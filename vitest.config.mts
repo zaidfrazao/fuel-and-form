@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: { tsconfigPaths: true },
   test: {
     environment: "jsdom",
+    setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}", "tests/unit/**/*.{test,spec}.{ts,tsx}"],
     // tests/e2e and tests/visual are Playwright's (see docs/TESTING_STRATEGY.md § 2.1)
     // and must not be picked up by Vitest.
