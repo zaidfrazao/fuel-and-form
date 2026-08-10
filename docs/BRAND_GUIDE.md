@@ -313,7 +313,9 @@ One question per screen. Bottom sheets for the meal picker and swap preview; the
 
 ## Implementation Notes
 
-The PRD specifies Tailwind CSS + shadcn/ui. Define every token as a CSS custom property on `:root` and `.dark`, then map them in `tailwind.config.ts` — so a component says `bg-surface` and `text-accent`, never a raw hex.
+The PRD specifies Tailwind CSS + shadcn/ui. Define every token as a CSS custom property on `:root` and `.dark`, then map them into Tailwind — so a component says `bg-surface` and `text-accent`, never a raw hex.
+
+> The build uses Tailwind v4, which is CSS-first: there is no `tailwind.config.ts`. The mapping lives in the `@theme inline` block of `app/globals.css`, alongside the token definitions themselves. `app/globals.tokens.test.ts` asserts that every value in § Color Palette below is declared for both modes and that no hex appears anywhere else in `src/`.
 
 shadcn/ui defaults require five overrides:
 
