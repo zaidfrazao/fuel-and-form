@@ -35,8 +35,8 @@ build:
 project_management:
   provider: notetask         # lakar | notetask
   client: ""                 # lakar only — your Lakar client name
-  project_identifier: ""     # notetask only — e.g. NOTET
-  workspace: ""              # notetask only
+  project_identifier: "FUEL" # notetask only — e.g. NOTET
+  workspace: "Personal"      # notetask only
   statuses:
     todo: "Todo"
     in_progress: "In Progress"
