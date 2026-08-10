@@ -1,0 +1,64 @@
+# Claude Code Project Configuration
+
+project:
+  name: "fuel-and-form"
+  description: "A personal fitness & nutrition tracker: meal planning with swaps, workout scheduling, and weekly check-in exports."
+  type: fullstack  # web-app, api, cli, library, desktop-app, mobile-app, fullstack
+
+user:
+  mode: technical  # technical or non-technical
+
+team:
+  lead: ""  # Set this to the technical lead's name for review notifications
+
+git:
+  default_branch: main
+  branch_prefixes:
+    feature: "feature/"
+    bugfix: "fix/"
+    hotfix: "hotfix/"
+    chore: "chore/"
+  merge_strategy: squash
+  delete_branch_after_merge: true
+  require_pr_approval: false  # solo project — PRs may be merged without review approval
+
+build:
+  tool: npm
+  commands:
+    lint: "npm run lint"
+    typecheck: "npm run typecheck"
+    build: "npm run build"
+    test: "npm run test"
+    dev: "npm run dev"
+  dev_port: 3000
+
+project_management:
+  provider: notetask         # lakar | notetask
+  client: ""                 # lakar only — your Lakar client name
+  project_identifier: ""     # notetask only — e.g. NOTET
+  workspace: ""              # notetask only
+  statuses:
+    todo: "Todo"
+    in_progress: "In Progress"
+    in_review: "In Review"
+    done: "Done"
+    paused: null
+    blocked: null
+    canceled: null
+
+commits:
+  types:
+    feature: "feat"
+    bugfix: "fix"
+    refactor: "refactor"
+    style: "style"
+    docs: "docs"
+    test: "test"
+    chore: "chore"
+  include_scope: false
+  footer: |
+    🤖 Generated with Claude Code
+
+docs:
+  brand_template: full
+  testing_template: full
