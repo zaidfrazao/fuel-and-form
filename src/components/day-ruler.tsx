@@ -113,7 +113,11 @@ function scaleMarks(span: Span): number[] {
     marks.push(at);
   }
 
-  return [...marks, span.end];
+  // Deduplicated because a degenerate span would otherwise return the same
+  // minute twice, which React sees as a duplicate key. `positionInSpan` already
+  // renders such a span rather than throwing; this keeps the scale consistent
+  // with that rather than trading a silent zero for a console warning.
+  return [...new Set([...marks, span.end])];
 }
 
 /**
@@ -287,17 +291,18 @@ export function DayRuler({
           sibling of the positioned box rather than a child so nothing clips it.
           Hidden because the Right Now screen shows no table and the ~40px budget
           has no room for one; the requirement is that the data exists, not that
-          it is drawn twice. */}
-      {/* The wrapper is doing real work. `sr-only` hides an element by shrinking
+          it is drawn twice.
+
+          The wrapper is doing real work. `sr-only` hides an element by shrinking
           it to 1px and clipping, but a `display: table` box under automatic
           layout treats that width as a suggestion and lays out at its natural
           ~476px instead — which, being absolutely positioned, added itself to
           the document's scrollable width. At 100% it fitted inside the viewport
           and looked fine; at 200% Dynamic Type it pushed the page to 530px and
-          scrolled sideways, against Brand Guide § Accessibility. A block
-          wrapper honours the 1px and clips the table inside it, and the table
-          keeps its semantics — forcing `display: block` onto the table itself
-          would have hidden it from the accessibility tree instead. */}
+          scrolled sideways, against Brand Guide § Accessibility. A block wrapper
+          honours the 1px and clips the table inside it, and the table keeps its
+          semantics — forcing `display: block` onto the table itself would have
+          hidden it from the accessibility tree instead. */}
       <div className="sr-only">
         <table>
           <caption>

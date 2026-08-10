@@ -235,6 +235,17 @@ describe("DayRuler", () => {
     );
   });
 
+  // A degenerate span is not reachable from any current caller, but it used to
+  // emit the span's single minute twice — one React duplicate-key warning, and
+  // two labels stacked at the same position.
+  test("does not repeat a scale mark when the span has no width", () => {
+    const noon = parseClock("12:00");
+
+    render(<DayRuler slots={[]} span={{ start: noon, end: noon }} />);
+
+    expect(screen.getAllByText("12")).toHaveLength(1);
+  });
+
   test("renders an empty day without a summary that implies data", () => {
     render(<DayRuler slots={[]} />);
 
