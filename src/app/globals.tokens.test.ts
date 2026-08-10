@@ -33,7 +33,14 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 const SRC = join(dirname(THIS_FILE), "..");
 const CSS = readFileSync(join(SRC, "app/globals.css"), "utf8");
 
-/** The body of a top-level rule, e.g. `:root { ... }`. Blocks here are flat. */
+/**
+ * The body of a top-level rule, e.g. `:root { ... }`. Blocks here are flat.
+ *
+ * Both ends are asserted. An unfound terminator would make `slice` return the
+ * rest of the file, which the "no hex outside the blocks" test then subtracts —
+ * so a formatting change could silently turn that test into a no-op. A drift
+ * guard that passes wrongly is worse than no guard at all.
+ */
 function block(selector: string): string {
   const start = CSS.indexOf(`${selector} {`);
   expect(start, `${selector} block not found in globals.css`).toBeGreaterThan(
@@ -41,6 +48,10 @@ function block(selector: string): string {
   );
 
   const end = CSS.indexOf("\n}", start);
+  expect(end, `${selector} block is not terminated by a \\n}`).toBeGreaterThan(
+    start,
+  );
+
   return CSS.slice(start, end);
 }
 
@@ -51,11 +62,18 @@ describe("colour tokens", () => {
     "%s is declared in both modes with the Brand Guide's values",
     (token, expected) => {
       for (const mode of ["light", "dark"] as const) {
-        const declaration = new RegExp(`--${token}:\\s*(#[0-9a-f]{3,8});`, "i");
-        const match = BLOCKS[mode].match(declaration);
+        const declaration = new RegExp(`--${token}:\\s*(#[0-9a-f]{3,8});`, "gi");
+        const matches = [...BLOCKS[mode].matchAll(declaration)];
 
-        expect(match, `--${token} is not declared for ${mode}`).not.toBeNull();
-        expect(match?.[1]?.toLowerCase()).toBe(expected[mode]);
+        // Exactly one, not at least one: CSS applies the last declaration
+        // wins, so a duplicate would let this assert a value the browser never
+        // uses. The colon anchors the name, so `--ink:` cannot match
+        // `--ink-fg:`.
+        expect(
+          matches.length,
+          `--${token} should be declared exactly once for ${mode}`,
+        ).toBe(1);
+        expect(matches[0]?.[1]?.toLowerCase()).toBe(expected[mode]);
       }
     },
   );

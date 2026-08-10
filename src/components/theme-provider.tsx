@@ -22,6 +22,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       attribute="class"
       defaultTheme="system"
       enableSystem
+      // Sets `color-scheme` on <html> to the resolved mode, so native controls
+      // and scrollbars follow. On by default, but stated explicitly: the
+      // viewport export in layout.tsx claims this happens, and that claim
+      // should not rest on a library default surviving an upgrade.
+      enableColorScheme
       // The Brand Guide's motion rules: a value that merely updated does not
       // animate. Without this, every colour transition in the tree fires at
       // once on a mode switch.

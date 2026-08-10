@@ -86,6 +86,8 @@ Shows the pattern and refuses to grade it, which is the PRD's position on adhere
 
 System-adaptive. Both modes are first-class and fully specified; neither is a derived afterthought. Implement via `prefers-color-scheme` with a manual override stored in settings.
 
+> The signal is read through `matchMedia('(prefers-color-scheme: dark)')` rather than a CSS `@media` block, so that a manual override can win over it. The tokens are therefore declared once per mode, not a third time inside a media query — the trade is that a client with JavaScript disabled renders light, which is moot in an app that needs JavaScript to function at all. Decided in FUEL-3; recorded here so it is not re-litigated.
+
 ### Color Palette
 
 All values are **light / dark** pairs, with contrast measured against that mode's canvas.
