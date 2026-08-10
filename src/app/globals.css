@@ -1,14 +1,185 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-/* Placeholder only. The Brand Guide token layer — accent, canvas, surface, ink,
-   the text ramp, and the light/dark wiring — lands in FUEL-3. Nothing here is
-   intended to survive that task. */
+@custom-variant dark (&:is(.dark *));
+
+/* Brand Guide § Implementation Notes — the five shadcn/ui overrides (FUEL-2).
+   Colours here are the subset the installed components need. The remaining
+   tokens (accent-subtle, success, the full text ramp as named utilities), the
+   `prefers-color-scheme` wiring and the settings override land in FUEL-3. */
+
 @theme inline {
+  /* No webfont. SF Pro on the phone this is built for, and no blocking request
+     inside the PRD's sub-1.5s budget for the "Right Now" view. */
   --font-sans:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
     Arial, sans-serif;
+  --font-heading: var(--font-sans);
+
+  /* Override 1 — Radius. shadcn derives its scale from --radius via calc(),
+     which yields lg 12px / xl 16.8px. The Brand Guide wants 14 and 26, so the
+     calc chain is replaced with the guide's explicit values. */
+  --radius-sm: 0.375rem; /* 6px  — tags */
+  --radius-md: 0.75rem; /* 12px — buttons */
+  --radius-lg: 0.875rem; /* 14px — tiles */
+  --radius-xl: 1.625rem; /* 26px — sheets */
+
+  /* Override 2 — Neutrals. The slate/zinc scale replaced with the warm stone
+     values. Per the guide, the single change that most determines whether the
+     app looks bespoke or templated. */
+  --color-ink: var(--ink);
+  --color-ink-fg: var(--ink-fg);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+
+  /* shadcn's own variable names, re-pointed at the tokens above so a component
+     never reaches for a raw hex. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* NOTE: `accent` means "now" in this system — the NOW marker, today's dot,
+     the latest reading. It is NOT shadcn's hover-background accent. Any shadcn
+     component added later that uses `bg-accent`/`text-accent-foreground` as a
+     hover pair must be re-pointed at `muted`, or it will fill with umber. */
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  /* Override 5 — Type scale. shadcn assumes a 14–16px base with no display
+     tier. Sizes are in rem so they survive Dynamic Type at 200% zoom.
+     The ratio is the rule: 76 ÷ 10.5 ≈ 7.2×. */
+  --text-display: 4.75rem; /* 76px */
+  --text-display--line-height: 4.375rem; /* 70px */
+  --text-display--letter-spacing: -0.045em;
+  --text-display--font-weight: 600;
+
+  --text-title: 2.5rem; /* 40px */
+  --text-title--line-height: 2.5625rem; /* 41px */
+  --text-title--letter-spacing: -0.035em;
+  --text-title--font-weight: 600;
+
+  --text-value: 1.375rem; /* 22px */
+  --text-value--line-height: 1.625rem; /* 26px */
+  --text-value--letter-spacing: -0.022em;
+  --text-value--font-weight: 600;
+
+  --text-body: 1.0625rem; /* 17px — stays at 17, not 15/16. Legibility beats
+                             refinement on a phone at arm's length, mid-cook. */
+  --text-body--line-height: 1.4375rem; /* 23px */
+  --text-body--letter-spacing: -0.011em;
+  --text-body--font-weight: 400;
+
+  --text-slash: 0.78125rem; /* 12.5px */
+  --text-slash--line-height: 1.0625rem; /* 17px */
+  --text-slash--letter-spacing: 0em;
+  --text-slash--font-weight: 500;
+
+  /* Micro is always set in caps — pair `text-micro` with `uppercase`. A text
+     token cannot carry text-transform. */
+  --text-micro: 0.65625rem; /* 10.5px */
+  --text-micro--line-height: 1rem; /* 16px */
+  --text-micro--letter-spacing: 0.16em;
+  --text-micro--font-weight: 600;
 }
 
-body {
-  font-family: var(--font-sans);
+:root {
+  --radius: 0.75rem; /* 12px — the button base */
+
+  /* Brand Guide § Color Palette — light */
+  --ink: #1c1917;
+  --ink-fg: #ffffff;
+  --canvas: #ffffff;
+  --surface: #f4f1ec;
+  --raised: #ffffff;
+  --text-primary: #1c1917;
+  --text-secondary: #78716c;
+  --text-tertiary: #b5aea6;
+  --accent: #8a5a3b;
+  --accent-foreground: #ffffff;
+  --error: #a93226;
+
+  --background: var(--canvas);
+  --foreground: var(--text-primary);
+  --card: var(--canvas);
+  --card-foreground: var(--text-primary);
+  --popover: var(--raised);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--ink);
+  --primary-foreground: var(--ink-fg);
+  --secondary: var(--surface);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--surface);
+  --muted-foreground: var(--text-secondary);
+  --destructive: var(--error);
+  --border: #e5e1db;
+  --input: var(--border);
+  --ring: var(--accent);
+}
+
+.dark {
+  /* Brand Guide § Color Palette — dark. Both modes are first-class; neither is
+     a derived afterthought. */
+  --ink: #f5f3f0;
+  --ink-fg: #1c1917;
+  --canvas: #0c0b0a;
+  --surface: #17150f;
+  --raised: #1f1c19;
+  --text-primary: #f5f3f0;
+  --text-secondary: #a8a29e;
+  --text-tertiary: #5c5650;
+  --accent: #c89a6b;
+  --accent-foreground: #1c1917;
+  --error: #f0776b;
+
+  --border: #2a2724;
+
+  /* Repeated from :root deliberately. Custom properties are substituted where
+     they are declared, so aliases resolved at :root would keep their light
+     values even inside a nested `.dark`. Restating them here makes dark mode
+     correct for a scoped subtree, not just for `.dark` on <html>. */
+  --background: var(--canvas);
+  --foreground: var(--text-primary);
+  --card: var(--canvas);
+  --card-foreground: var(--text-primary);
+  --popover: var(--raised);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--ink);
+  --primary-foreground: var(--ink-fg);
+  --secondary: var(--surface);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--surface);
+  --muted-foreground: var(--text-secondary);
+  --destructive: var(--error);
+  --input: var(--border);
+  --ring: var(--accent);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
 }
