@@ -1,0 +1,1265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fuel &amp; Form — Brand &amp; UX Guide</title>
+<style>*,*::before,*::after{box-sizing:border-box}body{margin:0}</style>
+</head>
+<body>
+
+<style>
+/* ============================================================
+   PAGE CHROME
+   ============================================================ */
+:root {
+  --pg-canvas: #FFFFFF; --pg-surface: #F4F1EC; --pg-border: #E5E1DB;
+  --pg-text: #1C1917; --pg-text-2: #78716C; --pg-text-3: #B5AEA6;
+  --pg-accent: #8A5A3B; --pg-accent-sub: #F3EBE3;
+  --pg-stage: #EFECE7; --pg-frame: #DCD6CE;
+  --pg-ok: #2F7D3E; --pg-no: #A93226;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --pg-canvas: #0C0B0A; --pg-surface: #17150F; --pg-border: #2A2724;
+    --pg-text: #F5F3F0; --pg-text-2: #A8A29E; --pg-text-3: #5C5650;
+    --pg-accent: #C89A6B; --pg-accent-sub: #251B14;
+    --pg-stage: #131211; --pg-frame: #302C29;
+    --pg-ok: #4ADE80; --pg-no: #F0776B;
+  }
+}
+:root[data-theme="dark"] {
+  --pg-canvas: #0C0B0A; --pg-surface: #17150F; --pg-border: #2A2724;
+  --pg-text: #F5F3F0; --pg-text-2: #A8A29E; --pg-text-3: #5C5650;
+  --pg-accent: #C89A6B; --pg-accent-sub: #251B14;
+  --pg-stage: #131211; --pg-frame: #302C29;
+  --pg-ok: #4ADE80; --pg-no: #F0776B;
+}
+
+:root {
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: light dark;
+}
+body {
+  background: var(--pg-canvas); color: var(--pg-text); font-family: var(--sans);
+  font-size: 17px; line-height: 1.6; letter-spacing: -.011em; -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 28px 100px; }
+@media (max-width: 640px) { .wrap { padding: 0 20px 64px; } }
+h1,h2,h3,h4 { text-wrap: balance; margin: 0; }
+p { margin: 0; }
+a { color: var(--pg-accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--pg-accent); outline-offset: 2px; }
+
+.micro { font-size: 10.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--pg-text-2); font-family: var(--sans); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: 0; font-size: .93em; }
+.slash { color: var(--pg-text-2); font-size: 12.5px; letter-spacing: 0; }
+.slash::before { content: "/ "; color: var(--pg-text-3); }
+
+/* ---------- masthead ---------- */
+.masthead { padding: 78px 0 44px; border-bottom: 1px solid var(--pg-border);
+  display: flex; flex-direction: column; gap: 30px; }
+.mast-rule { display: flex; align-items: baseline; justify-content: space-between; gap: 20px;
+  flex-wrap: wrap; padding-bottom: 22px; border-bottom: 1px solid var(--pg-border); }
+.wordmark { font-size: 52px; font-weight: 600; letter-spacing: -.045em; line-height: .98; }
+.masthead-lower { display: grid; grid-template-columns: 1.35fr 1fr; gap: 40px; align-items: start; }
+@media (max-width: 760px) { .masthead-lower { grid-template-columns: 1fr; gap: 26px; } }
+.lede { font-size: 22px; line-height: 1.45; letter-spacing: -.02em; max-width: 30ch; }
+.principle { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.principle q { font-size: 16px; font-style: italic; line-height: 1.5; quotes: "\201C" "\201D"; }
+.principle cite { font-style: normal; font-size: 12.5px; color: var(--pg-text-2); letter-spacing: 0; }
+
+/* ---------- sections ---------- */
+.section { padding-top: 84px; display: flex; flex-direction: column; gap: 28px; }
+.section-head { display: flex; flex-direction: column; gap: 12px; max-width: 64ch; }
+.sec-no { display: flex; align-items: center; gap: 12px; }
+.sec-no b { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--pg-accent); letter-spacing: .1em; }
+.sec-no i { flex: 1; height: 1px; background: var(--pg-border); font-style: normal; max-width: 120px; }
+.section-head h2 { font-size: 34px; font-weight: 600; letter-spacing: -.038em; line-height: 1.08; }
+.section-head p { color: var(--pg-text-2); font-size: 16px; }
+
+.note { border-top: 1px solid var(--pg-border); padding-top: 16px; font-size: 15px; line-height: 1.6;
+  max-width: 78ch; color: var(--pg-text-2); }
+.note strong { color: var(--pg-text); font-weight: 600; }
+
+/* ============================================================
+   DEVICE + BRAND TOKENS
+   ============================================================ */
+.ui {
+  --canvas: #FFFFFF; --surface: #F4F1EC; --raised: #FFFFFF;
+  --border: #E5E1DB; --grid: #EFECE7;
+  --text: #1C1917; --text-2: #78716C; --text-3: #B5AEA6;
+  --accent: #8A5A3B; --accent-sub: #F3EBE3;
+  --ink: #1C1917; --ink-fg: #FFFFFF;
+  --success: #2F7D3E; --error: #A93226;
+  font-family: var(--sans); letter-spacing: -.011em;
+  background: var(--canvas); color: var(--text);
+}
+.ui[data-mode="dark"] {
+  --canvas: #0C0B0A; --surface: #17150F; --raised: #1F1C19;
+  --border: #2A2724; --grid: #201D1B;
+  --text: #F5F3F0; --text-2: #A8A29E; --text-3: #5C5650;
+  --accent: #C89A6B; --accent-sub: #251B14;
+  --ink: #F5F3F0; --ink-fg: #1C1917;
+  --success: #4ADE80; --error: #F0776B;
+}
+.ui * { font-variant-numeric: tabular-nums; }
+
+.device { width: 375px; flex: 0 0 375px; border-radius: 44px; border: 1px solid var(--pg-frame);
+  overflow: hidden; display: flex; flex-direction: column; min-height: 700px; position: relative; }
+.stage { background: var(--pg-stage); border-radius: 26px; padding: 28px 0;
+  display: flex; justify-content: center; overflow-x: auto; }
+
+.statusbar { display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 26px 2px; font-size: 13px; font-weight: 600; }
+.statusbar .glyphs { display: flex; gap: 5px; align-items: center; opacity: .8; }
+
+.app { flex: 1; display: flex; flex-direction: column; padding: 14px 22px 0; gap: 30px; position: relative; }
+.blk { display: flex; flex-direction: column; gap: 14px; }
+
+/* ---------- type ---------- */
+.u-micro { font-size: 10.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--text-2); }
+.u-xl { font-size: 76px; font-weight: 600; letter-spacing: -.045em; line-height: .92; }
+.u-title { font-size: 40px; font-weight: 600; letter-spacing: -.035em; line-height: 1.03; }
+.u-val { font-size: 22px; font-weight: 600; letter-spacing: -.022em; line-height: 1.2; }
+.u-body { font-size: 17px; letter-spacing: -.011em; }
+.u-cap { font-size: 13px; font-weight: 500; color: var(--text-2); letter-spacing: 0; }
+.u-slash { font-size: 12.5px; font-weight: 500; color: var(--text-2); letter-spacing: 0; }
+.u-slash::before { content: "/ "; color: var(--text-3); }
+
+.topbar { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.hr { height: 1px; background: var(--border); }
+@media (min-resolution: 2dppx) { .hr { height: .5px; } }
+
+/* ---------- key/value grid (ref1) ---------- */
+.kv { display: grid; grid-template-columns: 1fr 1fr; gap: 22px 16px; }
+.kv.three { grid-template-columns: repeat(3, 1fr); }
+.kvi { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.kvi .u-val.em { font-weight: 700; }
+
+/* ---------- DAY RULER (signature, intraday) ---------- */
+.ruler { position: relative; padding: 16px 0 26px; }
+.ruler-base { position: absolute; left: 0; right: 0; top: 30px; height: 1px; background: var(--border); }
+.tick { position: absolute; top: 16px; width: 5px; border-radius: 1px; transform: translateX(-50%); }
+.tick.done { height: 15px; background: var(--text); }
+.tick.skip { height: 15px; background: transparent;
+  background-image: repeating-linear-gradient(-45deg, var(--text-3) 0 1px, transparent 1px 3px);
+  box-shadow: inset 0 0 0 1px var(--text-3); }
+.tick.next { height: 9px; top: 22px; width: 1px; background: var(--text-3); }
+.now-mark { position: absolute; top: 12px; width: 2px; height: 23px; background: var(--accent);
+  transform: translateX(-50%); }
+.now-pill { position: absolute; top: 38px; transform: translateX(-50%); background: var(--accent);
+  color: #FFF; font-size: 9.5px; font-weight: 700; letter-spacing: .14em; padding: 2px 7px;
+  border-radius: 999px; white-space: nowrap; }
+.ui[data-mode="dark"] .now-pill { color: #1C1917; }
+.ruler-scale { position: absolute; left: 0; right: 0; top: 38px; height: 12px; }
+.ruler-scale span { position: absolute; font-size: 10px; font-weight: 600; letter-spacing: .1em;
+  color: var(--text-3); transform: translateX(-50%); }
+.ruler-scale span:first-child { transform: none; }
+.ruler-scale span:last-child { transform: translateX(-100%); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; }
+.legend i { font-style: normal; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
+.lg-done { width: 5px; height: 11px; background: var(--text); border-radius: 1px; }
+.lg-skip { width: 5px; height: 11px; border-radius: 1px; box-shadow: inset 0 0 0 1px var(--text-3);
+  background-image: repeating-linear-gradient(-45deg, var(--text-3) 0 1px, transparent 1px 3px); }
+.lg-next { width: 1px; height: 11px; background: var(--text-3); }
+
+/* ---------- DOT GRID (signature, multi-week) ---------- */
+.dots { display: grid; grid-template-columns: repeat(7, 1fr); gap: 9px; max-width: 240px; }
+.dot { width: 11px; height: 11px; border-radius: 999px; justify-self: center; }
+.dot.done { background: var(--text); }
+.dot.skip { box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.dot.walk { width: 4px; height: 4px; background: var(--text-3); align-self: center; }
+.dot.none { width: 4px; height: 4px; background: var(--border); align-self: center; }
+.dot.today { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-sub); }
+.dot-head { display: grid; grid-template-columns: repeat(7, 1fr); gap: 9px; max-width: 240px; }
+.dot-head span { font-size: 9.5px; font-weight: 600; letter-spacing: .08em; color: var(--text-3);
+  text-align: center; text-transform: uppercase; }
+
+/* ---------- buttons ---------- */
+.btn { border: 1px solid transparent; border-radius: 12px; font-family: inherit; font-size: 17px;
+  font-weight: 600; letter-spacing: -.011em; display: inline-flex; align-items: center;
+  justify-content: center; gap: 8px; cursor: default; width: 100%; }
+.btn-primary { background: var(--ink); color: var(--ink-fg); min-height: 52px; padding: 0 18px; }
+.btn-secondary { background: transparent; border-color: var(--border); color: var(--text);
+  min-height: 46px; font-weight: 500; }
+.btn-text { background: transparent; color: var(--text); min-height: 44px; font-weight: 500;
+  text-decoration: underline; text-decoration-color: var(--text-3); text-underline-offset: 4px; }
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* ---------- lists ---------- */
+.list { display: flex; flex-direction: column; }
+.row { display: flex; align-items: center; gap: 12px; padding: 14px 0; min-height: 54px; }
+.row + .row { border-top: 1px solid var(--border); }
+@media (min-resolution: 2dppx) { .row + .row { border-top-width: .5px; } }
+.row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.row-title { font-size: 17px; letter-spacing: -.011em; }
+.row-trail { font-size: 15px; font-weight: 500; color: var(--text-2); white-space: nowrap; }
+.num-ix { font-family: var(--mono); font-size: 11px; color: var(--text-3); width: 18px; flex: none; }
+
+.status { font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--text-3); white-space: nowrap; }
+.status.done { color: var(--text); }
+.tag { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: 4px; background: var(--accent-sub); color: var(--accent); }
+
+/* ---------- bento tiles + motifs ---------- */
+.bento { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tile { border-radius: 14px; padding: 12px 13px; display: flex; flex-direction: column;
+  gap: 8px; min-height: 132px; }
+.tile.stone { background: var(--surface); color: var(--text); }
+.tile.ink { background: var(--ink); color: var(--ink-fg); }
+.tile.sel { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.tile-name { font-size: 15px; font-weight: 600; letter-spacing: -.018em; line-height: 1.2; }
+.tile-art { flex: 1; display: grid; place-items: center; }
+.tile-art svg { width: 46px; height: 46px; }
+.tile-meta { font-size: 11px; font-weight: 500; letter-spacing: 0; opacity: .68; }
+.tile-meta::before { content: "/ "; }
+.motif { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- sheet ---------- */
+.scrim { position: absolute; inset: 0; background: rgba(28,25,23,.34); }
+.ui[data-mode="dark"] .scrim { background: rgba(0,0,0,.64); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--raised);
+  border-radius: 26px 26px 0 0; padding: 12px 22px 26px; display: flex; flex-direction: column; gap: 20px;
+  box-shadow: 0 -8px 34px rgba(0,0,0,.12); }
+.grabber { width: 36px; height: 5px; border-radius: 999px; background: var(--text-3); opacity: .5; align-self: center; }
+
+/* ---------- week grid ---------- */
+.wrapx { overflow-x: auto; }
+table.week { border-collapse: collapse; font-size: 12.5px; width: 100%; letter-spacing: -.005em; }
+table.week th, table.week td { border-bottom: 1px solid var(--border); padding: 9px 9px;
+  text-align: left; white-space: nowrap; font-weight: 500; }
+table.week thead th { font-size: 9.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--text-3); border-bottom-color: var(--text-3); }
+table.week th:first-child, table.week td:first-child { position: sticky; left: 0; background: var(--canvas);
+  font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); z-index: 1; }
+table.week tr:last-child td, table.week tr:last-child th { border-bottom: 0; }
+table.week td.sw { background: var(--accent-sub); color: var(--accent); font-weight: 600; }
+table.week td.flex { color: var(--text-3);
+  background-image: repeating-linear-gradient(-45deg, var(--border) 0 1px, transparent 1px 5px); }
+table.week thead th.now { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ---------- chart ---------- */
+.chart { width: 100%; height: 128px; display: block; overflow: visible; }
+
+/* ---------- crop marks ---------- */
+.crop { position: absolute; width: 11px; height: 11px; color: var(--text-3); }
+.crop::before, .crop::after { content: ""; position: absolute; background: currentColor; }
+.crop::before { left: 5px; top: 0; width: 1px; height: 11px; }
+.crop::after { top: 5px; left: 0; height: 1px; width: 11px; }
+.crop.tl { left: 10px; top: 8px; } .crop.tr { right: 10px; top: 8px; }
+.crop.bl { left: 10px; bottom: 12px; } .crop.br { right: 10px; bottom: 12px; }
+
+/* ---------- tab bar (pill) ---------- */
+.tabbar { margin-top: auto; padding: 12px 0 24px; display: flex; justify-content: center; }
+.tabpill { display: flex; align-items: center; gap: 2px; border: 1px solid var(--border);
+  border-radius: 999px; padding: 4px; }
+.tabitem { width: 46px; height: 40px; display: grid; place-items: center; border-radius: 999px;
+  color: var(--text-3); }
+.tabitem.active { background: var(--ink); color: var(--ink-fg); width: auto; padding: 0 15px 0 13px;
+  display: flex; gap: 7px; }
+.tabitem .lab { display: none; font-size: 12.5px; font-weight: 600; letter-spacing: -.01em; }
+.tabitem.active .lab { display: block; }
+.tab-ico { width: 20px; height: 20px; }
+
+/* ============================================================
+   ARTIFACT LAYOUT PIECES
+   ============================================================ */
+.screens { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 44px 28px; }
+.cell { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.cap { display: flex; flex-direction: column; gap: 6px; }
+.cap h3 { font-size: 18px; font-weight: 600; letter-spacing: -.024em; }
+.cap p { font-size: 14px; color: var(--pg-text-2); line-height: 1.55; }
+.cap .tagline { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--pg-text-3); }
+
+.plate { border: 1px solid var(--pg-border); border-radius: 18px; padding: 20px 18px; }
+.plate .ui { background: transparent; }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 30px 26px; }
+.item { display: flex; flex-direction: column; gap: 12px; }
+.item-head { font-size: 10.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--pg-text-2); padding-bottom: 10px; border-bottom: 1px solid var(--pg-border); }
+.item p { font-size: 14px; line-height: 1.55; color: var(--pg-text-2); }
+.item h4 { font-size: 15px; font-weight: 600; letter-spacing: -.015em; color: var(--pg-text); }
+
+/* type scale table */
+.scale { display: flex; flex-direction: column; }
+.scale-row { display: grid; grid-template-columns: 150px 1fr; gap: 24px; align-items: baseline;
+  padding: 20px 0; border-top: 1px solid var(--pg-border); }
+.scale-row:last-child { border-bottom: 1px solid var(--pg-border); }
+.scale-key { font-family: var(--mono); font-size: 10.5px; color: var(--pg-text-2); line-height: 1.7; letter-spacing: 0; }
+.scale-key b { display: block; color: var(--pg-text); font-size: 10.5px; font-weight: 600;
+  letter-spacing: .16em; text-transform: uppercase; margin-bottom: 3px; font-family: var(--sans); }
+.scale-val { min-width: 0; overflow-x: auto; }
+@media (max-width: 560px) { .scale-row { grid-template-columns: 1fr; gap: 10px; } }
+
+/* swatches */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+.sw { display: flex; flex-direction: column; gap: 10px; }
+.sw-chips { display: flex; height: 66px; border-radius: 10px; overflow: hidden; border: 1px solid var(--pg-border); }
+.sw-chip { flex: 1; display: flex; align-items: flex-end; padding: 7px 9px; }
+.sw-chip span { font-size: 9px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; opacity: .72; }
+.sw-body { display: flex; flex-direction: column; gap: 3px; }
+.sw-name { font-size: 10.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; }
+.sw-hex { font-family: var(--mono); font-size: 11px; color: var(--pg-text-2); letter-spacing: 0; }
+.sw-use { font-size: 12.5px; line-height: 1.45; color: var(--pg-text-2); }
+.ratio { align-self: flex-start; font-family: var(--mono); font-size: 10px; letter-spacing: .02em;
+  padding: 1px 6px; border-radius: 999px; border: 1px solid; margin-top: 2px; }
+.ratio.pass { border-color: color-mix(in srgb, var(--pg-ok) 45%, transparent); color: var(--pg-ok); }
+
+/* voice */
+.tablewrap { overflow-x: auto; }
+table.voice { border-collapse: collapse; width: 100%; font-size: 15px; min-width: 620px; }
+table.voice th, table.voice td { text-align: left; padding: 14px 20px 14px 0;
+  border-bottom: 1px solid var(--pg-border); vertical-align: top; }
+table.voice thead th { border-top: 1px solid var(--pg-border); font-size: 10.5px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--pg-text-2); font-weight: 600; padding-top: 12px; padding-bottom: 12px; }
+table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-space: nowrap; }
+.avoid { color: var(--pg-text-2); text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); }
+
+.footer { margin-top: 88px; padding-top: 24px; border-top: 1px solid var(--pg-border);
+  display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--pg-text-2); }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<!-- ============ MOTIF SPRITE ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="m-bowl" viewBox="0 0 48 48">
+    <path class="motif" d="M7 22h34v1c0 9-7.6 16-17 16S7 32 7 23v-1Z"/>
+    <path class="motif" d="M13 22c2.6-3.4 6.4-5 11-5s8.4 1.6 11 5"/>
+    <path class="motif" d="M19 8c-1.8 2.2-1.8 4 0 6M27 6c-1.8 2.4-1.8 4.6 0 7"/>
+  </symbol>
+  <symbol id="m-cup" viewBox="0 0 48 48">
+    <path class="motif" d="M11 19h21v10a8 8 0 0 1-8 8h-5a8 8 0 0 1-8-8V19Z"/>
+    <path class="motif" d="M32 22h3.5a4.5 4.5 0 0 1 0 9H32"/>
+    <path class="motif" d="M7 41h32"/>
+    <path class="motif" d="M18 8c-1.8 2.2-1.8 4 0 6M26 6c-1.8 2.4-1.8 4.6 0 7"/>
+  </symbol>
+  <symbol id="m-roll" viewBox="0 0 48 48">
+    <path class="motif" d="M6 29c0-7.2 8-12 18-12s18 4.8 18 12c0 5.4-8 9-18 9S6 34.4 6 29Z"/>
+    <path class="motif" d="M16 24.5l3.5 5M23 23.5l3.5 5M30 24.5l3.5 5"/>
+  </symbol>
+  <symbol id="m-pot" viewBox="0 0 48 48">
+    <path class="motif" d="M12 22h24v10a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6V22Z"/>
+    <path class="motif" d="M8 22h32M12 27H8M36 27h4"/>
+    <path class="motif" d="M19 10c-1.8 2.2-1.8 4 0 6M27 8c-1.8 2.4-1.8 4.6 0 7"/>
+  </symbol>
+  <symbol id="m-plate" viewBox="0 0 48 48">
+    <circle class="motif" cx="24" cy="24" r="16"/>
+    <circle class="motif" cx="24" cy="24" r="10.5"/>
+    <path class="motif" d="M18.5 26.5c1.6-2.6 3.4-3.9 5.5-3.9s3.9 1.3 5.5 3.9"/>
+  </symbol>
+  <symbol id="m-bar" viewBox="0 0 48 48">
+    <rect class="motif" x="6" y="17" width="36" height="14" rx="3.5"/>
+    <path class="motif" d="M16 17l-4 14M25 17l-4 14M34 17l-4 14"/>
+  </symbol>
+  <symbol id="m-egg" viewBox="0 0 48 48">
+    <path class="motif" d="M11 30c0-6.6 3.6-13 8-13s8 6.4 8 13a8 8 0 0 1-16 0Z"/>
+    <circle class="motif" cx="19" cy="29" r="3.4"/>
+    <path class="motif" d="M28 33c0-4.4 2.6-8 6-8s6 3.6 6 8a6 6 0 0 1-12 0Z"/>
+  </symbol>
+  <symbol id="m-walk" viewBox="0 0 48 48">
+    <path class="motif" d="M9 34c7 0 7-9 14-9s7-9 14-9"/>
+    <circle class="motif" cx="9" cy="34" r="2"/><circle class="motif" cx="37" cy="16" r="2"/>
+  </symbol>
+</svg>
+
+<div class="wrap">
+
+  <!-- ============ MASTHEAD ============ -->
+  <header class="masthead">
+    <div class="mast-rule">
+      <div class="wordmark">Fuel &amp; Form</div>
+      <span class="micro">Brand &amp; UX Guide · v3 · 2026-08-10</span>
+    </div>
+    <div class="masthead-lower">
+      <p class="lede">
+        A personal nutrition and training tracker. Monochrome, typographically extreme, one warm
+        accent that only ever means <em>now</em>.
+      </p>
+      <div class="principle">
+        <span class="micro">Governing principle</span>
+        <q>Divergence from plan should become data rather than guilt.</q>
+        <cite>docs/PRD.md</cite>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ THE SYSTEM ============ -->
+  <section class="section">
+    <div class="section-head">
+      <div class="sec-no"><b>01</b><i></i></div>
+      <h2>Four rules that carry the whole design</h2>
+      <p>
+        No gradients, no textures, no shadows outside sheets. What makes it feel designed instead of
+        generic is scale, restraint, and two signature graphics.
+      </p>
+    </div>
+
+    <div class="grid2">
+      <div class="item">
+        <span class="item-head">01 — Scale</span>
+        <h4>7× contrast, minimum</h4>
+        <p>76px display against a 10.5px label. Anything in between is where designs go to look ordinary — mid-sized type reads as a default, never a decision.</p>
+      </div>
+      <div class="item">
+        <span class="item-head">02 — Accent</span>
+        <h4>Umber means “now”</h4>
+        <p>Not brand colour, not actions, not emphasis. The NOW marker, today's dot, and the swap tint. One umber element per screen and it always says: you are here.</p>
+      </div>
+      <div class="item">
+        <span class="item-head">03 — Actions</span>
+        <h4>Ink, not colour</h4>
+        <p>Primary buttons and the active tab are near-black in light, near-white in dark. Nothing competes with the accent, and the screen stays monochrome.</p>
+      </div>
+      <div class="item">
+        <span class="item-head">04 — Graphics</span>
+        <h4>Two devices, two time-scales</h4>
+        <p>The <strong>day ruler</strong> for intraday, the <strong>dot grid</strong> for weeks. Split this way they never appear as alternatives to each other on the same screen.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SIGNATURE DEVICES ============ -->
+  <section class="section">
+    <div class="section-head">
+      <div class="sec-no"><b>02</b><i></i></div>
+      <h2>The two signature graphics</h2>
+      <p>Both are abstractions of data the app already has — neither is decoration, and neither needs colour to work.</p>
+    </div>
+
+    <div class="grid2">
+      <div class="item">
+        <span class="item-head">Day ruler · intraday</span>
+        <div class="plate">
+          <div class="ui" data-mode="light">
+            <div class="ruler">
+              <div class="ruler-base"></div>
+              <span class="tick done" style="left:0%"></span>
+              <span class="tick done" style="left:6.3%"></span>
+              <span class="tick done" style="left:28.1%"></span>
+              <span class="tick done" style="left:43.8%"></span>
+              <span class="tick skip" style="left:62.5%"></span>
+              <span class="tick done" style="left:71.9%"></span>
+              <span class="tick next" style="left:81.3%"></span>
+              <span class="now-mark" style="left:80.6%"></span>
+              <span class="now-pill" style="left:80.6%">NOW</span>
+              <div class="ruler-scale">
+                <span style="left:0%">06</span><span style="left:37.5%">12</span>
+                <span style="left:75%">18</span><span style="left:100%">22</span>
+              </div>
+            </div>
+            <div class="legend" style="margin-top:8px;">
+              <i><span class="lg-done"></span>Logged</i>
+              <i><span class="lg-skip"></span>Skipped</i>
+              <i><span class="lg-next"></span>Upcoming</i>
+            </div>
+          </div>
+        </div>
+        <p>Eight slots across a 06:00–22:00 span. Filled bars are logged, hatched are skipped, hairlines are still to come. The umber tick and pill mark the present. The whole day's shape in 40px of vertical space — and it answers “where am I?” before a single word is read.</p>
+      </div>
+
+      <div class="item">
+        <span class="item-head">Dot grid · multi-week</span>
+        <div class="plate">
+          <div class="ui" data-mode="light">
+            <div class="dot-head" style="margin-bottom:10px;">
+              <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+            </div>
+            <div class="dots">
+              <span class="dot done"></span><span class="dot done"></span><span class="dot skip"></span><span class="dot done"></span><span class="dot done"></span><span class="dot walk"></span><span class="dot walk"></span>
+              <span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot walk"></span><span class="dot walk"></span>
+              <span class="dot done"></span><span class="dot skip"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot walk"></span><span class="dot walk"></span>
+              <span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot skip"></span><span class="dot walk"></span><span class="dot walk"></span>
+              <span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot walk"></span><span class="dot walk"></span>
+              <span class="dot done"></span><span class="dot done"></span><span class="dot today"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span>
+            </div>
+          </div>
+        </div>
+        <p>Six weeks of training adherence, one row per week. Filled is done, ring is skipped, small dots are walk-only weekends. Today is the single umber dot. The PRD wants adherence visible without a score — this shows the pattern and refuses to grade it.</p>
+      </div>
+    </div>
+
+    <p class="note">
+      <strong>Why both, and why they never collide.</strong> They operate at different resolutions: the
+      ruler is one day at hour precision, the grid is six weeks at day precision. The ruler lives on
+      <span class="mono">/</span>; the grid lives on Training and Weight. No screen shows both, so neither
+      has to compete to be the memorable thing.
+    </p>
+  </section>
+
+  <!-- ============ SCREENS ============ -->
+  <section class="section">
+    <div class="section-head">
+      <div class="sec-no"><b>03</b><i></i></div>
+      <h2>Seven screens</h2>
+      <p>True 375px — the width the PRD names as the dominant case. Light and dark alternate: both modes are specified, neither is derived from the other.</p>
+    </div>
+
+    <div class="screens">
+
+      <!-- ===== 1 · RIGHT NOW ===== -->
+      <div class="cell">
+        <div class="stage">
+          <div class="ui device" data-mode="light" role="img" aria-label="Right Now screen: Chilli con Carne at 19:00, with a day ruler showing progress through the day and a macro key-value grid">
+            <div class="statusbar"><span>18:54</span>
+              <span class="glyphs" aria-hidden="true">
+                <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.7" y="5" width="3" height="6" rx="1"/><rect x="9.4" y="2.5" width="3" height="8.5" rx="1"/><rect x="14" y="0" width="3" height="11" rx="1"/></svg>
+                <svg width="24" height="11" viewBox="0 0 24 11" fill="none"><rect x=".5" y=".5" width="20" height="10" rx="3" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="15" height="7" rx="1.5" fill="currentColor"/></svg>
+              </span>
+            </div>
+            <div class="app">
+              <div class="topbar"><span class="u-micro">Right now</span><span class="u-micro">Mon 10 Aug</span></div>
+
+              <div style="display:flex;flex-direction:column;gap:12px;">
+                <span class="u-micro" style="color:var(--text-3);">Dinner · 19:00</span>
+                <div class="u-title">Chilli<br>con Carne</div>
+              </div>
+
+              <div>
+                <div class="ruler">
+                  <div class="ruler-base"></div>
+                  <span class="tick done" style="left:0%"></span>
+                  <span class="tick done" style="left:6.3%"></span>
+                  <span class="tick done" style="left:28.1%"></span>
+                  <span class="tick done" style="left:43.8%"></span>
+                  <span class="tick skip" style="left:62.5%"></span>
+                  <span class="tick done" style="left:71.9%"></span>
+                  <span class="tick next" style="left:81.3%"></span>
+                  <span class="now-mark" style="left:80.6%"></span>
+                  <span class="now-pill" style="left:80.6%">NOW</span>
+                  <div class="ruler-scale">
+                    <span style="left:0%">06</span><span style="left:37.5%">12</span>
+                    <span style="left:75%">18</span><span style="left:100%">22</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="kv">
+                <div class="kvi"><span class="u-micro">Calories</span><span class="u-val">612</span></div>
+                <div class="kvi"><span class="u-micro">Protein</span><span class="u-val em">48 g</span></div>
+                <div class="kvi"><span class="u-micro">Fat</span><span class="u-val">18 g</span></div>
+                <div class="kvi"><span class="u-micro">Carbs</span><span class="u-val">61 g</span></div>
+              </div>
+
+              <div class="hr"></div>
+
+              <div class="kv">
+                <div class="kvi"><span class="u-micro">Today so far</span><span class="u-val">1,178</span><span class="u-slash">of 1,780 kcal</span></div>
+                <div class="kvi"><span class="u-micro">Protein left</span><span class="u-val">50 g</span><span class="u-slash">98 of 148 g</span></div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:4px;">
+                <button class="btn btn-primary" type="button">Log eaten</button>
+                <div class="btn-row">
+                  <button class="btn btn-secondary" type="button">Swap</button>
+                  <button class="btn btn-secondary" type="button">Skip</button>
+                </div>
+              </div>
+
+              <nav class="tabbar" aria-label="Primary">
+                <div class="tabpill">
+                  <span class="tabitem active"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg><span class="lab">Now</span></span>
+                  <span class="tabitem" role="img" aria-label="Plan"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M9 4v-2M15 4v-2"/></svg></span>
+                  <span class="tabitem" role="img" aria-label="Weight"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 16.5l5-5 3.5 3.5 8.5-8.5"/><path d="M16 6.5h4.5V11"/></svg></span>
+                  <span class="tabitem" role="img" aria-label="More"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="5.5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18.5" cy="12" r="1.4"/></svg></span>
+                </div>
+              </nav>
+            </div>
+          </div>
+        </div>
+        <div class="cap">
+          <span class="tagline">P1 · / · light</span>
+          <h3>Right Now</h3>
+          <p>40px name, 10.5px labels, the ruler carrying the day's shape, macros as a key/value grid rather than a strip. One umber mark on the screen and it means “now”.</p>
+        </div>
+      </div>
+
+      <!-- ===== 2 · MEAL PICKER ===== -->
+      <div class="cell">
+        <div class="stage">
+          <div class="ui device" data-mode="dark" role="img" aria-label="Swap sheet: meal tiles with line motifs, and the resulting day totals shown before confirming">
+            <div class="statusbar"><span>18:55</span>
+              <span class="glyphs" aria-hidden="true">
+                <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.7" y="5" width="3" height="6" rx="1"/><rect x="9.4" y="2.5" width="3" height="8.5" rx="1"/><rect x="14" y="0" width="3" height="11" rx="1"/></svg>
+                <svg width="24" height="11" viewBox="0 0 24 11" fill="none"><rect x=".5" y=".5" width="20" height="10" rx="3" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="15" height="7" rx="1.5" fill="currentColor"/></svg>
+              </span>
+            </div>
+            <div class="app" style="opacity:.36;">
+              <div class="topbar"><span class="u-micro">Right now</span><span class="u-micro">Mon 10 Aug</span></div>
+              <div style="display:flex;flex-direction:column;gap:12px;">
+                <span class="u-micro" style="color:var(--text-3);">Dinner · 19:00</span>
+                <div class="u-title">Chilli<br>con Carne</div>
+              </div>
+            </div>
+
+            <div class="scrim"></div>
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div class="topbar"><span class="u-micro">Swap dinner</span><span class="u-micro">Mon 10 Aug</span></div>
+
+              <div class="bento">
+                <div class="tile ink sel">
+                  <div class="tile-name">Chicken<br>&amp; Rice</div>
+                  <div class="tile-art"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-plate"/></svg></div>
+                  <div class="tile-meta">591 kcal · P 62</div>
+                </div>
+                <div class="tile stone">
+                  <div class="tile-name">Beef Mince<br>&amp; Potato</div>
+                  <div class="tile-art"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-pot"/></svg></div>
+                  <div class="tile-meta">648 kcal · P 51</div>
+                </div>
+                <div class="tile stone">
+                  <div class="tile-name">Chilli<br>con Carne</div>
+                  <div class="tile-art"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-bowl"/></svg></div>
+                  <div class="tile-meta">612 kcal · P 48</div>
+                </div>
+                <div class="tile stone">
+                  <div class="tile-name">Flexible<br>dinner</div>
+                  <div class="tile-art"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#m-egg"/></svg></div>
+                  <div class="tile-meta">Untracked</div>
+                </div>
+              </div>
+
+              <div>
+                <span class="u-micro">Day totals after swap</span>
+                <div class="kv" style="margin-top:12px;">
+                  <div class="kvi"><span class="u-micro">Calories</span><span class="u-val">1,769</span><span class="u-slash">−21</span></div>
+                  <div class="kvi"><span class="u-micro">Protein</span><span class="u-val em">160 g</span><span class="u-slash" style="color:var(--success);">+14</span></div>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <button class="btn btn-primary" type="button">Swap for today</button>
+                <button class="btn btn-text" type="button">Repeat for the next 2 days</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap">
+          <span class="tagline">P2 + P4 · sheet · dark</span>
+          <h3>Swap, with the cost shown first</h3>
+          <p>Flat bento tiles — one ink, the rest stone — each with a single line motif. Selection is an umber inset rule, not a fill. Day totals sit above the confirm button, never after it.</p>
+        </div>
+      </div>
+
+      <!-- ===== 3 · MEAL DETAIL ===== -->
+      <div class="cell">
+        <div class="stage">
+          <div class="ui device" data-mode="light" role="img" aria-label="Meal detail for Chilli con Carne with ingredients and method">
+            <div class="statusbar"><span>18:56</span>
+              <span class="glyphs" aria-hidden="true">
+                <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.7" y="5" width="3" height="6" rx="1"/><rect x="9.4" y="2.5" width="3" height="8.5" rx="1"/><rect x="14" y="0" width="3" height="11" rx="1"/></svg>
+                <svg width="24" height="11" viewBox="0 0 24 11" fill="none"><rect x=".5" y=".5" width="20" height="10" rx="3" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="15" height="7" rx="1.5" fill="currentColor"/></svg>
+              </span>
+            </div>
+            <div class="app">
+              <div class="topbar"><span class="u-micro">Meal · Dinner</span><span class="u-micro">1 serving</span></div>
+
+              <div class="tile ink" style="min-height:172px;">
+                <div class="tile-name" style="font-size:17px;">Chilli con Carne</div>
+                <div class="tile-art"><svg viewBox="0 0 48 48" style="width:66px;height:66px;" aria-hidden="true"><use href="#m-pot"/></svg></div>
+                <div class="tile-meta">612 kcal · 25 min · serves 1</div>
+              </div>
+
+              <div class="kv">
+                <div class="kvi"><span class="u-micro">Protein</span><span class="u-val em">48 g</span></div>
+                <div class="kvi"><span class="u-micro">Calories</span><span class="u-val">612</span></div>
+                <div class="kvi"><span class="u-micro">Fat</span><span class="u-val">18 g</span></div>
+                <div class="kvi"><span class="u-micro">Carbs</span><span class="u-val">61 g</span></div>
+              </div>
+
+              <div class="blk">
+                <span class="u-micro">Ingredients</span>
+                <div class="list">
+                  <div class="row" style="min-height:46px;padding:11px 0;">
+                    <div class="row-main"><span class="row-title">Beef mince, 5%</span></div>
+                    <span class="row-trail">150 g <span style="color:var(--text-3);">· 1 palm</span></span>
+                  </div>
+                  <div class="row" style="min-height:46px;padding:11px 0;">
+                    <div class="row-main"><span class="row-title">Kidney beans</span></div>
+                    <span class="row-trail">120 g <span style="color:var(--text-3);">· ½ tin</span></span>
+                  </div>
+                  <div class="row" style="min-height:46px;padding:11px 0;">
+                    <div class="row-main"><span class="row-title">Basmati rice, dry</span></div>
+                    <span class="row-trail">65 g <span style="color:var(--text-3);">· 1 mug</span></span>
+                  </div>
+                  <div class="row" style="min-height:46px;padding:11px 0;">
+                    <div class="row-main"><span class="row-title">Chopped tomatoes</span></div>
+                    <span class="row-trail">200 g <span style="color:var(--text-3);">· ½ tin</span></span>
+                  </div>
+                </div>
+              </div>
+
+              <div style="padding-bottom:4px;">
+                <button class="btn btn-primary" type="button">Log eaten</button>
+              </div>
+
+              <nav class="tabbar" aria-label="Primary">
+                <div class="tabpill">
+                  <span class="tabitem" role="img" aria-label="Now"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></span>
+                  <span class="tabitem active"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M9 4v-2M15 4v-2"/></svg><span class="lab">Plan</span></span>
+                  <span class="tabitem" role="img" aria-label="Weight"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 16.5l5-5 3.5 3.5 8.5-8.5"/><path d="M16 6.5h4.5V11"/></svg></span>
+                  <span class="tabitem" role="img" aria-label="More"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="5.5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18.5" cy="12" r="1.4"/></svg></span>
+                </div>
+              </nav>
+            </div>
+          </div>
+        </div>
+        <div class="cap">
+          <span class="tagline">P2 / P8 · /meal · light</span>
+          <h3>Meal detail</h3>
+          <p>The imagery moment. A flat ink tile, one line motif, no photography to source or ship. Non-scale measures sit beside gram weights in tertiary grey — the PRD notes there's no kitchen scale.</p>
+        </div>
+      </div>
+
+      <!-- ===== 4 · TRAINING ===== -->
+      <div class="cell">
+        <div class="stage">
+          <div class="ui device" data-mode="dark" role="img" aria-label="Training screen: Circuit B exercise list and a six-week adherence dot grid">
+            <div class="statusbar"><span>17:32</span>
+              <span class="glyphs" aria-hidden="true">
+                <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.7" y="5" width="3" height="6" rx="1"/><rect x="9.4" y="2.5" width="3" height="8.5" rx="1"/><rect x="14" y="0" width="3" height="11" rx="1"/></svg>
+                <svg width="24" height="11" viewBox="0 0 24 11" fill="none"><rect x=".5" y=".5" width="20" height="10" rx="3" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="15" height="7" rx="1.5" fill="currentColor"/></svg>
+              </span>
+            </div>
+            <div class="app">
+              <div class="topbar"><span class="u-micro">Right now</span><span class="u-micro">Wed 12 Aug</span></div>
+
+              <div style="display:flex;flex-direction:column;gap:12px;">
+                <span class="u-micro" style="color:var(--text-3);">Training · 17:30</span>
+                <div class="u-title">Circuit B</div>
+                <span class="u-slash">Bodyweight · 3 rounds · ~28 min</span>
+              </div>
+
+              <div class="blk">
+                <span class="u-micro">Exercises</span>
+                <div class="list">
+                  <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">01</span><div class="row-main"><span class="row-title">Press-ups</span></div><span class="row-trail">3 × 12</span></div>
+                  <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">02</span><div class="row-main"><span class="row-title">Reverse lunges</span></div><span class="row-trail">3 × 10 ea</span></div>
+                  <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">03</span><div class="row-main"><span class="row-title">Inverted rows</span></div><span class="row-trail">3 × 8</span></div>
+                  <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">04</span><div class="row-main"><span class="row-title">Glute bridge</span></div><span class="row-trail">3 × 15</span></div>
+                  <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">05</span><div class="row-main"><span class="row-title">Plank</span></div><span class="row-trail">3 × 45s</span></div>
+                </div>
+              </div>
+
+              <div class="blk">
+                <div class="topbar"><span class="u-micro">Adherence</span><span class="u-micro" style="color:var(--text-3);">Last 6 weeks</span></div>
+                <div class="dot-head">
+                  <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+                </div>
+                <div class="dots">
+                  <span class="dot done"></span><span class="dot done"></span><span class="dot skip"></span><span class="dot done"></span><span class="dot done"></span><span class="dot walk"></span><span class="dot walk"></span>
+                  <span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot walk"></span><span class="dot walk"></span>
+                  <span class="dot done"></span><span class="dot skip"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot walk"></span><span class="dot walk"></span>
+                  <span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot skip"></span><span class="dot walk"></span><span class="dot walk"></span>
+                  <span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot walk"></span><span class="dot walk"></span>
+                  <span class="dot done"></span><span class="dot done"></span><span class="dot today"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:4px;">
+                <button class="btn btn-primary" type="button">Mark done</button>
+                <div class="btn-row">
+                  <button class="btn btn-secondary" type="button">Partial</button>
+                  <button class="btn btn-secondary" type="button">Skip</button>
+                </div>
+              </div>
+
+              <nav class="tabbar" aria-label="Primary">
+                <div class="tabpill">
+                  <span class="tabitem active"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg><span class="lab">Now</span></span>
+                  <span class="tabitem" role="img" aria-label="Plan"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M9 4v-2M15 4v-2"/></svg></span>
+                  <span class="tabitem" role="img" aria-label="Weight"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 16.5l5-5 3.5 3.5 8.5-8.5"/><path d="M16 6.5h4.5V11"/></svg></span>
+                  <span class="tabitem" role="img" aria-label="More"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="5.5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18.5" cy="12" r="1.4"/></svg></span>
+                </div>
+              </nav>
+            </div>
+          </div>
+        </div>
+        <div class="cap">
+          <span class="tagline">P3 · / · dark</span>
+          <h3>Training</h3>
+          <p>Numbered exercise rows, and six weeks of adherence as dots. Skipped is an outline, never red — the pattern is visible and deliberately ungraded.</p>
+        </div>
+      </div>
+
+      <!-- ===== 5 · WEIGHT ===== -->
+      <div class="cell">
+        <div class="stage">
+          <div class="ui device" data-mode="light" role="img" aria-label="Weight screen: 72.5 kilograms shown at large scale, with a twelve-week trend line and a 64 kilogram target">
+            <div class="statusbar"><span>20:11</span>
+              <span class="glyphs" aria-hidden="true">
+                <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.7" y="5" width="3" height="6" rx="1"/><rect x="9.4" y="2.5" width="3" height="8.5" rx="1"/><rect x="14" y="0" width="3" height="11" rx="1"/></svg>
+                <svg width="24" height="11" viewBox="0 0 24 11" fill="none"><rect x=".5" y=".5" width="20" height="10" rx="3" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="15" height="7" rx="1.5" fill="currentColor"/></svg>
+              </span>
+            </div>
+            <div class="app">
+              <div class="topbar"><span class="u-micro">Weight</span><span class="u-micro">Sun 9 Aug</span></div>
+
+              <div style="display:flex;align-items:baseline;gap:10px;">
+                <span class="u-xl">72.5</span><span class="u-micro" style="padding-bottom:8px;">kg</span>
+              </div>
+
+              <svg class="chart" viewBox="0 0 300 128" role="img" aria-label="Line chart: weight falling from 84.2 to 72.5 kilograms over twelve weekly weigh-ins, against a dashed target line at 64 kilograms">
+                <g stroke="var(--grid)" stroke-width="1">
+                  <line x1="0" y1="24" x2="300" y2="24"/><line x1="0" y1="53" x2="300" y2="53"/><line x1="0" y1="82" x2="300" y2="82"/>
+                </g>
+                <g fill="var(--text-3)" font-size="8.5" font-weight="600" letter-spacing=".08em" font-family="-apple-system, sans-serif">
+                  <text x="0" y="20">76</text><text x="0" y="49">72</text><text x="0" y="78">68</text>
+                </g>
+                <line x1="0" y1="111" x2="300" y2="111" stroke="var(--text-3)" stroke-width="1" stroke-dasharray="3 4"/>
+                <text x="300" y="107" text-anchor="end" fill="var(--text-3)" font-size="8.5" font-weight="600" letter-spacing=".12em" font-family="-apple-system, sans-serif">TARGET 64</text>
+                <polyline points="4,13 30,17 56,21 82,23 108,28 134,30 160,34 186,36 212,40 238,43 264,46 292,49"
+                  fill="none" stroke="var(--text)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="292" cy="49" r="3.4" fill="var(--accent)"/>
+              </svg>
+
+              <div class="kv three">
+                <div class="kvi"><span class="u-micro">Lost</span><span class="u-val">4.95</span></div>
+                <div class="kvi"><span class="u-micro">To go</span><span class="u-val">8.50</span></div>
+                <div class="kvi"><span class="u-micro">Rate</span><span class="u-val">0.44</span></div>
+              </div>
+
+              <div class="hr"></div>
+
+              <div class="blk">
+                <div class="topbar"><span class="u-micro">Weigh-ins</span><span class="u-micro" style="color:var(--text-3);">Last 6 weeks</span></div>
+                <div class="dot-head"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+                <div class="dots">
+                  <span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot done"></span>
+                  <span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot done"></span>
+                  <span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot done"></span>
+                  <span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot skip"></span>
+                  <span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot done"></span>
+                  <span class="dot none"></span><span class="dot none"></span><span class="dot today"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span>
+                </div>
+              </div>
+
+              <div style="padding-bottom:4px;">
+                <button class="btn btn-primary" type="button">Log weigh-in</button>
+              </div>
+
+              <nav class="tabbar" aria-label="Primary">
+                <div class="tabpill">
+                  <span class="tabitem" role="img" aria-label="Now"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></span>
+                  <span class="tabitem" role="img" aria-label="Plan"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M9 4v-2M15 4v-2"/></svg></span>
+                  <span class="tabitem active"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 16.5l5-5 3.5 3.5 8.5-8.5"/><path d="M16 6.5h4.5V11"/></svg><span class="lab">Weight</span></span>
+                  <span class="tabitem" role="img" aria-label="More"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="5.5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18.5" cy="12" r="1.4"/></svg></span>
+                </div>
+              </nav>
+            </div>
+          </div>
+        </div>
+        <div class="cap">
+          <span class="tagline">P5 · /weight · light</span>
+          <h3>Weight</h3>
+          <p>76px against 10.5px — the scale ratio that makes the screen read as designed. The trend line is ink; the single umber dot is the latest reading, which is to say: now.</p>
+        </div>
+      </div>
+
+      <!-- ===== 6 · WEEK PLAN ===== -->
+      <div class="cell">
+        <div class="stage">
+          <div class="ui device" data-mode="dark" role="img" aria-label="Weekly plan grid with Tuesday dinner swapped and weekend meals shown as untracked">
+            <div class="statusbar"><span>21:04</span>
+              <span class="glyphs" aria-hidden="true">
+                <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.7" y="5" width="3" height="6" rx="1"/><rect x="9.4" y="2.5" width="3" height="8.5" rx="1"/><rect x="14" y="0" width="3" height="11" rx="1"/></svg>
+                <svg width="24" height="11" viewBox="0 0 24 11" fill="none"><rect x=".5" y=".5" width="20" height="10" rx="3" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="15" height="7" rx="1.5" fill="currentColor"/></svg>
+              </span>
+            </div>
+            <div class="app">
+              <div class="topbar"><span class="u-micro">Plan</span><span class="u-micro">10 – 16 Aug</span></div>
+
+              <div class="u-title" style="font-size:34px;">Week 32</div>
+
+              <div class="wrapx">
+                <table class="week">
+                  <thead>
+                    <tr><th scope="col">Slot</th><th scope="col" class="now">Mon</th><th scope="col">Tue</th><th scope="col">Wed</th><th scope="col">Thu</th><th scope="col">Fri</th><th scope="col">Sat</th><th scope="col">Sun</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><th scope="row">Break</th><td>Oats · Cocoa</td><td>Oats · Berry</td><td>Oats · PB</td><td>Oats · Cocoa</td><td>Oats · Berry</td><td class="flex">Eggs</td><td class="flex">Eggs</td></tr>
+                    <tr><th scope="row">Snack</th><td>Yoghurt</td><td>Yoghurt</td><td>Yoghurt</td><td>Yoghurt</td><td>Yoghurt</td><td>Yoghurt</td><td>Yoghurt</td></tr>
+                    <tr><th scope="row">Lunch</th><td>Ciabatta</td><td>Ciabatta</td><td>Ciabatta</td><td>Ciabatta</td><td>Ciabatta</td><td class="flex">Flexible</td><td class="flex">Flexible</td></tr>
+                    <tr><th scope="row">Train</th><td>Circuit A</td><td>Intervals</td><td>Circuit B</td><td>Intervals</td><td>Circuit A</td><td>Walk</td><td>Walk</td></tr>
+                    <tr><th scope="row">Dinner</th><td>Chilli</td><td class="sw">Chilli</td><td>Chicken</td><td>Beef</td><td>Chicken</td><td class="flex">Flexible</td><td class="flex">Flexible</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="legend">
+                <i><span style="width:11px;height:11px;border-radius:3px;background:var(--accent-sub);"></span>Swapped</i>
+                <i><span style="width:11px;height:11px;border-radius:3px;background-image:repeating-linear-gradient(-45deg,var(--border) 0 1px,transparent 1px 5px);box-shadow:inset 0 0 0 1px var(--border);"></span>Untracked</i>
+              </div>
+
+              <div class="list">
+                <div class="row">
+                  <div class="row-main">
+                    <span class="row-title" style="display:flex;align-items:center;gap:8px;">Tue dinner <span class="tag">Swapped</span></span>
+                    <span class="u-slash">Chicken &amp; Rice → Chilli · +21 kcal</span>
+                  </div>
+                  <button class="btn btn-text" type="button" style="width:auto;font-size:15px;">Revert</button>
+                </div>
+              </div>
+
+              <div class="kv three">
+                <div class="kvi"><span class="u-micro">Avg kcal</span><span class="u-val">1,772</span></div>
+                <div class="kvi"><span class="u-micro">Avg protein</span><span class="u-val em">148</span></div>
+                <div class="kvi"><span class="u-micro">Swaps</span><span class="u-val">1</span></div>
+              </div>
+
+              <nav class="tabbar" aria-label="Primary">
+                <div class="tabpill">
+                  <span class="tabitem" role="img" aria-label="Now"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></span>
+                  <span class="tabitem active"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M9 4v-2M15 4v-2"/></svg><span class="lab">Plan</span></span>
+                  <span class="tabitem" role="img" aria-label="Weight"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 16.5l5-5 3.5 3.5 8.5-8.5"/><path d="M16 6.5h4.5V11"/></svg></span>
+                  <span class="tabitem" role="img" aria-label="More"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="5.5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18.5" cy="12" r="1.4"/></svg></span>
+                </div>
+              </nav>
+            </div>
+          </div>
+        </div>
+        <div class="cap">
+          <span class="tagline">P2 · /plan · dark</span>
+          <h3>Weekly plan</h3>
+          <p>Untracked weekend meals are hatched — a flat two-tone pattern, not a texture. Today's column header is the one umber mark. Swapped cells take the tint, and stay one tap from reverting.</p>
+        </div>
+      </div>
+
+      <!-- ===== 7 · DAY COMPLETE ===== -->
+      <div class="cell">
+        <div class="stage">
+          <div class="ui device" data-mode="light" role="img" aria-label="Day complete summary with crop marks, totals against target, and the day's log">
+            <div class="statusbar"><span>21:40</span>
+              <span class="glyphs" aria-hidden="true">
+                <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.7" y="5" width="3" height="6" rx="1"/><rect x="9.4" y="2.5" width="3" height="8.5" rx="1"/><rect x="14" y="0" width="3" height="11" rx="1"/></svg>
+                <svg width="24" height="11" viewBox="0 0 24 11" fill="none"><rect x=".5" y=".5" width="20" height="10" rx="3" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="15" height="7" rx="1.5" fill="currentColor"/></svg>
+              </span>
+            </div>
+            <div class="app" style="padding-bottom:30px;">
+              <span class="crop tl" aria-hidden="true"></span><span class="crop tr" aria-hidden="true"></span>
+              <span class="crop bl" aria-hidden="true"></span><span class="crop br" aria-hidden="true"></span>
+
+              <div class="topbar" style="padding:0 6px;"><span class="u-micro">Day complete</span><span class="u-micro">Mon 10 Aug</span></div>
+
+              <div style="padding:0 6px;display:flex;flex-direction:column;gap:26px;">
+                <div style="display:flex;align-items:baseline;gap:10px;">
+                  <span class="u-xl">1,715</span><span class="u-micro" style="padding-bottom:8px;">kcal</span>
+                </div>
+
+                <div class="kv">
+                  <div class="kvi"><span class="u-micro">Target</span><span class="u-val">1,780</span><span class="u-slash">−65</span></div>
+                  <div class="kvi"><span class="u-micro">Protein</span><span class="u-val em">138 g</span><span class="u-slash">of 146 · −8</span></div>
+                  <div class="kvi"><span class="u-micro">Fat</span><span class="u-val">47 g</span><span class="u-slash">of 50</span></div>
+                  <div class="kvi"><span class="u-micro">Carbs</span><span class="u-val">179 g</span><span class="u-slash">of 185</span></div>
+                </div>
+
+                <div class="blk">
+                  <span class="u-micro">Logged</span>
+                  <div class="list">
+                    <div class="row" style="min-height:44px;padding:10px 0;">
+                      <div class="row-main"><span class="row-title">Oats · Cocoa</span></div><span class="status done">Eaten</span>
+                    </div>
+                    <div class="row" style="min-height:44px;padding:10px 0;">
+                      <div class="row-main"><span class="row-title" style="display:flex;align-items:center;gap:8px;">Chilli <span class="tag">Swapped</span></span></div><span class="status done">Eaten</span>
+                    </div>
+                    <div class="row" style="min-height:44px;padding:10px 0;">
+                      <div class="row-main"><span class="row-title">Protein bar</span></div><span class="status">Skipped</span>
+                    </div>
+                    <div class="row" style="min-height:44px;padding:10px 0;">
+                      <div class="row-main"><span class="row-title">Circuit A</span></div><span class="status done">Done</span>
+                    </div>
+                    <div class="row" style="min-height:44px;padding:10px 0;">
+                      <div class="row-main"><span class="row-title">Walk · 38 min</span></div><span class="status done">Done</span>
+                    </div>
+                  </div>
+                </div>
+
+                <button class="btn btn-secondary" type="button">Export this week</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap">
+          <span class="tagline">P1 + P6 · / · light</span>
+          <h3>Day complete</h3>
+          <p>Crop marks appear on exactly one screen, marking the day as a closed page. No tab bar, no score, no praise — Skipped and Done are set in the same 10.5px caps, differing only in weight.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ TYPE ============ -->
+  <section class="section">
+    <div class="section-head">
+      <div class="sec-no"><b>04</b><i></i></div>
+      <h2>Scale is the design</h2>
+      <p>System stack, no webfont — SF Pro on the phone this is built for, and no blocking request in the PRD's sub-1.5-second budget. What does the work is the ratio between the top and the bottom of this table.</p>
+    </div>
+
+    <div class="scale">
+      <div class="scale-row">
+        <div class="scale-key"><b>Display</b>76 / 70 · 600<br>−0.045em · tabular</div>
+        <div class="scale-val"><span style="font-size:76px;font-weight:600;letter-spacing:-.045em;line-height:.95;font-variant-numeric:tabular-nums;display:inline-block;">72.5</span></div>
+      </div>
+      <div class="scale-row">
+        <div class="scale-key"><b>Title</b>40 / 41 · 600<br>−0.035em</div>
+        <div class="scale-val"><span style="font-size:40px;font-weight:600;letter-spacing:-.035em;">Chilli con Carne</span></div>
+      </div>
+      <div class="scale-row">
+        <div class="scale-key"><b>Value</b>22 / 26 · 600<br>−0.022em · tabular</div>
+        <div class="scale-val"><span style="font-size:22px;font-weight:600;letter-spacing:-.022em;font-variant-numeric:tabular-nums;">612 kcal</span></div>
+      </div>
+      <div class="scale-row">
+        <div class="scale-key"><b>Body</b>17 / 23 · 400<br>−0.011em</div>
+        <div class="scale-val"><span style="font-size:17px;">Overnight oats — cocoa. Eaten at 07:14.</span></div>
+      </div>
+      <div class="scale-row">
+        <div class="scale-key"><b>Slash</b>12.5 / 17 · 500<br>metadata only</div>
+        <div class="scale-val"><span class="slash">612 kcal · 25 min · serves 1</span></div>
+      </div>
+      <div class="scale-row">
+        <div class="scale-key"><b>Micro</b>10.5 / 16 · 600<br>+0.16em · caps</div>
+        <div class="scale-val"><span class="micro">Protein · Right now · Day complete</span></div>
+      </div>
+    </div>
+
+    <p class="note">
+      <strong>The ratio is the rule: 76 ÷ 10.5 ≈ 7.2×.</strong> Everything between Value and Micro is
+      deliberately empty. Mid-sized type is what makes an interface read as a default rather than a
+      decision — the references all avoid it, and so does this.
+      <br><br>
+      <strong>Two exceptions that outrank the aesthetic.</strong> Body stays at 17px, because the
+      dominant case is a phone at arm's length, one-handed, mid-cook — legibility beats refinement on
+      the one screen the app exists for. And protein stays emphasised by weight rather than colour,
+      because colour is spoken for.
+    </p>
+  </section>
+
+  <!-- ============ COLOUR ============ -->
+  <section class="section">
+    <div class="section-head">
+      <div class="sec-no"><b>05</b><i></i></div>
+      <h2>Monochrome, plus one meaning</h2>
+      <p>
+        Warm stone neutrals carry the entire interface. Umber is not the brand colour — it is the
+        present tense, and it appears once per screen.
+      </p>
+    </div>
+
+    <div class="swatches">
+      <div class="sw">
+        <div class="sw-chips">
+          <div class="sw-chip" style="background:#8A5A3B;color:#fff;"><span>Light</span></div>
+          <div class="sw-chip" style="background:#C89A6B;color:#1C1917;"><span>Dark</span></div>
+        </div>
+        <div class="sw-body">
+          <span class="sw-name">accent · “now”</span>
+          <span class="sw-hex">#8A5A3B / #C89A6B</span>
+          <span class="sw-use">NOW marker, today's dot, latest reading, today's column header. Nothing else, ever.</span>
+          <span class="ratio pass">5.8:1 / 7.8:1</span>
+        </div>
+      </div>
+      <div class="sw">
+        <div class="sw-chips">
+          <div class="sw-chip" style="background:#1C1917;color:#fff;"><span>Light</span></div>
+          <div class="sw-chip" style="background:#F5F3F0;color:#1C1917;"><span>Dark</span></div>
+        </div>
+        <div class="sw-body">
+          <span class="sw-name">ink · actions</span>
+          <span class="sw-hex">#1C1917 / #F5F3F0</span>
+          <span class="sw-use">Primary buttons, the active tab, tiles, the trend line. Actions are ink so the accent stays free.</span>
+          <span class="ratio pass">17.5:1 / 16.4:1</span>
+        </div>
+      </div>
+      <div class="sw">
+        <div class="sw-chips">
+          <div class="sw-chip" style="background:#FFFFFF;color:#1C1917;border-right:1px solid #E5E1DB;"><span>Light</span></div>
+          <div class="sw-chip" style="background:#0C0B0A;color:#F5F3F0;"><span>Dark</span></div>
+        </div>
+        <div class="sw-body">
+          <span class="sw-name">canvas</span>
+          <span class="sw-hex">#FFFFFF / #0C0B0A</span>
+          <span class="sw-use">Where nearly everything sits. No cards, no fills, no elevation.</span>
+        </div>
+      </div>
+      <div class="sw">
+        <div class="sw-chips">
+          <div class="sw-chip" style="background:#F4F1EC;color:#1C1917;"><span>Light</span></div>
+          <div class="sw-chip" style="background:#17150F;color:#F5F3F0;"><span>Dark</span></div>
+        </div>
+        <div class="sw-body">
+          <span class="sw-name">surface</span>
+          <span class="sw-hex">#F4F1EC / #17150F</span>
+          <span class="sw-use">Stone tiles only. The one place a fill is permitted outside sheets.</span>
+        </div>
+      </div>
+      <div class="sw">
+        <div class="sw-chips">
+          <div class="sw-chip" style="background:#78716C;color:#fff;"><span>Light</span></div>
+          <div class="sw-chip" style="background:#A8A29E;color:#0C0B0A;"><span>Dark</span></div>
+        </div>
+        <div class="sw-body">
+          <span class="sw-name">text-secondary</span>
+          <span class="sw-hex">#78716C / #A8A29E</span>
+          <span class="sw-use">Micro labels, slash metadata, trailing values.</span>
+          <span class="ratio pass">4.8:1 / 7.9:1</span>
+        </div>
+      </div>
+      <div class="sw">
+        <div class="sw-chips">
+          <div class="sw-chip" style="background:#F3EBE3;color:#8A5A3B;"><span>Light</span></div>
+          <div class="sw-chip" style="background:#251B14;color:#C89A6B;"><span>Dark</span></div>
+        </div>
+        <div class="sw-body">
+          <span class="sw-name">accent-subtle</span>
+          <span class="sw-hex">#F3EBE3 / #251B14</span>
+          <span class="sw-use">Swapped cells and the Swapped tag — the only tinted grounds in the system.</span>
+          <span class="ratio pass">4.9:1 / 6.7:1</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="note">
+      <strong>Brown, not amber — and it simplified the system.</strong> The amber this started from
+      measured 2.7:1 on white: it failed AA as text and missed even the 3:1 threshold for UI components,
+      so it needed a second darker token for ink plus a rule about which to use where. Umber clears
+      5.8:1, so fill and ink are one value. Confining it to “now” then removed the last judgement call —
+      there is never a question of whether something should be accented.
+    </p>
+  </section>
+
+  <!-- ============ MATERIALS ============ -->
+  <section class="section">
+    <div class="section-head">
+      <div class="sec-no"><b>06</b><i></i></div>
+      <h2>Flat, and the details that replace depth</h2>
+      <p>No gradients. No textures. No shadows outside sheets. Distinctiveness comes from these instead.</p>
+    </div>
+
+    <div class="grid2">
+      <div class="item">
+        <span class="item-head">Hatching</span>
+        <div class="plate">
+          <div class="ui" data-mode="light" style="display:flex;gap:12px;align-items:center;">
+            <span style="width:56px;height:36px;border-radius:6px;box-shadow:inset 0 0 0 1px var(--border);background-image:repeating-linear-gradient(-45deg,var(--border) 0 1px,transparent 1px 5px);"></span>
+            <span class="u-slash" style="flex:1;">Untracked · skipped · flexible</span>
+          </div>
+        </div>
+        <p>Hard-edged two-tone stripes at 45°. A <em>pattern</em>, not a texture — no blending, no opacity ramp, no noise. It marks the absence of data without implying failure.</p>
+      </div>
+
+      <div class="item">
+        <span class="item-head">Line motifs</span>
+        <div class="plate">
+          <div class="ui" data-mode="light" style="display:flex;gap:14px;flex-wrap:wrap;color:var(--text);">
+            <svg viewBox="0 0 48 48" style="width:40px;height:40px;" aria-hidden="true"><use href="#m-bowl"/></svg>
+            <svg viewBox="0 0 48 48" style="width:40px;height:40px;" aria-hidden="true"><use href="#m-cup"/></svg>
+            <svg viewBox="0 0 48 48" style="width:40px;height:40px;" aria-hidden="true"><use href="#m-roll"/></svg>
+            <svg viewBox="0 0 48 48" style="width:40px;height:40px;" aria-hidden="true"><use href="#m-pot"/></svg>
+            <svg viewBox="0 0 48 48" style="width:40px;height:40px;" aria-hidden="true"><use href="#m-plate"/></svg>
+            <svg viewBox="0 0 48 48" style="width:40px;height:40px;" aria-hidden="true"><use href="#m-bar"/></svg>
+            <svg viewBox="0 0 48 48" style="width:40px;height:40px;" aria-hidden="true"><use href="#m-egg"/></svg>
+            <svg viewBox="0 0 48 48" style="width:40px;height:40px;" aria-hidden="true"><use href="#m-walk"/></svg>
+          </div>
+        </div>
+        <p>One per meal type, 1.6px stroke, <span class="mono">currentColor</span> so a single set works on ink and stone in both modes. Eight marks cover the entire library — and there is no photography to shoot, licence or ship.</p>
+      </div>
+
+      <div class="item">
+        <span class="item-head">Crop marks</span>
+        <div class="plate">
+          <div class="ui" data-mode="light" style="position:relative;height:76px;">
+            <span class="crop" style="left:0;top:0;"></span><span class="crop" style="right:0;top:0;"></span>
+            <span class="crop" style="left:0;bottom:0;"></span><span class="crop" style="right:0;bottom:0;"></span>
+            <div style="display:grid;place-items:center;height:100%;"><span class="u-micro">Day complete</span></div>
+          </div>
+        </div>
+        <p>Registration marks from print. They appear on the day-complete summary and nowhere else — the day is a finished page, and a device used once keeps its meaning.</p>
+      </div>
+
+      <div class="item">
+        <span class="item-head">Slash metadata</span>
+        <div class="plate">
+          <div class="ui" data-mode="light" style="display:flex;flex-direction:column;gap:9px;">
+            <span class="u-slash">612 kcal · 25 min · serves 1</span>
+            <span class="u-slash">Chicken &amp; Rice → Chilli · +21 kcal</span>
+            <span class="u-slash">98 of 148 g</span>
+          </div>
+        </div>
+        <p>A leading slash in tertiary grey marks every secondary fact. It replaces the parentheses, dashes and colons that make interface copy look unconsidered, and it costs one character.</p>
+      </div>
+    </div>
+
+    <p class="note">
+      <strong>Also deliberately absent:</strong> icons that repeat their own label, filled status pills,
+      card borders, elevation, and any second accent. The only shadow in the system sits under a sheet,
+      because a sheet genuinely floats.
+    </p>
+  </section>
+
+  <!-- ============ VOICE ============ -->
+  <section class="section">
+    <div class="section-head">
+      <div class="sec-no"><b>07</b><i></i></div>
+      <h2>Voice</h2>
+      <p>A neutral instrument. It reports; it does not congratulate, scold, or motivate. No exclamation marks anywhere. The right-hand column is the default every fitness app ships with.</p>
+    </div>
+    <div class="tablewrap">
+      <table class="voice">
+        <thead><tr><th scope="col">Context</th><th scope="col">Fuel &amp; Form</th><th scope="col">Not this</th></tr></thead>
+        <tbody>
+          <tr><td>Swap</td><td>Swapped. −21g protein, −140 kcal today.</td><td class="avoid">No problem! We've updated your plan.</td></tr>
+          <tr><td>Skip</td><td>Skipped. Logged.</td><td class="avoid">That's OK — tomorrow's a new day!</td></tr>
+          <tr><td>Day complete</td><td>Day complete. 1,715 / 1,780 kcal · 138 / 148g protein.</td><td class="avoid">Awesome day! You crushed your goals! 🎉</td></tr>
+          <tr><td>Missed session</td><td>Circuit B · Skipped</td><td class="avoid">Workout missed 😔</td></tr>
+          <tr><td>Empty state</td><td>No weigh-ins yet. Your first entry starts the chart.</td><td class="avoid">Let's get started on your journey! 💪</td></tr>
+          <tr><td>Error</td><td>Couldn't save. Your connection dropped. Try again.</td><td class="avoid">Oops! Something went wrong.</td></tr>
+          <tr><td>Destructive</td><td>Delete this weigh-in? This can't be undone.</td><td class="avoid">Are you sure you want to do this?</td></tr>
+          <tr><td>Demo banner</td><td>Demo session — your changes are temporary. View the source.</td><td class="avoid">Welcome to the demo! Feel free to explore! 👋</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">
+      <strong>Terminology is fixed.</strong> Swap (not substitute) · Log (not track) · Weigh-in (not entry) ·
+      Circuit A / B (not Workout 1 / 2) · Plan (not programme) · Target (not goal) · Slot (not mealtime).
+    </p>
+  </section>
+
+  <!-- ============ ACCESSIBILITY ============ -->
+  <section class="section">
+    <div class="section-head">
+      <div class="sec-no"><b>08</b><i></i></div>
+      <h2>Accessibility</h2>
+      <p>WCAG 2.1 AA, measured rather than assumed. Where restraint and contrast conflict, contrast wins and the hairline gets darker.</p>
+    </div>
+    <div class="grid2">
+      <div class="item"><span class="item-head">Contrast</span><p>≥4.5:1 body, ≥3:1 for large text and every control, tick, dot and hairline that carries meaning.</p></div>
+      <div class="item"><span class="item-head">Never colour alone</span><p>The ruler encodes status as fill, hatch and hairline; the dot grid as solid, ring and size. Both survive greyscale — and both already are greyscale.</p></div>
+      <div class="item"><span class="item-head">Signature graphics</span><p>The ruler and the grid each carry an accessible summary plus a data table. A mark on a screen is not the data.</p></div>
+      <div class="item"><span class="item-head">Micro labels</span><p>10.5px is small. It is permitted only for labels whose value sits adjacent at 22px or more, never for standalone information, and it scales with Dynamic Type.</p></div>
+      <div class="item"><span class="item-head">Focus</span><p>2px umber ring, 2px offset, on every interactive element in both modes. Never removed.</p></div>
+      <div class="item"><span class="item-head">Touch</span><p>44×44px minimum. Icon-only tabs carry an <span class="mono">aria-label</span>; the active tab shows its label as text.</p></div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <span>Fuel &amp; Form · Brand &amp; UX Guide v3</span>
+    <span>Companion to docs/PRD.md · 2026-08-10</span>
+  </footer>
+
+</div>
+
+</body>
+</html>
