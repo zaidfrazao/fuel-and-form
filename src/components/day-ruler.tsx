@@ -113,6 +113,18 @@ function scaleMarks(span: Span): number[] {
   return [...marks, span.end];
 }
 
+/**
+ * Half the rendered NOW pill, used to stop it hanging outside the ruler when the
+ * present moment is near either end of the span — which for a 06:00 first slot
+ * is every morning, not a rare edge.
+ *
+ * An approximation of a measured 44.7px, and allowed to be: it only takes effect
+ * where the pill would otherwise overflow, and a pixel of slack at the very edge
+ * is invisible. The accent rule is not clamped, so the precise moment is still
+ * marked exactly — the pill is its label, not the reading.
+ */
+const NOW_PILL_HALF = "23px";
+
 const STATUS_LABEL: Record<SlotStatus, string> = {
   logged: "Logged",
   skipped: "Skipped",
@@ -239,7 +251,9 @@ export function DayRuler({
                 screen that says "you are here". */}
             <span
               className="absolute top-[26px] z-10 -translate-x-1/2 rounded-full bg-accent px-[7px] py-[2px] text-micro leading-none uppercase text-accent-foreground"
-              style={{ left: `${positionInSpan(now, span)}%` }}
+              style={{
+                left: `clamp(${NOW_PILL_HALF}, ${positionInSpan(now, span)}%, calc(100% - ${NOW_PILL_HALF}))`,
+              }}
             >
               Now
             </span>
