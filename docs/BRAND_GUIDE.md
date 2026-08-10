@@ -86,6 +86,8 @@ Shows the pattern and refuses to grade it, which is the PRD's position on adhere
 
 System-adaptive. Both modes are first-class and fully specified; neither is a derived afterthought. Implement via `prefers-color-scheme` with a manual override stored in settings.
 
+> The signal is read through `matchMedia('(prefers-color-scheme: dark)')` rather than a CSS `@media` block, so that a manual override can win over it. The tokens are therefore declared once per mode, not a third time inside a media query — the trade is that a client with JavaScript disabled renders light, which is moot in an app that needs JavaScript to function at all. Decided in FUEL-3; recorded here so it is not re-litigated.
+
 ### Color Palette
 
 All values are **light / dark** pairs, with contrast measured against that mode's canvas.
@@ -313,7 +315,9 @@ One question per screen. Bottom sheets for the meal picker and swap preview; the
 
 ## Implementation Notes
 
-The PRD specifies Tailwind CSS + shadcn/ui. Define every token as a CSS custom property on `:root` and `.dark`, then map them in `tailwind.config.ts` — so a component says `bg-surface` and `text-accent`, never a raw hex.
+The PRD specifies Tailwind CSS + shadcn/ui. Define every token as a CSS custom property on `:root` and `.dark`, then map them into Tailwind — so a component says `bg-surface` and `text-accent`, never a raw hex.
+
+> The build uses Tailwind v4, which is CSS-first: there is no `tailwind.config.ts`. The mapping lives in the `@theme inline` block of `app/globals.css`, alongside the token definitions themselves. `app/globals.tokens.test.ts` asserts that every value in § Color Palette below is declared for both modes and that no hex appears anywhere else in `src/`.
 
 shadcn/ui defaults require five overrides:
 

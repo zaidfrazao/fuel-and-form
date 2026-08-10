@@ -2,12 +2,16 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/* `.dark` sits on <html>, which `.dark *` cannot match. :where() keeps the
+   specificity at zero, so a scoped `.dark` subtree works too. */
+@custom-variant dark (&:where(.dark, .dark *));
 
-/* Brand Guide § Implementation Notes — the five shadcn/ui overrides (FUEL-2).
-   Colours here are the subset the installed components need. The remaining
-   tokens (accent-subtle, success, the full text ramp as named utilities), the
-   `prefers-color-scheme` wiring and the settings override land in FUEL-3. */
+/* Brand Guide § Implementation Notes — the five shadcn/ui overrides (FUEL-2)
+   and the complete token layer (FUEL-3).
+
+   Every colour in the Brand Guide § Color Palette is a custom property here and
+   nowhere else. A component says `bg-surface` or `text-accent`; it never says a
+   hex. `src/app/globals.tokens.test.ts` enforces both halves of that. */
 
 @theme inline {
   /* No webfont. SF Pro on the phone this is built for, and no blocking request
@@ -62,6 +66,14 @@
      hover pair must be re-pointed at `muted`, or it will fill with umber. */
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-subtle: var(--accent-subtle);
+
+  /* Semantic. Used on numbers only — never on a skip, a missed session, or an
+     under-target figure. `error` is mapped to shadcn's `destructive` above as
+     well, but that covers destructive *controls*; a red numeral is not one, so
+     it needs a utility of its own. */
+  --color-success: var(--success);
+  --color-error: var(--error);
 
   /* Override 5 — Type scale. shadcn assumes a 14–16px base with no display
      tier. Sizes are in rem so they survive Dynamic Type at 200% zoom.
@@ -114,6 +126,8 @@
   --text-tertiary: #b5aea6;
   --accent: #8a5a3b;
   --accent-foreground: #ffffff;
+  --accent-subtle: #f3ebe3;
+  --success: #2f7d3e;
   --error: #a93226;
 
   --background: var(--canvas);
@@ -147,6 +161,8 @@
   --text-tertiary: #5c5650;
   --accent: #c89a6b;
   --accent-foreground: #1c1917;
+  --accent-subtle: #251b14;
+  --success: #4ade80;
   --error: #f0776b;
 
   --border: #2a2724;
@@ -178,6 +194,12 @@
   }
   body {
     @apply bg-background text-foreground;
+
+    /* Brand Guide § Typography — tabular numerals on every value, weight, time
+       and table figure. Set once and inherited rather than applied per
+       component, so a figure in a list row or a sentence lines up with the same
+       figure in a key/value grid. `proportional-nums` is the escape hatch. */
+    font-variant-numeric: tabular-nums;
   }
   html {
     @apply font-sans;
