@@ -9,12 +9,15 @@ import { cn } from "@/lib/utils"
  * override 4: `default` is an ink fill, never the accent — the accent means
  * "now" and is not an action colour. `secondary` is outlined, not filled.
  *
- * Heights live on `size` rather than `variant` because cva emits variant
- * classes before size classes, so a height set on the variant would lose to
- * the size on every conflict. `default` therefore carries the guide's 52px
- * primary height and `sm` its 46px secondary height. No size drops below the
- * 44px touch minimum — shadcn's defaults start at 24px.
+ * The guide couples height to variant (Primary 52px, everything else 46px),
+ * but the height classes have to live on `size`: cva emits variant classes
+ * before size classes, so a height set on the variant loses every twMerge
+ * conflict. Button therefore derives the guide's height from the variant when
+ * the caller doesn't name a size — see `resolvedSize` below. No size drops
+ * below the 44px touch minimum; shadcn's defaults start at 24px.
  */
+const OUTLINED = "border-border text-foreground hover:bg-surface"
+
 const buttonVariants = cva(
   "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-body font-medium whitespace-nowrap transition-colors duration-150 outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
@@ -23,8 +26,9 @@ const buttonVariants = cva(
         // Primary — the one action the screen exists for. One per screen.
         default: "bg-ink text-ink-fg font-semibold hover:bg-ink/90",
         // Secondary — real actions that aren't the main one: Swap, Skip, Partial.
-        secondary: "border-border text-foreground hover:bg-surface",
-        outline: "border-border text-foreground hover:bg-surface",
+        // The guide has one outlined variant; shadcn ships two names for it.
+        secondary: OUTLINED,
+        outline: OUTLINED,
         ghost: "text-foreground hover:bg-surface",
         // Destructive — no fill; it is filled only inside a confirmation sheet.
         destructive: "text-destructive hover:bg-destructive/10",
@@ -52,7 +56,7 @@ const buttonVariants = cva(
 function Button({
   className,
   variant = "default",
-  size = "default",
+  size,
   asChild = false,
   ...props
 }: React.ComponentProps<"button"> &
@@ -61,12 +65,16 @@ function Button({
   }) {
   const Comp = asChild ? Slot.Root : "button"
 
+  // Primary is the guide's 52px; every other variant is its 46px. Only applied
+  // when the caller leaves `size` unset, so an explicit size still wins.
+  const resolvedSize = size ?? (variant === "default" ? "default" : "sm")
+
   return (
     <Comp
       data-slot="button"
       data-variant={variant}
-      data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
+      data-size={resolvedSize}
+      className={cn(buttonVariants({ variant, size: resolvedSize, className }))}
       {...props}
     />
   )

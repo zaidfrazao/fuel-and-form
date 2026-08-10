@@ -2,6 +2,7 @@
 
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
+import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
 /*
  * Installed but deliberately unmounted. Brand Guide § Interaction Patterns →
@@ -12,7 +13,6 @@ import { Toaster as Sonner, type ToasterProps } from "sonner"
  * Nothing renders <Toaster /> and nothing should without a reason that clears
  * that bar. It is kept so the option exists, not because it is wanted.
  */
-import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()
