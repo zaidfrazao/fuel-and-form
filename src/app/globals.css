@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+/* Placeholder only. The Brand Guide token layer — accent, canvas, surface, ink,
+   the text ramp, and the light/dark wiring — lands in FUEL-3. Nothing here is
+   intended to survive that task. */
+@theme inline {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+}
