@@ -60,7 +60,7 @@ const CASES: { label: string; note: string; slots: Slot[]; now?: number }[] = [
   },
   {
     label: "Now at the span end",
-    note: "The pill runs past the 22 label and off the right edge.",
+    note: "The pill stops at the edge rather than running off it, and covers 22.",
     slots: untouched(DAY, "logged"),
     now: parseClock("22:00"),
   },
@@ -97,7 +97,8 @@ export default function DayRulerSpecimen() {
         <p className="text-body text-text-secondary">
           Brand Guide § Signature Graphics, rendered. Narrow the window to 375px,
           switch modes, and check it in greyscale — status is carried by fill,
-          hatch and hairline, so nothing should be lost.
+          hatch and hairline, so nothing should be lost. Zoom to 200% too: the
+          page must not scroll sideways.
         </p>
         <ThemeToggle />
       </header>

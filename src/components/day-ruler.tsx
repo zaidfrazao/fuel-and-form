@@ -84,7 +84,10 @@ function formatClock(minutes: number): string {
  * lose data from a graphic whose entire job is showing the day's shape; a slot
  * pinned to the edge is at least honest about existing.
  */
-export function positionInSpan(minutes: number, span: Span = DEFAULT_SPAN): number {
+export function positionInSpan(
+  minutes: number,
+  span: Span = DEFAULT_SPAN,
+): number {
   const width = span.end - span.start;
 
   if (width <= 0) return 0;
@@ -122,8 +125,13 @@ function scaleMarks(span: Span): number[] {
  * where the pill would otherwise overflow, and a pixel of slack at the very edge
  * is invisible. The accent rule is not clamped, so the precise moment is still
  * marked exactly — the pill is its label, not the reading.
+ *
+ * In `em` rather than `px` so it tracks the pill's own text under Dynamic Type.
+ * The pill's padding is fixed while its text is not, so `em` over-estimates as
+ * the text grows — which errs towards keeping the pill inside the ruler, the
+ * direction that fails safely.
  */
-const NOW_PILL_HALF = "23px";
+const NOW_PILL_HALF = "2.2em";
 
 const STATUS_LABEL: Record<SlotStatus, string> = {
   logged: "Logged",
@@ -157,7 +165,10 @@ const MARK: Record<SlotStatus, { className: string; style?: CSSProperties }> = {
 
 function summarise(slots: Slot[], span: Span, now?: number): string {
   const counts = slots.reduce<Partial<Record<SlotStatus, number>>>(
-    (tally, slot) => ({ ...tally, [slot.status]: (tally[slot.status] ?? 0) + 1 }),
+    (tally, slot) => ({
+      ...tally,
+      [slot.status]: (tally[slot.status] ?? 0) + 1,
+    }),
     {},
   );
 
@@ -215,7 +226,10 @@ export function DayRuler({
         {ordered.map((slot) => (
           <span
             key={slot.id}
-            className={cn("absolute -translate-x-1/2", MARK[slot.status].className)}
+            className={cn(
+              "absolute -translate-x-1/2",
+              MARK[slot.status].className,
+            )}
             style={{
               left: `${positionInSpan(slot.minutes, span)}%`,
               ...MARK[slot.status].style,
@@ -223,9 +237,15 @@ export function DayRuler({
           />
         ))}
 
+        {/* The scale and the pill are text inside a role="img", which the ARIA
+            spec already makes presentational — but that depends on the browser
+            pruning them, and Chrome still lists them in the tree. Hidden
+            explicitly so no screen reader reads "06 12 18 22 Now" after a
+            summary that has already said it better. */}
         {marks.map((at, index) => (
           <span
             key={at}
+            aria-hidden
             className={cn(
               "absolute top-[26px] text-micro leading-none uppercase text-text-tertiary",
               // The end labels would otherwise hang half outside the ruler.
@@ -250,6 +270,7 @@ export function DayRuler({
                 inferred from the ruler; the accent mark is the one thing on the
                 screen that says "you are here". */}
             <span
+              aria-hidden
               className="absolute top-[26px] z-10 -translate-x-1/2 rounded-full bg-accent px-[7px] py-[2px] text-micro leading-none uppercase text-accent-foreground"
               style={{
                 left: `clamp(${NOW_PILL_HALF}, ${positionInSpan(now, span)}%, calc(100% - ${NOW_PILL_HALF}))`,
@@ -267,28 +288,40 @@ export function DayRuler({
           Hidden because the Right Now screen shows no table and the ~40px budget
           has no room for one; the requirement is that the data exists, not that
           it is drawn twice. */}
-      <table className="sr-only">
-        <caption>
-          The day&rsquo;s slots, {formatClock(span.start)} to{" "}
-          {formatClock(span.end)}
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">Slot</th>
-            <th scope="col">Time</th>
-            <th scope="col">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ordered.map((slot) => (
-            <tr key={slot.id}>
-              <th scope="row">{slot.label}</th>
-              <td>{formatClock(slot.minutes)}</td>
-              <td>{STATUS_LABEL[slot.status]}</td>
+      {/* The wrapper is doing real work. `sr-only` hides an element by shrinking
+          it to 1px and clipping, but a `display: table` box under automatic
+          layout treats that width as a suggestion and lays out at its natural
+          ~476px instead — which, being absolutely positioned, added itself to
+          the document's scrollable width. At 100% it fitted inside the viewport
+          and looked fine; at 200% Dynamic Type it pushed the page to 530px and
+          scrolled sideways, against Brand Guide § Accessibility. A block
+          wrapper honours the 1px and clips the table inside it, and the table
+          keeps its semantics — forcing `display: block` onto the table itself
+          would have hidden it from the accessibility tree instead. */}
+      <div className="sr-only">
+        <table>
+          <caption>
+            The day&rsquo;s slots, {formatClock(span.start)} to{" "}
+            {formatClock(span.end)}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Slot</th>
+              <th scope="col">Time</th>
+              <th scope="col">Status</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {ordered.map((slot) => (
+              <tr key={slot.id}>
+                <th scope="row">{slot.label}</th>
+                <td>{formatClock(slot.minutes)}</td>
+                <td>{STATUS_LABEL[slot.status]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

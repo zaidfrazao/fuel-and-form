@@ -31,9 +31,15 @@ const FIXTURE: [clock: string, position: number][] = [
 ];
 
 describe("positionInSpan", () => {
-  test.each(FIXTURE)("%s sits at %s%% of the default span", (clock, position) => {
-    expect(positionInSpan(parseClock(clock), DEFAULT_SPAN)).toBeCloseTo(position, 10);
-  });
+  test.each(FIXTURE)(
+    "%s sits at %s%% of the default span",
+    (clock, position) => {
+      expect(positionInSpan(parseClock(clock), DEFAULT_SPAN)).toBeCloseTo(
+        position,
+        10,
+      );
+    },
+  );
 
   test("defaults to the 06:00–22:00 span", () => {
     expect(positionInSpan(parseClock("13:00"))).toBe(43.75);
@@ -85,13 +91,48 @@ describe("parseClock", () => {
 });
 
 const SLOTS: Slot[] = [
-  { id: "coffee", label: "Coffee + MCT oil", minutes: parseClock("06:00"), status: "logged" },
-  { id: "breakfast", label: "Breakfast", minutes: parseClock("07:00"), status: "logged" },
-  { id: "snack-1", label: "Snack 1", minutes: parseClock("10:30"), status: "logged" },
-  { id: "lunch", label: "Lunch", minutes: parseClock("13:00"), status: "logged" },
-  { id: "snack-2", label: "Snack 2", minutes: parseClock("16:00"), status: "skipped" },
-  { id: "workout", label: "Circuit B", minutes: parseClock("17:30"), status: "logged" },
-  { id: "dinner", label: "Dinner", minutes: parseClock("19:00"), status: "upcoming" },
+  {
+    id: "coffee",
+    label: "Coffee + MCT oil",
+    minutes: parseClock("06:00"),
+    status: "logged",
+  },
+  {
+    id: "breakfast",
+    label: "Breakfast",
+    minutes: parseClock("07:00"),
+    status: "logged",
+  },
+  {
+    id: "snack-1",
+    label: "Snack 1",
+    minutes: parseClock("10:30"),
+    status: "logged",
+  },
+  {
+    id: "lunch",
+    label: "Lunch",
+    minutes: parseClock("13:00"),
+    status: "logged",
+  },
+  {
+    id: "snack-2",
+    label: "Snack 2",
+    minutes: parseClock("16:00"),
+    status: "skipped",
+  },
+  {
+    id: "workout",
+    label: "Circuit B",
+    minutes: parseClock("17:30"),
+    status: "logged",
+  },
+  {
+    id: "dinner",
+    label: "Dinner",
+    minutes: parseClock("19:00"),
+    status: "upcoming",
+  },
 ];
 
 const NOW = parseClock("18:54");
@@ -172,7 +213,26 @@ describe("DayRuler", () => {
     render(<DayRuler slots={SLOTS} now={now} />);
 
     expect(screen.queryByText("Now")).toBeNull();
-    expect(screen.getByRole("img").getAttribute("aria-label")).not.toContain("Now ");
+    expect(screen.getByRole("img").getAttribute("aria-label")).not.toContain(
+      "Now ",
+    );
+  });
+
+  /**
+   * jsdom cannot see this one, so it asserts the structure instead of the
+   * effect. `sr-only` hides a box by shrinking it to 1px, which a `display:
+   * table` element ignores under automatic layout — the table laid out at its
+   * natural width and, being absolutely positioned, widened the whole document.
+   * It fitted the viewport at 100% and only scrolled sideways at 200% Dynamic
+   * Type, so nothing here would have caught it and nobody would have looked.
+   * The wrapper is load-bearing; this says so.
+   */
+  test("keeps the data table inside a block wrapper that can actually clip it", () => {
+    render(<DayRuler slots={SLOTS} now={NOW} />);
+
+    expect(screen.getByRole("table").parentElement?.className).toContain(
+      "sr-only",
+    );
   });
 
   test("renders an empty day without a summary that implies data", () => {
