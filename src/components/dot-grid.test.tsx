@@ -88,7 +88,11 @@ describe("weekdayIndex", () => {
       process.env.TZ = "Pacific/Kiritimati";
       expect(weekdayIndex("2026-08-10")).toBe(0);
     } finally {
-      process.env.TZ = original;
+      // `process.env.TZ = undefined` assigns the *string* "undefined", not an
+      // absence — so restoring a TZ that was never set would leave every later
+      // test in this worker running under a bogus zone. Delete it instead.
+      if (original === undefined) delete process.env.TZ;
+      else process.env.TZ = original;
     }
   });
 
@@ -96,6 +100,21 @@ describe("weekdayIndex", () => {
     expect(() => weekdayIndex("10-08-2026")).toThrow(RangeError);
     expect(() => weekdayIndex("2026-13-01")).toThrow(RangeError);
     expect(() => weekdayIndex("")).toThrow(RangeError);
+  });
+
+  test("rejects a date that does not exist, rather than rolling it forward", () => {
+    // `Date` normalises an overrun day instead of refusing it: "2026-02-31"
+    // parses as 3 March and "2026-04-31" as 1 May. Both pass a shape check and
+    // both are a valid Date, so without the round-trip they would land two
+    // columns from where the caller meant — the exact silent misplacement this
+    // function exists to prevent.
+    expect(() => weekdayIndex("2026-02-31")).toThrow(RangeError);
+    expect(() => weekdayIndex("2026-02-30")).toThrow(RangeError);
+    expect(() => weekdayIndex("2026-04-31")).toThrow(RangeError);
+    // 2028 is a leap year and 2026 is not, so this pair also guards the
+    // round-trip against being loosened to a day-of-month range check.
+    expect(() => weekdayIndex("2026-02-29")).toThrow(RangeError);
+    expect(weekdayIndex("2028-02-29")).toBe(1);
   });
 });
 

@@ -92,10 +92,16 @@ export function KeyValueGrid({
         className,
       )}
     >
-      {items.map(({ label, value, meta, emphasis }) => (
+      {items.map(({ label, value, meta, emphasis }, index) => (
+        // Keyed by position, not by label. Labels are not unique — a day view
+        // showing "Calories" per meal repeats one immediately — and a duplicate
+        // key makes React reuse the wrong cell. The grid is a static ordered
+        // list that is never reordered in place, which is exactly the case where
+        // an index key is the correct one.
+        //
         // `min-w-0` so a long figure truncates inside its column instead of
         // widening the track and pushing the page sideways at 200% zoom.
-        <div key={label} className="flex min-w-0 flex-col gap-[3px]">
+        <div key={index} className="flex min-w-0 flex-col gap-[3px]">
           {/* Micro at 10.5px is permitted here precisely because the value sits
               adjacent at 22px — Brand Guide § Accessibility. It is never a
               standalone label. */}

@@ -65,7 +65,12 @@ type TileProps =
       >)
   | (TileOwnProps & { as: "button" } & Omit<
         ButtonHTMLAttributes<HTMLButtonElement>,
-        keyof TileOwnProps
+        // `type` is deliberately not passable. It is set to "button" below, but
+        // the spread comes after it, so a caller could otherwise override it to
+        // "submit" — and a tile inside a form would then submit that form when
+        // picked. Removing it from the type makes the default unforgeable
+        // rather than merely conventional.
+        keyof TileOwnProps | "type"
       >);
 
 const MATERIAL: Record<TileMaterial, string> = {

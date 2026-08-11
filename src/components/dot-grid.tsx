@@ -88,7 +88,19 @@ function parseISODate(date: string): Date {
   // column for anyone west of Greenwich.
   const parsed = new Date(`${date}T00:00:00Z`);
 
-  if (!ISO_DATE.test(date) || Number.isNaN(parsed.getTime())) {
+  // The round-trip is the real check, and the reason the shape test alone is not
+  // enough. `Date` *normalises* a day that overruns its month rather than
+  // rejecting it: "2026-02-31" parses happily as 3 March, and "2026-04-31" as
+  // 1 May. Both match the regex and both are a valid `Date`, so without this a
+  // date that does not exist would place its dot two columns from where the
+  // caller meant — silently, which is the one failure this function exists to
+  // prevent. Comparing the formatted result back to the input catches every such
+  // case, because a normalised date never formats back to what was passed in.
+  if (
+    !ISO_DATE.test(date) ||
+    Number.isNaN(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== date
+  ) {
     throw new RangeError(`Not an ISO YYYY-MM-DD date: ${JSON.stringify(date)}`);
   }
 
