@@ -15,7 +15,7 @@ import { Tile } from "@/components/tile";
  * same ground, as with /dev/tokens and /dev/day-ruler.
  */
 export const metadata: Metadata = {
-  title: "Primitives",
+  title: "Shared primitives",
   robots: { index: false, follow: false },
 };
 
@@ -67,7 +67,11 @@ export default function PrimitivesSpecimen() {
   return (
     <main className="mx-auto flex max-w-[640px] flex-col gap-[30px] px-[22px] py-10 md:px-7">
       <header className="flex flex-col gap-[14px]">
-        <h1 className="text-title">Primitives</h1>
+        {/* Two words, not "Primitives". At 200% Dynamic Type a single
+            eleven-character word set at 40px is wider than the 375px screen's
+            content box and scrolls the page sideways, against Brand Guide
+            § Accessibility. A title that can wrap is the whole fix. */}
+        <h1 className="text-title">Shared primitives</h1>
         <p className="text-body text-text-secondary">
           Brand Guide § Component Patterns and § Materials, rendered. Narrow to
           375px, switch modes, tab through the selectable tiles to check the

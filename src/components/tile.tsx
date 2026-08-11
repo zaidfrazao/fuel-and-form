@@ -96,6 +96,13 @@ export function Tile({
     // Brand Guide § Accessibility — 2px accent ring at 2px offset on every
     // interactive element, in both modes, never removed. Only `focus-visible`,
     // so a pointer tap does not leave a ring behind it.
+    //
+    // `outline`, where theme-toggle.tsx uses Tailwind's `ring-*`. Not a stylistic
+    // difference: `ring` is implemented as a box-shadow, and the selection ring
+    // below is an inline box-shadow that would replace it outright — a selected
+    // tile would take focus and show nothing at all. An outline is a separate
+    // property, so the two coexist and the ring never goes missing on the one
+    // tile most likely to be focused.
     as === "button" &&
       "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
     className,
