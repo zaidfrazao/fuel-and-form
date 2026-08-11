@@ -6,9 +6,11 @@ out/
 next-env.d.ts
 *.tsbuildinfo
 .vercel
-.env
-.env.local
-.env.*.local
+# Every .env variant is a secret — except the committed template. `vercel env
+# pull` appends a bare `.env*`, which would swallow .env.example too; the
+# negation is what keeps the setup docs' reference file in the repo.
+.env*
+!.env.example
 .idea/
 .vscode/
 *.swp
