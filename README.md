@@ -47,15 +47,31 @@ latency risk for the kitchen view, so pooling is not optional here.
 
 ### Setup
 
-1. Create a project at [console.neon.tech](https://console.neon.tech). Pick the
-   region closest to your Vercel region — every query crosses that gap.
-2. Create a branch named `test` off `main`. This is the separate database the
+Provision through Vercel's Neon integration — it sets `DATABASE_URL` and
+`DATABASE_URL_UNPOOLED` under exactly those names, which is what this code
+expects, and keeps them in sync across Production, Preview, and Development.
+
+```bash
+vercel integration add neon      # pick the Free plan; region = your Vercel region
+vercel env pull .env.local       # writes both connection strings locally
+```
+
+Then, for the integration tests, add the third string by hand:
+
+1. In the Neon console (`vercel integration open neon` opens it via SSO),
+   create a branch named `test` off `main`. This is the separate database the
    integration suite writes to and truncates.
-3. `cp .env.example .env.local`, then fill in the three connection strings from
-   **Project → Connect**. `.env.local` is gitignored; this repository is public,
-   so a real connection string must never be committed.
-4. In Vercel, set `DATABASE_URL` and `DATABASE_URL_UNPOOLED` as environment
-   variables. `DATABASE_URL_TEST` is local- and CI-only.
+2. Copy its **pooled** connection string into `.env.local` as
+   `DATABASE_URL_TEST`. It is local- and CI-only — never set it in Vercel.
+
+`.env.local` is gitignored. This repository is public, so a real connection
+string must never be committed; `.env.example` is the only `.env*` file git
+will accept.
+
+> Doing it by hand instead? Create a project at
+> [console.neon.tech](https://console.neon.tech), `cp .env.example .env.local`,
+> and fill in all three from **Project → Connect**. Put `DATABASE_URL` and
+> `DATABASE_URL_UNPOOLED` into Vercel's environment variables yourself.
 
 ### The three connection strings
 
