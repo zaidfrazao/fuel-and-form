@@ -64,6 +64,12 @@ Then, for the integration tests, add the third string by hand:
 2. Copy its **pooled** connection string into `.env.local` as
    `DATABASE_URL_TEST`. It is local- and CI-only — never set it in Vercel.
 
+> **`vercel env pull` overwrites `.env.local`.** It only knows about variables
+> Vercel holds, so it will silently drop `DATABASE_URL_TEST` — and the
+> integration suite will go back to reporting *skipped*, which reads like
+> success. Re-add it after any pull, and check for "skipped" before trusting a
+> green run.
+
 `.env.local` is gitignored. This repository is public, so a real connection
 string must never be committed; `.env.example` is the only `.env*` file git
 will accept.
