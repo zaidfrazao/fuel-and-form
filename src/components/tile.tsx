@@ -30,6 +30,13 @@ type TileOwnProps = {
    * Drawn as a 1.5px `accent` inset ring — never as a fill, so an ink tile stays
    * ink and a stone tile stays stone. It is also the screen's one umber element,
    * which is the whole of Brand Guide § Accent: umber says "here".
+   *
+   * On a `button` tile this also sets `aria-pressed`, so pass it as a boolean —
+   * `selected={id === chosen}` — for every tile in a picker, including the
+   * unselected ones. Omitting it leaves `aria-pressed` off entirely, which is
+   * right for a tile that merely opens something and wrong inside a group: the
+   * one chosen tile would announce as a pressed toggle while its siblings
+   * announced as ordinary buttons.
    */
   selected?: boolean;
   className?: string;

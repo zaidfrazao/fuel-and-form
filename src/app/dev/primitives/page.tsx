@@ -111,6 +111,9 @@ export default function PrimitivesSpecimen() {
         title="Tiles"
         note="The mock's meal picker. One ink tile carries the eye; selection is a ring, never a fill."
       >
+        {/* Every tile in the group passes `selected` as a boolean, including the
+            unselected ones, so all four announce as toggles rather than one
+            pressed toggle among three ordinary buttons. */}
         <div className="grid max-w-[331px] grid-cols-2 gap-[10px]">
           <Tile
             as="button"
@@ -128,6 +131,7 @@ export default function PrimitivesSpecimen() {
           />
           <Tile
             as="button"
+            selected={false}
             name={
               <>
                 Beef Mince
@@ -140,6 +144,7 @@ export default function PrimitivesSpecimen() {
           />
           <Tile
             as="button"
+            selected={false}
             name={
               <>
                 Chilli
@@ -152,6 +157,7 @@ export default function PrimitivesSpecimen() {
           />
           <Tile
             as="button"
+            selected={false}
             name={
               <>
                 Overnight
@@ -174,6 +180,7 @@ export default function PrimitivesSpecimen() {
           <Tile
             as="button"
             material="ink"
+            selected={false}
             name="Unselected"
             motif="bar"
             meta="Ink"
