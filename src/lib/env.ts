@@ -1,5 +1,13 @@
+import "server-only";
+
 /**
  * Server-side environment access.
+ *
+ * The guard above makes that a build error rather than a convention: a client
+ * component importing this file fails to compile. Non-`NEXT_PUBLIC_` variables
+ * are never inlined into a browser bundle, so this is defence in depth rather
+ * than a plugged leak — but the Next data-security guide is explicit that only
+ * the data-access layer should read `process.env`, and this enforces it.
  *
  * Every read is a function call, never a module-scope constant, so importing
  * this file can never throw at build time — only the code path that actually

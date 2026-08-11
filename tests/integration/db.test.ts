@@ -12,7 +12,11 @@ describe.skipIf(!configured)("database connectivity", () => {
   it("reaches the test branch over the HTTP driver", async () => {
     const rows = await getDb().execute(sql`select 1 as ok`);
 
-    expect(rows.rows[0]).toEqual({ ok: 1 });
+    // Number(): what matters is that a value round-trips, not whether the
+    // driver's type parsers hand back 1 or "1" for an int4. Asserting the
+    // stricter form would fail on the first real run and point at the driver
+    // instead of at the credentials.
+    expect(Number(rows.rows.at(0)?.ok)).toBe(1);
   });
 
   it("runs a transaction over the WebSocket driver", async () => {
@@ -20,10 +24,10 @@ describe.skipIf(!configured)("database connectivity", () => {
     // carries no `ws` dependency.
     const ok = await getPool().transaction(async (tx) => {
       const rows = await tx.execute(sql`select 1 as ok`);
-      return rows.rows[0];
+      return rows.rows.at(0);
     });
 
-    expect(ok).toEqual({ ok: 1 });
+    expect(Number(ok?.ok)).toBe(1);
   });
 });
 

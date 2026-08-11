@@ -69,6 +69,11 @@ Migrations run on the **direct** endpoint on purpose: DDL needs a real session,
 which pgbouncer's transaction pooling does not provide. Everything else uses the
 pooled endpoint.
 
+`drizzle-kit` requires `DATABASE_URL_UNPOOLED` and will not fall back to
+`DATABASE_URL`. `db:migrate` and `db:push` are destructive, and a fallback would
+let them silently target whatever `DATABASE_URL` holds — including a deployed
+database, if you happen to have production env exported.
+
 ### Two handles
 
 | Import | Driver | Use for |
@@ -100,9 +105,11 @@ history, so it must never touch a deployed database.
 
 `npm run test:integration` runs `tests/integration/` against the `test` branch,
 in a separate Vitest config from the unit suite. Without `DATABASE_URL_TEST` it
-reports **skipped**, so a fresh clone and CI stay green without a secret. The
-harness refuses to run if the test branch resolves to the same host as
-`DATABASE_URL`, because these tests truncate tables.
+reports **skipped**, so a fresh clone and CI stay green without a secret.
+
+Because these tests truncate tables, the harness refuses to run if the test
+branch resolves to the same host as `DATABASE_URL` — or if `DATABASE_URL` is
+unset, since it then cannot prove the two differ. Set both.
 
 ## Documentation
 

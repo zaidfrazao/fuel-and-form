@@ -10,14 +10,19 @@ loadEnvConfig(process.cwd());
 
 // Migrations run on the DIRECT endpoint, not the `-pooler` one the app uses:
 // DDL wants a real session, which pgbouncer's transaction pooling does not
-// give it. Falls back to DATABASE_URL so a fresh clone with only one string
-// still gets a working `db:generate`.
-const url = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
+// give it.
+//
+// No fallback to DATABASE_URL on purpose. `db:migrate` and `db:push` are
+// destructive, and a fallback would let them silently target whatever
+// DATABASE_URL happens to hold — including a deployed database, if someone
+// runs these with production env exported. One variable, one meaning.
+const url = process.env.DATABASE_URL_UNPOOLED;
 
 if (!url) {
   throw new Error(
-    "Missing DATABASE_URL_UNPOOLED (or DATABASE_URL). " +
-      "Copy .env.example to .env.local and fill it in (see README → Database).",
+    "Missing DATABASE_URL_UNPOOLED — drizzle-kit needs the DIRECT (non-pooler) " +
+      "connection string. Copy .env.example to .env.local and fill it in " +
+      "(see README → Database).",
   );
 }
 
