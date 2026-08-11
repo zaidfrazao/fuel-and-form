@@ -24,3 +24,8 @@ coverage/
 # Claude Code artifacts
 .playwright-mcp/
 .changeset/
+# Agent tooling — installed skills and their lockfile. Local to whoever is
+# driving the agent, not part of the app, and this repo is public.
+.agents/
+.claude/skills/
+skills-lock.json
