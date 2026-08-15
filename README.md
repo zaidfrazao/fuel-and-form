@@ -124,19 +124,30 @@ builds:
 ```ts
 const s = scope(session.userId, getDb());
 
-const meals = await s.select(mealsTable);                    // only this user's
-const one = await s.selectOne(mealsTable, eq(mealsTable.id, id));  // undefined if not theirs
-await s.insert(mealsTable, { name: "Oats", kcal: 500 });     // stamped with user_id
+const meals = await s.select(meals);                          // only this user's
+const recent = await s.select(meals, undefined, { orderBy: desc(meals.at), limit: 10 });
+const one = await s.selectOne(meals, eq(meals.id, id));       // undefined if not theirs
+await s.insert(meals, { name: "Oats", kcal: 500 });           // stamped with user_id
 
 await getPool().transaction(async (tx) => {
-  await scope(demoUserId, tx).insert(mealsTable, rows);      // same scope in a transaction
+  await scope(demoUserId, tx).insert(meals, rows);            // same scope in a transaction
 });
 ```
 
 Both arguments are required, so a scope cannot be built without deciding whose
-data it reads. Conditions are passed **as arguments**, never by chaining
-`.where()` — Drizzle's `.where()` replaces a predicate rather than narrowing it,
-so a second call would silently drop the ownership filter.
+data it reads. Conditions, ordering and pagination are all passed **as
+arguments**: every method returns rows, never a query builder.
+
+That last part is the load-bearing one. Drizzle's `.where()` *replaces* a
+predicate rather than narrowing it, and `.$dynamic()` deliberately restores
+methods stripped from a builder's type. Were a builder handed back, this would
+compile cleanly and delete every user's rows:
+
+```ts
+scope(uid, db).delete(meals).$dynamic().where(eq(meals.kcal, 500))
+```
+
+Returning results closes that off — there is no builder left to reopen.
 
 There is no get-by-id-then-check-owner helper, and there must not be one. It
 would answer "exists but isn't yours" differently from "doesn't exist", letting a

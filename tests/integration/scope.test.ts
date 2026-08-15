@@ -77,7 +77,7 @@ describe.skipIf(!configured)("scope — isolation against real Postgres", () => 
 
   describe("reads", () => {
     it("returns only the caller's rows", async () => {
-      const rows = await alice().select(fixture).orderBy(asc(fixture.id));
+      const rows = await alice().select(fixture, undefined, { orderBy: asc(fixture.id) });
 
       expect(rows.map((r) => r.id)).toEqual(["a1", "a2"]);
       expect(rows.every((r) => r.userId === ALICE)).toBe(true);
@@ -131,9 +131,7 @@ describe.skipIf(!configured)("scope — isolation against real Postgres", () => 
     });
 
     it("leaves another user's row untouched on update", async () => {
-      const updated = await alice()
-        .update(fixture, { label: "hijacked" }, eq(fixture.id, "b1"))
-        .returning();
+      const updated = await alice().update(fixture, { label: "hijacked" }, eq(fixture.id, "b1"));
 
       expect(updated).toHaveLength(0);
 
@@ -142,7 +140,7 @@ describe.skipIf(!configured)("scope — isolation against real Postgres", () => 
     });
 
     it("leaves another user's row untouched on delete", async () => {
-      const deleted = await alice().delete(fixture, eq(fixture.id, "b1")).returning();
+      const deleted = await alice().delete(fixture, eq(fixture.id, "b1"));
 
       expect(deleted).toHaveLength(0);
       await expect(bob().selectOne(fixture, eq(fixture.id, "b1"))).resolves.toBeDefined();
