@@ -13,7 +13,17 @@
  * so we would silently read nothing.
  */
 
-let loaded = false;
+/**
+ * Resolved once per process, result and all.
+ *
+ * Not merely an optimisation. `setup.ts` REPLACES `DATABASE_URL` with the test
+ * branch so the code under test reads it — after which the two variables hold
+ * the same string, and a second trip through `assertNotProduction` would refuse
+ * to run on the grounds that the test database is the app's own. Caching the
+ * answer means the guard sees the real pair, once, and every later caller gets
+ * that verdict rather than a fresh comparison against a value we ourselves set.
+ */
+let resolved: { url: string | undefined } | undefined;
 
 /**
  * The test branch's connection string, or `undefined` when unconfigured — in
@@ -22,28 +32,58 @@ let loaded = false;
  * Throws only when the configuration is present but unsafe; see below.
  */
 export function testDatabaseUrl(): string | undefined {
-  if (!loaded) {
-    loaded = true;
+  if (resolved) return resolved.url;
 
-    try {
-      process.loadEnvFile(".env.local");
-    } catch {
-      // No .env.local — CI, or a fresh clone. The suites skip themselves.
-    }
+  try {
+    process.loadEnvFile(".env.local");
+  } catch {
+    // No .env.local — CI, or a fresh clone. The suites skip themselves.
   }
 
   const testUrl = process.env.DATABASE_URL_TEST;
 
-  if (!testUrl) return undefined;
+  // Deliberately not cached before the guard runs: a throw must stay a throw on
+  // every call, not be answered from a cache on the second one.
+  if (testUrl) assertNotProduction(testUrl, process.env.DATABASE_URL);
 
-  assertNotProduction(testUrl, process.env.DATABASE_URL);
+  resolved = { url: testUrl };
 
-  return testUrl;
+  return resolved.url;
+}
+
+/**
+ * Which database a connection string reaches, as a comparable string.
+ *
+ * The host, with Neon's `-pooler` suffix normalised away. That normalisation is
+ * the whole point rather than a tidy-up: Neon's pooled endpoint is the direct
+ * one with `-pooler` inserted into the same endpoint id, so
+ * `ep-x-pooler.eu-west-2.aws.neon.tech` and `ep-x.eu-west-2.aws.neon.tech` are
+ * two doors into ONE database. Comparing raw hosts would call them different and
+ * wave through the exact misconfiguration the guard exists to catch — the app's
+ * production database in `DATABASE_URL` as pooled, and the same database pasted
+ * into `DATABASE_URL_TEST` as direct, followed by a truncate.
+ *
+ * Exported for `tests/unit/database-guard.test.ts`. A guard whose failure mode
+ * is "the integration suite silently truncates production" should not itself be
+ * the one thing in the repository with no test.
+ */
+export function databaseIdentity(url: string, name: string): string {
+  let parsed: URL;
+
+  try {
+    parsed = new URL(url);
+  } catch {
+    // Never interpolate a connection string into an error — these surface in CI
+    // logs, and the first characters alone carry the username.
+    throw new Error(`Could not parse ${name} as a URL.`);
+  }
+
+  return parsed.host.replace(/-pooler(?=\.)/i, "");
 }
 
 /**
  * These tests migrate, write and truncate. Refuse to run if the test branch
- * resolves to the same Postgres host as the app's own database.
+ * resolves to the same database as the app's own.
  *
  * Fails closed: with no DATABASE_URL there is nothing to compare against, and
  * an unverifiable guard is worse than none — it reads as protection while
@@ -59,20 +99,11 @@ function assertNotProduction(testUrl: string, appUrl: string | undefined) {
     );
   }
 
-  // Never interpolate a connection string into an error — these surface in CI
-  // logs, and the first characters alone carry the username.
-  const host = (url: string, name: string) => {
-    try {
-      return new URL(url).host;
-    } catch {
-      throw new Error(`Could not parse ${name} as a URL.`);
-    }
-  };
-
-  if (host(testUrl, "DATABASE_URL_TEST") === host(appUrl, "DATABASE_URL")) {
+  if (databaseIdentity(testUrl, "DATABASE_URL_TEST") === databaseIdentity(appUrl, "DATABASE_URL")) {
     throw new Error(
-      "DATABASE_URL_TEST points at the same host as DATABASE_URL. " +
-        "The integration suite truncates tables — point it at a separate Neon branch.",
+      "DATABASE_URL_TEST reaches the same database as DATABASE_URL — pooled and " +
+        "direct endpoints of one Neon branch count as the same. The integration " +
+        "suite truncates tables; point it at a separate branch.",
     );
   }
 }

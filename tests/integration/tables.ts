@@ -65,6 +65,13 @@ type Executes = { execute: (query: SQL) => Promise<unknown> };
  * assuming the scoping it is about to test.
  */
 export async function truncateAll(db: Executes): Promise<void> {
+  // The walk finding nothing would emit `truncate table  restart identity
+  // cascade` and fail as a syntax error, sending whoever hits it to the SQL
+  // rather than to the export shape it actually came from.
+  if (allTables.length === 0) {
+    throw new Error("Found no tables to truncate — the walk over the schema module found none.");
+  }
+
   const names = allTables.map(([name]) => `"${name}"`).join(", ");
 
   await db.execute(sql.raw(`truncate table ${names} restart identity cascade`));

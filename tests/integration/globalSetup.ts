@@ -25,6 +25,14 @@ import { truncateAll } from "./tables";
  * with no session to hold, so it runs DDL over the pooled endpoint perfectly
  * well — the constraint the README describes does not apply to it.
  *
+ * The condition that buys: every migration must stay statement-independent. A
+ * future one that needs a single session across statements — a transactional
+ * wrapper, a session-local setting, an advisory lock — will not survive this
+ * path, and the fix then is a `DATABASE_URL_TEST_UNPOOLED` pointing at the same
+ * branch's direct endpoint, not a workaround here. Adding that variable today
+ * would be a fourth connection string to keep in step for a migration nobody has
+ * written.
+ *
  * ## Torn down per run, not per suite
  *
  * The schema persists between runs; the DATA never does. Truncating on the way

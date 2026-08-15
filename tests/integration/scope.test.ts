@@ -8,6 +8,7 @@ import { getPool } from "@/lib/db/pool";
 import * as schema from "@/lib/db/schema";
 import { scope } from "@/lib/db/scope";
 
+import { testDatabaseUrl } from "./env";
 import { type Fixture, seedFixture } from "./fixtures";
 import { truncateAll, userOwnedTables } from "./tables";
 
@@ -44,7 +45,17 @@ import { truncateAll, userOwnedTables } from "./tables";
  * stand-in session would prove only that the stand-in works.
  */
 
-const configured = Boolean(process.env.DATABASE_URL_TEST);
+/**
+ * Resolved through the shared helper, not read off `process.env` directly.
+ *
+ * `setup.ts` is what loads `.env.local`, and it happens to run before this
+ * module is evaluated — so reading the raw variable works today, by ordering the
+ * config does not promise. If that ordering ever changed, this suite would
+ * report SKIPPED on a machine that is fully configured, which the README already
+ * warns reads like success. Asking the resolver removes the dependency: it loads
+ * the file itself if nobody has yet, and applies the same-database guard.
+ */
+const configured = Boolean(testDatabaseUrl());
 
 /**
  * Reads the owning column off a row whose table is only known as `ScopedTable`.
