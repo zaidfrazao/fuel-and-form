@@ -393,6 +393,17 @@ describe("resolveTraining", () => {
     expect(() => resolveTraining(plan, "2026-03-08")).toThrow(/not in the workouts/);
   });
 
+  it("throws on an entry with neither a workout nor a group", () => {
+    // The schema's CHECK forbids this row. If one ever appeared anyway, the
+    // failure has to be loud: resolving it as a rotation would match every
+    // workout with a null rotation_group — the walk among them — and quietly
+    // schedule one of those instead.
+    const orphan: TrainingTemplateEntry = { ...fixedEntry(MONDAY, "walk"), workoutId: null };
+    const plan: TrainingPlan = { ...PLAN, template: [orphan] };
+
+    expect(() => resolveTraining(plan, PROGRAM_START)).toThrow(/names workout null/);
+  });
+
   it("returns nothing for a day the template does not cover", () => {
     expect(resolveTraining(PLAN, "2026-03-07")).toEqual([]); // a Saturday
   });

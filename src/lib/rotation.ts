@@ -231,26 +231,33 @@ export function resolveTraining(plan: TrainingPlan, date: CalendarDate): Resolve
     .sort((a, b) => a.sortOrder - b.sortOrder || compareStrings(a.id, b.id));
 
   for (const entry of entries) {
-    if (entry.workoutId !== null) {
-      const workout = plan.workouts.find((candidate) => candidate.id === entry.workoutId);
+    // Branching on the GROUP rather than on `workout_id`, which the schema's
+    // CHECK makes equivalent — exactly one of the two is non-null — but which
+    // fails differently if a row ever gets past it. Testing `workout_id` first
+    // would send a row with neither column set into the rotation branch with a
+    // null group, and `groupWorkouts` matches `rotation_group === null`: every
+    // workout that belongs to no rotation at all, the Sunday walk included. That
+    // resolves, and puts the walk on a Monday with nothing to indicate anything
+    // went wrong. This way round the same row falls through to the lookup below
+    // and throws, which is the right noise for a state the database forbids.
+    if (entry.rotationGroup !== null) {
+      const workout = rotationWorkout(plan, entry.rotationGroup, date);
 
-      if (!workout) {
-        throw new Error(
-          `Training template entry ${entry.id} references workout ${entry.workoutId}, ` +
-            `which is not in the workouts it was given. rotation.ts does not read the ` +
-            `database — pass every workout the template names.`,
-        );
-      }
-
-      resolved.push({ workout, source: "fixed", entryId: entry.id });
+      if (workout) resolved.push({ workout, source: "rotation", entryId: entry.id });
       continue;
     }
 
-    // The schema's CHECK makes exactly one of the two columns non-null, so this
-    // branch has a group by construction.
-    const workout = rotationWorkout(plan, entry.rotationGroup as string, date);
+    const workout = plan.workouts.find((candidate) => candidate.id === entry.workoutId);
 
-    if (workout) resolved.push({ workout, source: "rotation", entryId: entry.id });
+    if (!workout) {
+      throw new Error(
+        `Training template entry ${entry.id} names workout ${entry.workoutId}, which ` +
+          `is not in the workouts it was given. rotation.ts does not read the ` +
+          `database — pass every workout the template names.`,
+      );
+    }
+
+    resolved.push({ workout, source: "fixed", entryId: entry.id });
   }
 
   return resolved;
