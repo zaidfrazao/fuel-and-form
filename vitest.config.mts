@@ -54,6 +54,7 @@ export default defineConfig({
       include: [
         "src/lib/db/scope.ts",
         "src/lib/date.ts",
+        "src/lib/macros.ts",
         "src/lib/resolve-plan.ts",
         "src/lib/rotation.ts",
       ],
@@ -65,6 +66,12 @@ export default defineConfig({
         // actually names.
         "src/lib/date.ts": FULLY_COVERED,
         "src/lib/resolve-plan.ts": FULLY_COVERED,
+        // § 1.3. The totals are what P4 puts in front of a swap, so an
+        // unmeasured branch here is a number the user is asked to trust that
+        // nothing checked. The rounding and the untracked skip are both single
+        // branches whose failure mode is a plausible-looking wrong figure
+        // rather than a crash — precisely what a coverage gate is for.
+        "src/lib/macros.ts": FULLY_COVERED,
         // § 1.2. The strategy singles out its case 4 — a skipped session must
         // resolve identically — and the guarantee behind it is that rotation.ts
         // never reads workout_logs. An unmeasured branch here is precisely where
