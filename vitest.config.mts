@@ -51,7 +51,12 @@ export default defineConfig({
     // only builds. Until one exists this gate is enforced by whoever runs it.
     coverage: {
       provider: "v8",
-      include: ["src/lib/db/scope.ts", "src/lib/date.ts", "src/lib/resolve-plan.ts"],
+      include: [
+        "src/lib/db/scope.ts",
+        "src/lib/date.ts",
+        "src/lib/resolve-plan.ts",
+        "src/lib/rotation.ts",
+      ],
       thresholds: {
         "src/lib/db/scope.ts": FULLY_COVERED,
         // § 1.1. date.ts is here because it is where resolve-plan.ts keeps its
@@ -60,6 +65,11 @@ export default defineConfig({
         // actually names.
         "src/lib/date.ts": FULLY_COVERED,
         "src/lib/resolve-plan.ts": FULLY_COVERED,
+        // § 1.2. The strategy singles out its case 4 — a skipped session must
+        // resolve identically — and the guarantee behind it is that rotation.ts
+        // never reads workout_logs. An unmeasured branch here is precisely where
+        // a shortcut that consults history would sit unnoticed.
+        "src/lib/rotation.ts": FULLY_COVERED,
       },
     },
   },
