@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   addDays,
   dayOfWeek,
+  daysBetween,
   parseCalendarDate,
   startOfWeek,
   toCalendarDate,
@@ -211,6 +212,51 @@ describe("addDays", () => {
   it("stays exact over a long span", () => {
     expect(addDays("2026-01-01", 365)).toBe("2027-01-01");
     expect(addDays("2026-01-01", 730)).toBe("2028-01-01"); // 2028 is the leap year
+  });
+});
+
+describe("daysBetween", () => {
+  it("counts forward, backward and zero", () => {
+    expect(daysBetween("2026-03-02", "2026-03-09")).toBe(7);
+    expect(daysBetween("2026-03-09", "2026-03-02")).toBe(-7);
+    expect(daysBetween("2026-03-02", "2026-03-02")).toBe(0);
+  });
+
+  it("is the inverse of addDays", () => {
+    // The property that matters to rotation.ts: the two functions have to agree
+    // about how long a day is, or stepping and counting drift apart.
+    for (const offset of [-400, -31, -1, 0, 1, 31, 400]) {
+      expect(daysBetween("2026-03-02", addDays("2026-03-02", offset))).toBe(offset);
+    }
+  });
+
+  it("counts whole days across both DST transitions", () => {
+    // The 23-hour day and the 25-hour day, each crossed. Subtracting local
+    // midnights would give 0.958 and 1.042 here; a rotation built on that would
+    // drift by a session twice a year, permanently.
+    expect(daysBetween("2026-03-28", "2026-03-29")).toBe(1);
+    expect(daysBetween("2026-03-29", "2026-03-30")).toBe(1);
+    expect(daysBetween("2026-10-24", "2026-10-25")).toBe(1);
+    expect(daysBetween("2026-10-25", "2026-10-26")).toBe(1);
+
+    // And the whole summer at once — 214 days that include both transitions,
+    // so any per-day error would have accumulated into a visible one.
+    expect(daysBetween("2026-03-25", "2026-10-25")).toBe(214);
+  });
+
+  it("counts through a leap day", () => {
+    expect(daysBetween("2028-02-28", "2028-03-01")).toBe(2);
+    expect(daysBetween("2026-02-28", "2026-03-01")).toBe(1);
+  });
+
+  it("stays exact over years", () => {
+    expect(daysBetween("2026-01-01", "2027-01-01")).toBe(365);
+    expect(daysBetween("2026-01-01", "2029-01-01")).toBe(1096); // 2028 is the leap year
+  });
+
+  it("rejects a malformed date on either side", () => {
+    expect(() => daysBetween("2026-3-02", "2026-03-09")).toThrow(/Not a calendar date/);
+    expect(() => daysBetween("2026-03-02", "2026-02-30")).toThrow(/No such date/);
   });
 });
 
