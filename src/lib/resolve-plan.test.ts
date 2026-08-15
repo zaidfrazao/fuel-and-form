@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { todayIn } from "./date";
-import type { DayPlanOverride, Meal, MealSlot, PlanTemplateEntry } from "./db/schema";
-import { type Plan, resolveDay, resolveSlot, resolveWeek } from "./resolve-plan";
+import {
+  type DayPlanOverride,
+  type Meal,
+  type MealSlot,
+  mealSlot,
+  type PlanTemplateEntry,
+} from "./db/schema";
+import { type Plan, resolveDay, resolveSlot, resolveWeek, SLOT_ORDER } from "./resolve-plan";
 
 /**
  * Testing Strategy § 1.1 — the fourteen cases, in order, each named by number.
@@ -136,6 +142,19 @@ const resolved = (result: ReturnType<typeof resolveSlot>) =>
 
 const dayMeals = (subject: Plan, date: string) =>
   resolveDay(subject, date).map((item) => [item.slot, item.meal.id, item.source]);
+
+describe("SLOT_ORDER", () => {
+  it("still matches the meal_slot enum exactly, in order", () => {
+    // resolve-plan.ts restates the slots rather than importing the enum at
+    // runtime, so that a client component can use the resolver without pulling
+    // Drizzle into its bundle. This is the price of that: a slot added to the
+    // schema and not to SLOT_ORDER would silently never resolve, in the day
+    // view and in the macro totals alike. Here it is a failing test instead.
+    //
+    // The test may import the schema freely — nothing bundles a test file.
+    expect(SLOT_ORDER).toEqual([...mealSlot.enumValues]);
+  });
+});
 
 /* -------------------------------------------------------------------------- */
 /* The fourteen cases                                                         */

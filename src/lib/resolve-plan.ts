@@ -1,10 +1,4 @@
-import {
-  type DayPlanOverride,
-  type Meal,
-  type MealSlot,
-  mealSlot,
-  type PlanTemplateEntry,
-} from "./db/schema";
+import type { DayPlanOverride, Meal, MealSlot, PlanTemplateEntry } from "./db/schema";
 import {
   addDays,
   type CalendarDate,
@@ -95,15 +89,28 @@ export type Plan = {
 };
 
 /**
- * The order a day is eaten in — the `meal_slot` enum's own order, reused rather
- * than restated so the two cannot drift.
+ * The order a day is eaten in — the `meal_slot` enum's order, restated.
  *
  * Deliberately NOT `sort_order`: `day_plan_overrides` has no such column, so any
  * ordering that read it would have to invent one for a swapped slot, and the
- * day would visibly reshuffle itself the moment something was swapped. The enum
+ * day would visibly reshuffle itself the moment something was swapped. The slot
  * position is defined for template and override alike.
+ *
+ * Written out rather than read from `mealSlot.enumValues` so that this module
+ * imports NOTHING from the schema at runtime — only types, which are erased.
+ * P2's weekly grid is interactive and may well be a client component, and a
+ * resolver it can import should not drag Drizzle's pg-core into that bundle to
+ * read five strings. The cost of restating them is that the two could drift, so
+ * resolve-plan.test.ts asserts this list against the enum: drift is a failing
+ * test rather than a slot that quietly stops resolving.
  */
-const SLOT_ORDER = mealSlot.enumValues;
+export const SLOT_ORDER: readonly MealSlot[] = [
+  "breakfast",
+  "lunch",
+  "snack",
+  "dinner",
+  "extra",
+];
 
 /**
  * Whether `date` is on or after the program start.
@@ -121,15 +128,20 @@ function isScheduled(plan: Plan, date: CalendarDate): boolean {
 }
 
 /**
- * Lowest `sort_order` first, ties broken by id so the order is total.
+ * Three-way string comparison, without a branch and without a locale.
  *
- * The id comparison is `<` on the strings rather than `localeCompare`, which
- * reads the ambient locale's collation: a tie-break exists to give the same
- * answer everywhere, and one that could sort differently on another machine
- * would defeat its own purpose.
+ * Not `localeCompare`, which reads the ambient locale's collation: a tie-break
+ * exists to give the same answer everywhere, and one that could sort
+ * differently on another machine defeats its own purpose. Not a ternary either
+ * — subtracting the two comparisons returns a proper 0 for equal operands,
+ * where `a < b ? -1 : 1` would claim an order between a value and itself and
+ * break `sort`'s contract.
  */
+const compareStrings = (a: string, b: string) => Number(a > b) - Number(a < b);
+
+/** Lowest `sort_order` first, ties broken by id so the order is total. */
 const bySortOrderThenId = (a: PlanTemplateEntry, b: PlanTemplateEntry) =>
-  a.sortOrder - b.sortOrder || (a.id < b.id ? -1 : 1);
+  a.sortOrder - b.sortOrder || compareStrings(a.id, b.id);
 
 /**
  * The template entry for a weekday and slot, if the template has one.

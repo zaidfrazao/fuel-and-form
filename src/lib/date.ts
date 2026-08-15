@@ -98,6 +98,10 @@ const fromUtcMillis = (millis: number): CalendarDate => {
  *     the string that went in. It also catches two-digit years, which
  *     `Date.UTC` would otherwise map into the 1900s ('0026' → 1926).
  *
+ * The supported range is therefore years 0100-9999, which is not a general-
+ * purpose date parser's range and is deliberately more than this app's: a
+ * fitness program that started in the year 99 is a bug, not a use case.
+ *
  * Throwing is right here where the resolver returns `null` elsewhere. A slot
  * with no meal is an ordinary state of the data; a malformed date is a bug in
  * the caller, and letting it through would put it somewhere further away — a
@@ -138,10 +142,13 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
   const cached = formatters.get(timeZone);
   if (cached) return cached;
 
-  // The locale is pinned, and the calendar with it: this formatter's output is
-  // parsed, not shown to anyone, so it must not vary with the host's default
-  // locale or with a locale whose calendar is not Gregorian.
-  const formatter = new Intl.DateTimeFormat("en-US-u-ca-gregory", {
+  // The locale is pinned, and with it the calendar AND the numbering system:
+  // this formatter's output is parsed, never shown to anyone. `-ca-gregory`
+  // keeps a non-Gregorian default calendar from reaching it, and `-nu-latn`
+  // keeps the digits ASCII — a runtime whose ICU resolved another numbering
+  // system would otherwise emit '٢٠٢٦-٠٣-٢٩', which every regex and every date
+  // comparison downstream would reject, in production only.
+  const formatter = new Intl.DateTimeFormat("en-US-u-ca-gregory-nu-latn", {
     timeZone,
     year: "numeric",
     month: "2-digit",
@@ -223,6 +230,12 @@ export function dayOfWeek(date: CalendarDate): DayOfWeek {
  * February, leap year included. And because it is UTC, one day is always 24
  * hours — the spring-forward day is not 23 hours long here, so stepping across
  * it cannot land twice on the same date or skip one.
+ *
+ * It counts CALENDAR days, which for one exotic case is not the same as days a
+ * given zone actually had: Samoa skipped 2011-12-30 entirely when it crossed
+ * the date line, and this would still count through it. Harmless here — the
+ * PRD configures one zone per user with no travel handling, and plan rows are
+ * keyed by calendar date — but it is the assumption, so it is written down.
  */
 export function addDays(date: CalendarDate, days: number): CalendarDate {
   const { year, month, day } = parseCalendarDate(date);
