@@ -18,11 +18,15 @@ export default defineConfig({
     // guarantee about the isolation boundary instead of a number to be gamed
     // elsewhere.
     //
-    // It runs HERE, in the hermetic suite, deliberately. The integration suite
+    // It lives HERE, in the hermetic suite, deliberately. The integration suite
     // skips itself without DATABASE_URL_TEST, so a gate that lived there would
-    // report success in CI having measured nothing — a false green on exactly
-    // the promise the PRD makes to strangers on a public URL. scope.ts imports
-    // nothing `server-only` precisely so this is possible.
+    // report success on any machine without a database while having measured
+    // nothing — a false green on exactly the promise the PRD makes to strangers
+    // on a public URL. scope.ts imports nothing `server-only` precisely so this
+    // is possible.
+    //
+    // NOTE: no GitHub Actions workflow runs `npm run test:coverage` yet — Vercel
+    // only builds. Until one exists this gate is enforced by whoever runs it.
     coverage: {
       provider: "v8",
       include: ["src/lib/db/scope.ts"],

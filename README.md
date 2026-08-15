@@ -156,7 +156,10 @@ demo visitor enumerate the owner's row ids. Here both are the same empty result.
 ESLint blocks importing `@/lib/db` or `@/lib/db/pool` from anywhere outside
 `src/lib/db/`, because an unscoped handle is the only way to write a query that
 skips this. `npm run test:coverage` holds `scope.ts` at 100% in the unit suite —
-hermetically, so the gate still runs in CI where there is no database.
+hermetically, so it needs neither a database nor credentials to run.
+
+> No GitHub Actions workflow runs the test suite yet; Vercel only builds. Run
+> `npm run test:coverage` before merging anything that touches this layer.
 
 ### Migrations
 

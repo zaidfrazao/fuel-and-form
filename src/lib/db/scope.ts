@@ -11,8 +11,9 @@ import type { PgColumn, PgDatabase, PgTable, PgUpdateSetSource } from "drizzle-o
  *
  * Deliberately NOT `server-only`. It constructs queries and holds no
  * connection or secret — the executor carries those. Staying pure is what lets
- * the hermetic unit suite cover it at 100% and run that gate in CI, where no
- * database exists. See scope.test.ts.
+ * the hermetic unit suite cover it at 100% with no database and no credentials,
+ * so the gate can run anywhere — including a CI job, once one exists. See
+ * scope.test.ts.
  *
  * ## Why no method here returns a query builder
  *
