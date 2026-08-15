@@ -17,7 +17,7 @@ Anything not in Tier 1 is explicitly **not being built this weekend**, and that 
 
 ### Why not a coverage percentage
 
-There is no repo-wide coverage gate. A global 80% on a one-user app rewards testing the easy 70% — form components, presentational rendering — and would still miss the DST boundary in `resolveDay()` that actually breaks the product. Coverage is enforced at 100% on four files and nowhere else.
+There is no repo-wide coverage gate. A global 80% on a one-user app rewards testing the easy 70% — form components, presentational rendering — and would still miss the DST boundary in `resolveDay()` that actually breaks the product. Coverage is enforced at 100% on the Tier 1 files and nowhere else — the four below, plus `lib/date.ts`, which FUEL-8 split out of `resolve-plan.ts` because the rotation resolver needs the same calendar arithmetic. A gate on a resolver that left its own date maths unmeasured would cover the easy half of the risk.
 
 ---
 
@@ -49,8 +49,11 @@ The resolver: for a given `(user_id, date, slot)`, return the `day_plan_override
 | 12 | Repeat spanning a month boundary | All dates resolve correctly |
 | 13 | Reverted override (row deleted) | Falls back to template |
 | 14 | Archived meal referenced by a template entry | Still resolves; archival affects the picker, not history |
+| 15 | Override on a slot the template leaves empty | Resolves the override — a swap *into* an empty slot is an ordinary action |
 
 **Coverage: 100%, enforced.**
+
+Case 15 was added during FUEL-8. It is neither case 3 (a *different* slot is overridden) nor case 10 (nothing is overridden), and it settles whether overrides are consulted unconditionally or only as a replacement for an entry that already exists. It has to be unconditionally, or "add a meal to today only" has no way to work.
 
 ### 1.2 Circuit A/B rotation — `lib/rotation.ts`
 
