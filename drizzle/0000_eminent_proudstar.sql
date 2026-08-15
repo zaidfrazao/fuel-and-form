@@ -135,20 +135,20 @@ CREATE TABLE "workouts" (
 );
 --> statement-breakpoint
 ALTER TABLE "day_plan_overrides" ADD CONSTRAINT "day_plan_overrides_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "day_plan_overrides" ADD CONSTRAINT "day_plan_overrides_meal_id_meals_id_fk" FOREIGN KEY ("meal_id") REFERENCES "public"."meals"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "day_plan_overrides" ADD CONSTRAINT "day_plan_overrides_meal_fk" FOREIGN KEY ("meal_id","user_id") REFERENCES "public"."meals"("id","user_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "meal_ingredients" ADD CONSTRAINT "meal_ingredients_meal_fk" FOREIGN KEY ("meal_id","user_id") REFERENCES "public"."meals"("id","user_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "meal_logs" ADD CONSTRAINT "meal_logs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "meal_logs" ADD CONSTRAINT "meal_logs_meal_id_meals_id_fk" FOREIGN KEY ("meal_id") REFERENCES "public"."meals"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "meal_logs" ADD CONSTRAINT "meal_logs_meal_fk" FOREIGN KEY ("meal_id","user_id") REFERENCES "public"."meals"("id","user_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "meals" ADD CONSTRAINT "meals_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "plan_template_entries" ADD CONSTRAINT "plan_template_entries_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "plan_template_entries" ADD CONSTRAINT "plan_template_entries_meal_id_meals_id_fk" FOREIGN KEY ("meal_id") REFERENCES "public"."meals"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "plan_template_entries" ADD CONSTRAINT "plan_template_entries_meal_fk" FOREIGN KEY ("meal_id","user_id") REFERENCES "public"."meals"("id","user_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "profiles" ADD CONSTRAINT "profiles_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_template_entries" ADD CONSTRAINT "training_template_entries_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "training_template_entries" ADD CONSTRAINT "training_template_entries_workout_id_workouts_id_fk" FOREIGN KEY ("workout_id") REFERENCES "public"."workouts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_template_entries" ADD CONSTRAINT "training_template_entries_workout_fk" FOREIGN KEY ("workout_id","user_id") REFERENCES "public"."workouts"("id","user_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "weight_logs" ADD CONSTRAINT "weight_logs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workout_exercises" ADD CONSTRAINT "workout_exercises_workout_fk" FOREIGN KEY ("workout_id","user_id") REFERENCES "public"."workouts"("id","user_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workout_logs" ADD CONSTRAINT "workout_logs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "workout_logs" ADD CONSTRAINT "workout_logs_workout_id_workouts_id_fk" FOREIGN KEY ("workout_id") REFERENCES "public"."workouts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workout_logs" ADD CONSTRAINT "workout_logs_workout_fk" FOREIGN KEY ("workout_id","user_id") REFERENCES "public"."workouts"("id","user_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workouts" ADD CONSTRAINT "workouts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "day_plan_overrides_user_date_slot_key" ON "day_plan_overrides" USING btree ("user_id","date","slot");--> statement-breakpoint
 CREATE INDEX "meal_ingredients_user_meal_idx" ON "meal_ingredients" USING btree ("user_id","meal_id");--> statement-breakpoint

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   check,
   date,
@@ -121,6 +122,59 @@ const ownerId = () =>
   uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" });
+
+/**
+ * A reference to a row in this user's own meal or workout library.
+ *
+ * ## Why the foreign key is composite, always
+ *
+ * A plain `meal_id` foreign key says the meal exists. It does NOT say the meal
+ * is YOURS. `scope()` fills in `user_id` and refuses to let a caller name it —
+ * but `meal_id` is an ordinary argument, supplied by the request. So a demo
+ * visitor swapping a slot could pass the OWNER's meal id: the insert succeeds,
+ * `user_id` is honestly their own, and the day view then renders the owner's
+ * meal name and macros. That is a cross-tenant read, and because an invalid id
+ * is rejected while a valid one is accepted, it doubles as an oracle for
+ * enumerating the owner's rows — the exact thing scope.ts refuses to leak.
+ *
+ * Pairing `user_id` into the key closes it in the database: `(meal_id, user_id)`
+ * must match a real `(id, user_id)` on `meals`, so another user's meal is not a
+ * candidate at all. Postgres enforces it; no application code has to remember.
+ *
+ * Nullable child columns are safe here — the default MATCH SIMPLE skips the
+ * check when any key column is null, which is what `training_template_entries`
+ * wants for a row that names a `rotation_group` instead of a workout.
+ *
+ * ## Why `no action` for history, `cascade` for configuration
+ *
+ * A log is history, and the export exists so history is never lost (P6, and the
+ * "don't lose my history" requirement behind it). Under a cascade, hard-deleting
+ * one meal silently erases every record of having eaten it — months of check-in
+ * evidence, gone, with no error. `is_archived` is the supported way to retire a
+ * library entry, and `no action` is what makes it the ONLY way.
+ *
+ * `no action` rather than `restrict` specifically: both refuse the delete, but
+ * `restrict` fires immediately while `no action` is checked at end of statement
+ * — and the demo reaper's `delete from users` removes the meal AND the logs in
+ * that one statement, via each row's own `user_id` cascade. By the time the
+ * check runs there is no dangling reference, so the reaper still cascades
+ * cleanly. `restrict` would abort it. Verified both ways against real Postgres.
+ *
+ * Template entries cascade instead: they are current configuration, not history.
+ * Removing a meal from the library should remove it from the recurring plan —
+ * and with logs protected, a meal that has any history cannot be deleted anyway.
+ */
+const ownedReference = (config: {
+  name: string;
+  columns: [AnyPgColumn, AnyPgColumn];
+  foreignColumns: [AnyPgColumn, AnyPgColumn];
+  onDelete: "cascade" | "no action";
+}) =>
+  foreignKey({
+    name: config.name,
+    columns: config.columns,
+    foreignColumns: config.foreignColumns,
+  }).onDelete(config.onDelete);
 
 /** 0 = Sunday through 6 = Saturday, matching `Date.prototype.getDay()`. */
 const dayOfWeek = () => integer("day_of_week").notNull();
@@ -311,13 +365,17 @@ export const planTemplateEntries = pgTable(
 
     dayOfWeek: dayOfWeek(),
     slot: mealSlot().notNull(),
-    mealId: uuid("meal_id")
-      .notNull()
-      .references(() => meals.id, { onDelete: "cascade" }),
+    mealId: uuid("meal_id").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [
     dayOfWeekInRange("plan_template_entries"),
+    ownedReference({
+      name: "plan_template_entries_meal_fk",
+      columns: [t.mealId, t.userId],
+      foreignColumns: [meals.id, meals.userId],
+      onDelete: "cascade",
+    }),
     index("plan_template_entries_user_day_idx").on(t.userId, t.dayOfWeek),
   ],
 );
@@ -341,12 +399,21 @@ export const dayPlanOverrides = pgTable(
 
     date: calendarDate("date").notNull(),
     slot: mealSlot().notNull(),
-    mealId: uuid("meal_id")
-      .notNull()
-      .references(() => meals.id, { onDelete: "cascade" }),
+
+    // History, not configuration: the export's "planned" column reads this, so
+    // it outlives the meal it names. See `ownedReference`.
+    mealId: uuid("meal_id").notNull(),
     createdAt: instant("created_at").notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("day_plan_overrides_user_date_slot_key").on(t.userId, t.date, t.slot)],
+  (t) => [
+    ownedReference({
+      name: "day_plan_overrides_meal_fk",
+      columns: [t.mealId, t.userId],
+      foreignColumns: [meals.id, meals.userId],
+      onDelete: "no action",
+    }),
+    uniqueIndex("day_plan_overrides_user_date_slot_key").on(t.userId, t.date, t.slot),
+  ],
 );
 
 /**
@@ -367,14 +434,20 @@ export const mealLogs = pgTable(
 
     date: calendarDate("date").notNull(),
     slot: mealSlot().notNull(),
-    mealId: uuid("meal_id")
-      .notNull()
-      .references(() => meals.id, { onDelete: "cascade" }),
+    mealId: uuid("meal_id").notNull(),
     status: mealLogStatus().notNull(),
     note: text(),
     loggedAt: instant("logged_at").notNull().defaultNow(),
   },
-  (t) => [index("meal_logs_user_date_idx").on(t.userId, t.date)],
+  (t) => [
+    ownedReference({
+      name: "meal_logs_meal_fk",
+      columns: [t.mealId, t.userId],
+      foreignColumns: [meals.id, meals.userId],
+      onDelete: "no action",
+    }),
+    index("meal_logs_user_date_idx").on(t.userId, t.date),
+  ],
 );
 
 /* -------------------------------------------------------------------------- */
@@ -477,12 +550,18 @@ export const trainingTemplateEntries = pgTable(
     userId: ownerId(),
 
     dayOfWeek: dayOfWeek(),
-    workoutId: uuid("workout_id").references(() => workouts.id, { onDelete: "cascade" }),
+    workoutId: uuid("workout_id"),
     rotationGroup: text("rotation_group"),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [
     dayOfWeekInRange("training_template_entries"),
+    ownedReference({
+      name: "training_template_entries_workout_fk",
+      columns: [t.workoutId, t.userId],
+      foreignColumns: [workouts.id, workouts.userId],
+      onDelete: "cascade",
+    }),
     check(
       "training_template_entries_target",
       sql`("workout_id" is null) != ("rotation_group" is null)`,
@@ -499,15 +578,21 @@ export const workoutLogs = pgTable(
     userId: ownerId(),
 
     date: calendarDate("date").notNull(),
-    workoutId: uuid("workout_id")
-      .notNull()
-      .references(() => workouts.id, { onDelete: "cascade" }),
+    workoutId: uuid("workout_id").notNull(),
     status: workoutLogStatus().notNull(),
     note: text(),
     durationMin: integer("duration_min"),
     loggedAt: instant("logged_at").notNull().defaultNow(),
   },
-  (t) => [index("workout_logs_user_date_idx").on(t.userId, t.date)],
+  (t) => [
+    ownedReference({
+      name: "workout_logs_workout_fk",
+      columns: [t.workoutId, t.userId],
+      foreignColumns: [workouts.id, workouts.userId],
+      onDelete: "no action",
+    }),
+    index("workout_logs_user_date_idx").on(t.userId, t.date),
+  ],
 );
 
 /* -------------------------------------------------------------------------- */

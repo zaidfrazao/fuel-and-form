@@ -131,6 +131,83 @@ describe("schema", () => {
     });
   });
 
+  describe("cross-user references are impossible", () => {
+    /**
+     * `scope()` owns `user_id`, but `meal_id` and `workout_id` arrive from the
+     * request. A single-column foreign key only proves the meal EXISTS — not
+     * that it is yours — so a demo visitor could swap in the owner's meal id and
+     * have the day view render the owner's food. Accepting valid ids while
+     * rejecting invalid ones also turns the insert into an id-enumeration
+     * oracle. Pairing user_id into the key removes another user's rows from the
+     * candidate set entirely.
+     *
+     * Asserted over every table rather than a list, so a new reference added
+     * later cannot quietly reintroduce the single-column form.
+     */
+    it.each(userOwned)("%s references sibling tables by (id, user_id)", (_name, table) => {
+      const { foreignKeys } = getTableConfig(table);
+
+      for (const key of foreignKeys) {
+        const { columns, foreignColumns } = key.reference();
+
+        // The owning user_id -> users.id key is the one legitimate single-column
+        // reference: it is what the demo reaper cascades through.
+        const [firstColumn] = columns;
+        const [firstTarget] = foreignColumns;
+
+        const isOwnerKey =
+          columns.length === 1 &&
+          firstColumn?.name === "user_id" &&
+          firstTarget !== undefined &&
+          getTableName(firstTarget.table) === "users";
+
+        if (isOwnerKey) continue;
+
+        expect(columns.map((c) => c.name)).toContain("user_id");
+        expect(foreignColumns.map((c) => c.name)).toContain("user_id");
+      }
+    });
+  });
+
+  describe("history survives a deleted library entry", () => {
+    /**
+     * The export is the backup (P6), so a log must outlive the meal or workout
+     * it names. A cascade here would make hard-deleting one library row erase
+     * every record of having eaten or done it — silently, with no error, and
+     * only noticed at a check-in when the evidence is already gone.
+     *
+     * `no action` refuses that delete while still letting the demo reaper's
+     * `delete from users` through, because each row's own `user_id` cascade
+     * removes it within the same statement. `restrict` would abort the reaper;
+     * `cascade` would lose the history. Neither is a safe substitute.
+     */
+    // Column names before the table, so vitest's printf-style titles interpolate
+    // two short strings rather than dumping an entire PgTable into the name.
+    const onDeleteFor = (table: PgTable, column: string) =>
+      getTableConfig(table)
+        .foreignKeys.filter((key) => key.reference().columns.some((c) => c.name === column))
+        .map((key) => key.onDelete);
+
+    it.each([
+      ["meal_logs", "meal_id", schema.mealLogs],
+      ["workout_logs", "workout_id", schema.workoutLogs],
+      ["day_plan_overrides", "meal_id", schema.dayPlanOverrides],
+    ] as const)("%s.%s does not cascade", (_table, column, table) => {
+      const behaviours = onDeleteFor(table, column);
+
+      expect(behaviours).toHaveLength(1);
+      expect(behaviours[0]).not.toBe("cascade");
+    });
+
+    it("the owning user_id still cascades, so the demo reaper works", () => {
+      const key = getTableConfig(schema.mealLogs).foreignKeys.find((k) =>
+        k.reference().columns.some((c) => c.name === "user_id"),
+      );
+
+      expect(key?.onDelete).toBe("cascade");
+    });
+  });
+
   describe("gym-restart readiness", () => {
     /**
      * PRD § Gym-restart readiness: weighted training must be new rows, not a

@@ -1,5 +1,5 @@
 {
-  "id": "9cd21032-2f09-456c-8f21-8c6bfa623145",
+  "id": "f08cbc12-4eb2-4d14-a223-d70b49f10f3d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -91,17 +91,19 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "day_plan_overrides_meal_id_meals_id_fk": {
-          "name": "day_plan_overrides_meal_id_meals_id_fk",
+        "day_plan_overrides_meal_fk": {
+          "name": "day_plan_overrides_meal_fk",
           "tableFrom": "day_plan_overrides",
           "tableTo": "meals",
           "columnsFrom": [
-            "meal_id"
+            "meal_id",
+            "user_id"
           ],
           "columnsTo": [
-            "id"
+            "id",
+            "user_id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -306,17 +308,19 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "meal_logs_meal_id_meals_id_fk": {
-          "name": "meal_logs_meal_id_meals_id_fk",
+        "meal_logs_meal_fk": {
+          "name": "meal_logs_meal_fk",
           "tableFrom": "meal_logs",
           "tableTo": "meals",
           "columnsFrom": [
-            "meal_id"
+            "meal_id",
+            "user_id"
           ],
           "columnsTo": [
-            "id"
+            "id",
+            "user_id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -534,15 +538,17 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "plan_template_entries_meal_id_meals_id_fk": {
-          "name": "plan_template_entries_meal_id_meals_id_fk",
+        "plan_template_entries_meal_fk": {
+          "name": "plan_template_entries_meal_fk",
           "tableFrom": "plan_template_entries",
           "tableTo": "meals",
           "columnsFrom": [
-            "meal_id"
+            "meal_id",
+            "user_id"
           ],
           "columnsTo": [
-            "id"
+            "id",
+            "user_id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -738,15 +744,17 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "training_template_entries_workout_id_workouts_id_fk": {
-          "name": "training_template_entries_workout_id_workouts_id_fk",
+        "training_template_entries_workout_fk": {
+          "name": "training_template_entries_workout_fk",
           "tableFrom": "training_template_entries",
           "tableTo": "workouts",
           "columnsFrom": [
-            "workout_id"
+            "workout_id",
+            "user_id"
           ],
           "columnsTo": [
-            "id"
+            "id",
+            "user_id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -1105,17 +1113,19 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "workout_logs_workout_id_workouts_id_fk": {
-          "name": "workout_logs_workout_id_workouts_id_fk",
+        "workout_logs_workout_fk": {
+          "name": "workout_logs_workout_fk",
           "tableFrom": "workout_logs",
           "tableTo": "workouts",
           "columnsFrom": [
-            "workout_id"
+            "workout_id",
+            "user_id"
           ],
           "columnsTo": [
-            "id"
+            "id",
+            "user_id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
