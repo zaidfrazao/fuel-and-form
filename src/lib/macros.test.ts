@@ -138,12 +138,20 @@ function plan(overrides: DayPlanOverride[] = [], fields: Partial<Plan> = {}): Pl
   };
 }
 
-/** The owner's targets, from the PRD. Round numbers, so a delta is readable. */
+/**
+ * Invented targets. Round numbers, so a delta is readable at a glance.
+ *
+ * Deliberately NOT the owner's real figures. This repository is public, and
+ * Testing Strategy § 1.5 fails the pre-publish scan on any real kcal or macro
+ * target found outside `docs/` — a test fixture is exactly the kind of place
+ * those numbers get copied to and then forgotten. Nothing here needs them to be
+ * real: the arithmetic is the same against any target.
+ */
 const TARGET: MacroTarget = {
-  targetKcal: 1790,
-  targetProteinG: 146,
-  targetFatG: 55,
-  targetCarbG: 140,
+  targetKcal: 2000,
+  targetProteinG: 150,
+  targetFatG: 60,
+  targetCarbG: 200,
 };
 
 /** The four figures alone, for asserting a total without its partial flag. */
@@ -313,13 +321,13 @@ describe("§ 1.3 case 4 — an empty day", () => {
 
 describe("§ 1.3 case 5 — the delta against target", () => {
   it("is negative when the day falls short", () => {
-    // Monday against the PRD's targets: 1600 kcal against 1790, 132.1g protein
-    // against 146. The convention is `−21`, not "21 under".
+    // Monday against the fixture targets: 1600 kcal against 2000, 132.1g
+    // protein against 150. The convention is `−21`, not "21 under".
     expect(deltaFromTarget(dayTotals(plan(), MONDAY_DATE), TARGET)).toEqual({
-      kcal: -190,
-      proteinG: -13.9,
-      fatG: 0.1,
-      carbG: 0.1,
+      kcal: -400,
+      proteinG: -17.9,
+      fatG: -4.9,
+      carbG: -59.9,
     });
   });
 
@@ -356,12 +364,31 @@ describe("§ 1.3 case 5 — the delta against target", () => {
     }
   });
 
+  it("is zero — not minus zero — when a shortfall rounds away to nothing", () => {
+    // The case that actually produces `-0`. The test above cannot: `a − a` is
+    // `+0` in IEEE 754, so it passes with or without the normalisation.
+    //
+    // A shortfall smaller than half a decimal place is what rounds to a
+    // negative zero: Math.round(-0.4) is `-0`, and -0 / 10 stays `-0`. It
+    // reaches this function the moment a candidate meal's macros are computed
+    // rather than read from a `numeric(6, 1)` column — which is exactly what a
+    // P4 swap preview does — and it renders as "−0", a shortfall on a day that
+    // is not short.
+    const barelyUnder = deltaFromTarget(
+      { kcal: 0, proteinG: 0.16, fatG: 0, carbG: 0 },
+      { targetKcal: 0, targetProteinG: 0.2, targetFatG: 0, targetCarbG: 0 },
+    );
+
+    expect(Object.is(barelyUnder.proteinG, -0)).toBe(false);
+    expect(barelyUnder.proteinG).toBe(0);
+  });
+
   it("measures the post-override day, not the template's", () => {
     // The delta is what P4 shows next to the swap. Reading it off the template
     // would tell the user the cost of a meal they are not eating.
     const swapped = plan([override(MONDAY_DATE, "dinner", "curry")]);
 
-    expect(deltaFromTarget(dayTotals(swapped, MONDAY_DATE), TARGET).proteinG).toBe(-20.1);
+    expect(deltaFromTarget(dayTotals(swapped, MONDAY_DATE), TARGET).proteinG).toBe(-24.1);
   });
 });
 
@@ -380,7 +407,7 @@ describe("§ 1.3 case 6 — a swap preview", () => {
     const before = dayTotals(plan(), MONDAY_DATE);
     const after = previewDayTotals(plan(), MONDAY_DATE, candidate);
 
-    expect(deltaFromTarget(after, TARGET).proteinG).toBe(-20.1);
+    expect(deltaFromTarget(after, TARGET).proteinG).toBe(-24.1);
     expect(after.proteinG - before.proteinG).toBeCloseTo(-6.2, 10);
   });
 
