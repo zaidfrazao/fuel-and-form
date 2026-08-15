@@ -23,8 +23,9 @@
  *      right now?". This is the only genuinely hard one, and `toCalendarDate`
  *      is the only function here that takes a `Date` at all.
  *   2. Deriving `day_of_week` from a calendar date.
- *   3. Adding days to a calendar date — a repeat-across-days swap, or stepping
- *      through a week grid.
+ *   3. Adding days to a calendar date, or counting the days between two — a
+ *      repeat-across-days swap, stepping through a week grid, or the elapsed
+ *      count the Circuit A/B rotation is derived from.
  *
  * (2) and (3) go through `Date.UTC`, which has no daylight saving anywhere in
  * its definition. So a day is always exactly 24 hours in this file, the clocks
@@ -241,6 +242,30 @@ export function addDays(date: CalendarDate, days: number): CalendarDate {
   const { year, month, day } = parseCalendarDate(date);
 
   return fromUtcMillis(Date.UTC(year, month - 1, day + days));
+}
+
+/** Milliseconds in a UTC day. Always exactly this, which is the whole point. */
+const DAY_MILLIS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whole days from `from` to `to`. Negative when `to` is the earlier date.
+ *
+ * The inverse of `addDays`, and the counting half of the Circuit A/B rotation:
+ * `rotation.ts` needs to know how many days have elapsed since
+ * `program_start_date` before it can count how many of them were training days.
+ *
+ * Exact by construction rather than by rounding. Both dates become UTC midnight,
+ * and a UTC day is always 86,400,000 milliseconds, so the subtraction is a whole
+ * number of days with no remainder to lose — no `Math.round` papering over a
+ * 23-hour day, which is what the same subtraction on local midnights would need
+ * twice a year. Over the spring-forward weekend a local-time version returns
+ * 0.958 of a day; this returns 1.
+ */
+export function daysBetween(from: CalendarDate, to: CalendarDate): number {
+  const start = toUtcMillis(parseCalendarDate(from));
+  const end = toUtcMillis(parseCalendarDate(to));
+
+  return (end - start) / DAY_MILLIS;
 }
 
 /**
