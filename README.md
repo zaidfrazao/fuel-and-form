@@ -34,6 +34,7 @@ npm run dev          # http://localhost:3000
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run test` | Vitest — unit suite, no database required |
+| `npm run test:coverage` | Unit suite with the 100% gate on the scope layer |
 | `npm run test:integration` | Vitest against the test branch (see [Database](#database)) |
 | `npm run db:generate` | Diff the schema and write SQL to `drizzle/` |
 | `npm run db:migrate` | Apply pending migrations |
@@ -111,6 +112,40 @@ there to avoid.
 
 Both are `server-only` and resolve their connection string lazily, so `next
 build` never needs credentials.
+
+Neither is imported directly outside `src/lib/db/` — see below.
+
+### Scoped queries
+
+Every user-owned query goes through `scope()` from `@/lib/db/scope`, which binds
+a user to a handle and puts `user_id` in the `WHERE` clause of every statement it
+builds:
+
+```ts
+const s = scope(session.userId, getDb());
+
+const meals = await s.select(mealsTable);                    // only this user's
+const one = await s.selectOne(mealsTable, eq(mealsTable.id, id));  // undefined if not theirs
+await s.insert(mealsTable, { name: "Oats", kcal: 500 });     // stamped with user_id
+
+await getPool().transaction(async (tx) => {
+  await scope(demoUserId, tx).insert(mealsTable, rows);      // same scope in a transaction
+});
+```
+
+Both arguments are required, so a scope cannot be built without deciding whose
+data it reads. Conditions are passed **as arguments**, never by chaining
+`.where()` — Drizzle's `.where()` replaces a predicate rather than narrowing it,
+so a second call would silently drop the ownership filter.
+
+There is no get-by-id-then-check-owner helper, and there must not be one. It
+would answer "exists but isn't yours" differently from "doesn't exist", letting a
+demo visitor enumerate the owner's row ids. Here both are the same empty result.
+
+ESLint blocks importing `@/lib/db` or `@/lib/db/pool` from anywhere outside
+`src/lib/db/`, because an unscoped handle is the only way to write a query that
+skips this. `npm run test:coverage` holds `scope.ts` at 100% in the unit suite —
+hermetically, so the gate still runs in CI where there is no database.
 
 ### Migrations
 
