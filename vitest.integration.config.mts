@@ -5,7 +5,7 @@ import { defineConfig } from "vitest/config";
 //   - no jsdom, no React plugin — nothing here renders
 //   - the default suite stays hermetic, so CI needs no database secret
 //
-// Testing Strategy § 1.4 (demo isolation) lands here in FUEL-7.
+// Testing Strategy § 1.4 (demo isolation) lives in tests/integration/scope.test.ts.
 export default defineConfig({
   resolve: {
     tsconfigPaths: true,
@@ -17,6 +17,9 @@ export default defineConfig({
   ssr: { resolve: { conditions: ["react-server"] } },
   test: {
     environment: "node",
+    // Applies the migrations to the test branch, once, before any worker starts
+    // — the suites read and write the real schema. See globalSetup.ts.
+    globalSetup: ["./tests/integration/globalSetup.ts"],
     setupFiles: ["./tests/integration/setup.ts"],
     include: ["tests/integration/**/*.{test,spec}.ts"],
     // Neon's compute auto-suspends when idle; the first query after a cold

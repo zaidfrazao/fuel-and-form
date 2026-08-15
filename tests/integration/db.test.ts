@@ -4,9 +4,13 @@ import { describe, expect, it } from "vitest";
 import { getDb } from "@/lib/db";
 import { getPool } from "@/lib/db/pool";
 
+import { testDatabaseUrl } from "./env";
+
 // Skipped, not failed, when DATABASE_URL_TEST is unset — a fresh clone and CI
-// both report "skipped", which is truthful, rather than a false green.
-const configured = Boolean(process.env.DATABASE_URL_TEST);
+// both report "skipped", which is truthful, rather than a false green. Resolved
+// through the shared helper rather than read off `process.env`, so the decision
+// does not depend on setup.ts having run first; see scope.test.ts.
+const configured = Boolean(testDatabaseUrl());
 
 describe.skipIf(!configured)("database connectivity", () => {
   it("reaches the test branch over the HTTP driver", async () => {

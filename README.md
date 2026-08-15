@@ -182,6 +182,16 @@ Because these tests truncate tables, the harness refuses to run if the test
 branch resolves to the same host as `DATABASE_URL` — or if `DATABASE_URL` is
 unset, since it then cannot prove the two differ. Set both.
 
+The suite migrates the `test` branch itself before it runs, so there is no
+`db:migrate` step to remember and no way for it to test yesterday's schema. Data
+is truncated at the start and end of every run, and between tests; the schema
+persists.
+
+`tests/integration/scope.test.ts` is the demo-isolation proof — Testing Strategy
+§ 1.4, and the PRD's promise that no session can reach another user's rows. It
+runs against the real tables. Treat a failure there as a release blocker, and
+check the run said **passed** rather than **skipped** before trusting it.
+
 ## Documentation
 
 - [`docs/PRD.md`](docs/PRD.md) — product requirements
