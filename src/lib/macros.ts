@@ -53,27 +53,28 @@ export type MacroTotals = {
  * Narrower than `Meal` on purpose. Totalling needs four numbers, and a signature
  * demanding a whole row would force every caller with a hypothetical meal to
  * fabricate a `userId`, a `method` and an `isArchived` to add up two numbers.
- *
- * ## `isUntracked`, and why it is optional
- *
- * The weekend is deliberately looser — the PRD calls flexible meals *"a slot
- * type, not a failure state"* — and § 1.3 case 3 requires such a slot be left
- * out of the totals with the day flagged partial. But PRD Open Question 4 is
- * still open: whether those meals are real library rows with macros, or a
- * placeholder standing in for "not counted". Until it is answered there is no
- * `meals.is_untracked` column, so this flag reads `undefined` on every row the
- * database returns and no day is wrongly flagged in the meantime.
- *
- * It is declared here rather than inferred because the alternative is a sentinel
- * on zero macros, and the PRD's own coffee-and-MCT-oil ritual is a real item
- * with real, small numbers. A rule reading "0 kcal means we stopped counting"
- * cannot tell an honest zero from an absence, and would quietly flag a day
- * partial for drinking coffee.
- *
- * Adding the column is the follow-up that makes case 3 reachable in production;
- * this contract is what that column will plug into.
  */
 export type MacroBearing = Pick<Meal, "kcal" | "proteinG" | "fatG" | "carbG"> & {
+  /**
+   * Excluded from macro totals, and flags the day partial (§ 1.3 case 3).
+   *
+   * NOT a column on `meals` — this is the one field here that the database
+   * cannot yet supply. The weekend is deliberately looser (the PRD calls
+   * flexible meals *"a slot type, not a failure state"*), but PRD Open
+   * Question 4 is still open on whether those meals are real library rows with
+   * macros or a placeholder standing in for "not counted". Until it is
+   * answered there is no `meals.is_untracked`, so this reads `undefined` on
+   * every row the database returns and no day is wrongly flagged meanwhile.
+   *
+   * Declared rather than inferred because the alternative is a sentinel on
+   * zero macros, and the PRD's own coffee-and-MCT-oil ritual is a real item
+   * with real, small numbers. A rule reading "0 kcal means we stopped
+   * counting" cannot tell an honest zero from an absence, and would quietly
+   * flag a day partial for drinking coffee.
+   *
+   * Adding the column is the follow-up that makes case 3 reachable in
+   * production; this contract is what it will plug into.
+   */
   isUntracked?: boolean;
 };
 
