@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import { getPool } from "@/lib/db/pool";
@@ -102,25 +102,50 @@ describe.skipIf(!configured)("loading the seed libraries", () => {
     );
   });
 
-  it("schedules the dinner the template names", async () => {
-    // The same risk, one table further on: a template entry holds a meal uuid,
-    // so a shuffled map schedules a real meal on the right day — the wrong one.
-    // Tuesday's dinner is the one the PRD pins by name, which makes it the entry
-    // worth asserting.
+  it("schedules the exact meal the template names, on every weekday dinner", async () => {
+    // The same risk as above, one table further on: a template entry holds a
+    // meal uuid, so a shuffled map schedules a REAL meal on the right day — just
+    // the wrong one.
+    //
+    // Asserting only that the scheduled meal's `slotType` matches the entry's
+    // slot would be close to vacuous here, because plan.test.ts already proves
+    // every template entry names a meal of the matching type: a mis-wired uuid
+    // pointing at any other dinner would satisfy it. So this compares the
+    // scheduled meal's NAME against the one seedPlanTemplate names, for all five
+    // weekday dinners rather than one.
+    //
+    // The expectation is derived from the template rather than hardcoded on
+    // purpose. What this test owns is "the database agrees with the template";
+    // whether the template itself is right is plan.test.ts's job, and pinning a
+    // meal name here as well would make a deliberate template edit fail in two
+    // places for one reason.
     const { userId } = await seedFreshUser();
     const s = scope(userId, getPool());
 
-    const tuesdayDinner = await s.selectOne(
-      schema.planTemplateEntries,
-      eq(schema.planTemplateEntries.dayOfWeek, 2),
-    );
+    const expectedNameFor = (dayOfWeek: number) => {
+      const entry = seedPlanTemplate.find(
+        (candidate) => candidate.dayOfWeek === dayOfWeek && candidate.slot === "dinner",
+      )!;
 
-    expect(tuesdayDinner).toBeDefined();
+      return seedMeals.find((meal) => meal.key === entry.mealKey)!.name;
+    };
 
-    const scheduled = await s.select(schema.meals, eq(schema.meals.id, tuesdayDinner!.mealId));
+    for (const dayOfWeek of [1, 2, 3, 4, 5]) {
+      const entry = await s.selectOne(
+        schema.planTemplateEntries,
+        and(
+          eq(schema.planTemplateEntries.dayOfWeek, dayOfWeek),
+          eq(schema.planTemplateEntries.slot, "dinner"),
+        ),
+      );
 
-    // Whatever slot came back first, it must be a meal of that slot's type.
-    expect(scheduled.at(0)?.slotType).toBe(tuesdayDinner!.slot);
+      expect(entry, `day ${dayOfWeek} has a dinner entry`).toBeDefined();
+
+      const scheduled = await s.selectOne(schema.meals, eq(schema.meals.id, entry!.mealId));
+
+      expect(scheduled?.name, `day ${dayOfWeek} dinner`).toBe(expectedNameFor(dayOfWeek));
+      expect(scheduled?.slotType, `day ${dayOfWeek} dinner`).toBe("dinner");
+    }
   });
 
   it("keeps two seeded users' libraries entirely separate", async () => {

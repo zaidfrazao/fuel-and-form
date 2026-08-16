@@ -53,20 +53,33 @@ const noRawDatabaseHandles = {
             // else. Nor can the negation be expressed as a glob — gitignore
             // cannot re-include a file whose parent directory is excluded.
             //
-            // The regex must catch every SPELLING of the two handle modules
-            // while ending before the siblings. A narrower `(^|/)db(/pool)?$`
-            // was tried first and is wrong: it lets `@/lib/db/index`,
-            // `@/lib/db/pool.ts` and `@/lib/db/` straight through, all of which
-            // the glob form did block. Resolving a directory to its index, and
-            // an explicit extension, are exactly what someone reaching for a raw
-            // handle would land on, so each alternative below is deliberate and
-            // `tests/unit/scope-import-rule.test.ts` holds every one of them.
+            // DEFAULT DENY: anything naming the `db` directory is restricted,
+            // and the two safe siblings are the named exceptions.
             //
-            // Neither un-blocked module can bypass the scope. `scope.ts` IS the
-            // choke point and holds no connection: it takes its executor as an
+            // Enumerating the forbidden spellings instead was tried twice and
+            // failed twice. `(^|/)db(/pool)?$` let `@/lib/db/index` and
+            // `@/lib/db/` through; adding those still let `@/lib/db/index.js`,
+            // `@/lib/db/./index` and `@/lib/db//index` through — all of which
+            // TypeScript resolves to the raw handle, verified. ESLint matches
+            // the specifier STRING and performs no module resolution, so a
+            // pattern listing bad spellings loses to whoever writes a new one.
+            // Listing the good ones cannot: a specifier not ending in `scope`
+            // or `schema` is refused however it is spelled.
+            //
+            // It also fails closed in the right direction. A module added to
+            // src/lib/db/ later is restricted the day it appears, rather than
+            // being reachable until someone remembers to extend a denylist.
+            //
+            // Neither exception can bypass the scope. `scope.ts` IS the choke
+            // point and holds no connection: it takes its executor as an
             // argument. `schema.ts` is table definitions, and a table object
-            // with no executor cannot run a statement.
-            regex: "(^|/)db(/(index|pool)(\\.ts)?)?/?$",
+            // with no executor cannot run a statement — while `scope()` takes
+            // those objects as arguments, so restricting them would restrict
+            // scoped writes and nothing else.
+            //
+            // tests/unit/scope-import-rule.test.ts runs this config over every
+            // spelling above, in both directions.
+            regex: "^(?!.*/(scope|schema)(\\.[tj]s)?$).*(^|/)db(/.*)?$",
             allowTypeImports: true,
             message:
               "Import scope() from @/lib/db/scope instead. getDb() and getPool() " +

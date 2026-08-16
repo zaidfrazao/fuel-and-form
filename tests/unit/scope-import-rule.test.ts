@@ -78,6 +78,17 @@ describe("raw database handles are blocked from src/", () => {
     "../db",
     "../db/pool",
     "./db",
+
+    // Spellings that defeated two earlier denylist attempts. Every one of these
+    // is resolved by TypeScript to src/lib/db/index.ts or pool.ts — verified,
+    // not assumed — while differing from the obvious form only in punctuation.
+    // ESLint matches the specifier string and resolves nothing, so these are
+    // what a denylist cannot keep up with and an allowlist does not have to.
+    "@/lib/db/index.js", // bundler resolution maps .js onto the .ts source
+    "@/lib/db/pool.js",
+    "@/lib/db/./index", // dot segment
+    "@/lib/db//index", // doubled separator
+    "@/lib/db/../db", // normalises back into the directory
   ];
 
   it.each(forbidden)("blocks %s", async (specifier) => {
@@ -95,10 +106,25 @@ describe("the scope layer itself is importable", () => {
   // definitions, and a table object with no executor cannot run a statement —
   // while `scope()` requires those objects as arguments, so forbidding them
   // forbids scoped writes and nothing else.
-  const allowed = ["@/lib/db/scope", "@/lib/db/schema"];
+  const allowed = [
+    "@/lib/db/scope",
+    "@/lib/db/schema",
+    "@/lib/db/scope.ts",
+    "@/lib/db/schema.js",
+    "../db/scope",
+  ];
 
   it.each(allowed)("allows %s", async (specifier) => {
     expect(isRestricted(await lintImport(specifier))).toBe(false);
+  });
+
+  it("leaves imports that merely resemble the db directory alone", async () => {
+    // The allowlist is expressed as "not ending in scope or schema", so it must
+    // not over-reach onto unrelated modules. `dbx` is the adjacent-name case a
+    // segment-unaware pattern would catch.
+    for (const specifier of ["@/lib/seed/plan", "@/lib/dbx", "drizzle-orm/pg-core"]) {
+      expect(isRestricted(await lintImport(specifier)), specifier).toBe(false);
+    }
   });
 
   it("allows a type-only import of the handle modules", async () => {

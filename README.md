@@ -284,11 +284,15 @@ is just another `npm run db:seed`; the library is skipped once it exists. Pass
 npx tsx scripts/seed-local.ts --replace
 ```
 
-`--replace` refuses once anything has been logged against a meal — `meal_logs`
-holds its meals with `on delete no action`, so deleting a meal with history is
-rejected by Postgres and the whole run rolls back. That is the schema keeping
-the promise the weekly export depends on, not a bug. Archive a library entry
-(`is_archived`) rather than deleting it.
+`--replace` refuses once a library entry has any history behind it. Three tables
+hold their parents with `on delete no action` — `meal_logs`, `workout_logs`, and
+`day_plan_overrides` — so a meal that has been eaten, a session that has been
+logged, *or a meal that has been swapped in on some date* all block the delete,
+and the whole run rolls back. The overrides are the easy one to forget: a swap
+does not feel like history, but the export's "planned" column reads it.
+
+That is the schema keeping the promise the weekly export depends on, not a bug.
+Archive a library entry (`is_archived`) rather than deleting it.
 
 > The seed runs through `scope()` like every other write, so each row is stamped
 > with the account it belongs to. It does **not** use `getDb()`/`getPool()`:

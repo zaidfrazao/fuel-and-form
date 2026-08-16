@@ -162,15 +162,6 @@ function connect(connectionString: string) {
   return drizzle({ client: new Pool({ connectionString }), schema });
 }
 
-/** The row an insert's `returning()` just produced, or a named failure. */
-function inserted<T>(rows: T[], what: string): T {
-  const row = rows.at(0);
-
-  if (!row) throw new Error(`Insert of ${what} returned no row.`);
-
-  return row;
-}
-
 type Tx = Parameters<Parameters<ReturnType<typeof connect>["transaction"]>[0]>[0];
 
 /**
@@ -185,29 +176,46 @@ type Tx = Parameters<Parameters<ReturnType<typeof connect>["transaction"]>[0]>[0
  * Reuses an existing owner rather than inserting a second one. That is the
  * common case, not the edge case: `ownerUserId()` provisions the owner row on
  * the first correct login, so anyone who has logged in before seeding already
- * has one. The `users_single_owner_key` partial unique index would reject a
- * second insert anyway — this turns that error into the intended behaviour.
+ * has one.
+ *
+ * ## Insert first, then select — the same shape as `ownerUserId()`
+ *
+ * Select-then-insert reads more naturally and is wrong, for the reason
+ * src/lib/auth/owner.ts sets out at length: it is a check-then-act race. A seed
+ * run concurrent with a first login — or with another seed run — has both sides
+ * read "no owner" and both attempt the insert. `users_single_owner_key` then
+ * refuses the loser, and because everything here is one transaction, the whole
+ * seed aborts rather than the loser simply reusing the winner's row.
+ *
+ * Attempting the insert FIRST closes the window: `onConflictDoNothing` turns
+ * the loser into an empty `returning()`, and the select below picks up the row
+ * the winner committed. The database decides existence and creation at once, so
+ * there is no gap between them. Costs one no-op insert on every run after the
+ * first, which is the same price owner.ts pays on every login.
  */
 async function ownerUser(tx: Tx): Promise<{ id: string; created: boolean }> {
-  const existing = await tx
-    .select()
+  const [created] = await tx
+    .insert(schema.users)
+    .values({ kind: "owner", displayName: OWNER_DISPLAY_NAME, expiresAt: null })
+    .onConflictDoNothing()
+    .returning({ id: schema.users.id });
+
+  if (created) return { id: created.id, created: true };
+
+  // Empty `returning()` means the row was already there — from an earlier seed,
+  // an earlier login, or the far side of a race that has now committed.
+  const [existing] = await tx
+    .select({ id: schema.users.id })
     .from(schema.users)
     .where(eq(schema.users.kind, "owner"))
     .limit(1);
 
-  const found = existing.at(0);
+  // Neither branch produced a row: the insert was refused and the select found
+  // nothing. That is a broken database rather than anything this script can
+  // recover from, and it says so instead of failing later on a null id.
+  if (!existing) throw new Error("Could not resolve or create the owner account.");
 
-  if (found) return { id: found.id, created: false };
-
-  const row = inserted(
-    await tx
-      .insert(schema.users)
-      .values({ kind: "owner", displayName: OWNER_DISPLAY_NAME, expiresAt: null })
-      .returning(),
-    "users",
-  );
-
-  return { id: row.id, created: true };
+  return { id: existing.id, created: false };
 }
 
 /**
@@ -215,10 +223,20 @@ async function ownerUser(tx: Tx): Promise<{ id: string; created: boolean }> {
  *
  * Order follows the foreign keys down: template entries and children first,
  * then the parents they name. The meal and workout deletes are the ones that
- * can fail — `meal_logs` and `workout_logs` hold their parents with
- * `on delete no action`, so a meal with any history refuses to go. Let that
- * error surface unchanged; catching it would be catching the schema keeping the
- * promise the export depends on.
+ * can fail — THREE tables hold their parents with `on delete no action`, and
+ * any of them is enough to refuse the delete:
+ *
+ *   - `meal_logs`      — a meal that has been eaten
+ *   - `workout_logs`   — a session that has been logged
+ *   - `day_plan_overrides` — a meal that has been swapped IN on some date
+ *
+ * The overrides are easy to forget because a swap does not feel like history,
+ * but the export's "planned" column reads that table (P6), so it outlives the
+ * meal it names exactly as a log does.
+ *
+ * Let the error surface unchanged. Catching it would be catching the schema
+ * keeping the promise the export depends on — `is_archived` is the supported
+ * way to retire a library entry, and this refusal is what makes it the only one.
  */
 async function clearLibrary(s: ReturnType<typeof scope>): Promise<void> {
   await s.delete(schema.planTemplateEntries);
