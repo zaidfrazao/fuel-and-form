@@ -34,7 +34,7 @@ const USER_ID = "00000000-0000-4000-8000-000000000001";
  * stable within a test run without pretending to be real uuids.
  */
 const library: Workout[] = seedWorkouts.map((workout, index) => ({
-  id: `w${index}`,
+  id: `w${String(index).padStart(2, "0")}`,
   userId: USER_ID,
   name: workout.name,
   type: workout.type,
@@ -45,7 +45,7 @@ const library: Workout[] = seedWorkouts.map((workout, index) => ({
 
 /** Mon, Wed and Fri name the group rather than a workout — the rotated days. */
 const template: TrainingTemplateEntry[] = [1, 3, 5].map((dayOfWeek, index) => ({
-  id: `t${index}`,
+  id: `t${String(index).padStart(2, "0")}`,
   userId: USER_ID,
   dayOfWeek,
   workoutId: null,
@@ -192,10 +192,22 @@ describe("meal library", () => {
     }
   });
 
-  it("gives every meal a method and at least one ingredient", () => {
+  it("gives every meal a method", () => {
     for (const meal of seedMeals) {
       expect(meal.method?.trim()).toBeTruthy();
-      expect(meal.ingredients.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("gives every rotation meal at least one ingredient", () => {
+    // Scoped to the rotation deliberately. AC1 requires ingredients for these
+    // ten; the type contract in types.ts explicitly permits `ingredients: []`
+    // so a meal can be seeded with macros alone, which is what lets P1–P6 ship
+    // before P8 has any data. Asserting non-empty across ALL meals would
+    // contradict that promise and fail the first macro-only meal someone adds.
+    const byKey = new Map(seedMeals.map((m) => [m.key, m]));
+
+    for (const key of ROTATION_KEYS) {
+      expect(byKey.get(key)!.ingredients.length).toBeGreaterThan(0);
     }
   });
 

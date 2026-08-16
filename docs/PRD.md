@@ -424,4 +424,4 @@ To resolve before or during the build — none of these block starting.
 ## Document History
 
 - **Created:** 2026-08-10
-- **Last Updated:** 2026-08-10
+- **Last Updated:** 2026-08-16 — demo persona figures substituted for the owner's throughout (FUEL-14); Open Questions 1, 2 and 7 resolved.
