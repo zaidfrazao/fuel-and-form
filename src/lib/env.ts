@@ -42,3 +42,30 @@ export function requireEnv(name: string): string {
 export function databaseUrl(): string {
   return requireEnv("DATABASE_URL");
 }
+
+/**
+ * The owner's password, as typed.
+ *
+ * Not a hash. There is no user table to store one in and no registration flow
+ * to produce one — the PRD's auth section is a single password in an env var,
+ * and the threat a bcrypt hash defends against (a leaked database revealing a
+ * password reused elsewhere) does not exist when the secret was never in the
+ * database to leak.
+ *
+ * The value must never be interpolated into a log line, an error, or a rendered
+ * response. `verifyOwnerPassword` in ./auth/password.ts is the only caller.
+ */
+export function ownerPassword(): string {
+  return requireEnv("OWNER_PASSWORD");
+}
+
+/**
+ * The key the session cookies are signed with.
+ *
+ * Read fresh on every call rather than captured at module scope, so rotating it
+ * takes effect on the next request instead of the next deploy — and so this
+ * file still imports cleanly during `next build`, where it is absent.
+ */
+export function sessionSecret(): string {
+  return requireEnv("SESSION_SECRET");
+}
