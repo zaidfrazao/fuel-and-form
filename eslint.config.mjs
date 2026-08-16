@@ -37,7 +37,31 @@ const noRawDatabaseHandles = {
       {
         patterns: [
           {
-            group: ["@/lib/db", "@/lib/db/pool", "**/lib/db", "**/lib/db/pool"],
+            // An anchored regex, not a `group` of globs, and that is the whole
+            // point. Glob groups are matched with GITIGNORE semantics, under
+            // which `@/lib/db` excludes the whole DIRECTORY — so the previous
+            // form also blocked `@/lib/db/scope` and `@/lib/db/schema`, the two
+            // modules a caller is supposed to reach for. This rule forbade the
+            // very import its own message recommends.
+            //
+            // Nothing had hit it: the auth files import table values but are
+            // exempt above for the unrelated `users` reason, and every other
+            // file so far imports only types, which `allowTypeImports` waves
+            // through. FUEL-15's seed loader is the first file in src/ to write
+            // a scoped query, and it cannot: `scope()` takes table objects as
+            // arguments, so blocking `schema` blocks scoped writes and nothing
+            // else. Nor can the negation be expressed as a glob — gitignore
+            // cannot re-include a file whose parent directory is excluded.
+            //
+            // The regex ends at `db` or `db/pool`, so siblings are unaffected
+            // while every spelling of the two handle modules is caught —
+            // including `../db/pool`, which the glob form missed.
+            //
+            // Neither un-blocked module can bypass the scope. `scope.ts` IS the
+            // choke point and holds no connection: it takes its executor as an
+            // argument. `schema.ts` is table definitions, and a table object
+            // with no executor cannot run a statement.
+            regex: "(^|/)db(/pool)?$",
             allowTypeImports: true,
             message:
               "Import scope() from @/lib/db/scope instead. getDb() and getPool() " +
@@ -50,10 +74,22 @@ const noRawDatabaseHandles = {
   },
 };
 
+// `const { key, ingredients, ...row } = seed` is how a seed entry is narrowed to
+// the columns its table actually has (see src/lib/seed/load.ts). The two named
+// keys exist only to be excluded, so flagging them as unused reports the idiom
+// working. ESLint's own option for this is off by default; everything else the
+// rule catches stays caught.
+const unusedVars = {
+  rules: {
+    "@typescript-eslint/no-unused-vars": ["warn", { ignoreRestSiblings: true }],
+  },
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   noRawDatabaseHandles,
+  unusedVars,
   // Replaces (does not extend) the default ignores of eslint-config-next,
   // so the defaults are repeated here alongside our additions.
   globalIgnores([

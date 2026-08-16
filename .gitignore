@@ -11,6 +11,17 @@ next-env.d.ts
 # negation is what keeps the setup docs' reference file in the repo.
 .env*
 !.env.example
+# The owner's local seed script — body metrics, targets and weigh-in history.
+# PRD § P7: "no personal metrics in git history, ever". Recipes, workouts and
+# the weekly template are committed under src/lib/seed/ because they are food,
+# exercises and routine; only the profile row and the weigh-ins are personal,
+# and they live here. `scripts/seed-local.example.ts` is the committed template,
+# carrying the demo persona's invented figures — see README → Seeding.
+#
+# Not a `scripts/*.local.ts` glob: one named file, so a future script cannot
+# fall into the ignore by accident and go missing from a review.
+scripts/seed-local.ts
+
 .idea/
 .vscode/
 *.swp
