@@ -1,9 +1,11 @@
 import type {
+  MealSlot,
   NewMeal,
   NewMealIngredient,
   NewWorkout,
   NewWorkoutExercise,
 } from "@/lib/db/schema";
+import type { DayOfWeek } from "@/lib/date";
 
 /**
  * The shape of the committed seed libraries — PRD § P7 → repository privacy.
@@ -91,6 +93,53 @@ export type SeedWorkout = Omit<NewWorkout, "id" | "userId"> & {
   key: SeedKey;
   exercises: readonly SeedExercise[];
 };
+
+/* -------------------------------------------------------------------------- */
+/* The weekly template                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One recurring meal slot — "Tuesday dinner is the chicken and rice".
+ *
+ * ## Why the weekly template is committed, when body metrics are not
+ *
+ * PRD § P7 draws the line at *personal data*, not at everything the owner does:
+ * the demo "shares the plan's *shape* — same recipe library, same training
+ * structure — but is an invented person with different body metrics". Which
+ * recipe lands on which weekday is that shape. It reveals no weight, no target
+ * and no measurement, so it ships in git alongside the recipes it names, and
+ * FUEL-41's demo provisioner reads the same arrays rather than restating them.
+ *
+ * The gitignored half is only what the PRD actually calls personal: the profile
+ * row and the weigh-in history. See `scripts/seed-local.example.ts`.
+ *
+ * `mealKey` rather than a uuid, for the reason given at the top of this file —
+ * ids are generated at insert time, and a committed uuid would be the same uuid
+ * in every demo session. `loadSeedLibraries` builds the key → uuid map.
+ */
+export type SeedPlanEntry = {
+  dayOfWeek: DayOfWeek;
+  slot: MealSlot;
+  mealKey: SeedKey;
+
+  /** Ordering within a slot that holds more than one meal — the two snacks. */
+  sortOrder?: number;
+};
+
+/**
+ * One recurring training slot.
+ *
+ * A row names EITHER a fixed workout (the daily walk) OR a rotation group
+ * (Circuit A/B, resolved per date from `programStartDate`). The schema makes
+ * that exclusive with the `training_template_entries_target` check; the union
+ * below makes it a compile error instead, so a malformed entry is caught while
+ * editing this file rather than as a constraint violation partway through a
+ * seed run against a real database.
+ */
+export type SeedTrainingEntry = { dayOfWeek: DayOfWeek; sortOrder?: number } & (
+  | { workoutKey: SeedKey; rotationGroup?: never }
+  | { rotationGroup: string; workoutKey?: never }
+);
 
 /**
  * The rotation group the bodyweight circuits alternate within.
