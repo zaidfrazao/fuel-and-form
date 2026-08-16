@@ -36,6 +36,7 @@ npm run dev          # http://localhost:3000
 | `npm run test` | Vitest — unit suite, no database required |
 | `npm run test:coverage` | Unit suite with the 100% gate on the scope layer |
 | `npm run test:integration` | Vitest against the test branch (see [Database](#database)) |
+| `npm run db:seed` | Load the owner account, libraries and weekly plan (see [Seeding](#seeding)) |
 | `npm run db:generate` | Diff the schema and write SQL to `drizzle/` |
 | `npm run db:migrate` | Apply pending migrations |
 | `npm run db:push` | Sync the schema without a migration — local only |
@@ -240,6 +241,60 @@ npm run db:migrate    # apply pending migrations
 Generated SQL in `drizzle/` is committed and reviewed like any other source. Use
 `npm run db:push` for local schema iteration only — it skips the migration
 history, so it must never touch a deployed database.
+
+### Seeding
+
+Bringing a clean clone up to a working app:
+
+```bash
+cp scripts/seed-local.example.ts scripts/seed-local.ts
+# edit the two blocks marked TODO — your body metrics, and any weigh-in history
+npm run db:seed
+```
+
+That writes the owner account, the profile, the recipe and workout libraries,
+and the weekly plan — 17 meals, 155 ingredients, 4 workouts and 46 template
+entries. Log in and the app is populated.
+
+**`scripts/seed-local.ts` is gitignored, and that is the point.** PRD § P7:
+*"No personal metrics in git history, ever."* This repository is public, so the
+seed is split in two:
+
+| Half | Holds | In git |
+| --- | --- | --- |
+| `src/lib/seed/` | recipes, workouts, and which meal falls on which weekday | **yes** — food, exercises and routine |
+| `scripts/seed-local.ts` | height, weights, macro targets, weigh-ins | **no** |
+
+The committed half is plan *shape*, which is what the PRD says the demo shares
+with the owner — so FUEL-41's demo provisioner loads the same arrays through the
+same `loadSeedLibraries()` rather than keeping a second copy. Only the profile
+row and the weigh-in history are personal.
+
+`scripts/seed-local.example.ts` is the committed template. Every figure in it
+belongs to Sam Rivera, the fictional demo persona (PRD § Target Users) — if you
+are only trying the app out, they are internally consistent and can be left
+alone. Edit the copy, never the example: `git status` will show it if you
+confuse the two.
+
+Re-running is safe. The profile is rewritten every time, so correcting a metric
+is just another `npm run db:seed`; the library is skipped once it exists. Pass
+`--replace` to reload it from `src/lib/seed/`:
+
+```bash
+npx tsx scripts/seed-local.ts --replace
+```
+
+`--replace` refuses once anything has been logged against a meal — `meal_logs`
+holds its meals with `on delete no action`, so deleting a meal with history is
+rejected by Postgres and the whole run rolls back. That is the schema keeping
+the promise the weekly export depends on, not a bug. Archive a library entry
+(`is_archived`) rather than deleting it.
+
+> The seed runs through `scope()` like every other write, so each row is stamped
+> with the account it belongs to. It does **not** use `getDb()`/`getPool()`:
+> those are `server-only`, which throws outside the `react-server` condition, so
+> the script opens its own connection and passes it to the same scope the app
+> uses.
 
 ### Integration tests
 
