@@ -53,15 +53,20 @@ const noRawDatabaseHandles = {
             // else. Nor can the negation be expressed as a glob — gitignore
             // cannot re-include a file whose parent directory is excluded.
             //
-            // The regex ends at `db` or `db/pool`, so siblings are unaffected
-            // while every spelling of the two handle modules is caught —
-            // including `../db/pool`, which the glob form missed.
+            // The regex must catch every SPELLING of the two handle modules
+            // while ending before the siblings. A narrower `(^|/)db(/pool)?$`
+            // was tried first and is wrong: it lets `@/lib/db/index`,
+            // `@/lib/db/pool.ts` and `@/lib/db/` straight through, all of which
+            // the glob form did block. Resolving a directory to its index, and
+            // an explicit extension, are exactly what someone reaching for a raw
+            // handle would land on, so each alternative below is deliberate and
+            // `tests/unit/scope-import-rule.test.ts` holds every one of them.
             //
             // Neither un-blocked module can bypass the scope. `scope.ts` IS the
             // choke point and holds no connection: it takes its executor as an
             // argument. `schema.ts` is table definitions, and a table object
             // with no executor cannot run a statement.
-            regex: "(^|/)db(/pool)?$",
+            regex: "(^|/)db(/(index|pool)(\\.ts)?)?/?$",
             allowTypeImports: true,
             message:
               "Import scope() from @/lib/db/scope instead. getDb() and getPool() " +
