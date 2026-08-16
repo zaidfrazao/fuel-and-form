@@ -29,29 +29,50 @@ import { users } from "@/lib/db/schema";
  *
  * The caller must have verified the password first — see src/app/login/actions.ts.
  * Nothing unauthenticated reaches this.
+ *
+ * ## Why the insert comes first, and why it cannot duplicate
+ *
+ * The obvious shape — select, and insert if absent — is a race: two logins on a
+ * fresh deployment both read "no owner" and both insert, leaving two owner
+ * identities with nothing to choose between them. No error is raised and the
+ * damage is silent, which is the worst kind.
+ *
+ * `users_single_owner_key`, a partial unique index on `kind = 'owner'`, makes
+ * one owner a fact Postgres enforces. `onConflictDoNothing` then turns the
+ * loser of a race into an empty `returning()` rather than an exception, and the
+ * select below picks up the row the winner made. Attempting the insert FIRST is
+ * what removes the window entirely: there is no gap between deciding the row is
+ * absent and creating it, because the database decides both at once.
+ *
+ * Steady state — every login after the first — costs one extra no-op insert.
+ * That is a fair price for a correctness property that cannot be got in
+ * application code at any price.
  */
 export async function ownerUserId(): Promise<string> {
   const db = getDb();
 
+  // A placeholder FUEL-15 overwrites. Nothing personal is committed to this
+  // repository, and the display name authenticates nothing.
+  const [created] = await db
+    .insert(users)
+    .values({ kind: "owner", displayName: "Owner" })
+    .onConflictDoNothing()
+    .returning({ id: users.id });
+
+  if (created) return created.id;
+
+  // Empty `returning()` means the row already existed — either from an earlier
+  // login or from the other side of a race that has now committed.
   const [existing] = await db
     .select({ id: users.id })
     .from(users)
     .where(eq(users.kind, "owner"))
     .limit(1);
 
-  if (existing) return existing.id;
+  // Neither branch produced a row: the insert was refused and the select found
+  // nothing. That is a broken database, not a wrong password, and it says so
+  // rather than surfacing as a null-property error somewhere later.
+  if (!existing) throw new Error("Could not resolve or create the owner account.");
 
-  // A placeholder FUEL-15 overwrites. Nothing personal is committed to this
-  // repository, and the display name is not used to authenticate anything.
-  const [created] = await db
-    .insert(users)
-    .values({ kind: "owner", displayName: "Owner" })
-    .returning({ id: users.id });
-
-  // `noUncheckedIndexedAccess` makes Drizzle's array return honest. An insert
-  // that produced no row is a broken database, not a wrong password, and the
-  // message says so rather than surfacing as a null-property error later.
-  if (!created) throw new Error("Could not create the owner account.");
-
-  return created.id;
+  return existing.id;
 }

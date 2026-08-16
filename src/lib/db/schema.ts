@@ -214,6 +214,17 @@ export const users = pgTable(
     // The reaper's only query: expired demo sessions. Partial, so the owner row
     // — and every unexpired session, once the index is scanned — stays out of it.
     index("users_expires_at_idx").on(t.expiresAt).where(sql`"expires_at" is not null`),
+
+    // "One owner" as a database fact rather than an application habit.
+    //
+    // `ownerUserId()` provisions the owner row on first correct login, and a
+    // check-then-insert cannot be made safe in application code: two logins
+    // racing on a fresh deployment both read "no owner" and both insert. The
+    // result is two owner identities, with `limit(1)` picking between them
+    // arbitrarily from then on — data silently split across two accounts, and
+    // no error anywhere. Partial, so it constrains owners only and leaves demo
+    // rows, of which there are deliberately many, alone.
+    uniqueIndex("users_single_owner_key").on(t.kind).where(sql`"kind" = 'owner'`),
   ],
 );
 

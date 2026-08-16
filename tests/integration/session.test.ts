@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { resolveSession } from "@/lib/auth/resolve";
 import { sign } from "@/lib/auth/token";
 import { getDb } from "@/lib/db";
+import * as schema from "@/lib/db/schema";
 
 import { testDatabaseUrl } from "./env";
 import { type Fixture, seedFixture } from "./fixtures";
@@ -86,6 +87,70 @@ describe.skipIf(!configured)("session boundary — Testing Strategy § 1.4 case 
         userId: fixture.alice.userId,
         kind: "owner",
       });
+    });
+  });
+
+  describe("one owner, enforced by the database", () => {
+    it("refuses a second owner row", async () => {
+      // `ownerUserId()` provisions the owner on first correct login, and a
+      // check-then-insert cannot be made race-free in application code: two
+      // logins on a fresh deployment both read "no owner" and both insert.
+      // `users_single_owner_key` is what makes one owner a fact rather than a
+      // habit, so this asserts Postgres refuses — not that our code remembers.
+      //
+      // The fixture already seeded Alice as the owner.
+      await expect(
+        getDb().insert(schema.users).values({ kind: "owner", displayName: "Impostor" }),
+      ).rejects.toThrow();
+    });
+
+    it("still allows many demo users", async () => {
+      // The index is PARTIAL. A constraint that also limited demo rows would
+      // break P7 entirely, and would do it only under concurrent visitors —
+      // exactly when nobody is watching.
+      await getDb()
+        .insert(schema.users)
+        .values([
+          { kind: "demo", displayName: "Visitor one" },
+          { kind: "demo", displayName: "Visitor two" },
+        ]);
+
+      const demos = await getDb()
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.kind, "demo"));
+
+      // Two seeded by the fixture (bob, expired) plus the two just added.
+      expect(demos).toHaveLength(4);
+    });
+
+    it("lets a racing insert resolve to the winner's row rather than failing", async () => {
+      // What `onConflictDoNothing` buys: the loser of the race gets an empty
+      // returning() instead of an exception, then reads the row the winner
+      // made. Both callers end up with the SAME id, which is the property that
+      // matters — two owner identities is the failure being prevented.
+      const attempt = async () => {
+        const [created] = await getDb()
+          .insert(schema.users)
+          .values({ kind: "owner", displayName: "Owner" })
+          .onConflictDoNothing()
+          .returning({ id: schema.users.id });
+
+        if (created) return created.id;
+
+        const [existing] = await getDb()
+          .select({ id: schema.users.id })
+          .from(schema.users)
+          .where(eq(schema.users.kind, "owner"))
+          .limit(1);
+
+        return existing?.id;
+      };
+
+      const [first, second] = await Promise.all([attempt(), attempt()]);
+
+      expect(first).toBe(fixture.alice.userId);
+      expect(second).toBe(fixture.alice.userId);
     });
   });
 

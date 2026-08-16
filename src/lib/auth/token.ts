@@ -44,6 +44,22 @@ export type SessionPayload = {
 const SEPARATOR = ".";
 
 /**
+ * The longest token worth looking at.
+ *
+ * A real one is about 130 characters: a uuid and an integer, encoded, plus a
+ * 43-character signature. This cap is generous by an order of magnitude and
+ * still bounds the work an unauthenticated caller can demand.
+ *
+ * Without it, `verify` HMACs whatever arrives BEFORE deciding it is nonsense,
+ * so a client sending a megabyte-long cookie makes the server hash a megabyte
+ * on every request — repeatable for free, and on the hot path, since every page
+ * resolves a session. Rejecting on length first makes junk cost a comparison
+ * instead. Browsers cap a cookie near 4KB, but nothing obliges an attacker to
+ * use a browser.
+ */
+const MAX_TOKEN_LENGTH = 1024;
+
+/**
  * HMAC-SHA256 of the encoded payload, base64url.
  *
  * The digest covers the ENCODED payload rather than the raw JSON, so verifying
@@ -89,7 +105,9 @@ export function verify(
   secret: string,
   now: number,
 ): SessionPayload | undefined {
-  if (!token) return undefined;
+  // Length before cryptography: an oversized token is refused for the price of
+  // reading `.length`, rather than after hashing all of it. See the constant.
+  if (!token || token.length > MAX_TOKEN_LENGTH) return undefined;
 
   // `indexOf`, not `split`: a token with two separators must be rejected, not
   // silently read as its first two segments.

@@ -140,6 +140,26 @@ describe("verify", () => {
       expect(verify(`${encoded}.${"x".repeat(500)}`, SECRET, NOW)).toBeUndefined();
     });
 
+    it("rejects an oversized token before hashing it", () => {
+      // Unbounded input on the hot path: every page resolves a session, so a
+      // caller sending a huge cookie would make the server HMAC all of it on
+      // every request, for free and repeatably. The cap makes junk cost a
+      // length check. A megabyte is well past any browser's cookie limit —
+      // which is the point, since nothing obliges an attacker to use one.
+      const { encoded, signature } = parts(sign(payload, SECRET));
+      const padded = `${encoded}${"A".repeat(1_000_000)}.${signature}`;
+
+      expect(verify(padded, SECRET, NOW)).toBeUndefined();
+    });
+
+    it("still accepts a token of realistic length", () => {
+      // The cap must not be so tight that a real token trips it. A genuine
+      // token is ~130 characters; asserted so a future payload addition that
+      // pushed past 1024 would fail here rather than in production.
+      expect(sign(payload, SECRET).length).toBeLessThan(256);
+      expect(verify(sign(payload, SECRET), SECRET, NOW)).toEqual(payload);
+    });
+
     it("rejects a token signed with a different secret", () => {
       // Also the rotation path: changing SESSION_SECRET invalidates every live
       // session, which is how a session is revoked when there is no store to

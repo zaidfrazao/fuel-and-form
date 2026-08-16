@@ -73,7 +73,19 @@ export async function startSession(userId: string, kind: UserKind): Promise<void
  *
  * One kind, not both: signing out of a demo must not sign the owner out of
  * their own account on their own machine.
+ *
+ * ## Why `path` is passed to a delete
+ *
+ * A deletion is just a `Set-Cookie` that expires immediately, and the browser
+ * only applies it to a cookie matching the same name AND path. `delete(name)`
+ * sends no Path, which defaults to the path of the request that triggered it —
+ * so signing out from anywhere other than `/` would expire a cookie scoped to
+ * that route while the real one, set at `path: "/"`, survived untouched.
+ *
+ * The failure is silent and looks like nothing: the user is redirected to the
+ * login screen, believes they are out, and is still signed in. Naming the path
+ * matches what `cookieOptions` set.
  */
 export async function endSession(kind: UserKind): Promise<void> {
-  (await cookies()).delete(COOKIE[kind]);
+  (await cookies()).delete({ name: COOKIE[kind], path: cookieOptions(new Date()).path });
 }

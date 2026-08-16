@@ -92,6 +92,26 @@ describe("the login screen", () => {
     expect(document.body.textContent).not.toContain("wrong-guess");
   });
 
+  it("shows the same refusal when the server fails after a correct password", async () => {
+    // The password oracle precommit found. Before the catch in actions.ts, a
+    // missing OWNER_PASSWORD or an unreachable database threw — and a thrown
+    // Server Action is a 500, a visibly different response reachable ONLY by
+    // someone who guessed correctly. Guess wrong, get a form; guess right, get
+    // a server error; now you know the password.
+    //
+    // Asserted from the client's side: whatever went wrong server-side, what
+    // comes back is the one message every other failure produces.
+    logIn.mockResolvedValue({ error: "Incorrect password." });
+
+    render(<LoginPage />);
+
+    await userEvent.type(screen.getByLabelText("Password"), "the-right-password");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("Incorrect password.");
+  });
+
   it("marks the field invalid so the error is not conveyed by colour alone", async () => {
     logIn.mockResolvedValue({ error: "Incorrect password." });
 
