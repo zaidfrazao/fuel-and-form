@@ -131,6 +131,14 @@ describe("workout library", () => {
     expect(circuits.map((w) => w.rotationIndex).sort()).toEqual([0, 1]);
   });
 
+  it("gives every workout a unique name", () => {
+    // Same argument as the meal names above — `loadSeedLibraries` matches these
+    // positionally too, and guards it the same way.
+    const names = seedWorkouts.map((w) => w.name);
+
+    expect(new Set(names).size).toBe(names.length);
+  });
+
   it("gives every exercise a prescription", () => {
     for (const workout of seedWorkouts) {
       for (const exercise of workout.exercises) {
@@ -179,6 +187,19 @@ describe("meal library", () => {
     const keys = seedMeals.map((m) => m.key);
 
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("gives every meal a unique name", () => {
+    // Not cosmetic. `loadSeedLibraries` maps a seed key to its generated uuid by
+    // zipping this array against the rows `RETURNING` hands back, and guards
+    // that positional match by comparing names pair by pair. Two meals sharing
+    // a name would let a mis-ordered result satisfy the guard — which is the
+    // one failure mode the guard exists for, and it is silent: ingredients
+    // attached to the wrong recipe, and a template scheduling the wrong dinner,
+    // with no error and nothing in the data that looks wrong.
+    const names = seedMeals.map((m) => m.name);
+
+    expect(new Set(names).size).toBe(names.length);
   });
 
   it("gives every meal a full set of macros", () => {

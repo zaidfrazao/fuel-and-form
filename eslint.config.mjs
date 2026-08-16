@@ -37,7 +37,49 @@ const noRawDatabaseHandles = {
       {
         patterns: [
           {
-            group: ["@/lib/db", "@/lib/db/pool", "**/lib/db", "**/lib/db/pool"],
+            // An anchored regex, not a `group` of globs, and that is the whole
+            // point. Glob groups are matched with GITIGNORE semantics, under
+            // which `@/lib/db` excludes the whole DIRECTORY — so the previous
+            // form also blocked `@/lib/db/scope` and `@/lib/db/schema`, the two
+            // modules a caller is supposed to reach for. This rule forbade the
+            // very import its own message recommends.
+            //
+            // Nothing had hit it: the auth files import table values but are
+            // exempt above for the unrelated `users` reason, and every other
+            // file so far imports only types, which `allowTypeImports` waves
+            // through. FUEL-15's seed loader is the first file in src/ to write
+            // a scoped query, and it cannot: `scope()` takes table objects as
+            // arguments, so blocking `schema` blocks scoped writes and nothing
+            // else. Nor can the negation be expressed as a glob — gitignore
+            // cannot re-include a file whose parent directory is excluded.
+            //
+            // DEFAULT DENY: anything naming the `db` directory is restricted,
+            // and the two safe siblings are the named exceptions.
+            //
+            // Enumerating the forbidden spellings instead was tried twice and
+            // failed twice. `(^|/)db(/pool)?$` let `@/lib/db/index` and
+            // `@/lib/db/` through; adding those still let `@/lib/db/index.js`,
+            // `@/lib/db/./index` and `@/lib/db//index` through — all of which
+            // TypeScript resolves to the raw handle, verified. ESLint matches
+            // the specifier STRING and performs no module resolution, so a
+            // pattern listing bad spellings loses to whoever writes a new one.
+            // Listing the good ones cannot: a specifier not ending in `scope`
+            // or `schema` is refused however it is spelled.
+            //
+            // It also fails closed in the right direction. A module added to
+            // src/lib/db/ later is restricted the day it appears, rather than
+            // being reachable until someone remembers to extend a denylist.
+            //
+            // Neither exception can bypass the scope. `scope.ts` IS the choke
+            // point and holds no connection: it takes its executor as an
+            // argument. `schema.ts` is table definitions, and a table object
+            // with no executor cannot run a statement — while `scope()` takes
+            // those objects as arguments, so restricting them would restrict
+            // scoped writes and nothing else.
+            //
+            // tests/unit/scope-import-rule.test.ts runs this config over every
+            // spelling above, in both directions.
+            regex: "^(?!.*/(scope|schema)(\\.[tj]s)?$).*(^|/)db(/.*)?$",
             allowTypeImports: true,
             message:
               "Import scope() from @/lib/db/scope instead. getDb() and getPool() " +
@@ -50,10 +92,22 @@ const noRawDatabaseHandles = {
   },
 };
 
+// `const { key, ingredients, ...row } = seed` is how a seed entry is narrowed to
+// the columns its table actually has (see src/lib/seed/load.ts). The two named
+// keys exist only to be excluded, so flagging them as unused reports the idiom
+// working. ESLint's own option for this is off by default; everything else the
+// rule catches stays caught.
+const unusedVars = {
+  rules: {
+    "@typescript-eslint/no-unused-vars": ["warn", { ignoreRestSiblings: true }],
+  },
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   noRawDatabaseHandles,
+  unusedVars,
   // Replaces (does not extend) the default ignores of eslint-config-next,
   // so the defaults are repeated here alongside our additions.
   globalIgnores([
