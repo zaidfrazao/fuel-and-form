@@ -33,8 +33,8 @@ const MACROS = [
 ];
 
 const TODAY = [
-  { label: "Today so far", value: "1,178", meta: "of 1,790 kcal" },
-  { label: "Protein left", value: "48 g", meta: "98 of 146 g" },
+  { label: "Today so far", value: "1,178", meta: "of 1,780 kcal" },
+  { label: "Protein left", value: "50 g", meta: "98 of 148 g" },
 ];
 
 const COMPACT = [

@@ -17,7 +17,7 @@ I have a meal plan and a training program that both work on paper. The friction 
 
 Existing apps (MyFitnessPal and friends) solve a different problem: logging arbitrary food from a giant database. My food isn't arbitrary — it's ten known recipes on a rotation. I don't need a search index, I need a scheduler with an override mechanism.
 
-**Why now:** the plan is already written and the cut is already underway (77.45kg → 64kg, ~7–8 months). The tracking tool needs to exist while the program is running, not after. A gym restart in 1–2 months will force a plan revision — the app must be built to absorb that rather than assume bodyweight training forever.
+**Why now:** the plan is already written and the cut is already underway (84.2kg → 76kg, ~4 months). The tracking tool needs to exist while the program is running, not after. A gym restart in 1–2 months will force a plan revision — the app must be built to absorb that rather than assume bodyweight training forever.
 
 **Secondary motive:** this is also a portfolio project. The repository is public and a one-click demo lets a visitor use the real thing without an account.
 
@@ -25,7 +25,13 @@ Existing apps (MyFitnessPal and friends) solve a different problem: logging arbi
 
 ### Primary User — the owner (single, authenticated)
 
-Me. 32M, 160cm, 77.45kg → 64kg target, cutting at ~0.45–0.5kg/week on ~1,780–1,800 kcal / 146g protein / 35g fat / 173g carb. Training 5 days/week at home — bodyweight circuits Mon/Wed/Fri, skipping intervals + core Tue/Thu, plus a 30–45 minute walk every day including weekends.
+> **A note on the figures in this document.** Every weight, target and macro
+> number below belongs to **Sam Rivera, the fictional demo persona** — not to the
+> repository owner. This is a public repository and P7 commits to keeping real
+> body metrics out of it; the owner's actual figures live in the database only,
+> loaded by a gitignored script (FUEL-15). Read the numbers here as illustrative.
+
+Sam Rivera. 34, 172cm, 84.2kg → 76kg target, cutting at ~0.5kg/week on ~1,780 kcal / 148g protein / 50g fat / 185g carb. Training 5 days/week at home — bodyweight circuits Mon/Wed/Fri, skipping intervals + core Tue/Thu, plus a 30–45 minute walk every day including weekends.
 
 **Goals**
 - Get the answer to "what now?" in under three seconds, one-handed, mid-cook.
@@ -154,16 +160,16 @@ Circuit A/B **alternate across sessions**, not by fixed weekday — Mon=A, Wed=B
 
 #### P5 — Weight Tracking
 
-**Description:** Weekly weigh-in entry (date, weight in kg, optional note). Line chart of the trend over time, with a target line at 64kg. Progress shown both in kilograms remaining and as a percentage of the 77.45 → 64kg journey. A trailing average smooths daily noise if weigh-ins become more frequent than weekly.
+**Description:** Weekly weigh-in entry (date, weight in kg, optional note). Line chart of the trend over time, with a target line at the goal weight. Progress shown both in kilograms remaining and as a percentage of the start → target journey. A trailing average smooths daily noise if weigh-ins become more frequent than weekly.
 
 **User Value:** The single number the whole program is judged on, and the anchor for recalibration every 5kg.
 
 **Acceptance Criteria:**
 - [ ] Log a weigh-in with date, weight, and optional note; edit or delete any past entry
 - [ ] Line chart renders the full history, legible at 375px width
-- [ ] Target line at 64kg and starting weight are both visible on the chart
+- [ ] Target line at the goal weight and starting weight are both visible on the chart
 - [ ] Progress displayed as kg lost, kg remaining, and % of the way to target
-- [ ] Current rate (kg/week over the trailing 4 weeks) shown against the 0.45–0.5kg/week goal pace
+- [ ] Current rate (kg/week over the trailing 4 weeks) shown against the configured goal pace
 - [ ] Chart handles the empty state and the single-data-point state without breaking
 
 #### P6 — Export
@@ -365,7 +371,7 @@ None. No third-party APIs, no wearables, no health platforms. The only external 
 | Plan adherence visible | Planned-versus-actual computable for every day | Export contains both columns for 100% of logged days |
 | Weigh-ins captured | 100% of weekly weigh-ins logged | One `weight_logs` row per week, unbroken |
 | Training adherence | ≥ 80% of scheduled sessions marked done or partial | `workout_logs` versus scheduled sessions |
-| Weight trend on track | 0.45–0.5kg/week trailing 4-week average | Rate calculation in the app |
+| Weight trend on track | Trailing 4-week average within the configured goal pace | Rate calculation in the app |
 | Export used at check-ins | Every check-in backed by an export rather than recall | Assistant receives a file each week |
 | Demo works cold | A stranger reaches a populated view in one click, no errors | Tested from a clean browser profile on mobile and desktop |
 | Replaces the document | The source planning doc goes unopened after week 1 | Self-reported |
@@ -407,15 +413,15 @@ None. No third-party APIs, no wearables, no health platforms. The only external 
 
 To resolve before or during the build — none of these block starting.
 
-1. **Full recipe data** — ingredients with gram weights *and* non-scale measures, method, and per-serving macros for all ten meals: 3 overnight oats flavours, the ciabatta roll, both snacks, 3 dinners, and the coffee + MCT oil ritual. Needed first; the app is a shell without it.
-2. **Exact exercise lists** — Circuit A, Circuit B, and the skipping intervals + core session, with sets/reps/durations.
+1. ~~**Full recipe data**~~ — **Resolved (FUEL-14).** All ten rotation meals are seeded in `src/lib/seed/meals.ts`, with seven treat recipes alongside them. Two caveats remain: the three oats flavours, both snacks and all seven treats have **estimated** macros derived from their ingredient lists rather than supplied figures (each row is flagged `ESTIMATED` in its notes), and the ciabatta's stated 540 kcal disagrees with its own macros by 12.6%.
+2. ~~**Exact exercise lists**~~ — **Resolved (FUEL-14).** Circuit A, Circuit B, skipping intervals + core, and the daily walk are seeded in `src/lib/seed/workouts.ts` with full prescriptions, and the A/B alternation is pinned by test.
 3. **Slot times** — confirm or correct the proposed defaults above, particularly the workout time and whether snacks are fixed or opportunistic.
 4. **Weekend meals** — should "fried eggs + bangers" and the flexible lunch/dinner be real library entries with macros, or a "flexible / untracked" placeholder slot?
 5. **Template weekday assignment** — which specific dinner and which oats flavour land on which weekday, so the template seeds correctly.
 6. **Product name** — "Fuel & Form" is a placeholder; it appears in the repo name, page title, and export filenames.
-7. **Demo persona** — a name and a starting/target weight for the fictional demo user, or my discretion.
+7. ~~**Demo persona**~~ — **Resolved (FUEL-14).** Sam Rivera: 34, 172cm, 84.2kg → 76kg at ~0.5kg/week, on 1,780 kcal / 148g protein / 50g fat / 185g carb. Targets were chosen to sit within ~3% of what the seeded meal library actually delivers, so the demo's macro deltas read near-zero rather than permanently over. These are the figures now used throughout this document and the Brand Guide.
 
 ## Document History
 
 - **Created:** 2026-08-10
-- **Last Updated:** 2026-08-10
+- **Last Updated:** 2026-08-16 — demo persona figures substituted for the owner's throughout (FUEL-14); Open Questions 1, 2 and 7 resolved.

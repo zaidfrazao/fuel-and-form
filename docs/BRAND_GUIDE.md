@@ -292,7 +292,7 @@ One question per screen. Bottom sheets for the meal picker and swap preview; the
 | Active item | `Dinner · 19:00` / `Chilli con Carne` | `Time for dinner! 🍛` |
 | Swap | `Swapped. −21g protein, −140 kcal today.` | `No problem! We've updated your plan.` |
 | Skip | `Skipped. Logged.` | `That's OK — tomorrow's a new day!` |
-| Day complete | `Day complete. 1,742 / 1,790 kcal · 138 / 146g protein.` | `Awesome day! You crushed your goals! 🎉` |
+| Day complete | `Day complete. 1,715 / 1,780 kcal · 141 / 148g protein.` | `Awesome day! You crushed your goals! 🎉` |
 | Under target | `−8g protein` in `text-secondary` | `You missed your protein goal` in red |
 | Over target | `+220 kcal` in `error` | `Uh oh, you went over!` |
 | Empty — weight | `No weigh-ins yet. Your first entry starts the chart.` | `Let's get started on your journey! 💪` |
