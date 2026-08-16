@@ -25,12 +25,20 @@ const noRawDatabaseHandles = {
   files: ["src/**/*.{ts,tsx}"],
   ignores: ["src/lib/db/**", ...authenticationReadsUsers],
   rules: {
-    "no-restricted-imports": [
+    // The base rule cannot tell a type import from a value one; the
+    // typescript-eslint version can, and `allowTypeImports` is the difference
+    // that matters here. `import type { UserKind }` erases at compile time and
+    // cannot build a query — the thing this rule exists to prevent. Restricting
+    // it would only push files into the exemption list below for no safety, and
+    // a list that means two different things stops meaning either.
+    "no-restricted-imports": "off",
+    "@typescript-eslint/no-restricted-imports": [
       "error",
       {
         patterns: [
           {
             group: ["@/lib/db", "@/lib/db/pool", "**/lib/db", "**/lib/db/pool"],
+            allowTypeImports: true,
             message:
               "Import scope() from @/lib/db/scope instead. getDb() and getPool() " +
               "hand back an unscoped handle, and a query built on one is not " +

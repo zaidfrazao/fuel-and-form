@@ -5,6 +5,7 @@ import { cache } from "react";
 
 import type { UserKind } from "@/lib/db/schema";
 import { sessionSecret } from "@/lib/env";
+import { COOKIE, cookieOptions, LIFETIME } from "./cookies";
 import { resolveSession, type Session } from "./resolve";
 import { sign } from "./token";
 
@@ -28,56 +29,6 @@ import { sign } from "./token";
  * what lets the owner try the demo on their own machine without being signed
  * out of their own account.
  */
-
-/** The cookie a session of each kind travels in. */
-const COOKIE = {
-  owner: "ff_owner",
-  demo: "ff_demo",
-} as const satisfies Record<UserKind, string>;
-
-/**
- * How long each kind of session lasts.
- *
- * The owner's is long because re-typing a password on a phone in a kitchen is
- * the friction the PRD's "<1.5s, one thumb" view exists to avoid. A demo's is
- * short because it is a visit, not an account, and because P7 reaps the rows
- * behind them — a cookie outliving its row is refused anyway (see resolve.ts),
- * so a long demo cookie would only produce confusing dead sessions.
- *
- * FUEL-40 sets `users.expires_at` when it provisions a demo user; this is the
- * cookie-side half and should be kept no longer than that.
- */
-const LIFETIME = {
-  owner: 30 * 24 * 60 * 60 * 1000,
-  demo: 2 * 60 * 60 * 1000,
-} as const satisfies Record<UserKind, number>;
-
-/**
- * The flags every session cookie carries, defined once.
- *
- * Written as a function of the expiry rather than spread at each call site, so
- * `httpOnly` cannot be present on one cookie and forgotten on the other — the
- * failure mode of a copied options object, and one nothing would report.
- *
- * - `httpOnly` — no script reads it, so an XSS cannot lift the session.
- * - `sameSite: "lax"` — not sent on cross-site POSTs, which is what stands in
- *   for CSRF tokens here. Top-level GET navigations still carry it, so a link
- *   into the app from anywhere still lands signed in.
- * - `secure` — https only. Off ONLY in `next dev`, where the app is served over
- *   http://localhost and a Secure cookie would be dropped by the browser with
- *   no error at all: login would appear to succeed and simply not work. It is
- *   on in production and in every other NODE_ENV, including test.
- * - `path: "/"` — one session for the whole app; a narrower path would silently
- *   sign the user out on routes it does not cover.
- */
-const cookieOptions = (expiresAt: Date) =>
-  ({
-    httpOnly: true,
-    secure: process.env.NODE_ENV !== "development",
-    sameSite: "lax",
-    path: "/",
-    expires: expiresAt,
-  }) as const;
 
 /**
  * The current session, or `undefined`.

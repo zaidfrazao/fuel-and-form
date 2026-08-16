@@ -55,6 +55,7 @@ export default defineConfig({
         "src/lib/db/scope.ts",
         "src/lib/auth/token.ts",
         "src/lib/auth/compare.ts",
+        "src/lib/auth/cookies.ts",
         "src/lib/date.ts",
         "src/lib/macros.ts",
         "src/lib/resolve-plan.ts",
@@ -72,6 +73,11 @@ export default defineConfig({
         // enough that 100% is unremarkable, and load-bearing enough that an
         // unmeasured line in it is a timing leak nobody looked at.
         "src/lib/auth/compare.ts": FULLY_COVERED,
+        // The cookie flags the PRD names in § Security & Compliance. Separated
+        // from session.ts so they can be asserted at all: a flag that is only
+        // ever exercised by a running browser is one no test can hold still,
+        // and losing `httpOnly` looks identical until someone reads the cookie.
+        "src/lib/auth/cookies.ts": FULLY_COVERED,
         // § 1.1. date.ts is here because it is where resolve-plan.ts keeps its
         // date arithmetic — a gate on the resolver that let its own calendar
         // maths go unmeasured would cover the easy half of the risk the PRD
