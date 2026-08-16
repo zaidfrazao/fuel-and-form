@@ -112,10 +112,12 @@ Resolution counts elapsed days matching a `rotation_group` since `program_start_
 Not a Vitest test. A script, run in a pre-publish check and ideally a pre-commit hook:
 
 - Scans the full history (`git log -p`) and the working tree for the owner's real figures: start/target weight, kcal and macro targets, height.
-- Fails on any hit outside `docs/` (the PRD and Brand Guide legitimately contain them — see the note below).
+- Fails on any hit **anywhere in the working tree, `docs/` included** — there is no whitelist.
 - Asserts no `.env*` file is tracked.
 
-> **Known exposure, flagged rather than silently accepted.** `docs/PRD.md` and `docs/BRAND_GUIDE.md` are committed to a public repo and contain real figures — 77.45kg, 64kg target, 1,790 kcal, 146g protein. The PRD's rule was written about application data, and these two documents predate it. Either accept it deliberately, or swap the demo persona's figures into both docs before launch. **The script must not be written to quietly whitelist `docs/`; it should report what it finds there and let the decision be explicit.**
+> **Resolved in the working tree, still present in history.** `docs/PRD.md` and `docs/BRAND_GUIDE.md` previously carried the owner's real figures. As of FUEL-14 they carry the demo persona's instead (Sam Rivera — 84.2kg → 76kg, 1,780 kcal, 148g protein), and the PRD says so explicitly at the top of its Target Users section, so a reader cannot mistake them for real.
+>
+> **The old values remain reachable in published git history.** The substitution fixed the files, not the commits behind them; scrubbing those needs a history rewrite and a force-push on an already-public repository. That is FUEL-43's job (pre-publish history scan), and it is the reason this script scans `git log -p` and not just the working tree — a clean checkout is not evidence of a clean repository.
 
 ### 1.6 The Tier 1 gate
 
