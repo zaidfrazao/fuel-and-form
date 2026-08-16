@@ -7,16 +7,38 @@ import nextTs from "eslint-config-next/typescript";
 // isn't, so reaching for one outside src/lib/db is an error rather than a
 // convention — the acceptance criterion is "no query path exists that bypasses
 // the scope helper", and only a machine can keep saying so on every push.
+// FUEL-12: the auth layer is the one legitimate exception, because `users` is
+// the one table `scope()` cannot read — it carries no `user_id`, its own `id`
+// IS the user, and resolving a cookie to an identity necessarily happens before
+// there is an identity to scope by (see the note on the table in schema.ts).
+//
+// Named file by file rather than as `src/lib/auth/**`, so a future file added
+// beside these does not silently inherit the permission. Every query in them is
+// against `users` alone; anything user-owned still goes through the scope.
+const authenticationReadsUsers = [
+  "src/lib/auth/resolve.ts",
+  "src/lib/auth/owner.ts",
+  "src/lib/auth/session.ts",
+];
+
 const noRawDatabaseHandles = {
   files: ["src/**/*.{ts,tsx}"],
-  ignores: ["src/lib/db/**"],
+  ignores: ["src/lib/db/**", ...authenticationReadsUsers],
   rules: {
-    "no-restricted-imports": [
+    // The base rule cannot tell a type import from a value one; the
+    // typescript-eslint version can, and `allowTypeImports` is the difference
+    // that matters here. `import type { UserKind }` erases at compile time and
+    // cannot build a query — the thing this rule exists to prevent. Restricting
+    // it would only push files into the exemption list below for no safety, and
+    // a list that means two different things stops meaning either.
+    "no-restricted-imports": "off",
+    "@typescript-eslint/no-restricted-imports": [
       "error",
       {
         patterns: [
           {
             group: ["@/lib/db", "@/lib/db/pool", "**/lib/db", "**/lib/db/pool"],
+            allowTypeImports: true,
             message:
               "Import scope() from @/lib/db/scope instead. getDb() and getPool() " +
               "hand back an unscoped handle, and a query built on one is not " +

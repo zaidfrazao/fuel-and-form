@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "users_single_owner_key" ON "users" USING btree ("kind") WHERE "kind" = 'owner';

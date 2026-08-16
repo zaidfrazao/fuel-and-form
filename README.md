@@ -158,8 +158,77 @@ ESLint blocks importing `@/lib/db` or `@/lib/db/pool` from anywhere outside
 skips this. `npm run test:coverage` holds `scope.ts` at 100% in the unit suite —
 hermetically, so it needs neither a database nor credentials to run.
 
+The three files in `src/lib/auth/` that read `users` are named individually in
+that ESLint rule. `users` is the one table `scope()` cannot read — it carries no
+`user_id`, its own `id` *is* the user — and resolving a cookie to an identity
+necessarily happens before there is an identity to scope by. They are listed
+file by file rather than as a directory, so a new file added beside them does
+not inherit the exemption.
+
 > No GitHub Actions workflow runs the test suite yet; Vercel only builds. Run
 > `npm run test:coverage` before merging anything that touches this layer.
+
+## Auth
+
+One password, in `OWNER_PASSWORD`, compared server-side. No auth provider, no
+signup, no password reset — one human uses this. Demo visitors get their own
+ephemeral `users` row and their own cookie.
+
+| File | Holds | Tested by |
+| --- | --- | --- |
+| `auth/compare.ts` | Constant-time comparison | Unit suite, gated at 100% |
+| `auth/token.ts` | HMAC-SHA256 sign / verify | Unit suite, gated at 100% |
+| `auth/resolve.ts` | Token → user, against the database | `tests/integration/session.test.ts` |
+| `auth/session.ts` | Cookies, and the only `SESSION_SECRET` read | — |
+
+`token.ts` and `compare.ts` take their secret and clock as **arguments** and
+import nothing `server-only`. That is what lets the hermetic suite cover them
+with no server, no request and no configured secret — the same seam `scope.ts`
+uses, and the reason both are in the coverage gate.
+
+### The rejection ladder
+
+A cookie becomes an identity only after five checks, in this order:
+
+```
+1. signature valid?                      no query yet
+2. payload not past its signed expiry?   no query yet
+3. userId shaped like a uuid?            no query yet
+4. row exists, and users.kind matches the cookie it arrived in?
+5. users.expires_at absent, or still in the future?
+```
+
+Every rung returns exactly `undefined` — not a reason, not an error, not a log
+line. Absent, malformed, forged, replayed in the wrong cookie, and expired are
+therefore indistinguishable from outside, so none of them can be probed. This is
+the same argument `scope()` makes for collapsing "not yours" into "not there",
+and it is Testing Strategy § 1.4 case 5.
+
+Rungs 1–3 run before any query, so a flood of forged cookies costs a hash rather
+than a round trip.
+
+Both expiries are checked on purpose. The signed one is free; the row is
+authoritative, because it is what P7's reaper reads and what can be shortened
+*after* a cookie has been issued.
+
+### Cookies
+
+Two, `ff_owner` and `ff_demo`, both `HttpOnly` + `SameSite=Lax` + `Secure` +
+`path=/`. The cookie **name** carries the kind and the payload does not repeat
+it, so there is one fact rather than two that could disagree; `users.kind` must
+then match the name, which is what stops a genuine demo token being worth
+anything in the owner's jar. Separate cookies also mean signing out of the demo
+leaves the owner signed in.
+
+`Secure` is omitted only under `next dev`, where the app is served over
+`http://localhost` and the browser would drop a Secure cookie silently — login
+would appear to succeed and simply not work. It is set everywhere else,
+including test.
+
+The token is **signed, not encrypted**: whoever holds the cookie can read the
+user id and expiry inside it. That is deliberate — a user id is not a secret,
+and `scope()` already assumes an attacker may know one. Nothing sensitive may be
+added to that payload later on the assumption that it is hidden.
 
 ### Migrations
 
@@ -201,3 +270,15 @@ check the run said **passed** rather than **skipped** before trusting it.
 ## Configuration
 
 Secrets are never committed. The owner password, session secret, and database URL live in `.env.local` locally and in Vercel's environment variables in production.
+
+Define each one in **both** places. `vercel env pull` overwrites `.env.local`
+with the variables Vercel knows about, so a secret that only ever existed on one
+machine is gone after the next pull — and shows up later as a missing-variable
+error, a long way from the cause. `.env.example` lists every variable the app
+reads.
+
+Generate the session secret with:
+
+```bash
+openssl rand -base64 32
+```
