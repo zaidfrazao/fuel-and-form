@@ -46,6 +46,24 @@ const forge = (encoded: string, secret = SECRET) =>
 const encodeSegment = (value: unknown) =>
   Buffer.from(typeof value === "string" ? value : JSON.stringify(value)).toString("base64url");
 
+/**
+ * A token's two segments, separately.
+ *
+ * `noUncheckedIndexedAccess` types `split(".")` results as possibly missing.
+ * Throwing beats a non-null assertion: a `sign` that ever stopped emitting two
+ * segments would fail here, naming the helper, rather than surfacing as an
+ * undefined halfway through whichever assertion happened to run first.
+ */
+function parts(token: string): { encoded: string; signature: string } {
+  const [encoded, signature] = token.split(".");
+
+  if (encoded === undefined || signature === undefined) {
+    throw new Error(`Expected a token of two segments, got ${token.split(".").length}.`);
+  }
+
+  return { encoded, signature };
+}
+
 describe("sign", () => {
   it("round-trips a payload through verify", () => {
     expect(verify(sign(payload, SECRET), SECRET, NOW)).toEqual(payload);
@@ -63,7 +81,7 @@ describe("sign", () => {
     // is not a secret; scope.ts already assumes an attacker may know one. This
     // test is here to fail loudly if anyone later adds something to the payload
     // believing it to be hidden.
-    const [encoded] = sign(payload, SECRET).split(".");
+    const { encoded } = parts(sign(payload, SECRET));
 
     expect(JSON.parse(Buffer.from(encoded, "base64url").toString())).toEqual(payload);
   });
@@ -90,17 +108,17 @@ describe("verify", () => {
     });
 
     it("rejects a tampered payload", () => {
-      const [, signature] = sign(payload, SECRET).split(".");
+      const { signature } = parts(sign(payload, SECRET));
       const elevated = encodeSegment({ ...payload, userId: "someone-else" });
 
       expect(verify(`${elevated}.${signature}`, SECRET, NOW)).toBeUndefined();
     });
 
     it("rejects a tampered signature", () => {
-      const [encoded, signature] = sign(payload, SECRET).split(".");
+      const { encoded, signature } = parts(sign(payload, SECRET));
       // Flip one character, keeping the length identical, so what fails is the
       // comparison itself rather than a length check standing in front of it.
-      const flipped = (signature[0] === "A" ? "B" : "A") + signature.slice(1);
+      const flipped = (signature.startsWith("A") ? "B" : "A") + signature.slice(1);
 
       expect(verify(`${encoded}.${flipped}`, SECRET, NOW)).toBeUndefined();
     });
@@ -110,13 +128,13 @@ describe("verify", () => {
       // `timingSafeEqual` THROWS on unequal lengths, and a throw here would
       // crash the request instead of rejecting the cookie — and would announce,
       // by crashing, that the cookie was malformed rather than merely wrong.
-      const [encoded, signature] = sign(payload, SECRET).split(".");
+      const { encoded, signature } = parts(sign(payload, SECRET));
 
       expect(verify(`${encoded}.${signature.slice(0, 8)}`, SECRET, NOW)).toBeUndefined();
     });
 
     it("rejects a signature of wildly the wrong length without throwing", () => {
-      const [encoded] = sign(payload, SECRET).split(".");
+      const { encoded } = parts(sign(payload, SECRET));
 
       expect(verify(`${encoded}.x`, SECRET, NOW)).toBeUndefined();
       expect(verify(`${encoded}.${"x".repeat(500)}`, SECRET, NOW)).toBeUndefined();

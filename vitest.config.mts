@@ -54,6 +54,7 @@ export default defineConfig({
       include: [
         "src/lib/db/scope.ts",
         "src/lib/auth/token.ts",
+        "src/lib/auth/compare.ts",
         "src/lib/date.ts",
         "src/lib/macros.ts",
         "src/lib/resolve-plan.ts",
@@ -67,6 +68,10 @@ export default defineConfig({
         // is a way past the gate that nothing looked at. Coverable here at all
         // only because token.ts takes its secret and clock as arguments.
         "src/lib/auth/token.ts": FULLY_COVERED,
+        // Guards both the cookie signature and the owner's password. Small
+        // enough that 100% is unremarkable, and load-bearing enough that an
+        // unmeasured line in it is a timing leak nobody looked at.
+        "src/lib/auth/compare.ts": FULLY_COVERED,
         // § 1.1. date.ts is here because it is where resolve-plan.ts keeps its
         // date arithmetic — a gate on the resolver that let its own calendar
         // maths go unmeasured would cover the easy half of the risk the PRD

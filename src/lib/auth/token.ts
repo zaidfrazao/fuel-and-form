@@ -1,4 +1,6 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
+
+import { constantTimeEquals } from "./compare";
 
 /**
  * The signed value carried in a session cookie.
@@ -53,22 +55,6 @@ function signature(encodedPayload: string, secret: string): string {
 }
 
 /**
- * Compares two signatures without leaking, through timing, how far they matched.
- *
- * `timingSafeEqual` THROWS on buffers of unequal length rather than returning
- * false, so a token carrying a short signature would crash the request instead
- * of being rejected. Hashing both sides first makes both inputs exactly 32
- * bytes, so the length check can never fire and the comparison stays constant-
- * time over any input at all — including a signature made of the wrong number
- * of bytes, which is the case a naive length guard would answer early.
- */
-function signaturesMatch(a: string, b: string): boolean {
-  const digest = (value: string) => createHmac("sha256", "compare").update(value).digest();
-
-  return timingSafeEqual(digest(a), digest(b));
-}
-
-/**
  * Encodes and signs a payload.
  *
  * The result is safe in a cookie value: base64url plus a dot, no padding, no
@@ -113,7 +99,9 @@ export function verify(
   const encoded = token.slice(0, separator);
   const presented = token.slice(separator + 1);
 
-  if (!signaturesMatch(presented, signature(encoded, secret))) return undefined;
+  // Constant-time, and length-safe: a truncated signature must be rejected, not
+  // throw. See compare.ts on why that distinction is not merely tidiness.
+  if (!constantTimeEquals(presented, signature(encoded, secret))) return undefined;
 
   // Past the signature check the payload is our own, so this parse is of a
   // string this app produced. The guard stays because "our own" assumes the
