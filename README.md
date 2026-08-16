@@ -201,3 +201,15 @@ check the run said **passed** rather than **skipped** before trusting it.
 ## Configuration
 
 Secrets are never committed. The owner password, session secret, and database URL live in `.env.local` locally and in Vercel's environment variables in production.
+
+Define each one in **both** places. `vercel env pull` overwrites `.env.local`
+with the variables Vercel knows about, so a secret that only ever existed on one
+machine is gone after the next pull — and shows up later as a missing-variable
+error, a long way from the cause. `.env.example` lists every variable the app
+reads.
+
+Generate the session secret with:
+
+```bash
+openssl rand -base64 32
+```

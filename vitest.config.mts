@@ -53,6 +53,7 @@ export default defineConfig({
       provider: "v8",
       include: [
         "src/lib/db/scope.ts",
+        "src/lib/auth/token.ts",
         "src/lib/date.ts",
         "src/lib/macros.ts",
         "src/lib/resolve-plan.ts",
@@ -60,6 +61,12 @@ export default defineConfig({
       ],
       thresholds: {
         "src/lib/db/scope.ts": FULLY_COVERED,
+        // § 1.4 case 5, request-boundary half. scope.ts proves a forged
+        // identity reaches no data; this is what stops one being minted in the
+        // first place. Every branch in it is a rejection, so an unmeasured one
+        // is a way past the gate that nothing looked at. Coverable here at all
+        // only because token.ts takes its secret and clock as arguments.
+        "src/lib/auth/token.ts": FULLY_COVERED,
         // § 1.1. date.ts is here because it is where resolve-plan.ts keeps its
         // date arithmetic — a gate on the resolver that let its own calendar
         // maths go unmeasured would cover the easy half of the risk the PRD
