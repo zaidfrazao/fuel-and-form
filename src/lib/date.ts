@@ -17,23 +17,33 @@
  *
  * ## Where DST can reach, and where it cannot
  *
- * There are exactly three places a timezone can touch this system:
+ * There are exactly four places a timezone can touch this system:
  *
  *   1. Turning an INSTANT into a calendar date — "what day is it for the user
- *      right now?". This is the only genuinely hard one, and `toCalendarDate`
- *      is the only function here that takes a `Date` at all.
- *   2. Deriving `day_of_week` from a calendar date.
- *   3. Adding days to a calendar date, or counting the days between two — a
+ *      right now?". This is the only genuinely hard one.
+ *   2. Turning an INSTANT into a wall-clock time — "is it lunch yet?". P1
+ *      resolves the active slot against the clock, and the clock it has to mean
+ *      is the one on the user's wall, not the one on the server's.
+ *   3. Deriving `day_of_week` from a calendar date.
+ *   4. Adding days to a calendar date, or counting the days between two — a
  *      repeat-across-days swap, stepping through a week grid, or the elapsed
  *      count the Circuit A/B rotation is derived from.
  *
- * (2) and (3) go through `Date.UTC`, which has no daylight saving anywhere in
+ * (1) and (2) are the same question asked of the same formatter, and
+ * `toCalendarDate` and `minutesOfDayIn` are the only functions here that take a
+ * `Date` at all. They read different parts of one `formatToParts` output for one
+ * zone, which is what keeps them from being able to disagree: a separate
+ * time-only formatter could be built with a different zone or a different hour
+ * cycle, and the failure would be a view that is confidently an hour or a day
+ * out rather than one that throws.
+ *
+ * (3) and (4) go through `Date.UTC`, which has no daylight saving anywhere in
  * its definition. So a day is always exactly 24 hours in this file, the clocks
  * changing cannot reach the arithmetic, and the Testing Strategy's "exactly one
  * day, not 25 hours of two" holds by construction rather than by a special case
  * someone has to remember to keep. Every timezone-dependent decision in the
- * product therefore funnels through ONE small function, `toCalendarDate`, which
- * is the whole reason it is testable.
+ * product therefore funnels through ONE cached formatter, which is the whole
+ * reason any of this is testable.
  *
  * ## Lexicographic order is chronological order
  *
@@ -66,7 +76,31 @@ export type DateParts = { year: number; month: number; day: number };
 /** 0 = Sunday through 6 = Saturday, matching `plan_template_entries.day_of_week`. */
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
+/**
+ * A wall-clock time of day as 'HH:MM', 24-hour — exactly the shape
+ * `profiles.slot_times` stores (`{ breakfast: "07:30" }`).
+ *
+ * A local time, deliberately carrying no date and no zone. A slot start is a
+ * statement about the routine — breakfast is at seven — that stays true across
+ * a DST transition precisely because it is not pinned to an instant. Storing an
+ * instant instead would make "07:00" mean 06:00 for half the year.
+ */
+export type TimeOfDay = string;
+
+/** Minutes in a day. The clock's modulus, and the day-complete sentinel. */
+export const MINUTES_PER_DAY = 24 * 60;
+
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * 'HH:MM', with the ranges in the pattern rather than in a follow-up check.
+ *
+ * The hour alternation is what rejects '24:00' and '7:30'. Doing it here means
+ * `parseTimeOfDay` has exactly one rejection branch to cover instead of three,
+ * and no arithmetic that could accept a time and then produce a minute count
+ * outside the day.
+ */
+const TIME_OF_DAY = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 const pad = (value: number, width: number) => String(value).padStart(width, "0");
 
@@ -131,6 +165,34 @@ export function parseCalendarDate(date: CalendarDate): DateParts {
 }
 
 /**
+ * A 'HH:MM' wall-clock time as minutes since local midnight.
+ *
+ * Minutes, not a `Date` and not a pair of numbers, because every use is a
+ * comparison: P1 asks which slot's window contains the clock, and that is `<=`
+ * on two integers. Reducing both sides to one number is what keeps the
+ * comparison from needing a date to hang the times off — two `Date` objects
+ * built for "07:00 today" and "now" would drag DST and a calendar back into a
+ * question that has neither.
+ *
+ * Throws on a malformed time, for the same reason `parseCalendarDate` does: a
+ * slot start comes from `profiles.slot_times`, which is free-shaped JSON with no
+ * database constraint behind it, so this parser is the only thing standing
+ * between a typo in a settings form and a window that silently never opens.
+ */
+export function parseTimeOfDay(time: TimeOfDay): number {
+  const match = TIME_OF_DAY.exec(time);
+
+  if (!match) {
+    throw new Error(
+      `Not a time of day: ${JSON.stringify(time)}. Times are 24-hour 'HH:MM' ` +
+        `strings throughout — see src/lib/date.ts.`,
+    );
+  }
+
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+/**
  * One `Intl.DateTimeFormat` per zone, kept.
  *
  * Constructing one loads the zone's transition table, which is expensive enough
@@ -149,11 +211,24 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
   // keeps the digits ASCII — a runtime whose ICU resolved another numbering
   // system would otherwise emit '٢٠٢٦-٠٣-٢٩', which every regex and every date
   // comparison downstream would reject, in production only.
+  // Date AND time in one formatter, because `toCalendarDate` and
+  // `minutesOfDayIn` are two readings of one question — "where in the day is
+  // this user?" — and a second formatter is a second chance to get the zone
+  // wrong. `toCalendarDate` ignores the hour parts; it selects the parts it
+  // wants by type rather than by position, so widening this is free.
+  //
+  // `hourCycle: "h23"` rather than `hour12: false`: the latter resolves to h24
+  // on some ICU builds, where midnight formats as '24' and a naive read of it
+  // lands 24 hours into a day that has 23 more minutes to run. h23 is the cycle
+  // that runs 00-23, which is what a minute count since midnight means.
   const formatter = new Intl.DateTimeFormat("en-US-u-ca-gregory-nu-latn", {
     timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
   });
 
   formatters.set(timeZone, formatter);
@@ -204,6 +279,39 @@ export function toCalendarDate(instant: Date, timeZone: string): CalendarDate {
  */
 export function todayIn(timeZone: string, now: Date = new Date()): CalendarDate {
   return toCalendarDate(now, timeZone);
+}
+
+/**
+ * The wall-clock time an instant falls on in a zone, as minutes since local
+ * midnight.
+ *
+ * The clock P1 resolves its active slot against. The wrong answers it exists to
+ * rule out are the time-of-day halves of `toCalendarDate`'s two:
+ * `instant.getHours()` reads the SERVER's zone — one hour out in London for half
+ * the year and five in New York, which is the difference between lunch and a
+ * snack — and `instant.getUTCHours()` is the same bug pinned to a zone nobody
+ * lives in.
+ *
+ * Reading the parts back rather than parsing a formatted string is what keeps
+ * this independent of how the locale arranges them, and of whether it emits a
+ * narrow no-break space before an AM marker. The `% 24` is not defending against
+ * a real hour of 24 — `hourCycle: "h23"` rules that out — but against an ICU
+ * build that ignores it; it costs no branch, and midnight reading as 1440
+ * instead of 0 would put the day-complete state on a view at breakfast.
+ *
+ * Minutes are the resolution the product needs: slot starts are 'HH:MM', so a
+ * second is below the precision of everything it gets compared against.
+ */
+export function minutesOfDayIn(timeZone: string, now: Date): number {
+  let hour = "";
+  let minute = "";
+
+  for (const part of formatterFor(timeZone).formatToParts(now)) {
+    if (part.type === "hour") hour = part.value;
+    else if (part.type === "minute") minute = part.value;
+  }
+
+  return (Number(hour) % 24) * 60 + Number(minute);
 }
 
 /**

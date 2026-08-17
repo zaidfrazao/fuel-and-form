@@ -59,6 +59,7 @@ export default defineConfig({
         "src/lib/date.ts",
         "src/lib/macros.ts",
         "src/lib/resolve-plan.ts",
+        "src/lib/resolve-now.ts",
         "src/lib/rotation.ts",
       ],
       thresholds: {
@@ -84,6 +85,14 @@ export default defineConfig({
         // actually names.
         "src/lib/date.ts": FULLY_COVERED,
         "src/lib/resolve-plan.ts": FULLY_COVERED,
+        // P1's acceptance criteria, and the resolver they all pass through. It
+        // belongs here for the same reason resolve-plan.ts does, one step further
+        // on: every branch in it decides which single card the app puts in front
+        // of someone, and every wrong answer it can give is a plausible one — a
+        // window off by a minute, a skip that eats two items, a day boundary read
+        // in the server's zone. None of them throw, so an unmeasured branch here
+        // is a screen that is confidently wrong with nothing to notice it.
+        "src/lib/resolve-now.ts": FULLY_COVERED,
         // § 1.3. The totals are what P4 puts in front of a swap, so an
         // unmeasured branch here is a number the user is asked to trust that
         // nothing checked. The rounding and the untracked skip are both single
