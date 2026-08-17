@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#
+# Pre-commit: keep the owner's body metrics out of a public repository.
+#
+# Enabled by `git config core.hooksPath .githooks`, which package.json's
+# `prepare` script runs on npm install. Versioned rather than living in
+# .git/hooks so it is reviewable and arrives with a clone.
+#
+# --tree-only on purpose. The full check also scans `git log -p`, and this
+# repository's history still carries real figures from before FUEL-14 (FUEL-43
+# owns the rewrite). Gating commits on that would block every commit until the
+# rewrite lands, everyone would learn to pass --no-verify, and the hook would be
+# worth nothing on the day it finally mattered. A commit can only be held
+# responsible for what it can actually fix.
+#
+# Run the full scan before publishing:  npm run check:metrics
+#
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+
+if [ ! -x "$repo_root/scripts/check-no-metrics.sh" ]; then
+  printf 'pre-commit: scripts/check-no-metrics.sh is missing or not executable\n' >&2
+  exit 1
+fi
+
+if ! "$repo_root/scripts/check-no-metrics.sh" --tree-only; then
+  printf '\npre-commit: blocked. Fix the findings above, or if the figure is\n' >&2
+  printf 'fictional add it to an ALLOW_* list in scripts/check-no-metrics.sh.\n' >&2
+  printf 'Override only if you are certain: git commit --no-verify\n' >&2
+  exit 1
+fi
