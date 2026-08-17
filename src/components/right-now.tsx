@@ -205,10 +205,25 @@ function Anytime({ items }: { items: readonly AnytimeItem[] }) {
  * The action bar — § Touch Targets: "primary actions sit in the bottom third,
  * within thumb reach".
  *
- * Placed by `mt-auto` on a full-height column rather than by a fixed position,
- * so it sits at the foot of a short screen and below the content on a long one
- * without ever covering the last row of a list. On a 375×667 phone the primary
- * lands inside the bottom third of the viewport, which is the criterion.
+ * ## Sticky as well as `mt-auto`, because `mt-auto` alone was not enough
+ *
+ * `mt-auto` on a `min-h-dvh` column puts the bar at the foot of the viewport
+ * when the content is short. It does nothing when the content is tall, and on
+ * P1 the content usually is: measured at 375×667 with a ruler, four macros, two
+ * up-next rows and the walk, the document ran to 893px and the primary landed
+ * at y=703 — thirty-six pixels below the fold, reachable only by scrolling.
+ * That is the criterion failing on the default case, not an edge.
+ *
+ * `sticky bottom-0` fixes the reach without giving up the natural placement:
+ * the bar keeps its own box at the end of the column, so it never overlaps the
+ * last row once the page is scrolled to the end, and it is pinned inside the
+ * viewport until then. `bg-background` is what makes it opaque as content
+ * passes beneath it, and the 30px of it above the primary is the separation —
+ * no border and no shadow, since § Materials allows neither outside sheets.
+ *
+ * The safe-area inset lives here rather than on the page, because a bar pinned
+ * to `bottom: 0` sits below any padding its parent has: the inset only clears
+ * the home indicator if it is inside the thing being pinned.
  *
  * Swap is offered for a meal and not for a session: a swap substitutes one meal
  * for another from the library (PRD § P2), and there is no equivalent for a
@@ -218,7 +233,7 @@ function Anytime({ items }: { items: readonly AnytimeItem[] }) {
  */
 function Actions({ item }: { item: NowItem }) {
   return (
-    <div className="mt-auto flex flex-col gap-3 pt-[30px]">
+    <div className="sticky bottom-0 mt-auto flex flex-col gap-3 bg-background pt-[30px] pb-[max(1.375rem,env(safe-area-inset-bottom))]">
       <Button disabled className="w-full">
         {item.kind === "meal" ? "Log eaten" : "Mark done"}
       </Button>
@@ -245,13 +260,14 @@ function Actions({ item }: { item: NowItem }) {
  * The dynamic unit is the one that keeps the primary action reachable, which is
  * the whole point of putting it there.
  *
- * The bottom gutter takes the larger of 22px and the safe-area inset, so the
- * primary clears the home indicator on a notched phone without adding dead
- * space on anything else.
+ * The bottom gutter is deliberately absent here and sits on the action bar
+ * instead — see `Actions`, which is pinned to `bottom: 0` and would otherwise
+ * be pinned below the page's own padding rather than inside it. The two quiet
+ * states have no bar, so they carry the same inset themselves.
  */
 function Screen({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-[640px] flex-col px-[22px] pt-[22px] pb-[max(1.375rem,env(safe-area-inset-bottom))] md:px-7">
+    <main className="mx-auto flex min-h-dvh w-full max-w-[640px] flex-col px-[22px] pt-[22px] md:px-7">
       {children}
     </main>
   );
@@ -280,7 +296,9 @@ export function RightNow({
   if (view.state !== "active") {
     return (
       <Screen>
-        <div className="flex flex-col gap-[30px]">
+        {/* No action bar on either quiet state, so the bottom inset the bar
+            normally carries is this block's. */}
+        <div className="flex flex-col gap-[30px] pb-[max(1.375rem,env(safe-area-inset-bottom))]">
           <header className="flex flex-col gap-2">
             <p className="text-micro uppercase text-text-secondary">
               {view.state === "day-complete" ? "Day complete" : "Today"}

@@ -27,7 +27,7 @@ function Block({ className }: { className: string }) {
 
 export default function Loading() {
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-[640px] flex-col px-[22px] pt-[22px] pb-[max(1.375rem,env(safe-area-inset-bottom))] md:px-7">
+    <main className="mx-auto flex min-h-dvh w-full max-w-[640px] flex-col px-[22px] pt-[22px] md:px-7">
       <p className="sr-only" role="status">
         Loading today&rsquo;s plan.
       </p>
@@ -68,9 +68,13 @@ export default function Loading() {
         </div>
       </div>
 
-      {/* The action bar, at the same 52px / 46px heights and the same 30px off
-          the content above it, so the primary does not move on swap-in. */}
-      <div aria-hidden className="mt-auto flex flex-col gap-3 pt-[30px]">
+      {/* The action bar, at the same 52px / 46px heights, the same 30px off the
+          content above it and pinned the same way, so the primary does not move
+          on swap-in. */}
+      <div
+        aria-hidden
+        className="sticky bottom-0 mt-auto flex flex-col gap-3 bg-background pt-[30px] pb-[max(1.375rem,env(safe-area-inset-bottom))]"
+      >
         <Block className="h-13 w-full rounded-md" />
         <div className="flex gap-3">
           <Block className="h-[2.875rem] flex-1 rounded-md" />

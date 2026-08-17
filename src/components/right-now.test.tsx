@@ -403,14 +403,34 @@ describe("the actions", () => {
     expect(primaries[0]?.className).not.toContain("bg-accent");
   });
 
-  test("sits below the content, in the bottom third", () => {
-    // Held at the foot by `mt-auto` on a full-height column rather than by a
-    // fixed position, so it never covers the last row of a list.
+  test("stays within thumb reach however tall the content is", () => {
+    // A regression, and one jsdom cannot see for itself: `mt-auto` alone put
+    // the primary at y=703 in a 667px viewport on the default case — below the
+    // fold, reachable only by scrolling. Measured at 375×667 on
+    // /dev/right-now, which is where the criterion is actually checked.
+    //
+    // Asserting the mechanism is the most this suite can do, so it asserts all
+    // three parts of it: pinned to the bottom, still placed by `mt-auto` when
+    // the content is short, and opaque so content passing beneath it does not
+    // show through.
     const { container } = renderNow(active(0));
 
     const bar = container.querySelector('[data-variant="default"]')?.parentElement;
 
+    expect(bar?.className).toContain("sticky");
+    expect(bar?.className).toContain("bottom-0");
     expect(bar?.className).toContain("mt-auto");
+    expect(bar?.className).toContain("bg-background");
+  });
+
+  test("carries the safe-area inset itself", () => {
+    // A bar pinned to `bottom: 0` sits below any padding its parent has, so the
+    // inset only clears the home indicator from inside the pinned element.
+    const { container } = renderNow(active(0));
+
+    const bar = container.querySelector('[data-variant="default"]')?.parentElement;
+
+    expect(bar?.className).toContain("safe-area-inset-bottom");
   });
 });
 
