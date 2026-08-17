@@ -109,26 +109,41 @@ Resolution counts elapsed days matching a `rotation_group` since `program_start_
 
 **Traces to:** P7 — *"`git log -p` contains no real weight, target, or body-metric values"*, and the risk *"Personal metrics leak into the public repository — L/H."*
 
-Not a Vitest test. A script, run in a pre-publish check and ideally a pre-commit hook:
+Not a Vitest test. A script, run in a pre-publish check and in a pre-commit hook. Four checks, all of which run before it exits, so one run gives the whole picture:
 
-- Scans the full history (`git log -p`) and the working tree for the owner's real figures: start/target weight, kcal and macro targets, height.
-- Fails on any hit **anywhere in the working tree, `docs/` included** — there is no whitelist.
-- Asserts no `.env*` file is tracked.
+1. **Working tree** — tracked and untracked files, `docs/` included, no whitelist.
+2. **History** — every patch on every ref (`git log -p --all`).
+3. **`.env` files** — none tracked except the deliberate `.env.example` template.
+4. **`scripts/seed-local.ts`** — still gitignored and still absent from the index.
+
+**It is an allowlist, not a denylist** (FUEL-16). The obvious design — grep for the owner's real figures — is self-defeating in a public repository, because the list of figures to hide would itself be published. Instead the script matches the *shape* of a body metric (a weight in kg, a height in cm, a daily kcal or macro target) and passes only values known to belong to Sam Rivera, the fictional persona. Everything else metric-shaped fails. So the script never contains a real number, and it catches figures nobody enumerated in advance.
+
+Sensitivity comes from domain bounds rather than keyword matching: a body weight is forty to two hundred kilograms, a height one hundred forty to two hundred centimetres, a daily macro target one hundred to three hundred grams. (Spelled out in words because writing them as numerals beside their units makes this paragraph trip the check it is describing — which is the `docs/`-is-not-exempt rule working as intended.) Those bounds are why the plate weights in the PRD, the ingredient sizes in `src/lib/seed/meals.ts`, and every per-recipe macro stay quiet. Two patterns need more help — fat, because a daily target and one meal's fat share a range, and kcal, because four-digit kcal figures are ordinary (typography specimens, the seed library's aggregate output, fixture prose). Both additionally require a target-ish word on the line, and kcal is also skipped in test files. Neither is load-bearing: the weight, height, protein and carb patterns catch the real figure set on bounds alone, in every file, unfiltered.
+
+**Findings are redacted by default.** CI logs on a public repository are public, so a check that printed the leaked value into a build log would have moved the leak rather than reported it. Output masks the digits and keeps the unit (`7****kg`, `1**g protein`); `--show-values` is for local use.
+
+**Two modes, deliberately.** The default scans everything. `--tree-only` skips history and is what the pre-commit hook runs, because history is the one thing a commit cannot fix — see the note below. A shallow clone is a hard **failure**, not a pass: a `depth-1` checkout would otherwise report an unscanned history as clean, so CI needs `fetch-depth: 0`.
+
+One deliberate blind spot: gitignored files are not scanned, because `scripts/seed-local.ts` exists to hold the owner's real profile and weigh-ins and scanning it would mean the check could never pass. Check 4 covers the property that actually matters — that the file is never committed.
 
 > **Resolved in the working tree, still present in history.** `docs/PRD.md` and `docs/BRAND_GUIDE.md` previously carried the owner's real figures. As of FUEL-14 they carry the demo persona's instead (Sam Rivera — 84.2kg → 76kg, 1,780 kcal, 148g protein), and the PRD says so explicitly at the top of its Target Users section, so a reader cannot mistake them for real.
 >
 > **The old values remain reachable in published git history.** The substitution fixed the files, not the commits behind them; scrubbing those needs a history rewrite and a force-push on an already-public repository. That is FUEL-43's job (pre-publish history scan), and it is the reason this script scans `git log -p` and not just the working tree — a clean checkout is not evidence of a clean repository.
+>
+> **So the default run fails today, and that is the correct result.** `--tree-only` is green; the full scan reports seven real figures across ten commits and exits non-zero. It stays red until FUEL-43 rewrites history. This is also why the pre-commit hook runs `--tree-only`: gating commits on a pre-existing history problem would block every commit until the rewrite lands, everyone would learn to reach for `--no-verify`, and the hook would be worthless on the day it mattered.
 
 ### 1.6 The Tier 1 gate
 
 ```bash
-npm run test        # Vitest — all of the above
-npm run typecheck   # tsc --noEmit, strict
-npm run lint        # eslint
-./scripts/check-no-metrics.sh
+npm run test           # Vitest — all of the above
+npm run typecheck      # tsc --noEmit, strict
+npm run lint           # eslint
+npm run check:metrics  # scripts/check-no-metrics.sh — full scan, needs a complete clone
 ```
 
 All four pass before the repository goes public. `npm run test` alone passes before each of P1–P6 is considered done.
+
+The pre-commit hook lives in `.githooks/pre-commit` and runs `check:metrics:tree`. It is enabled by `git config core.hooksPath .githooks`, which `package.json`'s `prepare` script sets on `npm install` — so a fresh clone gets it without anyone remembering to. No hook manager dependency.
 
 ---
 
