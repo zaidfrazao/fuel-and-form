@@ -4,7 +4,10 @@ import {
   addDays,
   dayOfWeek,
   daysBetween,
+  MINUTES_PER_DAY,
+  minutesOfDayIn,
   parseCalendarDate,
+  parseTimeOfDay,
   startOfWeek,
   toCalendarDate,
   todayIn,
@@ -30,6 +33,9 @@ import {
 
 const LONDON = "Europe/London";
 const NEW_YORK = "America/New_York";
+
+/** +05:30 year-round. The zone whose offset is not a whole number of hours. */
+const KOLKATA = "Asia/Kolkata";
 
 describe("parseCalendarDate", () => {
   it("splits a calendar date into numbers, with a 1-12 month", () => {
@@ -67,6 +73,46 @@ describe("parseCalendarDate", () => {
     // Date.UTC(26, ...) is 1926, which is exactly the silent wrong answer the
     // round-trip check exists to turn into a loud one.
     expect(() => parseCalendarDate("0026-01-01")).toThrow(/No such date/);
+  });
+});
+
+describe("parseTimeOfDay", () => {
+  it("counts minutes from local midnight", () => {
+    // The whole day, read as a whole: the two ends and the two shapes in
+    // between — an on-the-hour slot start and a half-hour one, which is what
+    // the PRD's 10:30 snack needs.
+    expect(parseTimeOfDay("00:00")).toBe(0);
+    expect(parseTimeOfDay("07:00")).toBe(420);
+    expect(parseTimeOfDay("10:30")).toBe(630);
+    expect(parseTimeOfDay("23:59")).toBe(MINUTES_PER_DAY - 1);
+  });
+
+  it("never returns a count outside the day", () => {
+    // The invariant the window comparison depends on: an accepted time is
+    // somewhere in [0, 1440), so no slot start can sort after the day ends.
+    for (const time of ["00:00", "06:00", "13:00", "17:30", "19:00", "23:59"]) {
+      const minutes = parseTimeOfDay(time);
+
+      expect(minutes).toBeGreaterThanOrEqual(0);
+      expect(minutes).toBeLessThan(MINUTES_PER_DAY);
+    }
+  });
+
+  it.each([
+    ["24:00", "an hour that does not exist — midnight is 00:00"],
+    ["25:00", "an hour past the end of the clock"],
+    ["07:60", "a minute that does not exist"],
+    ["7:30", "an unpadded hour"],
+    ["07:3", "an unpadded minute"],
+    ["07:30:00", "seconds this app has no use for"],
+    ["0730", "no separator"],
+    ["07.30", "the wrong separator"],
+    ["lunch", "not a time at all"],
+    ["", "empty — a slot_times value that was never filled in"],
+  ])("rejects %s — %s", (input) => {
+    // A slot start comes from free-shaped JSON with no CHECK behind it, so each
+    // of these is a plausible typo in a settings form rather than a hypothetical.
+    expect(() => parseTimeOfDay(input)).toThrow(/Not a time of day/);
   });
 });
 
@@ -153,6 +199,70 @@ describe("todayIn", () => {
 
     expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect([addDays(utcToday, -1), utcToday, addDays(utcToday, 1)]).toContain(today);
+  });
+});
+
+describe("minutesOfDayIn — the clock P1 resolves against", () => {
+  it("uses the configured zone, not the machine's", () => {
+    // 04:30 in London, 23:30 the previous evening in New York. The suite runs in
+    // New York (see the config), so `getHours()` would answer 23:30 here: the
+    // second assertion is the bug, and the first is what the function does
+    // instead. Five and a half hours apart is the difference between breakfast
+    // and the day being over.
+    const instant = new Date("2026-06-16T03:30:00Z");
+
+    expect(minutesOfDayIn(LONDON, instant)).toBe(4 * 60 + 30);
+    expect(minutesOfDayIn(NEW_YORK, instant)).toBe(23 * 60 + 30);
+    expect(instant.getHours() * 60 + instant.getMinutes()).toBe(23 * 60 + 30);
+  });
+
+  it("reads midnight as 0, not as the end of the day", () => {
+    // 23:00 UTC is midnight in BST. An `hour12: false` formatter on an ICU build
+    // that resolves it to h24 emits '24' here, and 1440 is past every window —
+    // the day-complete state, served at midnight to someone who has not eaten
+    // breakfast yet.
+    expect(minutesOfDayIn(LONDON, new Date("2026-06-15T23:00:00Z"))).toBe(0);
+  });
+
+  it("reads the last minute of the day as the last minute of the day", () => {
+    expect(minutesOfDayIn(LONDON, new Date("2026-06-15T22:59:00Z"))).toBe(
+      MINUTES_PER_DAY - 1,
+    );
+  });
+
+  it("keeps the minute part of a zone offset that is not whole hours", () => {
+    // 09:00 in Kolkata. A version that read only the hour, or that applied a
+    // whole-hour offset, would answer 08:30 or 09:30 — half an hour is enough to
+    // put the clock in the wrong window either side of a 10:30 snack.
+    expect(minutesOfDayIn(KOLKATA, new Date("2026-06-16T03:30:00Z"))).toBe(9 * 60);
+  });
+
+  it("agrees with toCalendarDate about which day it is (§ 1.1 case 7)", () => {
+    // The pairing P1's day boundary is made of: 23:30 UTC on the 29th is 00:30
+    // BST on the 30th, so the date has rolled over AND the clock has reset. A
+    // view that took the date from one source and the time from another could
+    // show the 30th's plan with the 29th's clock, and land on dinner.
+    const instant = new Date("2026-03-29T23:30:00Z");
+
+    expect(toCalendarDate(instant, LONDON)).toBe("2026-03-30");
+    expect(minutesOfDayIn(LONDON, instant)).toBe(30);
+  });
+
+  it("jumps the hour the spring-forward day never has", () => {
+    // London's clocks go 00:59 GMT -> 02:00 BST. One minute of elapsed time,
+    // 61 minutes of wall clock, and no local time in between: a resolver that
+    // assumed the clock advances a minute per minute would be an hour out for
+    // the rest of that day.
+    expect(minutesOfDayIn(LONDON, new Date("2026-03-29T00:59:00Z"))).toBe(59);
+    expect(minutesOfDayIn(LONDON, new Date("2026-03-29T01:00:00Z"))).toBe(2 * 60);
+  });
+
+  it("returns the same minute twice across the fall-back hour (§ 1.1 case 8)", () => {
+    // 01:30 happens twice on 2026-10-25 in London, an hour apart. Both passes
+    // are the same wall-clock minute, so both resolve the same slot — the
+    // sequence is not monotonic within a day, and nothing may assume it is.
+    expect(minutesOfDayIn(LONDON, new Date("2026-10-25T00:30:00Z"))).toBe(90);
+    expect(minutesOfDayIn(LONDON, new Date("2026-10-25T01:30:00Z"))).toBe(90);
   });
 });
 
