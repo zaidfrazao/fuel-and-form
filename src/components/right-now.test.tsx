@@ -214,6 +214,19 @@ describe("the active session", () => {
     expect(screen.getByText("30s on / 30s off")).toBeDefined();
   });
 
+  test("renders no slash mark for an empty note", () => {
+    // `notes` is nullable text with no length constraint, so "" is storable.
+    // A bare "/ " reads as a note that failed to load.
+    renderNow(
+      active(2),
+      new Map([["workout-1", [exercise({ id: "ex-1", name: "Press-ups", notes: "" })]]]),
+    );
+
+    const row = screen.getAllByRole("listitem").find((item) => item.closest("ol") !== null);
+
+    expect(row?.textContent).toBe("01Press-ups3 x 12");
+  });
+
   test("says so when a workout has no exercises", () => {
     // The daily walk is exactly this: a real workout row with no children.
     renderNow(active(2), new Map());

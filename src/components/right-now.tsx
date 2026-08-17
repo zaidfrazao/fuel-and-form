@@ -18,7 +18,7 @@ import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve
  * ## Pure, and given its view rather than resolving one
  *
  * Takes a resolved `NowView` and renders it. No database handle, no session, no
- * clock — `src/lib/today.ts` does all three and `app/page.tsx` wires the two
+ * clock — `src/lib/db/queries/today.ts` does all three and `app/page.tsx` wires the two
  * together in eight lines. That split is what makes this file testable at all:
  * an async component that opened a connection could not be rendered by the
  * hermetic suite, and every acceptance criterion this task has is about what
@@ -129,7 +129,11 @@ function ExerciseList({ exercises }: { exercises: readonly WorkoutExercise[] }) 
           </span>
           <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
             <span className="text-body text-text-primary">{exercise.name}</span>
-            {exercise.notes !== null && <SlashMeta>{exercise.notes}</SlashMeta>}
+            {/* Truthy, not `!== null`. `notes` is a nullable text column with
+                no length constraint, so an empty string is storable — and it
+                would render as a bare "/ " with nothing after it, which reads
+                as a note that failed to load rather than one that isn't there. */}
+            {exercise.notes && <SlashMeta>{exercise.notes}</SlashMeta>}
           </span>
           <span className="text-body text-text-secondary">{exercise.prescription}</span>
         </li>

@@ -7,7 +7,7 @@ import { loadToday } from "@/lib/db/queries/today";
 /**
  * `/` — the "Right Now" view. PRD § P1.
  *
- * Deliberately eight lines of logic. The fetch is `lib/today.ts`, the render is
+ * Deliberately eight lines of logic. The fetch is `lib/db/queries/today.ts`, the render is
  * `components/right-now.tsx`, and this file is the wire between them plus the
  * one thing neither of them can do: read the request.
  *
