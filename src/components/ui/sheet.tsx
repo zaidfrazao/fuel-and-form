@@ -88,7 +88,14 @@ export function Sheet({ open, onOpenChange, title, meta, children, className }: 
           // sentence for a screen reader to read before them would be noise.
           aria-describedby={undefined}
           onOpenAutoFocus={() => {
-            opener.current = document.activeElement as HTMLElement | null;
+            const active = document.activeElement;
+
+            // `instanceof` rather than a cast: `activeElement` is typed `Element`
+            // and is `<body>` whenever nothing is focused, which is not somewhere
+            // to give focus back to — storing it would "restore" to exactly the
+            // dead end this handler exists to avoid.
+            opener.current =
+              active instanceof HTMLElement && active !== document.body ? active : null;
           }}
           onCloseAutoFocus={(event) => {
             const trigger = opener.current;

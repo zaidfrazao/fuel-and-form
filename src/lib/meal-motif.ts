@@ -153,10 +153,12 @@ const PATTERNS: readonly { motif: MotifName; test: RegExp }[] = RULES.flatMap((r
  * a property of the meal, so it does not change when the picker is filtered.
  */
 export function motifFor(meal: MotifBearing): MotifName {
-  const name = meal.name.toLowerCase();
-
+  // Not lower-cased first: the patterns already carry `i`, and normalising
+  // twice invites the reading that case matters in two places. `toLowerCase`
+  // is also locale-sensitive for a few alphabets, which is a needless edge to
+  // own when the regex flag has none.
   for (const { motif, test } of PATTERNS) {
-    if (test.test(name)) return motif;
+    if (test.test(meal.name)) return motif;
   }
 
   return BY_SLOT[meal.slotType];

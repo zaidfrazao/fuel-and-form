@@ -168,6 +168,12 @@ function Candidates({
           `self-start` keeps its 46px box off the full width so the tap target
           sits under the grid rather than spanning it. */}
       <Button
+        // `Button` does not default this, and a bare `<button>` in a form is a
+        // submit button. The sheet portals to `document.body` so it is not
+        // inside any form's subtree today — but that is an accident of where
+        // Radix mounts it, not a property of this component, and `Tile` already
+        // pins its own type for the same reason.
+        type="button"
         variant="link"
         className="self-start px-0"
         aria-pressed={showAll}
