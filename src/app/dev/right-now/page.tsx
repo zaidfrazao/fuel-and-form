@@ -3,7 +3,9 @@ import Link from "next/link";
 
 import { RightNow } from "@/components/right-now";
 import { ThemeToggle } from "@/components/theme-toggle";
+import type { LoggedEntry } from "@/lib/day-summary";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
+import type { MacroTarget } from "@/lib/macros";
 import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve-now";
 
 /**
@@ -169,6 +171,38 @@ const base = (minutesOfDay: number) => ({
   anytime: [WALK],
 });
 
+/**
+ * The demo persona's targets — the same figures the seed library uses.
+ *
+ * Not invented freely, unlike the meals above: `targetKcal` and friends are
+ * profile columns, and `scripts/check-no-metrics.sh` treats any literal
+ * assigned to one as a body metric unless it is the persona's. Borrowing Sam
+ * Rivera's numbers keeps the specimen honest AND keeps the repo-hygiene check
+ * meaningful rather than exempting a path from it.
+ *
+ * The invented day above runs well over them, so the `complete` case exercises
+ * the over-target reading — a `+460` in `error` on kcal — while
+ * `complete-empty` shows the same screen entirely under. Between them the sign
+ * convention is visible in both directions.
+ */
+const TARGET: MacroTarget = {
+  targetKcal: 1780,
+  targetProteinG: 148,
+  targetFatG: 50,
+  targetCarbG: 185,
+};
+
+/** The day above, as it would look logged: two eaten, one skipped, two done. */
+const LOGGED: LoggedEntry[] = [
+  { id: "l1", name: "Coffee + MCT oil", status: "eaten", macros: { kcal: 118, proteinG: 0, fatG: 13, carbG: 0.4 } },
+  { id: "l2", name: "Overnight oats with berries", status: "eaten", macros: { kcal: 486, proteinG: 32.5, fatG: 11.8, carbG: 58.2 } },
+  { id: "l3", name: "Greek yoghurt", status: "skipped" },
+  { id: "l4", name: "Chicken and rice bowl", status: "eaten", macros: { kcal: 612, proteinG: 54.2, fatG: 14.6, carbG: 63.8 } },
+  { id: "l5", name: "Circuit A", status: "done" },
+  { id: "l6", name: "Beef chilli", status: "eaten", macros: { kcal: 1024, proteinG: 68.3, fatG: 34.1, carbG: 82.5 } },
+  { id: "l7", name: "Daily walk", status: "done" },
+];
+
 const activeAt = (index: number, minutesOfDay: number): NowView => ({
   ...base(minutesOfDay),
   state: "active",
@@ -181,7 +215,10 @@ const activeAt = (index: number, minutesOfDay: number): NowView => ({
 /* The cases                                                                  */
 /* -------------------------------------------------------------------------- */
 
-const CASES: Record<string, { label: string; note: string; view: NowView }> = {
+const CASES: Record<
+  string,
+  { label: string; note: string; view: NowView; entries?: LoggedEntry[] }
+> = {
   meal: {
     label: "Meal",
     note: "The default case. 40px name, macro grid, three actions, NOW at 08:00.",
@@ -204,7 +241,13 @@ const CASES: Record<string, { label: string; note: string; view: NowView }> = {
   },
   complete: {
     label: "Day complete",
-    note: "No active item, so no actions at all. FUEL-20 adds the actual-versus-target summary.",
+    note: "The finished page: actual against target, the day's log, and crop marks at the four corners. No ruler, no tab bar, no score.",
+    view: { ...base(21 * 60 + 30), state: "day-complete" },
+    entries: LOGGED,
+  },
+  "complete-empty": {
+    label: "Day complete · nothing logged",
+    note: "Reached by advancing past the last item by hand. Zero against target is the honest reading, and the log says what would have appeared.",
     view: { ...base(21 * 60 + 30), state: "day-complete" },
   },
   empty: {
@@ -234,7 +277,12 @@ export default async function RightNowSpecimen({
           its top. A fixed bar across the top was tried and hid the 40px title
           behind itself in every screenshot. Each case is addressable by URL, so
           the switcher is a convenience rather than the way in. */}
-      <RightNow view={current.view} exercises={EXERCISES} logged={0} />
+      <RightNow
+        view={current.view}
+        exercises={EXERCISES}
+        entries={current.entries ?? []}
+        target={TARGET}
+      />
 
       <div className="mx-auto flex max-w-[640px] flex-col gap-3 border-t border-border px-[22px] py-6 md:px-7">
         <p className="text-slash text-text-tertiary">{current.note}</p>

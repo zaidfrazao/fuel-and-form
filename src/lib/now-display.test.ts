@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import type { Meal, MealSlot, Workout } from "@/lib/db/schema";
-import { itemLabel, itemName, rulerSlots } from "@/lib/now-display";
+import { dayLabel, itemLabel, itemName, rulerSlots, slotLabel } from "@/lib/now-display";
 import type { NowItem, ScheduledItem } from "@/lib/resolve-now";
 
 /**
@@ -147,5 +147,41 @@ describe("rulerSlots", () => {
 
   test("an empty day has no marks", () => {
     expect(rulerSlots([])).toEqual([]);
+  });
+});
+
+describe("slotLabel", () => {
+  test("names every slot the schema has", () => {
+    // Total over the enum, so a slot added without a label is a failing case
+    // here rather than an empty eyebrow somebody has to notice on a screen.
+    const slots: MealSlot[] = ["extra", "breakfast", "snack", "lunch", "dinner"];
+
+    expect(slots.map(slotLabel)).toEqual(["Extra", "Breakfast", "Snack", "Lunch", "Dinner"]);
+  });
+
+  test("agrees with the label the active card shows", () => {
+    // Two callers, one word for breakfast — the summary names a log whose meal
+    // is gone by its slot, and it must not invent a second vocabulary to do it.
+    expect(slotLabel("breakfast")).toBe(itemLabel(mealItem("breakfast")));
+  });
+});
+
+describe("dayLabel", () => {
+  test("reads as the summary's corner writes it", () => {
+    expect(dayLabel("2026-08-10")).toBe("Mon 10 Aug");
+  });
+
+  test("names the date's own day, not the runtime's", () => {
+    // The suite runs in New York, where `new Date("2026-08-10")` — midnight UTC
+    // — is the evening of the 9th. A formatter that went through the runtime's
+    // zone would label the summary with yesterday for everyone west of
+    // Greenwich, which is the bug the pinned zone exists to catch.
+    expect(dayLabel("2026-01-01")).toBe("Thu 1 Jan");
+    expect(dayLabel("2026-12-31")).toBe("Thu 31 Dec");
+  });
+
+  test("refuses a date that is not one", () => {
+    // Loudly, rather than rendering "Invalid Date" into the corner of a screen.
+    expect(() => dayLabel("2026-02-30")).toThrow(/No such date/);
   });
 });

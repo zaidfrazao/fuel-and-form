@@ -44,6 +44,71 @@ const SESSION = { userId: "11111111-2222-3333-4444-555555555555", kind: "owner" 
 
 const CURSOR = { date: "2026-03-09", advancedPast: "meal:e1" };
 
+/**
+ * What `loadToday` hands back, with everything invented — Testing Strategy
+ * § 1.5. The profile carries the metrics that must NOT reach the browser
+ * alongside the four targets that must, which is what makes the narrowing in
+ * the route assertable rather than merely visible.
+ */
+const PROFILE = {
+  userId: SESSION.userId,
+  // The demo persona's figures, as everywhere else outside `docs/` — see
+  // scripts/check-no-metrics.sh on why a profile column never holds an
+  // invented number in this repository.
+  heightCm: 172,
+  startWeightKg: 84.2,
+  targetWeightKg: 76,
+  goalPaceKgPerWeek: 0.5,
+  targetKcal: 1780,
+  targetProteinG: 148,
+  targetFatG: 50,
+  targetCarbG: 185,
+  slotTimes: {},
+  programStartDate: "2026-03-02",
+  timezone: "Europe/London",
+};
+
+const DINNER = {
+  kind: "meal",
+  meal: {
+    slot: "dinner",
+    meal: {
+      id: "meal-1",
+      userId: SESSION.userId,
+      name: "Beef chilli",
+      slotType: "dinner",
+      kcal: 612,
+      proteinG: 54.2,
+      fatG: 14.6,
+      carbG: 63.8,
+      method: null,
+      notes: null,
+      isArchived: false,
+    },
+    source: "template",
+    entryId: "entry-1",
+  },
+  key: "meal:entry-1",
+  at: "19:00",
+  minutes: 1140,
+};
+
+const VIEW = {
+  date: "2026-03-09",
+  minutesOfDay: 8 * 60,
+  timeline: [],
+  anytime: [],
+  state: "nothing-planned",
+};
+
+const today = (overrides: Record<string, unknown> = {}) => ({
+  view: VIEW,
+  profile: PROFILE,
+  exercises: new Map(),
+  logs: { meals: [], workouts: [] },
+  ...overrides,
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   readCursor.mockResolvedValue(null);
@@ -109,21 +174,62 @@ describe("with a session", () => {
 
   test("renders the resolved view when there is one", async () => {
     getSession.mockResolvedValue(SESSION);
-    loadToday.mockResolvedValue({
-      view: {
-        date: "2026-03-09",
-        minutesOfDay: 8 * 60,
-        timeline: [],
-        anytime: [],
-        state: "nothing-planned",
-      },
-      profile: {},
-      exercises: new Map(),
-      logs: { meals: [], workouts: [] },
-    });
+    loadToday.mockResolvedValue(today());
 
     render(await Home());
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Nothing planned");
+  });
+
+  test("prints the day's log against the day's own plan", async () => {
+    // The route is where the log rows meet the resolved items, because it is
+    // the only place that holds both. A log carries a `meal_id`; the name comes
+    // back from resolution, and this is the join.
+    getSession.mockResolvedValue(SESSION);
+    loadToday.mockResolvedValue(
+      today({
+        view: { ...VIEW, state: "day-complete", timeline: [DINNER], anytime: [] },
+        logs: {
+          meals: [
+            {
+              id: "log-1",
+              userId: SESSION.userId,
+              date: "2026-03-09",
+              slot: "dinner",
+              mealId: "meal-1",
+              status: "eaten",
+              note: null,
+              loggedAt: new Date(0),
+            },
+          ],
+          workouts: [],
+        },
+      }),
+    );
+
+    render(await Home());
+
+    expect(screen.getByText("Beef chilli")).toBeDefined();
+    expect(screen.getByText("Eaten")).toBeDefined();
+    // The meal's own macros, totalled — so the join found the row rather than
+    // falling back to the slot's name.
+    expect(screen.getByText("612")).toBeDefined();
+  });
+
+  test("sends the four targets and no other body metric", async () => {
+    // `profiles` also holds height, start and target weight and goal pace. None
+    // of them appear on this screen, so none of them belong in a payload the
+    // browser can read — PRD § Security & Compliance, and the reason the props
+    // name four fields instead of handing over the row.
+    getSession.mockResolvedValue(SESSION);
+    loadToday.mockResolvedValue(
+      today({ view: { ...VIEW, state: "day-complete", timeline: [DINNER] } }),
+    );
+
+    const { container } = render(await Home());
+
+    expect(screen.getByText("1,780")).toBeDefined();
+    expect(container.textContent).not.toContain("172");
+    expect(container.textContent).not.toContain("84.2");
   });
 });

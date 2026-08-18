@@ -3,11 +3,14 @@
 import { type ReactNode, startTransition, useOptimistic, useState } from "react";
 
 import { logItem, undoLastLog } from "@/app/actions/log";
+import { DayComplete } from "@/components/day-complete";
 import { DayRuler } from "@/components/day-ruler";
 import { KeyValueGrid, SlashMeta } from "@/components/kv-grid";
 import { Button } from "@/components/ui/button";
+import { type LoggedEntry, pendingEntry } from "@/lib/day-summary";
 import type { Meal, WorkoutExercise } from "@/lib/db/schema";
 import type { LogVerb } from "@/lib/log-intent";
+import type { MacroTarget } from "@/lib/macros";
 import { itemLabel, itemName, rulerSlots } from "@/lib/now-display";
 import {
   type AnytimeItem,
@@ -49,8 +52,11 @@ import {
  * signed-in user's own data travelling over their own authenticated response —
  * no other user's rows are resolvable into it, because everything upstream is
  * scoped — but it is a real change from FUEL-18 and worth knowing about. Only
- * what the optimistic advance genuinely needs crosses: the day's log history
- * stays on the server and arrives as `logged`, a count.
+ * what the optimistic advance genuinely needs crosses: FUEL-19 sent the day's
+ * log history as a count, and FUEL-20 widened that to one line per log — a name
+ * and a status — because the day-complete summary that prints them is reached
+ * optimistically too. The rows themselves still stay on the server; `dayLog`
+ * derives the lines in `app/page.tsx` and only the answer travels.
  *
  * Progressive enhancement goes with it: these controls need JavaScript, because
  * optimistic UI is JavaScript. Neither the PRD nor the Brand Guide asks for a
@@ -316,7 +322,7 @@ function Actions({
         <>
           <Button
             className="w-full"
-            onClick={() => onAct({ kind: "act", key: item.key, verb: "log" })}
+            onClick={() => onAct({ kind: "act", item, verb: "log" })}
           >
             {item.kind === "meal" ? "Log eaten" : "Mark done"}
           </Button>
@@ -329,7 +335,7 @@ function Actions({
             <Button
               variant="secondary"
               className="flex-1"
-              onClick={() => onAct({ kind: "act", key: item.key, verb: "skip" })}
+              onClick={() => onAct({ kind: "act", item, verb: "skip" })}
             >
               Skip
             </Button>
@@ -387,42 +393,57 @@ function Screen({ children }: { children: ReactNode }) {
  * and the banner hands it straight back to the handler.
  */
 type Attempt =
-  | { kind: "act"; key: string; verb: LogVerb }
+  | { kind: "act"; item: ScheduledItem; verb: LogVerb }
   | { kind: "undo" };
 
 /**
  * What a tap does to the screen before the server has answered.
  *
- * A position and a count of today's logs, moved together: logging advances the
- * card AND makes an undo available, undoing does both in reverse. Holding them
- * in ONE optimistic value is what keeps them consistent — two `useOptimistic`
- * calls could revert independently, leaving an undo control offered for a log
- * that failed to write.
+ * A position and the day's log, moved together: logging advances the card, makes
+ * an undo available AND adds a line to the day-complete summary; undoing does
+ * all three in reverse. Holding them in ONE optimistic value is what keeps them
+ * consistent — two `useOptimistic` calls could revert independently, leaving an
+ * undo control offered for a log that failed to write.
+ *
+ * The log is the ENTRIES rather than a count (FUEL-20). Logging the last item of
+ * the day is the only way to reach the summary by tapping, so a count would
+ * leave that screen missing the very line the tap produced, and its calorie
+ * figure short by that meal, for as long as the request took. Appending the
+ * entry the tap implies is what makes the finished page right on the frame it
+ * appears. `dayLog` orders the server's entries by `logged_at` — the same order
+ * undo takes them back in — so popping the last one is the reverse of pushing.
  */
-type Progress = { position: number; logged: number };
+type Progress = { position: number; entries: LoggedEntry[] };
 
-const applyMove = (current: Progress, move: "logged" | "undone"): Progress =>
-  move === "logged"
-    ? { position: current.position + 1, logged: current.logged + 1 }
-    : { position: current.position - 1, logged: current.logged - 1 };
+type Move = { kind: "logged"; entry: LoggedEntry } | { kind: "undone" };
+
+const applyMove = (current: Progress, move: Move): Progress =>
+  move.kind === "logged"
+    ? { position: current.position + 1, entries: [...current.entries, move.entry] }
+    : { position: current.position - 1, entries: current.entries.slice(0, -1) };
 
 export function RightNow({
   view,
   exercises,
-  logged,
+  entries,
+  target,
 }: {
   view: NowView;
   /** `workouts.id` → its exercises, from `loadToday`. */
   exercises: ReadonlyMap<string, WorkoutExercise[]>;
   /**
-   * How many logs today already holds — `logCount(today.logs)`.
+   * The day's log as the summary prints it — `dayLog(...)`, in logged order.
    *
-   * A number rather than the rows, because a count is all the undo affordance
-   * asks and the rows would otherwise be shipped to the browser to be counted
-   * there. The timeline has to cross that boundary for the optimistic advance
-   * to work at all; the log history does not, so it does not.
+   * Derived rows rather than the rows themselves: a name, a status, and the
+   * macros of an eaten meal. Everything else `meal_logs` and `workout_logs`
+   * hold — the note, the instant, the ids — stays on the server, because
+   * nothing on this screen shows it. Its length is also what offers the undo
+   * control, which is why it covers every row rather than only the ones it
+   * could name.
    */
-  logged: number;
+  entries: LoggedEntry[];
+  /** The four target figures from `profiles`, for the day-complete summary. */
+  target: MacroTarget;
 }) {
   /*
    * The optimistic layer — § Feedback's "optimistic by default", and the whole
@@ -438,7 +459,7 @@ export function RightNow({
    * wrote neither, so the card and the undo control revert together.
    */
   const [progress, move] = useOptimistic(
-    { position: positionOf(view), logged },
+    { position: positionOf(view), entries },
     applyMove,
   );
 
@@ -448,7 +469,15 @@ export function RightNow({
     setFailure(null);
 
     startTransition(async () => {
-      move(attempt.kind === "undo" ? "undone" : "logged");
+      move(
+        attempt.kind === "undo"
+          ? { kind: "undone" }
+          : // The entry the tap implies, built through `logIntent` so the word
+            // this screen prints and the status the row is written with are the
+            // same decision. `view.date` rather than the clock: the day being
+            // logged is the day that was resolved.
+            { kind: "logged", entry: pendingEntry(attempt.item, attempt.verb, view.date) },
+      );
 
       // The `try` covers the CALL, not the action. `logItem` and `undoLastLog`
       // catch everything themselves and answer `{ ok: false }` — but reaching
@@ -464,7 +493,7 @@ export function RightNow({
         const result =
           attempt.kind === "undo"
             ? await undoLastLog()
-            : await logItem(attempt.key, attempt.verb);
+            : await logItem(attempt.item.key, attempt.verb);
 
         // Success is silent — § Feedback: "the UI reflecting the new state IS
         // the confirmation". There is no toast here on purpose; the card has
@@ -501,40 +530,64 @@ export function RightNow({
   const actions = (
     <Actions
       item={now.state === "active" ? now.active : undefined}
-      undoable={progress.logged > 0}
+      undoable={progress.entries.length > 0}
       failure={failure}
       onAct={act}
     />
   );
 
-  // The ruler is drawn in all three states. The day's shape and where the
-  // present moment falls in it are true whether or not anything is active, and
-  // a screen that dropped the graphic on the two quiet states would answer
-  // "where am I in the day?" only on the days it was already answering.
+  // The ruler answers "where am I in the day?", so it is drawn wherever that
+  // question is still open — beneath the active card, and on a day with nothing
+  // planned, where the shape is worth showing even though nothing is active.
+  //
+  // The day-complete summary is the exception, and the only one: the day is
+  // over, so the question has no live answer, and § Materials frames that screen
+  // as a closed page rather than a position within one. The Brand Guide's mock
+  // of it carries no ruler either.
   const ruler = (
     <DayRuler slots={rulerSlots(base.timeline)} now={base.minutesOfDay} className="pt-2" />
   );
 
-  if (now.state !== "active") {
+  /*
+   * The finished page — FUEL-20.
+   *
+   * Everything the active screen carries is deliberately absent here: no ruler,
+   * no "up next", no anytime list. § Materials calls this a closed page and puts
+   * crop marks at its corners on that basis, and a summary still offering the
+   * day's shape and the things left to log would not be one. The two are
+   * different screens that happen to share a route, which is why this branch
+   * returns rather than decorating the one below.
+   *
+   * The action bar stays, and stays conditional: it is there when there is a log
+   * to take back, which is the case § Feedback names — the tap that produced
+   * this screen is the one most likely to want undoing, "from where it was
+   * performed".
+   */
+  if (now.state === "day-complete") {
     return (
       <Screen>
-        {/* The quiet states carry the bottom inset themselves, because the bar
-            is only there when there is a log to take back. */}
+        <div className="flex flex-1 flex-col pb-[max(1.375rem,env(safe-area-inset-bottom))]">
+          <DayComplete date={base.date} entries={progress.entries} target={target} />
+        </div>
+
+        {actions}
+      </Screen>
+    );
+  }
+
+  if (now.state === "nothing-planned") {
+    return (
+      <Screen>
+        {/* The quiet state carries the bottom inset itself, because the bar is
+            only there when there is a log to take back. */}
         <div className="flex flex-col gap-[30px] pb-[max(1.375rem,env(safe-area-inset-bottom))]">
           <header className="flex flex-col gap-2">
-            <p className="text-micro uppercase text-text-secondary">
-              {now.state === "day-complete" ? "Day complete" : "Today"}
-            </p>
-            <h1 className="text-title text-text-primary">
-              {now.state === "day-complete" ? "Nothing left today" : "Nothing planned"}
-            </h1>
+            <p className="text-micro uppercase text-text-secondary">Today</p>
+            <h1 className="text-title text-text-primary">Nothing planned</h1>
             {/* § Tone of Voice — empty states describe what will appear, they
-                do not nudge. FUEL-20 replaces the day-complete line with the
-                actual-versus-target summary the PRD asks for. */}
+                do not nudge. */}
             <p className="text-body text-text-secondary">
-              {now.state === "day-complete"
-                ? "Every item on today's plan has been worked through."
-                : "Meals and sessions appear here once the week's plan covers today."}
+              Meals and sessions appear here once the week&rsquo;s plan covers today.
             </p>
           </header>
 
