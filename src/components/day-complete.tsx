@@ -260,10 +260,14 @@ export function DayComplete({
     // is what makes that box the whole page rather than the height of the
     // content — a page marked at its corners has to be the page.
     <div className="relative flex flex-1 flex-col gap-[26px]">
-      <CropMark corner="tl" className="top-0 left-0" />
-      <CropMark corner="tr" className="top-0 right-0" />
-      <CropMark corner="bl" className="bottom-0 left-0" />
-      <CropMark corner="br" className="right-0 bottom-0" />
+      {/* Out into the page gutter, not at the text's own edge. Measured at
+          375px: a mark flush with the content column sits on top of the date in
+          the corner it shares — registration marks belong OUTSIDE the trim, and
+          the 22px gutter is where the trim is. */}
+      <CropMark corner="tl" className="top-0 -left-4" />
+      <CropMark corner="tr" className="top-0 -right-4" />
+      <CropMark corner="bl" className="bottom-0 -left-4" />
+      <CropMark corner="br" className="-right-4 bottom-0" />
 
       {/* The date is the other half of the topbar in the mock, and it earns its
           place: this screen is a record of a specific day, and it is the one
