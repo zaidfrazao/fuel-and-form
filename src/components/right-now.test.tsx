@@ -3,7 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { RightNow } from "@/components/right-now";
+import type { LoggedEntry } from "@/lib/day-summary";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
+import type { MacroTarget } from "@/lib/macros";
 import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve-now";
 
 /**
@@ -175,12 +177,36 @@ const EXERCISES = new Map<string, WorkoutExercise[]>([
   ],
 ]);
 
+/**
+ * Invented targets — Testing Strategy § 1.5. Round numbers, so a delta in an
+ * assertion is obviously the subtraction under test rather than a coincidence.
+ */
+const TARGET: MacroTarget = {
+  targetKcal: 2000,
+  targetProteinG: 150,
+  targetFatG: 60,
+  targetCarbG: 200,
+};
+
+/** One line of the day's log, as `dayLog` would have produced it. */
+const entry = (fields: Partial<LoggedEntry> & { id: string }): LoggedEntry => ({
+  name: "Overnight oats",
+  status: "eaten",
+  ...fields,
+});
+
 const renderNow = (
   view: NowView,
   exercises: ReadonlyMap<string, WorkoutExercise[]> = EXERCISES,
-  /** How many logs today already holds — all the undo affordance reads. */
-  logged = 0,
-) => render(<RightNow view={view} exercises={exercises} logged={logged} />);
+  /** The day's log so far — what the summary prints, and what undo takes back. */
+  entries: LoggedEntry[] = [],
+) => (
+  render(<RightNow view={view} exercises={exercises} entries={entries} target={TARGET} />)
+);
+
+/** A day's log of `count` lines, for the cases that only care that there is one. */
+const someLogs = (count: number) =>
+  Array.from({ length: count }, (_, index) => entry({ id: `log-${index}` }));
 
 /* -------------------------------------------------------------------------- */
 /* The active card                                                            */
@@ -376,10 +402,14 @@ describe("the day ruler", () => {
     expect(rule!.getAttribute("style")).toContain("12.5%");
   });
 
-  test("is drawn on a day with nothing active", () => {
+  test("is left off the finished page", () => {
+    // The ruler answers "where am I in the day?", and the day-complete summary
+    // is the one state where that question has no live answer. § Materials
+    // frames it as a closed page — the Brand Guide's own mock of it carries no
+    // ruler — so the graphic stops here rather than being drawn out of habit.
     renderNow({ ...BASE, state: "day-complete" });
 
-    expect(screen.getByRole("img")).toBeDefined();
+    expect(screen.queryByRole("img")).toBeNull();
   });
 });
 
@@ -388,13 +418,184 @@ describe("the day ruler", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("day-complete", () => {
-  test("reports, and offers no action", () => {
-    renderNow({ ...BASE, state: "day-complete" });
+  /** A day where three things were logged and one of them was skipped. */
+  const LOGGED: LoggedEntry[] = [
+    entry({
+      id: "l1",
+      name: "Overnight oats",
+      macros: { kcal: 486, proteinG: 32.5, fatG: 11.8, carbG: 58.2 },
+    }),
+    entry({ id: "l2", name: "Greek yoghurt", status: "skipped" }),
+    entry({ id: "l3", name: "Circuit A", status: "done" }),
+    entry({
+      id: "l4",
+      name: "Beef chilli",
+      macros: { kcal: 1024, proteinG: 68.3, fatG: 34.1, carbG: 82.5 },
+    }),
+  ];
 
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Nothing left today");
-    // Nothing is active, so there is nothing to log, swap or skip. FUEL-20
-    // turns this into the actual-versus-target summary.
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+  const summary = (entries: LoggedEntry[] = LOGGED) =>
+    renderNow({ ...BASE, state: "day-complete" }, EXERCISES, entries);
+
+  test("reports the day as complete, and offers nothing to log", () => {
+    summary();
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Day complete");
+    // Nothing is active, so there is nothing to log, swap or skip. The only
+    // control this screen can carry is undo, and only when there is a log to
+    // take back — see the undo suite below.
+    expect(screen.queryByRole("button", { name: "Log eaten" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();
+  });
+
+  test("shows what the day actually came to", () => {
+    summary();
+
+    // Eaten only: the skipped yoghurt and the session contribute nothing, which
+    // is the difference between this figure and a planned total. 486 + 1024,
+    // grouped as the brand voice writes it.
+    expect(screen.getByText("1,510")).toBeDefined();
+    expect(screen.getByText("kcal")).toBeDefined();
+  });
+
+  test("shows actual against target for all three macros, with signed deltas", () => {
+    const { container } = summary();
+
+    const figures = container.querySelector("dl");
+
+    // 32.5 + 68.3 = 100.8 against 150; 11.8 + 34.1 = 45.9 against 60;
+    // 58.2 + 82.5 = 140.7 against 200.
+    expect(within(figures!).getByText("100.8 g")).toBeDefined();
+    expect(within(figures!).getByText(/of 150 · −49.2/)).toBeDefined();
+    expect(within(figures!).getByText("45.9 g")).toBeDefined();
+    expect(within(figures!).getByText(/of 60 · −14.1/)).toBeDefined();
+    expect(within(figures!).getByText("140.7 g")).toBeDefined();
+    expect(within(figures!).getByText(/of 200 · −59.3/)).toBeDefined();
+
+    // And kcal, whose target is the value and whose delta is the metadata,
+    // because the actual figure is already the largest thing on the screen.
+    expect(within(figures!).getByText("2,000")).toBeDefined();
+    expect(within(figures!).getByText("−490")).toBeDefined();
+  });
+
+  test("writes the delta with the brand's minus sign, not a hyphen", () => {
+    // § Voice writes the convention as `−21`, never "21 under", and the glyph
+    // is U+2212 — the one that lines up under tabular figures.
+    summary();
+
+    expect(screen.getByText("−490").textContent).toBe("\u2212490");
+  });
+
+  test("marks an over-target day in error, and only on kcal", () => {
+    // § Voice: `+220 kcal` in `error`, against `−8g protein` in text-secondary.
+    // Over target on protein is the day going well; a rule that painted every
+    // positive delta red would report a good day as a fault.
+    const { container } = summary([
+      entry({
+        id: "l1",
+        macros: { kcal: 2200, proteinG: 200, fatG: 60, carbG: 200 },
+      }),
+    ]);
+
+    expect(screen.getByText("+200").className).toContain("text-error");
+
+    const protein = within(container.querySelector("dl")!).getByText(/of 150 · \+50/);
+
+    expect(protein.className).not.toContain("text-error");
+  });
+
+  test("emphasises protein by weight, as everywhere else", () => {
+    summary();
+
+    expect(screen.getByText("100.8 g").className).toContain("font-bold");
+    expect(screen.getByText("45.9 g").className).not.toContain("font-bold");
+  });
+
+  test("lists the day's logged items with their status", () => {
+    summary();
+
+    const logged = screen.getByRole("list");
+
+    expect(
+      within(logged).getAllByRole("listitem").map((row) => row.textContent),
+    ).toEqual([
+      "Overnight oatsEaten",
+      "Greek yoghurtSkipped",
+      "Circuit ADone",
+      "Beef chilliEaten",
+    ]);
+  });
+
+  test("sets Skipped and Done in the same caps, differing only in weight", () => {
+    // The criterion, and the guide's own caption for this screen. The mock's
+    // stylesheet separates them by COLOUR instead; the caption and the
+    // criterion agree with each other against it, and they are the ones that
+    // state the intent — a skip is a neutral fact about the day, and greying it
+    // out is the closest this screen could come to a judgement.
+    summary();
+
+    const done = screen.getByText("Done").className;
+    const skipped = screen.getByText("Skipped").className;
+
+    for (const shared of ["text-micro", "uppercase", "text-text-secondary"]) {
+      expect(done).toContain(shared);
+      expect(skipped).toContain(shared);
+    }
+
+    expect(skipped).toContain("font-normal");
+    expect(done).not.toContain("font-normal");
+  });
+
+  test("says so when the day was walked through without logging anything", () => {
+    // Reached by advancing past the last item by hand, which is the deliberate
+    // "I'm done". Zero against target is the honest reading of it.
+    summary([]);
+
+    expect(screen.getByText(/Nothing was logged today/)).toBeDefined();
+    expect(screen.getByText("0")).toBeDefined();
+  });
+
+  test("marks the four corners, and carries no tab bar", () => {
+    const { container } = summary();
+
+    // § Materials: crop marks at the four corners of this screen "and nowhere
+    // else. The day is a finished page."
+    expect(
+      [...container.querySelectorAll("[data-crop]")].map((mark) => mark.getAttribute("data-crop")),
+    ).toEqual(["tl", "tr", "bl", "br"]);
+
+    // The summary owns the screen. Nothing renders navigation chrome yet, so
+    // this is the assertion that fails on the day something tries to.
+    expect(screen.queryByRole("navigation")).toBeNull();
+  });
+
+  test("says nothing about how the day went", () => {
+    // "No score, no streak, no praise anywhere on the screen." The four
+    // figures and the log are the whole report.
+    const { container } = summary();
+
+    expect(container.textContent).not.toMatch(
+      /streak|score|great|well done|crushed|nice work|keep it up|goal met|🎉/i,
+    );
+  });
+});
+
+describe("the crop marks", () => {
+  test("appear on the finished page and on no other state", () => {
+    // "A device used once keeps its meaning" — the reason they are worth an
+    // assertion from the outside as well as from within the summary.
+    const { container: active_ } = renderNow(active(0));
+
+    expect(active_.querySelectorAll("[data-crop]")).toHaveLength(0);
+
+    const { container: empty } = renderNow({
+      ...BASE,
+      state: "nothing-planned",
+      timeline: [],
+      anytime: [],
+    });
+
+    expect(empty.querySelectorAll("[data-crop]")).toHaveLength(0);
   });
 });
 
@@ -404,7 +605,9 @@ describe("nothing-planned", () => {
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Nothing planned");
     expect(
-      screen.getByText(/appear here once the week's plan covers today/),
+      // A curly apostrophe, as everywhere else in the copy — the straight one
+      // is a typewriter artefact the brand voice does not use.
+      screen.getByText(/appear here once the week\u2019s plan covers today/),
     ).toBeDefined();
   });
 
@@ -601,6 +804,65 @@ describe("logging the active item", () => {
     await waitFor(() => expect(logItem).toHaveBeenCalledOnce());
   });
 
+  test("puts the tap's own line on the summary it opens", async () => {
+    // The case FUEL-20 exists to get right: logging the last item is the only
+    // way to reach the summary by tapping, so a screen built from the server's
+    // log alone would open missing exactly the line that opened it — and with
+    // its calorie figure short by that meal — until the request came back.
+    const pending = deferred<{ ok: boolean }>();
+
+    logItem.mockReturnValue(pending.promise);
+
+    renderNow(active(3));
+
+    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+
+    await waitFor(() => expect(screen.getByText("Chilli")).toBeDefined());
+
+    // Dinner's own macros, from the item that was tapped.
+    expect(screen.getByText("Eaten")).toBeDefined();
+    expect(screen.getByText("420")).toBeDefined();
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(logItem).toHaveBeenCalledOnce());
+  });
+
+  test("takes the line back when the log is refused", async () => {
+    // The optimistic value reverts on failure, and the summary is part of it:
+    // a line left behind would be the app claiming a log the server refused.
+    logItem.mockResolvedValue({ ok: false });
+
+    renderNow(active(3));
+
+    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeDefined());
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chilli");
+    expect(screen.queryByText("Eaten")).toBeNull();
+  });
+
+  test("skips the last item onto the summary as a skip", async () => {
+    // Two verbs, four statuses. The word on the summary comes from `logIntent`,
+    // the same call the server action makes, so a skip cannot read "Eaten" here
+    // and be written as 'skipped' there.
+    const pending = deferred<{ ok: boolean }>();
+
+    logItem.mockReturnValue(pending.promise);
+
+    renderNow(active(3));
+
+    await userEvent.click(screen.getByRole("button", { name: "Skip" }));
+
+    await waitFor(() => expect(screen.getByText("Skipped")).toBeDefined());
+
+    // Skipped, so it counts for nothing: the day still reads zero.
+    expect(screen.getByText("0")).toBeDefined();
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(logItem).toHaveBeenCalledOnce());
+  });
+
   test("marking the last item done shows the day as complete", async () => {
     // The end of the timeline is where the client could most plausibly disagree
     // with the server about what advancing means. Both go through `positionAt`.
@@ -613,7 +875,7 @@ describe("logging the active item", () => {
     await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
 
     await waitFor(() =>
-      expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Nothing left today"),
+      expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Day complete"),
     );
 
     pending.settle({ ok: true });
@@ -712,7 +974,7 @@ describe("undo", () => {
   });
 
   test("is offered from the action bar once something has been", () => {
-    renderNow(active(1), EXERCISES, 1);
+    renderNow(active(1), EXERCISES, someLogs(1));
 
     expect(screen.getByRole("button", { name: "Undo" })).toBeDefined();
   });
@@ -736,7 +998,7 @@ describe("undo", () => {
     // The edge § Feedback's "from where it was performed" hides: logging the
     // final item leaves a screen with no active card, and before FUEL-19 that
     // state had no action bar for the undo to live in.
-    renderNow({ ...BASE, state: "day-complete" }, EXERCISES, 1);
+    renderNow({ ...BASE, state: "day-complete" }, EXERCISES, someLogs(1));
 
     expect(screen.getByRole("button", { name: "Undo" })).toBeDefined();
   });
@@ -746,7 +1008,7 @@ describe("undo", () => {
 
     undoLastLog.mockReturnValue(pending.promise);
 
-    renderNow(active(1), EXERCISES, 1);
+    renderNow(active(1), EXERCISES, someLogs(1));
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chicken salad");
 
@@ -763,7 +1025,7 @@ describe("undo", () => {
   test("says so when the undo request never reaches the server", async () => {
     undoLastLog.mockRejectedValue(new Error("Failed to fetch"));
 
-    renderNow(active(1), EXERCISES, 1);
+    renderNow(active(1), EXERCISES, someLogs(1));
 
     await userEvent.click(screen.getByRole("button", { name: "Undo" }));
 
@@ -773,7 +1035,7 @@ describe("undo", () => {
   test("reverts and says so when it fails", async () => {
     undoLastLog.mockResolvedValue({ ok: false });
 
-    renderNow(active(1), EXERCISES, 1);
+    renderNow(active(1), EXERCISES, someLogs(1));
 
     await userEvent.click(screen.getByRole("button", { name: "Undo" }));
 

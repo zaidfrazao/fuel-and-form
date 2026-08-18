@@ -3,15 +3,17 @@ import { redirect } from "next/navigation";
 import { RightNow } from "@/components/right-now";
 import { getSession } from "@/lib/auth/session";
 import { readCursor } from "@/lib/cursor-cookie";
+import { dayLog } from "@/lib/day-summary";
 import { loadToday } from "@/lib/db/queries/today";
-import { logCount } from "@/lib/log-intent";
 
 /**
  * `/` — the "Right Now" view. PRD § P1.
  *
- * Deliberately eight lines of logic. The fetch is `lib/db/queries/today.ts`, the render is
+ * Deliberately thin. The fetch is `lib/db/queries/today.ts`, the render is
  * `components/right-now.tsx`, and this file is the wire between them plus the
- * one thing neither of them can do: read the request.
+ * one thing neither of them can do: read the request. What arithmetic there is
+ * belongs to `lib/day-summary.ts`; what happens here is choosing which of the
+ * fetched fields the browser is allowed to see.
  *
  * ## Why the clock is read here
  *
@@ -61,11 +63,26 @@ export default async function Home() {
     );
   }
 
+  const { view, profile } = today;
+
   return (
     <RightNow
-      view={today.view}
+      view={view}
       exercises={today.exercises}
-      logged={logCount(today.logs)}
+      // The day's log, turned into lines here rather than in the browser: the
+      // rows carry a note, an instant and a set of ids, and the summary shows a
+      // name and a status. What crosses is the answer.
+      entries={dayLog([...view.timeline, ...view.anytime], today.logs)}
+      // The four target figures, named one at a time rather than by handing over
+      // the profile row. Everything else on it is a body metric — height, start
+      // and target weight, goal pace — and this screen shows none of them, so
+      // none of them belong in a payload the browser can read.
+      target={{
+        targetKcal: profile.targetKcal,
+        targetProteinG: profile.targetProteinG,
+        targetFatG: profile.targetFatG,
+        targetCarbG: profile.targetCarbG,
+      }}
     />
   );
 }

@@ -5,6 +5,7 @@
 // them gained a field. Types are erased, so nothing of the component reaches
 // the bundle through this line.
 import type { Slot } from "@/components/day-ruler";
+import { type CalendarDate, parseCalendarDate } from "@/lib/date";
 import type { MealSlot } from "@/lib/db/schema";
 import type { NowItem, ScheduledItem } from "@/lib/resolve-now";
 
@@ -39,6 +40,19 @@ const SLOT_LABEL: Readonly<Record<MealSlot, string>> = {
   extra: "Extra",
 };
 
+/**
+ * A slot's name, without an item to read it from.
+ *
+ * `itemLabel` covers the common case, but the day-complete summary has to name a
+ * logged row whose meal is no longer on today's plan — a log with nothing to
+ * point at, which has a slot and nothing else. Exported so that fallback and the
+ * eyebrow above the active card cannot end up with two different words for
+ * breakfast.
+ */
+export function slotLabel(slot: MealSlot): string {
+  return SLOT_LABEL[slot];
+}
+
 /** The item's own name — the 40px subject of the screen. */
 export function itemName(item: NowItem): string {
   return item.kind === "meal" ? item.meal.meal.name : item.workout.workout.name;
@@ -54,8 +68,36 @@ export function itemName(item: NowItem): string {
  * it does not already say better — "Circuit A" is the workout's name.
  */
 export function itemLabel(item: NowItem): string {
-  return item.kind === "meal" ? SLOT_LABEL[item.meal.slot] : "Training";
+  return item.kind === "meal" ? slotLabel(item.meal.slot) : "Training";
 }
+
+/**
+ * The date as the day-complete summary says it — `Mon 10 Aug`.
+ *
+ * Formatted in UTC from the date's own parts rather than by handing the string
+ * to a `Date` and hoping. `new Date("2026-08-10")` is midnight UTC, which is the
+ * 9th in New York and would label the summary with yesterday for everyone west
+ * of Greenwich — the exact class of bug the suite pins a non-UTC zone to catch.
+ * `parseCalendarDate` also rejects a malformed date loudly rather than rendering
+ * "Invalid Date" into the corner of the screen.
+ *
+ * The locale is fixed rather than the visitor's. This is a personal app with one
+ * user and a written brand voice; a runtime locale would make the same screen
+ * read "Aug 10" on one device and "10 août" on another, and neither the guide
+ * nor the PRD asks for translation.
+ */
+export function dayLabel(date: CalendarDate): string {
+  const { year, month, day } = parseCalendarDate(date);
+
+  return DAY_LABEL.format(Date.UTC(year, month - 1, day));
+}
+
+const DAY_LABEL = new Intl.DateTimeFormat("en-GB", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+});
 
 /**
  * The day's shape, as marks on the ruler.
