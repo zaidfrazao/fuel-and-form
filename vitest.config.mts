@@ -58,6 +58,7 @@ export default defineConfig({
         "src/lib/auth/cookies.ts",
         "src/lib/cursor.ts",
         "src/lib/date.ts",
+        "src/lib/day-summary.ts",
         "src/lib/log-intent.ts",
         "src/lib/macros.ts",
         "src/lib/resolve-plan.ts",
@@ -111,6 +112,13 @@ export default defineConfig({
         // of them surface on the screen that caused them. The gate is here
         // because the writes it decides are the only ones P1 makes.
         "src/lib/log-intent.ts": FULLY_COVERED,
+        // FUEL-20's arithmetic and its join. Every way it can be wrong is a
+        // plausible-looking wrong number on a screen the user is asked to
+        // trust — a skipped meal counted, a swapped meal counted twice, a log
+        // ordered so that undo appears to take back a different line from the
+        // one it will. None of them throw, and the summary is the last thing
+        // the day says.
+        "src/lib/day-summary.ts": FULLY_COVERED,
         // § 1.3. The totals are what P4 puts in front of a swap, so an
         // unmeasured branch here is a number the user is asked to trust that
         // nothing checked. The rounding and the untracked skip are both single
