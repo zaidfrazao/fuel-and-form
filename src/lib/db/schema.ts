@@ -258,8 +258,33 @@ export const profiles = pgTable("profiles", {
    * purpose: these are display hints for the "Right Now" view (P1), not
    * something any query filters or joins on, so a column per slot would buy
    * nothing and cost a migration every time the routine shifts.
+   *
+   * Three states per slot, and settings (FUEL-21) can write all three. A time
+   * is a configured window; an ABSENT key means "never set", which takes the
+   * default; and an explicit `null` means "deliberately unscheduled", which
+   * takes no default and sends the slot to `anytime`. Absent and null have to
+   * differ because a profile starts out `{}` and must still render a day —
+   * see `scheduleFor` in resolve-now.ts.
    */
-  slotTimes: jsonb("slot_times").$type<Partial<Record<MealSlot, string>>>().notNull(),
+  slotTimes: jsonb("slot_times").$type<Partial<Record<MealSlot, string | null>>>().notNull(),
+
+  /**
+   * When training happens, keyed by `workouts.type` — `{ circuit: "06:30" }`.
+   *
+   * A second free-shaped column rather than more keys in `slot_times`, because
+   * the two are keyed by different vocabularies: `slot_times` by the closed
+   * `meal_slot` enum, this by the deliberately OPEN `workouts.type` text (see
+   * the note on `workouts`). Merging them would mean one bag whose keys come
+   * from two namespaces that are each free to grow into the other's.
+   *
+   * Same three states as `slot_times`, and `null` is the one that matters
+   * here: the daily walk is unscheduled on purpose, and a gym session someone
+   * does whenever should be expressible the same way.
+   */
+  workoutTimes: jsonb("workout_times")
+    .$type<Record<string, string | null>>()
+    .notNull()
+    .default({}),
 
   /** Day zero for Circuit A/B alternation. See `trainingTemplateEntries`. */
   programStartDate: calendarDate("program_start_date").notNull(),

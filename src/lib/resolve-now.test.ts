@@ -238,10 +238,31 @@ const TRAINING: TrainingPlan = {
 /* Schedules                                                                  */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The fixture routine, written out rather than taken from `DEFAULT_SLOT_TIMES`.
+ *
+ * Everything below this line tests RESOLUTION — how a tie breaks, which window
+ * owns the boundary minute, how far one tap moves the cursor — and none of it is
+ * a claim about what time anyone eats. Built from the defaults, those tests
+ * inherited a dependency on the product's configuration: FUEL-21 re-confirmed
+ * the routine, moved training from 17:30 to 06:30, and fourteen tests about
+ * mechanics failed for it. None of them had found a bug.
+ *
+ * So the two are separated. These times are a fixture and are chosen to exercise
+ * the resolver — spread across the day, with a deliberate tie at 13:00 — and the
+ * real defaults are asserted on their own, in `describe("the default schedule")`
+ * below, which is where a wrong figure genuinely is a failure.
+ */
 const SCHEDULE: Schedule = {
   timeZone: LONDON,
-  slotTimes: DEFAULT_SLOT_TIMES,
-  workoutTimes: DEFAULT_WORKOUT_TIMES,
+  slotTimes: {
+    extra: "06:00",
+    breakfast: "07:00",
+    snack: "10:30",
+    lunch: "13:00",
+    dinner: "19:00",
+  },
+  workoutTimes: { circuit: "17:30", intervals: "17:30" },
 };
 
 /** The same routine, resolved for someone whose zone is not the fixture's. */
@@ -724,7 +745,7 @@ describe("the default schedule", () => {
     );
 
     expect(DEFAULT_SLOT_TIMES.extra).toBe("06:00");
-    expect(DEFAULT_SLOT_TIMES.dinner).toBe("19:00");
+    expect(DEFAULT_SLOT_TIMES.dinner).toBe("18:30");
     expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 
@@ -732,8 +753,22 @@ describe("the default schedule", () => {
     // Load-bearing, not an omission: the walk is on the template every day, and
     // a time here would make it the active card every evening.
     expect(DEFAULT_WORKOUT_TIMES).not.toHaveProperty("walk");
-    expect(DEFAULT_WORKOUT_TIMES.circuit).toBe("17:30");
-    expect(DEFAULT_WORKOUT_TIMES.intervals).toBe("17:30");
+    expect(DEFAULT_WORKOUT_TIMES.circuit).toBe("06:30");
+    expect(DEFAULT_WORKOUT_TIMES.intervals).toBe("06:30");
+  });
+
+  it("puts training inside the morning routine, before breakfast", () => {
+    // FUEL-21, and the ordering consequence of it: the session is at 06:30,
+    // between the 06:00 coffee and breakfast at 07:30. Pinned because it is the
+    // whole reason `buildTimeline` sorts by the clock rather than by kind — a
+    // resolver that ordered meals before training would put breakfast first and
+    // be wrong about the morning every day.
+    expect(parseTimeOfDay(DEFAULT_WORKOUT_TIMES.circuit!)).toBeGreaterThan(
+      parseTimeOfDay(DEFAULT_SLOT_TIMES.extra),
+    );
+    expect(parseTimeOfDay(DEFAULT_WORKOUT_TIMES.circuit!)).toBeLessThan(
+      parseTimeOfDay(DEFAULT_SLOT_TIMES.breakfast),
+    );
   });
 
   it("holds only times this app can parse", () => {
@@ -773,6 +808,111 @@ describe("scheduleFor", () => {
     const schedule = scheduleFor({ timeZone: LONDON, slotTimes: {} });
 
     expect(schedule.slotTimes).toEqual(DEFAULT_SLOT_TIMES);
+  });
+
+  it("distinguishes a slot never configured from one cleared to null", () => {
+    // The distinction FUEL-21 added, and the reason the merge is not a spread.
+    // Absent takes the default; `null` — which only settings writes — removes
+    // the key, so the slot has no window at all.
+    const schedule = scheduleFor({
+      timeZone: LONDON,
+      slotTimes: { lunch: null },
+    });
+
+    expect(schedule.slotTimes.breakfast).toBe(DEFAULT_SLOT_TIMES.breakfast);
+    expect(schedule.slotTimes).not.toHaveProperty("lunch");
+  });
+
+  it("leaves the key absent rather than present-and-null", () => {
+    // The failure this guards is specific and would not show up above: spreading
+    // `{ lunch: null }` over the defaults leaves the KEY there holding `null`,
+    // and `buildTimeline` tests `at === undefined`. A null would sail past that
+    // check into `parseTimeOfDay(null)` and throw — on `/`, on every request.
+    const schedule = scheduleFor({ timeZone: LONDON, slotTimes: { lunch: null } });
+
+    expect(Object.keys(schedule.slotTimes)).not.toContain("lunch");
+    expect(schedule.slotTimes.lunch).toBeUndefined();
+  });
+
+  it("sends a cleared slot to anytime rather than dropping its meal", () => {
+    // The behaviour the null is FOR. The meal is still on the plan and still
+    // loggable; it just has no window, exactly like the daily walk.
+    const cleared = scheduleFor({
+      timeZone: LONDON,
+      slotTimes: { ...SCHEDULE.slotTimes, lunch: null },
+    });
+    const view = resolve(clock(MON, "13:30"), null, cleared);
+
+    expect(namesOf(view.timeline)).not.toContain("salad");
+    expect(namesOf(view.anytime)).toContain("salad");
+  });
+
+  it("survives a slot_times holding a JSON null rather than an object", () => {
+    // `jsonb NOT NULL` forbids a SQL NULL and permits a JSON one, so the column
+    // can hold `'null'::jsonb` whatever the TypeScript type claims. The merge
+    // this replaced spread rather than iterated, and `{ ...null }` is `{}` —
+    // so tolerating this is not a new nicety, it is not regressing.
+    const schedule = scheduleFor({
+      timeZone: LONDON,
+      slotTimes: null as never,
+      workoutTimes: null as never,
+    });
+
+    expect(schedule.slotTimes).toEqual(DEFAULT_SLOT_TIMES);
+    expect(schedule.workoutTimes).toEqual(DEFAULT_WORKOUT_TIMES);
+  });
+
+  it("renders a day rather than throwing on a corrupt slot_times", () => {
+    // The failure that matters is not the wrong window, it is `/` returning a
+    // 500 on every request until someone edits the row by hand.
+    const corrupt = scheduleFor({ timeZone: LONDON, slotTimes: "07:00" as never });
+
+    expect(() => resolve(clock(MON, "13:30"), null, corrupt)).not.toThrow();
+    expect(corrupt.slotTimes).toEqual(DEFAULT_SLOT_TIMES);
+  });
+
+  it("treats a non-string time as no time, rather than handing it to the parser", () => {
+    // A number or a nested object in the column would reach `parseTimeOfDay`
+    // and throw. Unscheduled is the degradation that keeps the screen up.
+    const schedule = scheduleFor({
+      timeZone: LONDON,
+      slotTimes: { lunch: 1300, dinner: { at: "18:30" } } as never,
+    });
+
+    expect(schedule.slotTimes).not.toHaveProperty("lunch");
+    expect(schedule.slotTimes).not.toHaveProperty("dinner");
+    expect(schedule.slotTimes.breakfast).toBe(DEFAULT_SLOT_TIMES.breakfast);
+  });
+
+  it("reads workout times from the profile, defaulting the types it omits", () => {
+    const schedule = scheduleFor({
+      timeZone: LONDON,
+      slotTimes: {},
+      workoutTimes: { circuit: "18:00" },
+    });
+
+    expect(schedule.workoutTimes.circuit).toBe("18:00");
+    expect(schedule.workoutTimes.intervals).toBe(DEFAULT_WORKOUT_TIMES.intervals);
+  });
+
+  it("unschedules a workout type cleared to null", () => {
+    const schedule = scheduleFor({
+      timeZone: LONDON,
+      slotTimes: {},
+      workoutTimes: { circuit: null },
+    });
+
+    expect(schedule.workoutTimes).not.toHaveProperty("circuit");
+    expect(schedule.workoutTimes.intervals).toBe(DEFAULT_WORKOUT_TIMES.intervals);
+  });
+
+  it("defaults workout times when the profile has none — the pre-FUEL-21 row", () => {
+    // `workout_times` was added with a `{}` default, so every profile written
+    // before the migration reads as absent rather than as deliberately empty.
+    // Those rows must keep resolving their sessions, not lose them.
+    const schedule = scheduleFor({ timeZone: LONDON, slotTimes: {} });
+
+    expect(schedule.workoutTimes).toEqual(DEFAULT_WORKOUT_TIMES);
   });
 });
 
