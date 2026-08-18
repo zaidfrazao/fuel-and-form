@@ -80,8 +80,13 @@ export type Schedule = {
    * future 'strength' needs no migration. An unrecognised type therefore has to
    * mean something sane here: it means unscheduled, which is the same answer the
    * walk gets, and not a crash on the one screen the app exists for.
+   *
+   * `Partial` states that in the type. A bare `Record<string, TimeOfDay>` claims
+   * every string maps to a time, so `schedule.workoutTimes[type]` typechecks as
+   * a `TimeOfDay` and the `at === undefined` branch in `buildTimeline` reads as
+   * dead code — the one branch that keeps the open vocabulary from throwing.
    */
-  workoutTimes: Record<string, TimeOfDay>;
+  workoutTimes: Partial<Record<string, TimeOfDay>>;
 };
 
 /**
@@ -96,20 +101,27 @@ export type Schedule = {
  * shares this window — two items at 10:30, which the timeline already orders and
  * manual advance already walks through, one tap each.
  *
- * These are DEFAULTS, not the contract. The PRD marks the table "to confirm",
- * and its acceptance criterion is that the times are editable in settings; what
+ * These are DEFAULTS, not the contract. The times below are the routine as
+ * confirmed in FUEL-21, which closed PRD Open Question 3; the acceptance
+ * criterion attached to them is that they are editable in settings, and what
  * makes that possible is that nothing below reads this constant.
  */
 export const DEFAULT_SLOT_TIMES: Readonly<Record<MealSlot, TimeOfDay>> = {
   extra: "06:00",
-  breakfast: "07:00",
+  breakfast: "07:30",
   snack: "10:30",
-  lunch: "13:00",
-  dinner: "19:00",
+  lunch: "12:30",
+  dinner: "18:30",
 };
 
 /**
  * When training happens, by workout type.
+ *
+ * 06:30 puts the session inside the morning routine, between the 06:00 coffee
+ * and breakfast at 07:30 — which is the ordering the timeline then produces,
+ * and the reason `buildTimeline` sorts by the clock rather than by kind. The
+ * PRD's original 17:30 was one of the figures Open Question 3 marked "to
+ * confirm", and FUEL-21 confirmed it wrong: it fell inside a work block.
  *
  * The walk is deliberately absent. The PRD's table gives it "any time (logged,
  * not scheduled)", and it is on the template every single day — pinning it to a
@@ -117,29 +129,87 @@ export const DEFAULT_SLOT_TIMES: Readonly<Record<MealSlot, TimeOfDay>> = {
  * five days that also have a real session.
  */
 export const DEFAULT_WORKOUT_TIMES: Readonly<Record<string, TimeOfDay>> = {
-  circuit: "17:30",
-  intervals: "17:30",
+  circuit: "06:30",
+  intervals: "06:30",
 };
+
+/**
+ * Merges stored times over defaults, dropping the keys cleared to `null`.
+ *
+ * The three states a stored key can be in, resolved into the two a `Schedule`
+ * has. Absent takes the default; a time overrides it; and `null` — which only
+ * settings writes — removes the key entirely, so the slot has NO time and lands
+ * in `anytime` rather than in a window it was explicitly denied.
+ *
+ * `null` cannot simply be spread over the default, because `{ lunch: null }`
+ * spread onto the defaults leaves the KEY present holding `null`, and
+ * `schedule.slotTimes[slot]` is then `null` rather than `undefined` —
+ * `buildTimeline` tests `at === undefined`, so the slot would fall through to
+ * `parseTimeOfDay(null)` and throw on the one screen that has to render.
+ *
+ * ## Why the whole argument is guarded, and not just its values
+ *
+ * `jsonb NOT NULL` forbids a SQL NULL and permits a JSON one: `slot_times` can
+ * hold the scalar `'null'::jsonb`, and so can an object, a string or a number.
+ * The column's TypeScript type says otherwise, but a type is a claim about what
+ * the app writes, not about what the row contains — and this row is reachable
+ * by a hand-run migration, a seed script, or `psql`.
+ *
+ * That distinction is load-bearing here because iterating is less forgiving
+ * than spreading. `{ ...null }` is `{}`, so the merge this replaced tolerated a
+ * JSON null silently; `Object.entries(null)` throws, which would have turned
+ * the same row into a 500 on `/` — a regression introduced by fixing the other
+ * one. A non-object means "nothing configured", which is what an empty column
+ * means anyway, and the day still renders.
+ */
+function mergeTimes<K extends string>(
+  defaults: Readonly<Partial<Record<K, TimeOfDay>>>,
+  stored: Readonly<Partial<Record<K, TimeOfDay | null>>> | null | undefined,
+): Partial<Record<K, TimeOfDay>> {
+  const merged: Partial<Record<K, TimeOfDay>> = { ...defaults };
+
+  // Arrays and strings are objects and iterable by `Object.entries`, but their
+  // keys are numeric indices, so they contribute nothing a slot name matches
+  // and drop out below. Only the throw needs guarding against.
+  if (typeof stored !== "object" || stored === null) return merged;
+
+  for (const [key, time] of Object.entries(stored) as [K, TimeOfDay | null][]) {
+    // Anything that is not a string is treated as "no time", for the same
+    // reason the whole argument is: a number or a nested object here would
+    // reach `parseTimeOfDay` and throw, and an unscheduled slot is the
+    // degradation that keeps the screen up.
+    if (typeof time === "string") merged[key] = time;
+    else delete merged[key];
+  }
+
+  return merged;
+}
 
 /**
  * A schedule from a profile row, with the defaults filling the gaps.
  *
- * `slot_times` is free-shaped JSON that starts out empty, so an absent slot here
- * means "not configured yet" rather than "deliberately unscheduled", and P1 has
- * to render something on day one. The limitation is the other half of that: with
- * the defaults merged in there is currently no way to say a slot has NO time.
- * Nothing needs to yet — the flexible weekend slots have no template entry to
- * schedule — and when settings can write times, a slot cleared to `null` is what
- * would express it.
+ * `slot_times` and `workout_times` are free-shaped JSON that start out empty, so
+ * an absent key means "not configured yet" rather than "deliberately
+ * unscheduled", and P1 has to render something on day one. Settings (FUEL-21)
+ * is what distinguishes the two: a field cleared there writes an explicit
+ * `null`, which `mergeTimes` removes rather than defaults — the way this file
+ * previously had no way to express.
+ *
+ * `workoutTimes` widens the defaults rather than replacing them, so a type the
+ * profile says nothing about keeps its default window, and one the profile
+ * clears loses it. An unrecognised type still resolves to `undefined` and lands
+ * in `anytime`, which is what keeps the open `workouts.type` vocabulary safe
+ * here.
  */
 export function scheduleFor(profile: {
   timeZone: string;
-  slotTimes: Partial<Record<MealSlot, TimeOfDay>>;
+  slotTimes: Partial<Record<MealSlot, TimeOfDay | null>>;
+  workoutTimes?: Record<string, TimeOfDay | null>;
 }): Schedule {
   return {
     timeZone: profile.timeZone,
-    slotTimes: { ...DEFAULT_SLOT_TIMES, ...profile.slotTimes },
-    workoutTimes: DEFAULT_WORKOUT_TIMES,
+    slotTimes: mergeTimes(DEFAULT_SLOT_TIMES, profile.slotTimes),
+    workoutTimes: mergeTimes(DEFAULT_WORKOUT_TIMES, profile.workoutTimes ?? {}),
   };
 }
 

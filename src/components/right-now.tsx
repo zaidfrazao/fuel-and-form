@@ -4,6 +4,8 @@ import { type ReactNode, startTransition, useOptimistic, useState } from "react"
 
 import { logItem, undoLastLog } from "@/app/actions/log";
 import { DayComplete } from "@/components/day-complete";
+import Link from "next/link";
+
 import { DayRuler } from "@/components/day-ruler";
 import { KeyValueGrid, SlashMeta } from "@/components/kv-grid";
 import { Button } from "@/components/ui/button";
@@ -549,6 +551,30 @@ export function RightNow({
   );
 
   /*
+   * The way to `/settings` — FUEL-21.
+   *
+   * A text link rather than the § Navigation pill, which does not exist yet.
+   * The PRD's first acceptance criterion is that `/` "renders the current item
+   * with no navigation", and the guide restates it: "`/` never requires
+   * navigation to be useful". A link at the foot of the screen is reachable
+   * without being part of the reading order of the card — it is below the day,
+   * after everything the screen is actually for.
+   *
+   * Absent from day-complete for the same reason the ruler is: § Materials
+   * frames that screen as a closed page with crop marks at its corners, and its
+   * acceptance criterion says no tab bar. A navigation affordance is exactly
+   * what that criterion is about.
+   */
+  const settingsLink = (
+    <Link
+      href="/settings"
+      className="text-caption text-text-tertiary underline decoration-text-tertiary underline-offset-4"
+    >
+      Slot times
+    </Link>
+  );
+
+  /*
    * The finished page — FUEL-20.
    *
    * Everything the active screen carries is deliberately absent here: no ruler,
@@ -594,6 +620,8 @@ export function RightNow({
           {base.timeline.length > 0 && ruler}
 
           <Anytime items={base.anytime} />
+
+          {settingsLink}
         </div>
 
         {actions}
@@ -620,6 +648,8 @@ export function RightNow({
         <UpNext items={now.upcoming} />
 
         <Anytime items={base.anytime} />
+
+        {settingsLink}
       </div>
 
       {actions}

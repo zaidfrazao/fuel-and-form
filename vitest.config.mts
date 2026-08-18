@@ -64,6 +64,7 @@ export default defineConfig({
         "src/lib/resolve-plan.ts",
         "src/lib/resolve-now.ts",
         "src/lib/rotation.ts",
+        "src/lib/slot-times.ts",
       ],
       thresholds: {
         "src/lib/db/scope.ts": FULLY_COVERED,
@@ -130,6 +131,13 @@ export default defineConfig({
         // never reads workout_logs. An unmeasured branch here is precisely where
         // a shortcut that consults history would sit unnoticed.
         "src/lib/rotation.ts": FULLY_COVERED,
+        // FUEL-21, and the same reasoning as cursor.ts: every branch in it is
+        // reachable by anyone who can POST to the settings action, and the one
+        // that matters is the one that must REFUSE. `slot_times` is free-shaped
+        // jsonb with no CHECK, and `parseTimeOfDay` throws — so a malformed
+        // time this failed to reject would not break settings, it would break
+        // `/` on every subsequent request, until someone edited the row by hand.
+        "src/lib/slot-times.ts": FULLY_COVERED,
       },
     },
   },

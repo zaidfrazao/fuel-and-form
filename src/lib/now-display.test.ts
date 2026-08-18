@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import type { Meal, MealSlot, Workout } from "@/lib/db/schema";
+import { positionInSpan } from "@/components/day-ruler";
 import { dayLabel, itemLabel, itemName, rulerSlots, slotLabel } from "@/lib/now-display";
 import type { NowItem, ScheduledItem } from "@/lib/resolve-now";
 
@@ -130,6 +131,32 @@ describe("rulerSlots", () => {
     const swapped = [scheduled(mealItem("dinner", { id: "meal-9", name: "Chilli" }), "meal:e1", "19:00", 1140)];
 
     expect(rulerSlots(swapped)[0]?.id).toBe("meal:e1");
+  });
+
+  test("repositions its ticks when a slot time changes — FUEL-21", () => {
+    // The acceptance criterion, pinned across the whole chain rather than at
+    // either end of it: a stored slot time becomes a `Schedule`, a `Schedule`
+    // becomes a timeline minute, and the minute becomes a percentage along the
+    // ruler. Nothing in the ruler had to change for this to work, which is
+    // exactly the claim worth a test — the tick positions derive from the
+    // configured times, so a settings edit moves them and no component caches
+    // a position that could disagree.
+    const before = rulerSlots(TIMELINE);
+    const moved = rulerSlots([
+      ...TIMELINE.slice(0, 1),
+      scheduled(mealItem("breakfast"), "meal:e2", "09:00", 540),
+      ...TIMELINE.slice(2),
+    ]);
+
+    expect(before[1]!.minutes).toBe(420);
+    expect(moved[1]!.minutes).toBe(540);
+    expect(positionInSpan(moved[1]!.minutes)).toBeGreaterThan(
+      positionInSpan(before[1]!.minutes),
+    );
+    // The other two marks stay put — one edited row moves one tick.
+    expect(moved.map((slot) => slot.minutes).filter((_, i) => i !== 1)).toEqual(
+      before.map((slot) => slot.minutes).filter((_, i) => i !== 1),
+    );
   });
 
   test("reports no status until logs exist", () => {

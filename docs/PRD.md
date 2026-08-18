@@ -76,18 +76,23 @@ Listed in build priority order. P1–P5 are the weekend's non-negotiables; P6–
 
 Resolution uses **configurable time windows with manual advance**. Each slot has a start time; the active slot is the one whose window contains the current time. A "skip / next" control moves to the following item when I'm off-schedule, so the view is never wrong for longer than one tap.
 
-Proposed default windows (**to confirm — see Open Questions**):
+Default windows (**confirmed — Open Question 3, FUEL-21**). These are defaults, not the contract: every one is editable in settings, and a slot cleared there has no window at all.
 
-| Slot | Window |
-|---|---|
-| Coffee + MCT oil | 06:00 |
-| Breakfast | 07:00 |
-| Snack 1 | 10:30 |
-| Lunch | 13:00 |
-| Snack 2 | 16:00 |
-| Workout | 17:30 |
-| Dinner | 19:00 |
-| Walk | any time (logged, not scheduled) |
+| Slot | Window | |
+|---|---|---|
+| Coffee + MCT oil | 06:00 | start of the morning routine |
+| Workout | 06:30 | inside the morning routine, before breakfast |
+| Breakfast | 07:30 | after the session |
+| Snack 1 | 10:30 | the mid-morning walk |
+| Lunch | 12:30 | start of the lunch break |
+| Snack 2 | 16:00 | the afternoon walk — **not yet resolvable, see below** |
+| Dinner | 18:30 | start of the evening meal |
+| Walk | any time (logged, not scheduled) | twice daily in practice |
+
+Two of those eight rows do not resolve to a schedulable slot today, and both are deliberate:
+
+- **The two snacks share one window.** `meal_slot` has a single `snack` value, so 10:30 is the only snack time that currently resolves. Snack 2 at 16:00 is recorded here as the confirmed figure for FUEL-55, which adds the second.
+- **The walk has no window on purpose.** It is on the template every single day, so a start time would make it the active card every evening, displacing dinner on the five days that also have a real session. It is logged whenever.
 
 **User Value:** Removes the recall cost that causes improvisation. This is the screen the app exists for.
 
@@ -415,7 +420,7 @@ To resolve before or during the build — none of these block starting.
 
 1. ~~**Full recipe data**~~ — **Resolved (FUEL-14).** All ten rotation meals are seeded in `src/lib/seed/meals.ts`, with seven treat recipes alongside them. Two caveats remain: the three oats flavours, both snacks and all seven treats have **estimated** macros derived from their ingredient lists rather than supplied figures (each row is flagged `ESTIMATED` in its notes), and the ciabatta's stated 540 kcal disagrees with its own macros by 12.6%.
 2. ~~**Exact exercise lists**~~ — **Resolved (FUEL-14).** Circuit A, Circuit B, skipping intervals + core, and the daily walk are seeded in `src/lib/seed/workouts.ts` with full prescriptions, and the A/B alternation is pinned by test.
-3. **Slot times** — confirm or correct the proposed defaults above, particularly the workout time and whether snacks are fixed or opportunistic.
+3. ~~**Slot times**~~ — **Resolved (FUEL-21).** The table in § P1 above now holds the confirmed routine, and the times are editable in settings. Two corrections came out of confirming it: the workout moves from 17:30 to **06:30**, because 17:30 fell inside a work block and the session actually happens in the morning routine between the coffee and breakfast; and lunch, dinner and breakfast shift to 12:30, 18:30 and 07:30. Snacks are **fixed, not opportunistic** — they are anchored to the two daily walks, at 10:30 and 16:00.
 4. **Weekend meals** — should "fried eggs + bangers" and the flexible lunch/dinner be real library entries with macros, or a "flexible / untracked" placeholder slot?
 5. **Template weekday assignment** — which specific dinner and which oats flavour land on which weekday, so the template seeds correctly.
 6. **Product name** — "Fuel & Form" is a placeholder; it appears in the repo name, page title, and export filenames.
@@ -424,4 +429,5 @@ To resolve before or during the build — none of these block starting.
 ## Document History
 
 - **Created:** 2026-08-10
-- **Last Updated:** 2026-08-16 — demo persona figures substituted for the owner's throughout (FUEL-14); Open Questions 1, 2 and 7 resolved.
+- **Last Updated:** 2026-08-18 — slot-time defaults confirmed and corrected, and P1's § Slot times table rewritten (FUEL-21); Open Question 3 resolved.
+- **Updated:** 2026-08-16 — demo persona figures substituted for the owner's throughout (FUEL-14); Open Questions 1, 2 and 7 resolved.

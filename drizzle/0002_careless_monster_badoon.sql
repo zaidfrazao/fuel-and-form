@@ -1,0 +1,1 @@
+ALTER TABLE "profiles" ADD COLUMN "workout_times" jsonb DEFAULT '{}'::jsonb NOT NULL;
