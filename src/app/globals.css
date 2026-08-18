@@ -75,6 +75,23 @@
   --color-success: var(--success);
   --color-error: var(--error);
 
+  /* The dimming behind a sheet. Not in § Color Palette — it is a scrim, not a
+     surface — so it is the one colour token without a contrast ratio to hold.
+     It differs by mode, which is why it is a token and not a utility. */
+  --color-scrim: var(--scrim);
+
+  /* Override 3 — Elevation. § Spacing & Layout: "none, except sheets". The one
+     shadow in the system, and the reason it is a named token rather than an
+     arbitrary value is that `shadow-sheet` appearing anywhere but on a sheet is
+     then a grep away from being caught.
+
+     One value for both modes, as the guide gives it. In dark mode a 12% black
+     shadow against a near-black canvas is close to invisible, and that is
+     accepted rather than compensated for: `raised` is lighter than `canvas` in
+     dark by design, so the fill is what separates the sheet there and the
+     shadow is what separates it in light. */
+  --shadow-sheet: 0 -8px 34px rgb(0 0 0 / 0.12);
+
   /* Override 5 — Type scale. shadcn assumes a 14–16px base with no display
      tier. Sizes are in rem so they survive Dynamic Type at 200% zoom.
      The ratio is the rule: 76 ÷ 10.5 ≈ 7.2×. */
@@ -130,6 +147,10 @@
   --success: #2f7d3e;
   --error: #a93226;
 
+  /* Transcribed from the sheet mock in docs/BRAND_GUIDE.html: the ink value at
+     34%, so what shows through the scrim is warm rather than grey. */
+  --scrim: rgb(28 25 23 / 0.34);
+
   --background: var(--canvas);
   --foreground: var(--text-primary);
   --card: var(--canvas);
@@ -166,6 +187,10 @@
   --error: #f0776b;
 
   --border: #2a2724;
+
+  /* Near-opaque, per the mock. A 34% scrim over a #0c0b0a canvas is barely a
+     change at all, and the sheet then has nothing to sit in front of. */
+  --scrim: rgb(0 0 0 / 0.64);
 
   /* Repeated from :root deliberately. Custom properties are substituted where
      they are declared, so aliases resolved at :root would keep their light
