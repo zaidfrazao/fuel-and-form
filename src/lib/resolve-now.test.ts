@@ -847,6 +847,43 @@ describe("scheduleFor", () => {
     expect(namesOf(view.anytime)).toContain("salad");
   });
 
+  it("survives a slot_times holding a JSON null rather than an object", () => {
+    // `jsonb NOT NULL` forbids a SQL NULL and permits a JSON one, so the column
+    // can hold `'null'::jsonb` whatever the TypeScript type claims. The merge
+    // this replaced spread rather than iterated, and `{ ...null }` is `{}` —
+    // so tolerating this is not a new nicety, it is not regressing.
+    const schedule = scheduleFor({
+      timeZone: LONDON,
+      slotTimes: null as never,
+      workoutTimes: null as never,
+    });
+
+    expect(schedule.slotTimes).toEqual(DEFAULT_SLOT_TIMES);
+    expect(schedule.workoutTimes).toEqual(DEFAULT_WORKOUT_TIMES);
+  });
+
+  it("renders a day rather than throwing on a corrupt slot_times", () => {
+    // The failure that matters is not the wrong window, it is `/` returning a
+    // 500 on every request until someone edits the row by hand.
+    const corrupt = scheduleFor({ timeZone: LONDON, slotTimes: "07:00" as never });
+
+    expect(() => resolve(clock(MON, "13:30"), null, corrupt)).not.toThrow();
+    expect(corrupt.slotTimes).toEqual(DEFAULT_SLOT_TIMES);
+  });
+
+  it("treats a non-string time as no time, rather than handing it to the parser", () => {
+    // A number or a nested object in the column would reach `parseTimeOfDay`
+    // and throw. Unscheduled is the degradation that keeps the screen up.
+    const schedule = scheduleFor({
+      timeZone: LONDON,
+      slotTimes: { lunch: 1300, dinner: { at: "18:30" } } as never,
+    });
+
+    expect(schedule.slotTimes).not.toHaveProperty("lunch");
+    expect(schedule.slotTimes).not.toHaveProperty("dinner");
+    expect(schedule.slotTimes.breakfast).toBe(DEFAULT_SLOT_TIMES.breakfast);
+  });
+
   it("reads workout times from the profile, defaulting the types it omits", () => {
     const schedule = scheduleFor({
       timeZone: LONDON,

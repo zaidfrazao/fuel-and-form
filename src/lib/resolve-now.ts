@@ -146,16 +146,40 @@ export const DEFAULT_WORKOUT_TIMES: Readonly<Record<string, TimeOfDay>> = {
  * `schedule.slotTimes[slot]` is then `null` rather than `undefined` —
  * `buildTimeline` tests `at === undefined`, so the slot would fall through to
  * `parseTimeOfDay(null)` and throw on the one screen that has to render.
+ *
+ * ## Why the whole argument is guarded, and not just its values
+ *
+ * `jsonb NOT NULL` forbids a SQL NULL and permits a JSON one: `slot_times` can
+ * hold the scalar `'null'::jsonb`, and so can an object, a string or a number.
+ * The column's TypeScript type says otherwise, but a type is a claim about what
+ * the app writes, not about what the row contains — and this row is reachable
+ * by a hand-run migration, a seed script, or `psql`.
+ *
+ * That distinction is load-bearing here because iterating is less forgiving
+ * than spreading. `{ ...null }` is `{}`, so the merge this replaced tolerated a
+ * JSON null silently; `Object.entries(null)` throws, which would have turned
+ * the same row into a 500 on `/` — a regression introduced by fixing the other
+ * one. A non-object means "nothing configured", which is what an empty column
+ * means anyway, and the day still renders.
  */
 function mergeTimes<K extends string>(
   defaults: Readonly<Partial<Record<K, TimeOfDay>>>,
-  stored: Readonly<Partial<Record<K, TimeOfDay | null>>>,
+  stored: Readonly<Partial<Record<K, TimeOfDay | null>>> | null | undefined,
 ): Partial<Record<K, TimeOfDay>> {
   const merged: Partial<Record<K, TimeOfDay>> = { ...defaults };
 
+  // Arrays and strings are objects and iterable by `Object.entries`, but their
+  // keys are numeric indices, so they contribute nothing a slot name matches
+  // and drop out below. Only the throw needs guarding against.
+  if (typeof stored !== "object" || stored === null) return merged;
+
   for (const [key, time] of Object.entries(stored) as [K, TimeOfDay | null][]) {
-    if (time === null) delete merged[key];
-    else merged[key] = time;
+    // Anything that is not a string is treated as "no time", for the same
+    // reason the whole argument is: a number or a nested object here would
+    // reach `parseTimeOfDay` and throw, and an unscheduled slot is the
+    // degradation that keeps the screen up.
+    if (typeof time === "string") merged[key] = time;
+    else delete merged[key];
   }
 
   return merged;
