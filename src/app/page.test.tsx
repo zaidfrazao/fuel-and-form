@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
  * own terms elsewhere.
  */
 
-const { redirect, getSession, loadToday } = vi.hoisted(() => ({
+const { redirect, getSession, loadToday, readCursor } = vi.hoisted(() => ({
   redirect: vi.fn((path: string) => {
     // The real `redirect` throws, which is what terminates rendering of the
     // segment. A mock that merely recorded the call would let execution run on
@@ -25,18 +25,28 @@ const { redirect, getSession, loadToday } = vi.hoisted(() => ({
   }),
   getSession: vi.fn(),
   loadToday: vi.fn(),
+  readCursor: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("@/lib/auth/session", () => ({ getSession }));
 vi.mock("@/lib/db/queries/today", () => ({ loadToday }));
+vi.mock("@/lib/cursor-cookie", () => ({ readCursor }));
+// The screen is a client component that imports the log actions, and those
+// reach a session and a database. Same reason login/page.test.tsx mocks its
+// own: a "use server" module cannot be imported under jsdom, and none of what
+// it does is what this file is testing.
+vi.mock("@/app/actions/log", () => ({ logItem: vi.fn(), undoLastLog: vi.fn() }));
 
 const { default: Home } = await import("@/app/page");
 
 const SESSION = { userId: "11111111-2222-3333-4444-555555555555", kind: "owner" as const };
 
+const CURSOR = { date: "2026-03-09", advancedPast: "meal:e1" };
+
 beforeEach(() => {
   vi.clearAllMocks();
+  readCursor.mockResolvedValue(null);
 });
 
 describe("without a session", () => {
@@ -71,6 +81,20 @@ describe("with a session", () => {
     expect(now).toBeInstanceOf(Date);
   });
 
+  test("hands the manual advance to the resolver", async () => {
+    // The cursor lives in a cookie so that a tap survives the phone being
+    // locked, and this is the only place it is read. A route that fetched
+    // today without it would resolve from the clock alone — every skip
+    // forgotten on the next render, which looks like the action not working.
+    getSession.mockResolvedValue(SESSION);
+    loadToday.mockResolvedValue(undefined);
+    readCursor.mockResolvedValue(CURSOR);
+
+    await Home();
+
+    expect(loadToday.mock.calls[0]![2]).toEqual(CURSOR);
+  });
+
   test("describes what will appear when the user has no profile", async () => {
     // A user exists before it is set up: no profile row, so no timezone, so no
     // day to resolve. Ordinary, and not an error.
@@ -95,6 +119,7 @@ describe("with a session", () => {
       },
       profile: {},
       exercises: new Map(),
+      logs: { meals: [], workouts: [] },
     });
 
     render(await Home());

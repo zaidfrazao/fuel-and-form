@@ -4,6 +4,7 @@ import Link from "next/link";
 import { RightNow } from "@/components/right-now";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
+import type { DayLogs } from "@/lib/log-intent";
 import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve-now";
 
 /**
@@ -140,6 +141,15 @@ const WALK: AnytimeItem = {
 
 const TIMELINE = [COFFEE, BREAKFAST, SNACK, LUNCH, SESSION, DINNER];
 
+/**
+ * No logs, on every specimen.
+ *
+ * The gallery is for the LAYOUT, and the undo control's presence is a fact
+ * about the day's history rather than about the state being photographed. An
+ * empty pair keeps each case showing the bar it is meant to be showing.
+ */
+const NO_LOGS: DayLogs = { meals: [], workouts: [] };
+
 const EXERCISES = new Map<string, WorkoutExercise[]>([
   [
     "w1",
@@ -234,7 +244,7 @@ export default async function RightNowSpecimen({
           its top. A fixed bar across the top was tried and hid the 40px title
           behind itself in every screenshot. Each case is addressable by URL, so
           the switcher is a convenience rather than the way in. */}
-      <RightNow view={current.view} exercises={EXERCISES} />
+      <RightNow view={current.view} exercises={EXERCISES} logs={NO_LOGS} />
 
       <div className="mx-auto flex max-w-[640px] flex-col gap-3 border-t border-border px-[22px] py-6 md:px-7">
         <p className="text-slash text-text-tertiary">{current.note}</p>

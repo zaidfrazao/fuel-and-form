@@ -1,9 +1,55 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { RightNow } from "@/components/right-now";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
+import type { DayLogs } from "@/lib/log-intent";
 import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve-now";
+
+/**
+ * The server actions are mocked, for the reason `login/page.test.tsx` gives
+ * about its own: `@/app/actions/log` is a "use server" module that imports the
+ * database, `server-only` and a session, none of which resolve under the
+ * hermetic jsdom suite. What is under test here is the half the browser owns —
+ * that the card advances before the server has answered, that a refusal reverts
+ * it and says so, and that a success says nothing at all.
+ */
+const logItem = vi.fn();
+const undoLastLog = vi.fn();
+
+vi.mock("@/app/actions/log", () => ({
+  logItem: (...args: unknown[]) => logItem(...args),
+  undoLastLog: (...args: unknown[]) => undoLastLog(...args),
+}));
+
+beforeEach(() => {
+  logItem.mockReset();
+  undoLastLog.mockReset();
+  logItem.mockResolvedValue({ ok: true });
+  undoLastLog.mockResolvedValue({ ok: true });
+});
+
+/**
+ * An action held open, and the handle that lets it go.
+ *
+ * The optimistic cases below have to observe the screen while the server has
+ * not answered, which means the action must not resolve yet. A promise that
+ * NEVER resolves does that and then poisons the rest of the file: React runs
+ * transitions one at a time, so a transition left pending on an unmounted tree
+ * makes every later test's transition sit behind it and time out — which is a
+ * failure in a test that is not the one at fault, and took a bisect to find.
+ *
+ * So each case resolves its own, and flushes before it ends.
+ */
+function deferred<T>() {
+  let settle!: (value: T) => void;
+  const promise = new Promise<T>((resolve) => {
+    settle = resolve;
+  });
+
+  return { promise, settle };
+}
 
 /**
  * P1's acceptance criteria, as assertions about what ends up on the screen.
@@ -130,8 +176,30 @@ const EXERCISES = new Map<string, WorkoutExercise[]>([
   ],
 ]);
 
-const renderNow = (view: NowView, exercises: ReadonlyMap<string, WorkoutExercise[]> = EXERCISES) =>
-  render(<RightNow view={view} exercises={exercises} />);
+const NO_LOGS: DayLogs = { meals: [], workouts: [] };
+
+/** One meal log, which is all the undo affordance reads: that there is one. */
+const oneLog = (): DayLogs => ({
+  meals: [
+    {
+      id: "log-1",
+      userId: USER,
+      date: "2026-08-18",
+      slot: "breakfast",
+      mealId: "meal-1",
+      status: "eaten",
+      note: null,
+      loggedAt: new Date("2026-08-18T07:05:00Z"),
+    },
+  ],
+  workouts: [],
+});
+
+const renderNow = (
+  view: NowView,
+  exercises: ReadonlyMap<string, WorkoutExercise[]> = EXERCISES,
+  logs: DayLogs = NO_LOGS,
+) => render(<RightNow view={view} exercises={exercises} logs={logs} />);
 
 /* -------------------------------------------------------------------------- */
 /* The active card                                                            */
@@ -395,12 +463,18 @@ describe("the actions", () => {
     expect(screen.queryByRole("button", { name: "Swap" })).toBeNull();
   });
 
-  test("every action is disabled until FUEL-19 wires it", () => {
+  test("swap is the only disabled control — the meal picker is P2's", () => {
     renderNow(active(0));
 
-    for (const button of screen.getAllByRole("button")) {
-      expect((button as HTMLButtonElement).disabled).toBe(true);
-    }
+    expect((screen.getByRole("button", { name: "Swap" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(
+      (screen.getByRole("button", { name: "Log eaten" }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+    expect((screen.getByRole("button", { name: "Skip" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
   });
 
   test("the primary is ink-filled, and there is exactly one", () => {
@@ -480,5 +554,223 @@ describe("the accent", () => {
       expect(button.className).not.toContain("bg-accent");
       expect(button.className).not.toContain("text-accent");
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Logging, skipping and undo — FUEL-19                                       */
+/* -------------------------------------------------------------------------- */
+
+describe("logging the active item", () => {
+  test("advances the card before the server has answered", async () => {
+    // The criterion behind § Feedback's "optimistic by default": the next item
+    // is on screen on the frame of the tap, not on the frame of the response.
+    // The action is left hanging on purpose — nothing resolves it — so anything
+    // that arrives here can only have come from the optimistic layer.
+    const pending = deferred<{ ok: boolean }>();
+
+    logItem.mockReturnValue(pending.promise);
+
+    renderNow(active(0));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Overnight oats");
+
+    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chicken salad"),
+    );
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(logItem).toHaveBeenCalledOnce());
+  });
+
+  test("sends the item's key and the verb, and nothing else", async () => {
+    renderNow(active(0));
+
+    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+
+    // A key, not a row. The server re-resolves the day and derives the date,
+    // the slot and the meal id from its own answer — see app/actions/log.ts.
+    await waitFor(() => expect(logItem).toHaveBeenCalledWith("meal:e1", "log"));
+  });
+
+  test("skip records a skip rather than a completion", async () => {
+    renderNow(active(0));
+
+    await userEvent.click(screen.getByRole("button", { name: "Skip" }));
+
+    await waitFor(() => expect(logItem).toHaveBeenCalledWith("meal:e1", "skip"));
+  });
+
+  test("skip advances the card too", async () => {
+    const pending = deferred<{ ok: boolean }>();
+
+    logItem.mockReturnValue(pending.promise);
+
+    renderNow(active(0));
+
+    await userEvent.click(screen.getByRole("button", { name: "Skip" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chicken salad"),
+    );
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(logItem).toHaveBeenCalledOnce());
+  });
+
+  test("marking the last item done shows the day as complete", async () => {
+    // The end of the timeline is where the client could most plausibly disagree
+    // with the server about what advancing means. Both go through `positionAt`.
+    const pending = deferred<{ ok: boolean }>();
+
+    logItem.mockReturnValue(pending.promise);
+
+    renderNow(active(3));
+
+    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Nothing left today"),
+    );
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(logItem).toHaveBeenCalledOnce());
+  });
+
+  test("says nothing at all when it works", async () => {
+    renderNow(active(0));
+
+    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+
+    await waitFor(() => expect(logItem).toHaveBeenCalledOnce());
+
+    // § Feedback: "Success: silent. The UI reflecting the new state IS the
+    // confirmation." No toast, no banner, no status region.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+describe("when a log fails", () => {
+  test("reverts the card and says so, at the point of action", async () => {
+    logItem.mockResolvedValue({ ok: false });
+
+    renderNow(active(0));
+
+    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+
+    // § Feedback: "inline banner at the point of action, value reverted, 'Try
+    // again'. Never a modal." Reverted means the card the tap was made from is
+    // back — not the one the tap moved to.
+    const banner = await screen.findByRole("alert");
+
+    expect(banner.textContent).toContain("Couldn’t save that.");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Overnight oats");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("try again re-runs the same tap", async () => {
+    logItem.mockResolvedValue({ ok: false });
+
+    renderNow(active(0));
+
+    await userEvent.click(screen.getByRole("button", { name: "Skip" }));
+    await screen.findByRole("alert");
+
+    logItem.mockResolvedValue({ ok: true });
+
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    // The same item and the same verb — a retry that quietly logged instead of
+    // skipping would be worse than no retry at all.
+    await waitFor(() => expect(logItem).toHaveBeenCalledTimes(2));
+    expect(logItem.mock.calls[1]).toEqual(["meal:e1", "skip"]);
+  });
+
+  test("the banner clears when the next tap is made", async () => {
+    logItem.mockResolvedValue({ ok: false });
+
+    renderNow(active(0));
+
+    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+    await screen.findByRole("alert");
+
+    logItem.mockResolvedValue({ ok: true });
+
+    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+});
+
+describe("undo", () => {
+  test("is not offered when nothing has been logged today", () => {
+    renderNow(active(0));
+
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  test("is offered from the action bar once something has been", () => {
+    renderNow(active(1), EXERCISES, oneLog());
+
+    expect(screen.getByRole("button", { name: "Undo" })).toBeDefined();
+  });
+
+  test("appears as soon as a log is made, without waiting for the server", async () => {
+    const pending = deferred<{ ok: boolean }>();
+
+    logItem.mockReturnValue(pending.promise);
+
+    renderNow(active(0));
+
+    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Undo" })).toBeDefined());
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(logItem).toHaveBeenCalledOnce());
+  });
+
+  test("is reachable after the last item of the day, where the tap was made", () => {
+    // The edge § Feedback's "from where it was performed" hides: logging the
+    // final item leaves a screen with no active card, and before FUEL-19 that
+    // state had no action bar for the undo to live in.
+    renderNow({ ...BASE, state: "day-complete" }, EXERCISES, oneLog());
+
+    expect(screen.getByRole("button", { name: "Undo" })).toBeDefined();
+  });
+
+  test("steps the card back", async () => {
+    const pending = deferred<{ ok: boolean }>();
+
+    undoLastLog.mockReturnValue(pending.promise);
+
+    renderNow(active(1), EXERCISES, oneLog());
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chicken salad");
+
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Overnight oats"),
+    );
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(undoLastLog).toHaveBeenCalledOnce());
+  });
+
+  test("reverts and says so when it fails", async () => {
+    undoLastLog.mockResolvedValue({ ok: false });
+
+    renderNow(active(1), EXERCISES, oneLog());
+
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    const banner = await screen.findByRole("alert");
+
+    expect(banner.textContent).toContain("Couldn’t undo that.");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chicken salad");
   });
 });

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { RightNow } from "@/components/right-now";
 import { getSession } from "@/lib/auth/session";
+import { readCursor } from "@/lib/cursor-cookie";
 import { loadToday } from "@/lib/db/queries/today";
 
 /**
@@ -37,7 +38,11 @@ export default async function Home() {
 
   if (!session) redirect("/login");
 
-  const today = await loadToday(session.userId, new Date());
+  // The manual advance so far. A cookie rather than client state, because the
+  // guarantee attached to a tap is that the view "is never wrong for longer than
+  // one tap" — which has to survive the phone being locked. `resolveNow` ignores
+  // one set on another date, so nothing here has to decide whether it is stale.
+  const today = await loadToday(session.userId, new Date(), await readCursor());
 
   // No profile row: the user exists but has not been set up, so there is no
   // timezone and therefore no day to resolve. An ordinary state before the seed
@@ -55,5 +60,5 @@ export default async function Home() {
     );
   }
 
-  return <RightNow view={today.view} exercises={today.exercises} />;
+  return <RightNow view={today.view} exercises={today.exercises} logs={today.logs} />;
 }
