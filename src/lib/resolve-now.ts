@@ -174,7 +174,14 @@ export type ScheduledItem = NowItem & {
 /** An item with no window: the daily walk, and any slot with no time set. */
 export type AnytimeItem = NowItem & { key: string };
 
-type NowViewBase = {
+/**
+ * Everything true of the day regardless of where it has got to.
+ *
+ * Exported because `positionAt` takes one, and P1's card holds one across an
+ * optimistic advance: the day's shape does not change when a tap moves the
+ * cursor, only the position within it does.
+ */
+export type NowViewBase = {
   /** The date in the configured timezone, which is the day being resolved. */
   date: CalendarDate;
   /** The clock, as minutes since local midnight. */
@@ -363,33 +370,66 @@ export function resolveNow({ plan, training, schedule, now, cursor }: NowInput):
   const minutesOfDay = minutesOfDayIn(schedule.timeZone, now);
   const { timeline, anytime } = buildTimeline(plan, training, schedule, date);
 
-  const base = { date, minutesOfDay, timeline, anytime };
+  // `max`, so the clock catching up with a tap changes nothing: one tap is one
+  // item, however long ago it was tapped.
+  return positionAt(
+    { date, minutesOfDay, timeline, anytime },
+    Math.max(clockIndex(timeline, minutesOfDay), cursorIndex(timeline, date, cursor)),
+  );
+}
 
+/**
+ * The day, viewed from one position in its timeline.
+ *
+ * The three states and the rules that separate them, in one place. `resolveNow`
+ * computes a position from the clock and the cursor and calls this; P1's card
+ * calls it again with an OPTIMISTIC position, so a tap can advance the screen on
+ * the current frame without waiting for the server (FUEL-19).
+ *
+ * That second caller is the reason this is exported rather than inlined above.
+ * The client cannot advance without deciding what "advanced" looks like — is the
+ * next item active, or is the day complete? — and a copy of that decision living
+ * in a component would be free to drift from this one, silently, in exactly the
+ * case that is hardest to notice: the last item of the day. One rule, one place,
+ * and the coverage gate on this file measures it once.
+ *
+ * The position is clamped at zero rather than trusted. It arrives from a
+ * `useOptimistic` reducer over data that can change underneath it, and a
+ * negative index would index the timeline into `undefined` — a crash on the one
+ * screen the app exists for, in place of a view that is merely early.
+ */
+export function positionAt(base: NowViewBase, index: number): NowView {
   // Before `program_start_date`, on a date the template does not cover, and on a
   // day whose every item is unscheduled. Ordinary states of the data, all three,
   // and the walk in `anytime` is still there to be logged.
-  if (timeline.length === 0) return { ...base, state: "nothing-planned" };
-
-  // `max`, so the clock catching up with a tap changes nothing: one tap is one
-  // item, however long ago it was tapped.
-  const index = Math.max(
-    clockIndex(timeline, minutesOfDay),
-    cursorIndex(timeline, date, cursor),
-  );
+  if (base.timeline.length === 0) return { ...base, state: "nothing-planned" };
 
   // Only the cursor reaches here: the last window has no end, so the clock alone
   // runs it to midnight and the date rolls over instead. Advancing past the last
   // item is therefore the deliberate "I'm done" — which is what makes it a state
   // and not a timeout someone has to configure.
-  if (index >= timeline.length) return { ...base, state: "day-complete" };
+  if (index >= base.timeline.length) return { ...base, state: "day-complete" };
+
+  const position = Math.max(0, index);
 
   return {
     ...base,
     state: "active",
-    index,
-    active: timeline[index]!,
-    upcoming: timeline.slice(index + 1),
+    index: position,
+    active: base.timeline[position]!,
+    upcoming: base.timeline.slice(position + 1),
   };
+}
+
+/**
+ * Where a view sits in its own timeline, including when nothing is active.
+ *
+ * Day-complete is one past the end, which is the position that produced it, and
+ * nothing-planned is zero of zero. Having a number for all three states is what
+ * lets the optimistic card advance from any of them without a branch per state.
+ */
+export function positionOf(view: NowView): number {
+  return view.state === "active" ? view.index : view.timeline.length;
 }
 
 /**
@@ -404,4 +444,35 @@ export function advance(view: NowView): Cursor | null {
   if (view.state !== "active") return null;
 
   return { date: view.date, advancedPast: view.active.key };
+}
+
+/**
+ * The cursor that steps one item BACK — what undo asks for.
+ *
+ * `null` here means "no cursor at all", not "nothing to do": stepping back to
+ * the first item of the day is expressed by having advanced past nothing, and
+ * the caller clears the cookie rather than writing one. That is the opposite
+ * sense to `advance`'s `null`, which is genuinely "there is nothing to advance
+ * past" — the asymmetry is why they are two functions and not one signed step.
+ *
+ * Works from a day-complete view as well as an active one, because undoing the
+ * last log of the day is exactly the case that has no active item to read.
+ *
+ * ## What this does not promise
+ *
+ * `resolveNow` takes `max(clock, cursor)`, so a cursor that steps back BEHIND
+ * the clock changes nothing on screen. Undo seconds after a tap — the case that
+ * actually happens — is unaffected, because the clock has not moved. Undoing
+ * something logged hours ago removes the row and leaves the card where the clock
+ * says it belongs. That is deliberate: a cursor able to drag the view backwards
+ * past the clock would let one stale tap make the screen wrong for the rest of
+ * the day, which is the failure this file's whole cursor design exists to avoid.
+ */
+export function retreat(view: NowView): Cursor | null {
+  // The item to bring back, which is the one before wherever the view sits.
+  const target = positionOf(view) - 1;
+
+  if (target <= 0) return null;
+
+  return { date: view.date, advancedPast: view.timeline[target - 1]!.key };
 }

@@ -3,11 +3,13 @@ import "server-only";
 import { asc, eq } from "drizzle-orm";
 
 import { todayIn } from "@/lib/date";
+import type { DayLogs } from "@/lib/log-intent";
 import { type Cursor, type NowView, resolveNow, scheduleFor } from "@/lib/resolve-now";
 import { getDb } from "../index";
 import * as schema from "../schema";
 import type { Profile, WorkoutExercise } from "../schema";
 import { scope } from "../scope";
+import { logsFor } from "./log";
 
 /**
  * Today, fetched — the one impure step between Postgres and `resolveNow`.
@@ -77,6 +79,17 @@ export type Today = {
    * it needs; nothing about the rotation changes.
    */
   exercises: ReadonlyMap<string, WorkoutExercise[]>;
+  /**
+   * What has already been logged today, both kinds.
+   *
+   * Not read by `resolveNow` — it never sees this, and the rotation resolving
+   * identically whether or not a session was logged is the guarantee that
+   * depends on it. This is here for FUEL-19's undo, which has to survive a
+   * reload to be available "for the rest of the day" and therefore cannot live
+   * in client state, and for the duplicate guard the log action applies before
+   * it writes.
+   */
+  logs: DayLogs;
 };
 
 /**
@@ -128,7 +141,7 @@ export async function loadToday(
   // the one resolution will look for — one clock, read once.
   const date = todayIn(profile.timezone, now);
 
-  const [meals, planTemplate, overrides, workouts, trainingTemplate, exerciseRows] =
+  const [meals, planTemplate, overrides, workouts, trainingTemplate, exerciseRows, logs] =
     await Promise.all([
       s.select(schema.meals),
       s.select(schema.planTemplateEntries),
@@ -138,6 +151,11 @@ export async function loadToday(
       s.select(schema.workoutExercises, undefined, {
         orderBy: [asc(schema.workoutExercises.sortOrder), asc(schema.workoutExercises.id)],
       }),
+      // Its own scope rather than two more `s.select`s, so the one description
+      // of what a day's logs are lives in log.ts with the writes that produce
+      // them. `getDb()` is memoised, so this is two more queries in the same
+      // parallel batch and not a second connection.
+      logsFor(userId, date),
     ]);
 
   const view = resolveNow({
@@ -157,5 +175,5 @@ export async function loadToday(
     cursor,
   });
 
-  return { view, profile, exercises: byWorkout(exerciseRows) };
+  return { view, profile, exercises: byWorkout(exerciseRows), logs };
 }

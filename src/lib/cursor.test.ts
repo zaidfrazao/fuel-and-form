@@ -1,0 +1,120 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import {
+  CURSOR_COOKIE,
+  cursorCookieOptions,
+  parseCursor,
+  serialiseCursor,
+} from "./cursor";
+import type { Cursor } from "./resolve-now";
+
+/**
+ * The cursor cookie's value and flags.
+ *
+ * Every branch in `parseCursor` is reachable by anyone who can edit a cookie in
+ * their own browser, which is what makes this worth a hermetic suite of its own
+ * rather than an incidental pass through the route: the interesting cases are
+ * all the malformed ones, and none of them appear on a happy path.
+ */
+
+const CURSOR: Cursor = { date: "2026-03-09", advancedPast: "meal:entry-7" };
+
+describe("serialiseCursor", () => {
+  it("writes the date and the key, separated", () => {
+    expect(serialiseCursor(CURSOR)).toBe("2026-03-09|meal:entry-7");
+  });
+
+  it("round-trips", () => {
+    expect(parseCursor(serialiseCursor(CURSOR))).toEqual(CURSOR);
+  });
+});
+
+describe("parseCursor", () => {
+  it("reads a cursor back", () => {
+    expect(parseCursor("2026-03-09|workout:entry-2")).toEqual({
+      date: "2026-03-09",
+      advancedPast: "workout:entry-2",
+    });
+  });
+
+  it("is null when there is no cookie at all", () => {
+    expect(parseCursor(undefined)).toBeNull();
+  });
+
+  it("is null for an empty cookie", () => {
+    expect(parseCursor("")).toBeNull();
+  });
+
+  it("is null without a separator", () => {
+    expect(parseCursor("2026-03-09")).toBeNull();
+  });
+
+  it("is null with a separator and no key", () => {
+    expect(parseCursor("2026-03-09|")).toBeNull();
+  });
+
+  it("is null when the date is not a date", () => {
+    expect(parseCursor("yesterday|meal:entry-7")).toBeNull();
+  });
+
+  it("is null when the date does not exist", () => {
+    // Through `parseCalendarDate`, so a date that passes the pattern and fails
+    // the calendar is refused here exactly as it is everywhere else.
+    expect(parseCursor("2026-02-30|meal:entry-7")).toBeNull();
+  });
+
+  it("keeps a key containing the separator's own character intact", () => {
+    // Split on the FIRST separator, not on every one. A key is a template entry
+    // id today, but the rule should not become a constraint on what a key may
+    // contain — a truncated key silently means a different item.
+    expect(parseCursor("2026-03-09|meal:a|b")).toEqual({
+      date: "2026-03-09",
+      advancedPast: "meal:a|b",
+    });
+  });
+
+  it("never throws, whatever it is handed", () => {
+    // A cookie is untrusted input on the one screen that must always render. A
+    // throw here would be a 500 on `/` for anyone who edited their own jar.
+    for (const raw of ["|", "||", "not a cursor", "2026-13-45|x", " |x"]) {
+      expect(() => parseCursor(raw)).not.toThrow();
+    }
+  });
+});
+
+describe("the cookie itself", () => {
+  const NODE_ENV = process.env.NODE_ENV;
+
+  afterEach(() => {
+    vi.stubEnv("NODE_ENV", NODE_ENV as string);
+  });
+
+  it("is named once, so the reader and the writer cannot disagree", () => {
+    expect(CURSOR_COOKIE).toBe("ff_cursor");
+  });
+
+  it("is http-only and same-site, at the root", () => {
+    const options = cursorCookieOptions();
+
+    // No script needs to read it, and `lax` keeps it off cross-site POSTs. The
+    // root path is what stops a tap made on one route writing a cursor another
+    // route cannot see.
+    expect(options.httpOnly).toBe(true);
+    expect(options.sameSite).toBe("lax");
+    expect(options.path).toBe("/");
+  });
+
+  it("drops Secure in development, where a browser would silently discard it", () => {
+    vi.stubEnv("NODE_ENV", "development");
+
+    expect(cursorCookieOptions().secure).toBe(false);
+  });
+
+  it("is Secure everywhere else, test and production alike", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    expect(cursorCookieOptions().secure).toBe(true);
+
+    vi.stubEnv("NODE_ENV", "test");
+    expect(cursorCookieOptions().secure).toBe(true);
+  });
+});
