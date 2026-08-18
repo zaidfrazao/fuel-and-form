@@ -1,0 +1,61 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+
+import { getSession } from "@/lib/auth/session";
+import { loadSchedule } from "@/lib/db/queries/profile";
+import { scheduleFields } from "@/lib/slot-times";
+import { SlotTimesForm } from "./slot-times-form";
+
+/**
+ * `/settings` — the slot times, editable. PRD § P1's last acceptance criterion.
+ *
+ * Thin, like `/`: the fetch is `lib/db/queries/profile.ts`, the render is the
+ * form beside this file, and the mapping from stored values to field values is
+ * `scheduleFields`. What happens here is the auth check and the wiring.
+ *
+ * ## The auth check is here rather than in a layout
+ *
+ * The reasoning `page.tsx` and `login/page.tsx` both set out: a check in a
+ * layout does not stop nested segments or Server Actions from running, so it
+ * belongs next to the data. `loadSchedule` is the next line, and it is scoped to
+ * the session's user. The Server Action behind the form resolves the session
+ * again for itself, because it is separately reachable.
+ */
+
+export const metadata: Metadata = {
+  title: "Settings · Fuel & Form",
+  robots: { index: false, follow: false },
+};
+
+export default async function SettingsPage() {
+  const session = await getSession();
+
+  if (!session) redirect("/login");
+
+  const schedule = await loadSchedule(session.userId);
+
+  return (
+    <main className="mx-auto flex min-h-dvh w-full max-w-[640px] flex-col gap-7 px-[22px] py-8 md:px-7">
+      <header className="flex flex-col gap-2">
+        <Link href="/" className="text-label text-text-secondary underline decoration-text-tertiary underline-offset-4">
+          Right Now
+        </Link>
+        <h1 className="text-title text-text-primary">Settings</h1>
+      </header>
+
+      {/* No profile row: the same ordinary state `/` renders, and for the same
+          reason — a user exists before the seed script sets one up. § Tone of
+          Voice asks an empty state to describe what will appear. Settings
+          cannot create one: a profile carries height, weight and macro targets
+          it has no values for. */}
+      {schedule ? (
+        <SlotTimesForm values={scheduleFields(schedule)} timezone={schedule.timezone} />
+      ) : (
+        <p className="text-body text-text-secondary">
+          Slot times appear here once a profile exists for this account.
+        </p>
+      )}
+    </main>
+  );
+}

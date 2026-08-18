@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { parseTimeOfDay } from "./date";
 import { mealSlot } from "./db/schema";
+import { DEFAULT_SLOT_TIMES, DEFAULT_WORKOUT_TIMES } from "./resolve-now";
 import { SLOT_ORDER } from "./resolve-plan";
 import {
   EDITABLE_WORKOUT_TYPES,
   parseSlotTimes,
+  scheduleFields,
   slotField,
   workoutField,
 } from "./slot-times";
@@ -193,5 +195,65 @@ describe("the field vocabulary", () => {
     for (const time of Object.values(update.slotTimes)) {
       expect(() => parseTimeOfDay(time!)).not.toThrow();
     }
+  });
+});
+
+describe("scheduleFields", () => {
+  it("shows the default for a slot that was never configured", () => {
+    // The time actually in force. A blank field would say the slot has no
+    // window, which is a different setting and a false one.
+    const fields = scheduleFields({ slotTimes: {}, workoutTimes: {} });
+
+    expect(fields[slotField("breakfast")]).toBe(DEFAULT_SLOT_TIMES.breakfast);
+    expect(fields[workoutField("circuit")]).toBe(DEFAULT_WORKOUT_TIMES.circuit);
+  });
+
+  it("prefers a stored time over the default", () => {
+    const fields = scheduleFields({ slotTimes: { lunch: "11:45" }, workoutTimes: {} });
+
+    expect(fields[slotField("lunch")]).toBe("11:45");
+  });
+
+  it("renders a slot cleared to null as blank, not as its default", () => {
+    // The case the whole three-state distinction exists for. Falling back to
+    // the default here would make a cleared slot un-clearable: it would come
+    // back on the next render and be re-saved on the next submit.
+    const fields = scheduleFields({ slotTimes: { lunch: null }, workoutTimes: {} });
+
+    expect(fields[slotField("lunch")]).toBe("");
+  });
+
+  it("renders a workout type cleared to null as blank", () => {
+    const fields = scheduleFields({ slotTimes: {}, workoutTimes: { circuit: null } });
+
+    expect(fields[workoutField("circuit")]).toBe("");
+    expect(fields[workoutField("intervals")]).toBe(DEFAULT_WORKOUT_TIMES.intervals);
+  });
+
+  it("gives a field to every slot and every editable workout type", () => {
+    const fields = scheduleFields({ slotTimes: {}, workoutTimes: {} });
+
+    expect(Object.keys(fields).sort()).toEqual(
+      [...SLOT_ORDER.map(slotField), ...EDITABLE_WORKOUT_TYPES.map(workoutField)].sort(),
+    );
+  });
+
+  it("round-trips through the parser unchanged", () => {
+    // Rendering the form and saving it without touching anything must not
+    // change the schedule. The two functions are each other's inverse over the
+    // values the form holds, and this is what says so.
+    const stored = {
+      slotTimes: { lunch: "11:45", snack: null },
+      workoutTimes: { circuit: "06:00" },
+    };
+    const fields = scheduleFields(stored);
+    const update = ok(parseSlotTimes(form(fields)));
+
+    expect(update.slotTimes.lunch).toBe("11:45");
+    expect(update.slotTimes.snack).toBeNull();
+    expect(update.workoutTimes.circuit).toBe("06:00");
+    // The slots that were on their defaults come back as explicit times rather
+    // than as absent keys — the intended consequence noted on `scheduleFields`.
+    expect(update.slotTimes.dinner).toBe(DEFAULT_SLOT_TIMES.dinner);
   });
 });

@@ -1,5 +1,6 @@
 import { type TimeOfDay } from "./date";
 import type { MealSlot } from "./db/schema";
+import { DEFAULT_SLOT_TIMES, DEFAULT_WORKOUT_TIMES } from "./resolve-now";
 import { SLOT_ORDER } from "./resolve-plan";
 
 /**
@@ -145,4 +146,40 @@ export function parseSlotTimes(form: FormData): ParseResult {
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
   return { ok: true, update: { slotTimes, workoutTimes } };
+}
+
+/**
+ * What the form's fields should start out holding.
+ *
+ * The three stored states collapse into two rendered ones, and the mapping is
+ * the whole point of this function: a slot never configured shows its DEFAULT,
+ * because that is the time actually in force and a blank field would claim
+ * otherwise; a slot cleared to `null` shows blank, because that is what it now
+ * means. Reading the stored value alone would render the first case as blank and
+ * invite someone to "fix" a setting that was already correct.
+ *
+ * One consequence, and it is intended: saving the form writes every field it
+ * renders, so times that were implicit defaults become explicit rows. After the
+ * first save the profile says what it means, and a later change to
+ * `DEFAULT_SLOT_TIMES` stops silently moving this user's day.
+ */
+export function scheduleFields(stored: {
+  slotTimes: Partial<Record<MealSlot, TimeOfDay | null>>;
+  workoutTimes: Record<string, TimeOfDay | null>;
+}): Record<string, string> {
+  const fields: Record<string, string> = {};
+
+  for (const slot of SLOT_ORDER) {
+    fields[slotField(slot)] = (slot in stored.slotTimes
+      ? stored.slotTimes[slot]
+      : DEFAULT_SLOT_TIMES[slot]) ?? "";
+  }
+
+  for (const type of EDITABLE_WORKOUT_TYPES) {
+    fields[workoutField(type)] = (type in stored.workoutTimes
+      ? stored.workoutTimes[type]
+      : DEFAULT_WORKOUT_TIMES[type]) ?? "";
+  }
+
+  return fields;
 }
