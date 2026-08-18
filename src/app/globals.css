@@ -188,7 +188,7 @@
 
   --border: #2a2724;
 
-  /* Near-opaque, per the mock. A 34% scrim over a #0c0b0a canvas is barely a
+  /* Near-opaque, per the mock. A 34% scrim over a canvas this dark is barely a
      change at all, and the sheet then has nothing to sit in front of. */
   --scrim: rgb(0 0 0 / 0.64);
 
