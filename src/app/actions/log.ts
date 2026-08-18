@@ -91,6 +91,15 @@ export async function logItem(key: string, verb: LogVerb): Promise<LogResult> {
 
     if (!session) return FAILED;
 
+    // `LogVerb` is a compile-time type, and this is a public POST endpoint, so
+    // nothing has checked the value at runtime by the time it arrives here.
+    // Without this, an unrecognised verb would fall through `logIntent`'s
+    // `verb === "log" ? … : …` and be recorded as a SKIP — a write, chosen by
+    // whoever sent the request, from input nobody validated. Failing open into
+    // a database row is the one thing a trust boundary must not do, even when
+    // the row it writes happens to be harmless.
+    if (verb !== "log" && verb !== "skip") return FAILED;
+
     const today = await loadToday(session.userId, new Date(), await readCursor());
 
     // No profile row: nothing is resolved, so there is nothing to log against.
@@ -100,9 +109,17 @@ export async function logItem(key: string, verb: LogVerb): Promise<LogResult> {
     const item = itemFor(view, key);
 
     // A key today's plan does not hold. Either a forged request, or a genuine
-    // tap on a card the plan changed underneath — a swap in another tab. Both
-    // are refused, and `refresh()` below is what would have corrected the second.
-    if (!item) return FAILED;
+    // tap on a card the plan changed underneath — a swap made in another tab.
+    // Both are refused; the second is also a screen that is out of date, and
+    // `refresh()` is what corrects it. It has to be called HERE rather than
+    // left to the one at the end, because this path returns before reaching it
+    // — so a stale tap would otherwise be refused and left stale, which is the
+    // opposite of "never wrong for longer than one tap".
+    if (!item) {
+      refresh();
+
+      return FAILED;
+    }
 
     const intent = logIntent(item, verb, view.date);
 

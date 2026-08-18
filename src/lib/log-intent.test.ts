@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { Meal, MealLog, Workout, WorkoutLog } from "./db/schema";
-import { alreadyLogged, type DayLogs, latestLog, logIntent } from "./log-intent";
+import {
+  alreadyLogged,
+  type DayLogs,
+  logCount,
+  latestLog,
+  logIntent,
+} from "./log-intent";
 import type { NowItem } from "./resolve-now";
 
 /**
@@ -189,6 +195,20 @@ describe("alreadyLogged", () => {
   it("does not confuse a meal log with a session log", () => {
     expect(alreadyLogged({ meals: [mealLog()], workouts: [] }, logIntent(WORKOUT_ITEM, "log", MON))).toBe(
       false,
+    );
+  });
+});
+
+describe("logCount", () => {
+  it("is zero when nothing has been logged", () => {
+    expect(logCount(NOTHING)).toBe(0);
+  });
+
+  it("counts both kinds together", () => {
+    // One number, because the card's only question is whether there is
+    // anything to take back — and the rows themselves stay on the server.
+    expect(logCount({ meals: [mealLog(), mealLog({ id: "b" })], workouts: [workoutLog()] })).toBe(
+      3,
     );
   });
 });

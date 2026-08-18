@@ -7,7 +7,7 @@ import { DayRuler } from "@/components/day-ruler";
 import { KeyValueGrid, SlashMeta } from "@/components/kv-grid";
 import { Button } from "@/components/ui/button";
 import type { Meal, WorkoutExercise } from "@/lib/db/schema";
-import type { DayLogs, LogVerb } from "@/lib/log-intent";
+import type { LogVerb } from "@/lib/log-intent";
 import { itemLabel, itemName, rulerSlots } from "@/lib/now-display";
 import {
   type AnytimeItem,
@@ -45,10 +45,12 @@ import {
  * only advance after a round trip, which is the thing being avoided.
  *
  * The consequence, stated rather than buried: the payload for `/` now carries
- * today's resolved rows instead of only their rendered HTML. That is the
+ * today's resolved timeline instead of only its rendered HTML. That is the
  * signed-in user's own data travelling over their own authenticated response —
  * no other user's rows are resolvable into it, because everything upstream is
- * scoped — but it is a real change from FUEL-18 and worth knowing about.
+ * scoped — but it is a real change from FUEL-18 and worth knowing about. Only
+ * what the optimistic advance genuinely needs crosses: the day's log history
+ * stays on the server and arrives as `logged`, a count.
  *
  * Progressive enhancement goes with it: these controls need JavaScript, because
  * optimistic UI is JavaScript. Neither the PRD nor the Brand Guide asks for a
@@ -407,13 +409,20 @@ const applyMove = (current: Progress, move: "logged" | "undone"): Progress =>
 export function RightNow({
   view,
   exercises,
-  logs,
+  logged,
 }: {
   view: NowView;
   /** `workouts.id` → its exercises, from `loadToday`. */
   exercises: ReadonlyMap<string, WorkoutExercise[]>;
-  /** Today's logs, from `loadToday`. What undo is offered from. */
-  logs: DayLogs;
+  /**
+   * How many logs today already holds — `logCount(today.logs)`.
+   *
+   * A number rather than the rows, because a count is all the undo affordance
+   * asks and the rows would otherwise be shipped to the browser to be counted
+   * there. The timeline has to cross that boundary for the optimistic advance
+   * to work at all; the log history does not, so it does not.
+   */
+  logged: number;
 }) {
   /*
    * The optimistic layer — § Feedback's "optimistic by default", and the whole
@@ -429,7 +438,7 @@ export function RightNow({
    * wrote neither, so the card and the undo control revert together.
    */
   const [progress, move] = useOptimistic(
-    { position: positionOf(view), logged: logs.meals.length + logs.workouts.length },
+    { position: positionOf(view), logged },
     applyMove,
   );
 
@@ -441,21 +450,38 @@ export function RightNow({
     startTransition(async () => {
       move(attempt.kind === "undo" ? "undone" : "logged");
 
-      const result =
-        attempt.kind === "undo"
-          ? await undoLastLog()
-          : await logItem(attempt.key, attempt.verb);
+      // The `try` covers the CALL, not the action. `logItem` and `undoLastLog`
+      // catch everything themselves and answer `{ ok: false }` — but reaching
+      // them is a network request, and that request can fail on its own: no
+      // signal in a kitchen, a dropped connection, a cold start that times out.
+      // Those reject rather than resolve, and without this the rejection would
+      // escape the transition: no banner, no "Try again", and an unhandled
+      // rejection in the console. The optimistic value reverts either way, so
+      // the screen would silently undo the tap and never say why — which is
+      // the failure mode § Feedback exists to rule out, on the connection this
+      // app is most likely to meet.
+      try {
+        const result =
+          attempt.kind === "undo"
+            ? await undoLastLog()
+            : await logItem(attempt.key, attempt.verb);
 
-      // Success is silent — § Feedback: "the UI reflecting the new state IS the
-      // confirmation". There is no toast here on purpose; the card has already
-      // moved on, which is the only acknowledgement a routine log gets.
-      //
-      // The transition wrapper is not optional. React does not treat a state
-      // update after an `await` as part of the transition it was started in, so
-      // without it the banner would paint a frame before the optimistic value
-      // reverts — the failure message arriving over the card that is about to
-      // disappear.
-      if (!result.ok) startTransition(() => setFailure(attempt));
+        // Success is silent — § Feedback: "the UI reflecting the new state IS
+        // the confirmation". There is no toast here on purpose; the card has
+        // already moved on, which is the only acknowledgement a routine log
+        // gets.
+        //
+        // The transition wrapper is not optional. React does not treat a state
+        // update after an `await` as part of the transition it was started in,
+        // so without it the banner would paint a frame before the optimistic
+        // value reverts — the failure message arriving over the card that is
+        // about to disappear.
+        if (!result.ok) startTransition(() => setFailure(attempt));
+      } catch {
+        // The same banner as a refused action. The two are one event to whoever
+        // is holding the phone: it did not save, and here is how to try again.
+        startTransition(() => setFailure(attempt));
+      }
     });
   }
 

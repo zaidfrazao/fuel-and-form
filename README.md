@@ -214,12 +214,15 @@ authoritative, because it is what P7's reaper reads and what can be shortened
 
 ### Cookies
 
-Two, `ff_owner` and `ff_demo`, both `HttpOnly` + `SameSite=Lax` + `Secure` +
-`path=/`. The cookie **name** carries the kind and the payload does not repeat
-it, so there is one fact rather than two that could disagree; `users.kind` must
-then match the name, which is what stops a genuine demo token being worth
-anything in the owner's jar. Separate cookies also mean signing out of the demo
-leaves the owner signed in.
+Three: two sessions, `ff_owner` and `ff_demo`, plus `ff_cursor`, which is a view
+position rather than an identity (see below). All are `HttpOnly` +
+`SameSite=Lax` + `Secure` + `path=/`.
+
+For the two sessions, the cookie **name** carries the kind and the payload does
+not repeat it, so there is one fact rather than two that could disagree;
+`users.kind` must then match the name, which is what stops a genuine demo token
+being worth anything in the owner's jar. Separate cookies also mean signing out
+of the demo leaves the owner signed in.
 
 `Secure` is omitted only under `next dev`, where the app is served over
 `http://localhost` and the browser would drop a Secure cookie silently — login
@@ -230,6 +233,16 @@ The token is **signed, not encrypted**: whoever holds the cookie can read the
 user id and expiry inside it. That is deliberate — a user id is not a secret,
 and `scope()` already assumes an attacker may know one. Nothing sensitive may be
 added to that payload later on the assumption that it is hidden.
+
+`ff_cursor` is the odd one out and is **not signed**. It holds how far the
+manual advance on `/` has got — a date and an item key, as `2026-03-09|meal:<id>`
+— and the only thing forging one achieves is the screen you would get by tapping
+Skip. A signature would imply a threat that does not exist. It carries no expiry
+either: the date inside it is the expiry, checked against the user's *configured*
+timezone by `resolveNow`, which a deadline set on a server has no access to. The
+value is parsed by `src/lib/cursor.ts`, which returns `null` for anything
+malformed rather than throwing — `/` is the one screen that must always render,
+and a cookie a stranger controls must not be able to 500 it.
 
 ### Migrations
 

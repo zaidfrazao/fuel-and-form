@@ -177,6 +177,26 @@ describe("what it refuses", () => {
     expect(writeCursor).not.toHaveBeenCalled();
   });
 
+  test("still reconciles the screen when the key is stale", async () => {
+    // The second of those two cases is a screen that is out of date, and this
+    // path returns before reaching the `refresh()` at the end. Without one
+    // here, a tap on a card the plan changed underneath would be refused and
+    // left stale — the opposite of "never wrong for longer than one tap".
+    await logItem("meal:not-on-the-plan", "log");
+
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  test("refuses a verb it does not recognise, without writing", async () => {
+    // `LogVerb` is a compile-time type and this is a public POST endpoint, so
+    // nothing has checked the value by the time it arrives. Unchecked, it would
+    // fall through to "not 'log'" and be recorded as a SKIP — a write chosen by
+    // whoever sent the request.
+    expect(await logItem("meal:e1", "eat" as never)).toEqual({ ok: false });
+    expect(recordLog).not.toHaveBeenCalled();
+    expect(loadToday).not.toHaveBeenCalled();
+  });
+
   test("refuses an undo without a session", async () => {
     getSession.mockResolvedValue(undefined);
 

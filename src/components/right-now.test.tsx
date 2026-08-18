@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { RightNow } from "@/components/right-now";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
-import type { DayLogs } from "@/lib/log-intent";
 import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve-now";
 
 /**
@@ -176,30 +175,12 @@ const EXERCISES = new Map<string, WorkoutExercise[]>([
   ],
 ]);
 
-const NO_LOGS: DayLogs = { meals: [], workouts: [] };
-
-/** One meal log, which is all the undo affordance reads: that there is one. */
-const oneLog = (): DayLogs => ({
-  meals: [
-    {
-      id: "log-1",
-      userId: USER,
-      date: "2026-08-18",
-      slot: "breakfast",
-      mealId: "meal-1",
-      status: "eaten",
-      note: null,
-      loggedAt: new Date("2026-08-18T07:05:00Z"),
-    },
-  ],
-  workouts: [],
-});
-
 const renderNow = (
   view: NowView,
   exercises: ReadonlyMap<string, WorkoutExercise[]> = EXERCISES,
-  logs: DayLogs = NO_LOGS,
-) => render(<RightNow view={view} exercises={exercises} logs={logs} />);
+  /** How many logs today already holds — all the undo affordance reads. */
+  logged = 0,
+) => render(<RightNow view={view} exercises={exercises} logged={logged} />);
 
 /* -------------------------------------------------------------------------- */
 /* The active card                                                            */
@@ -689,6 +670,24 @@ describe("when a log fails", () => {
     expect(logItem.mock.calls[1]).toEqual(["meal:e1", "skip"]);
   });
 
+  test("says so when the request itself never reaches the server", async () => {
+    // Not a refused action — a rejected CALL. No signal in a kitchen, a dropped
+    // connection, a cold start that times out. The action's own try/catch
+    // cannot help here because the failure is on the way to it, and without a
+    // catch on this side the tap would be silently undone with nothing said.
+    logItem.mockRejectedValue(new Error("Failed to fetch"));
+
+    renderNow(active(0));
+
+    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+
+    const banner = await screen.findByRole("alert");
+
+    expect(banner.textContent).toContain("Couldn’t save that.");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Overnight oats");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeDefined();
+  });
+
   test("the banner clears when the next tap is made", async () => {
     logItem.mockResolvedValue({ ok: false });
 
@@ -713,7 +712,7 @@ describe("undo", () => {
   });
 
   test("is offered from the action bar once something has been", () => {
-    renderNow(active(1), EXERCISES, oneLog());
+    renderNow(active(1), EXERCISES, 1);
 
     expect(screen.getByRole("button", { name: "Undo" })).toBeDefined();
   });
@@ -737,7 +736,7 @@ describe("undo", () => {
     // The edge § Feedback's "from where it was performed" hides: logging the
     // final item leaves a screen with no active card, and before FUEL-19 that
     // state had no action bar for the undo to live in.
-    renderNow({ ...BASE, state: "day-complete" }, EXERCISES, oneLog());
+    renderNow({ ...BASE, state: "day-complete" }, EXERCISES, 1);
 
     expect(screen.getByRole("button", { name: "Undo" })).toBeDefined();
   });
@@ -747,7 +746,7 @@ describe("undo", () => {
 
     undoLastLog.mockReturnValue(pending.promise);
 
-    renderNow(active(1), EXERCISES, oneLog());
+    renderNow(active(1), EXERCISES, 1);
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chicken salad");
 
@@ -761,10 +760,20 @@ describe("undo", () => {
     await waitFor(() => expect(undoLastLog).toHaveBeenCalledOnce());
   });
 
+  test("says so when the undo request never reaches the server", async () => {
+    undoLastLog.mockRejectedValue(new Error("Failed to fetch"));
+
+    renderNow(active(1), EXERCISES, 1);
+
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Couldn’t undo that.");
+  });
+
   test("reverts and says so when it fails", async () => {
     undoLastLog.mockResolvedValue({ ok: false });
 
-    renderNow(active(1), EXERCISES, oneLog());
+    renderNow(active(1), EXERCISES, 1);
 
     await userEvent.click(screen.getByRole("button", { name: "Undo" }));
 

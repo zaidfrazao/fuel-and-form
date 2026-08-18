@@ -136,6 +136,18 @@ export function alreadyLogged(logs: DayLogs, intent: LogIntent): boolean {
 }
 
 /**
+ * How many logs today holds, both kinds.
+ *
+ * The only thing P1's card needs to know about them: whether there is anything
+ * to undo, and — while a tap is in flight — whether there still would be. The
+ * screen is handed this number rather than the rows themselves, so the log
+ * history does not travel to the browser to be counted there.
+ */
+export function logCount(logs: DayLogs): number {
+  return logs.meals.length + logs.workouts.length;
+}
+
+/**
  * The most recent log of the day — what undo takes back.
  *
  * Brand Guide § Feedback: "any log or swap is revertible from where it was

@@ -4,6 +4,7 @@ import { RightNow } from "@/components/right-now";
 import { getSession } from "@/lib/auth/session";
 import { readCursor } from "@/lib/cursor-cookie";
 import { loadToday } from "@/lib/db/queries/today";
+import { logCount } from "@/lib/log-intent";
 
 /**
  * `/` — the "Right Now" view. PRD § P1.
@@ -60,5 +61,11 @@ export default async function Home() {
     );
   }
 
-  return <RightNow view={today.view} exercises={today.exercises} logs={today.logs} />;
+  return (
+    <RightNow
+      view={today.view}
+      exercises={today.exercises}
+      logged={logCount(today.logs)}
+    />
+  );
 }
