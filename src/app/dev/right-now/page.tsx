@@ -234,7 +234,7 @@ export default async function RightNowSpecimen({
           its top. A fixed bar across the top was tried and hid the 40px title
           behind itself in every screenshot. Each case is addressable by URL, so
           the switcher is a convenience rather than the way in. */}
-      <RightNow view={current.view} exercises={EXERCISES} />
+      <RightNow view={current.view} exercises={EXERCISES} logged={0} />
 
       <div className="mx-auto flex max-w-[640px] flex-col gap-3 border-t border-border px-[22px] py-6 md:px-7">
         <p className="text-slash text-text-tertiary">{current.note}</p>

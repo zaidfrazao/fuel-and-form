@@ -56,7 +56,9 @@ export default defineConfig({
         "src/lib/auth/token.ts",
         "src/lib/auth/compare.ts",
         "src/lib/auth/cookies.ts",
+        "src/lib/cursor.ts",
         "src/lib/date.ts",
+        "src/lib/log-intent.ts",
         "src/lib/macros.ts",
         "src/lib/resolve-plan.ts",
         "src/lib/resolve-now.ts",
@@ -79,6 +81,15 @@ export default defineConfig({
         // ever exercised by a running browser is one no test can hold still,
         // and losing `httpOnly` looks identical until someone reads the cookie.
         "src/lib/auth/cookies.ts": FULLY_COVERED,
+        // FUEL-19, and the untrusted-input half of it. Every branch in
+        // `parseCursor` is reachable by anyone who can edit a cookie in their
+        // own browser, and the one that matters most is the one that must NOT
+        // throw: `/` is the screen the app exists for, and a malformed cookie
+        // turning it into a 500 would be a self-inflicted denial of the only
+        // view that has to render. The flags are here for the same reason
+        // auth/cookies.ts is — a property only a real browser exercises is one
+        // no test can hold still.
+        "src/lib/cursor.ts": FULLY_COVERED,
         // § 1.1. date.ts is here because it is where resolve-plan.ts keeps its
         // date arithmetic — a gate on the resolver that let its own calendar
         // maths go unmeasured would cover the easy half of the risk the PRD
@@ -93,6 +104,13 @@ export default defineConfig({
         // in the server's zone. None of them throw, so an unmeasured branch here
         // is a screen that is confidently wrong with nothing to notice it.
         "src/lib/resolve-now.ts": FULLY_COVERED,
+        // FUEL-19's decision layer: which row a tap becomes, whether one like
+        // it already exists, and which one undo takes back. Every way it can be
+        // wrong is silent and plausible — a skip filed as 'eaten', a double-tap
+        // doubling a day's protein, an undo removing the wrong log — and none
+        // of them surface on the screen that caused them. The gate is here
+        // because the writes it decides are the only ones P1 makes.
+        "src/lib/log-intent.ts": FULLY_COVERED,
         // § 1.3. The totals are what P4 puts in front of a swap, so an
         // unmeasured branch here is a number the user is asked to trust that
         // nothing checked. The rounding and the untracked skip are both single
