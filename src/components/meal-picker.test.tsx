@@ -68,10 +68,14 @@ type Overrides = Partial<Parameters<typeof MealPicker>[0]>;
 function Harness({
   meals = LIBRARY,
   currentMealId = CHICKEN.id,
+  // Not part of the picker's own props: most cases want the sheet already up,
+  // and the focus-restore case has to start closed so there is a real opening
+  // to restore to.
+  initialOpen = true,
   ...rest
-}: Overrides) {
+}: Overrides & { initialOpen?: boolean }) {
   const [selected, setSelected] = useState<string | null>(currentMealId ?? null);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(initialOpen);
 
   return (
     <>
@@ -96,7 +100,7 @@ function Harness({
   );
 }
 
-function Picker(overrides: Overrides = {}) {
+function Picker(overrides: Overrides & { initialOpen?: boolean } = {}) {
   return render(<Harness {...overrides} />);
 }
 
@@ -303,5 +307,24 @@ describe("the sheet", () => {
     Picker();
 
     expect(screen.getByRole("dialog", { name: /Swap dinner/ })).toBeTruthy();
+  });
+
+  test("gives focus back to whatever opened it", async () => {
+    const user = userEvent.setup();
+    Picker({ initialOpen: false });
+
+    const trigger = screen.getByRole("button", { name: "Swap" });
+
+    await user.click(trigger);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+
+    await user.keyboard("{Escape}");
+
+    // Radix restores to a `Dialog.Trigger`, and this sheet is controlled with
+    // no trigger element — left to itself it focuses null and drops the user on
+    // `<body>`, one Escape away from having lost their place entirely. Caught
+    // in a browser rather than here, which is why the assertion is on the
+    // element and not merely on "something is focused".
+    expect(document.activeElement).toBe(trigger);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import { Dialog } from "radix-ui";
 
 import { cn } from "@/lib/utils";
@@ -52,6 +52,24 @@ export type SheetProps = {
 };
 
 export function Sheet({ open, onOpenChange, title, meta, children, className }: SheetProps) {
+  /**
+   * Whatever had focus when the sheet opened, so it can be given it back.
+   *
+   * Radix restores focus to a `Dialog.Trigger`, and this sheet is controlled —
+   * `open` comes from the caller, there is no trigger element for Radix to hold
+   * a ref to. Its close handler therefore cancels the default restore and then
+   * focuses `null`, which drops the user on `<body>`: for anyone on a keyboard,
+   * closing the picker means losing their place and tabbing back through the
+   * whole page. § Accessibility does not spell this case out, but "focus is
+   * never removed" is plainly about not doing that.
+   *
+   * Captured in `onOpenAutoFocus` because that fires in the moment before Radix
+   * moves focus into the sheet — `document.activeElement` is still the control
+   * that opened it. An effect would be too late: child effects run before the
+   * parent's, so focus is already inside the content by then.
+   */
+  const opener = useRef<HTMLElement | null>(null);
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -69,6 +87,23 @@ export function Sheet({ open, onOpenChange, title, meta, children, className }: 
           // by its own contents — a grid of named tiles — and inventing a
           // sentence for a screen reader to read before them would be noise.
           aria-describedby={undefined}
+          onOpenAutoFocus={() => {
+            opener.current = document.activeElement as HTMLElement | null;
+          }}
+          onCloseAutoFocus={(event) => {
+            const trigger = opener.current;
+
+            // Only take the event over when there is somewhere to put focus.
+            // `isConnected` because the opener may have been unmounted while
+            // the sheet was up — a grid cell behind a re-render — and focusing
+            // a detached node silently does nothing at all, which is the same
+            // dead end by a longer route. Left alone, Radix's own handler runs
+            // and lands on `<body>`, which is the honest last resort.
+            if (!trigger?.isConnected) return;
+
+            event.preventDefault();
+            trigger.focus();
+          }}
           className={cn(
             // `max-w` with `mx-auto` so the sheet stops at the guide's 640px
             // single-column measure instead of stretching across a desktop.
