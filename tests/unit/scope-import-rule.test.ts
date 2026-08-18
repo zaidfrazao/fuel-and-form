@@ -89,6 +89,12 @@ describe("raw database handles are blocked from src/", () => {
     "@/lib/db/./index", // dot segment
     "@/lib/db//index", // doubled separator
     "@/lib/db/../db", // normalises back into the directory
+
+    // The queries/ allowance is one segment deep, so nothing may climb out of
+    // it. Each of these resolves back onto the raw handle.
+    "@/lib/db/queries/../index",
+    "@/lib/db/queries/./../pool",
+    "@/lib/db/queries", // the directory itself is not a module
   ];
 
   it.each(forbidden)("blocks %s", async (specifier) => {
@@ -106,12 +112,20 @@ describe("the scope layer itself is importable", () => {
   // definitions, and a table object with no executor cannot run a statement —
   // while `scope()` requires those objects as arguments, so forbidding them
   // forbids scoped writes and nothing else.
+  // `db/queries/*` is the third exception, and the one an app route depends on:
+  // a query module binds `scope(userId, getDb())` and hands back ROWS, never a
+  // handle or a builder. Something has to bind that scope for a request, and
+  // only src/lib/db/ may hold the getDb() half — so the module that does it has
+  // to be importable from outside, or the app cannot read anything at all.
   const allowed = [
     "@/lib/db/scope",
     "@/lib/db/schema",
     "@/lib/db/scope.ts",
     "@/lib/db/schema.js",
     "../db/scope",
+    "@/lib/db/queries/today",
+    "@/lib/db/queries/today.ts",
+    "../db/queries/today",
   ];
 
   it.each(allowed)("allows %s", async (specifier) => {

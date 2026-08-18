@@ -54,7 +54,7 @@ const noRawDatabaseHandles = {
             // cannot re-include a file whose parent directory is excluded.
             //
             // DEFAULT DENY: anything naming the `db` directory is restricted,
-            // and the two safe siblings are the named exceptions.
+            // and the safe siblings are the named exceptions.
             //
             // Enumerating the forbidden spellings instead was tried twice and
             // failed twice. `(^|/)db(/pool)?$` let `@/lib/db/index` and
@@ -70,16 +70,32 @@ const noRawDatabaseHandles = {
             // src/lib/db/ later is restricted the day it appears, rather than
             // being reachable until someone remembers to extend a denylist.
             //
-            // Neither exception can bypass the scope. `scope.ts` IS the choke
-            // point and holds no connection: it takes its executor as an
-            // argument. `schema.ts` is table definitions, and a table object
-            // with no executor cannot run a statement — while `scope()` takes
-            // those objects as arguments, so restricting them would restrict
-            // scoped writes and nothing else.
+            // No exception can bypass the scope. `scope.ts` IS the choke point
+            // and holds no connection: it takes its executor as an argument.
+            // `schema.ts` is table definitions, and a table object with no
+            // executor cannot run a statement — while `scope()` takes those
+            // objects as arguments, so restricting them would restrict scoped
+            // writes and nothing else.
+            //
+            // `db/queries/*` is the third, and it is a CATEGORY rather than a
+            // filename (FUEL-18). Something has to bind a scope to a handle for
+            // a request — `scope(session.userId, getDb())` — and only this
+            // directory may hold the `getDb()` half. A query module is what
+            // comes out of that: it runs scoped statements and returns ROWS,
+            // never a handle, never a builder, never a `Scope`. That is the
+            // same line scope.ts draws one level up, and it is what makes one
+            // safe to import from `app/`.
+            //
+            // A directory rather than a growing list of names, because P2's
+            // week loader and P4's totals are the same shape — and a rule
+            // edited once per feature is a rule nobody reads. Exactly one
+            // segment is allowed after `queries/`, so `db/queries/../index`
+            // normalises back onto the handle and stays refused.
             //
             // tests/unit/scope-import-rule.test.ts runs this config over every
             // spelling above, in both directions.
-            regex: "^(?!.*/(scope|schema)(\\.[tj]s)?$).*(^|/)db(/.*)?$",
+            regex:
+              "^(?!.*/(scope|schema)(\\.[tj]s)?$)(?!.*/db/queries/[^/]+$).*(^|/)db(/.*)?$",
             allowTypeImports: true,
             message:
               "Import scope() from @/lib/db/scope instead. getDb() and getPool() " +
