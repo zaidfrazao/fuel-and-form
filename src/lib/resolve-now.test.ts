@@ -17,7 +17,11 @@ import {
   DEFAULT_WORKOUT_TIMES,
   type NowItem,
   type NowView,
+  type NowViewBase,
+  positionAt,
+  positionOf,
   resolveNow,
+  retreat,
   type Schedule,
   scheduleFor,
 } from "./resolve-now";
@@ -783,5 +787,134 @@ describe("a malformed slot time", () => {
     };
 
     expect(() => resolve(clock(MON, "09:00"), null, typo)).toThrow(/Not a time of day/);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Positioning — the rule P1's optimistic card shares with the resolver        */
+/* -------------------------------------------------------------------------- */
+
+/** The day's shape on its own, which is what a position is applied to. */
+const baseFor = (date: CalendarDate, time: string): NowViewBase => {
+  const view = resolve(clock(date, time));
+
+  return {
+    date: view.date,
+    minutesOfDay: view.minutesOfDay,
+    timeline: view.timeline,
+    anytime: view.anytime,
+  };
+};
+
+/** A day where everything is unscheduled — the walk, and nothing else. */
+const EMPTY_DAY: NowViewBase = {
+  date: MON,
+  minutesOfDay: 9 * 60,
+  timeline: [],
+  anytime: [],
+};
+
+describe("positionAt", () => {
+  it("gives the same answer the resolver gives for the same position", () => {
+    // The whole reason it is exported: the card advances by calling this, and a
+    // second implementation living in a component would be free to disagree
+    // with the server about what a tap did.
+    const view = resolve(clock(MON, "13:30"));
+    const base = baseFor(MON, "13:30");
+
+    expect(positionAt(base, view.state === "active" ? view.index : -1)).toEqual(view);
+  });
+
+  it("names the item at the position, and everything after it as upcoming", () => {
+    const base = baseFor(MON, "07:30");
+
+    const view = positionAt(base, 2);
+
+    expect(activeName(view)).toBe("yoghurt");
+    expect(view.state === "active" && namesOf(view.upcoming)).toEqual([
+      "salad",
+      "circuit-b",
+      "chilli",
+    ]);
+  });
+
+  it("is day-complete one past the end", () => {
+    const base = baseFor(MON, "07:30");
+
+    expect(positionAt(base, base.timeline.length).state).toBe("day-complete");
+  });
+
+  it("is nothing-planned when the day has no scheduled items at all", () => {
+    // A day whose every item is unscheduled. Position is irrelevant when there
+    // is nothing to be positioned in, so it is checked at both ends.
+    expect(positionAt(EMPTY_DAY, 0).state).toBe("nothing-planned");
+    expect(positionAt(EMPTY_DAY, 4).state).toBe("nothing-planned");
+  });
+
+  it("clamps a negative position rather than indexing off the front", () => {
+    // Reachable from the optimistic reducer: undo taken twice against a base
+    // that has already moved back. `timeline[-1]` is `undefined`, and rendering
+    // that is a crash on the one screen that must always render.
+    const base = baseFor(MON, "07:30");
+
+    expect(activeName(positionAt(base, -3))).toBe("coffee");
+  });
+});
+
+describe("positionOf", () => {
+  it("reads the index of an active view", () => {
+    const view = resolve(clock(MON, "13:30"));
+
+    expect(positionOf(view)).toBe(3);
+  });
+
+  it("puts a day-complete view one past the end, where it came from", () => {
+    // The round trip that matters: a position turned into a view and back.
+    const base = baseFor(MON, "19:30");
+    const complete = positionAt(base, base.timeline.length);
+
+    expect(complete.state).toBe("day-complete");
+    expect(positionOf(complete)).toBe(base.timeline.length);
+  });
+
+  it("puts a nothing-planned view at zero of zero", () => {
+    expect(positionOf(positionAt(EMPTY_DAY, 0))).toBe(0);
+  });
+});
+
+describe("retreat", () => {
+  it("names the item before the one being taken back", () => {
+    // At 13:30 the salad is active; undoing the yoghurt's log brings the
+    // yoghurt back, which means having advanced past the oats and no further.
+    const view = resolve(clock(MON, "13:30"));
+
+    expect(activeName(view)).toBe("salad");
+    expect(retreat(view)).toEqual({
+      date: MON,
+      advancedPast: view.state === "active" ? view.timeline[view.index - 2]!.key : null,
+    });
+    expect(activeName(positionAt(baseFor(MON, "13:30"), 2))).toBe("yoghurt");
+  });
+
+  it("clears the cursor at the start of the day, rather than pointing before it", () => {
+    const view = resolve(clock(MON, "06:30"));
+
+    expect(retreat(view)).toBeNull();
+  });
+
+  it("steps back into the last item from a day-complete view", () => {
+    // The case with no active item to read, and the one that happens every time
+    // the final log of the day is taken back.
+    const base = baseFor(MON, "19:30");
+    const complete = positionAt(base, base.timeline.length);
+
+    expect(retreat(complete)).toEqual({
+      date: MON,
+      advancedPast: base.timeline[base.timeline.length - 2]!.key,
+    });
+  });
+
+  it("has nothing to step back into on a day with no timeline", () => {
+    expect(retreat(positionAt(EMPTY_DAY, 0))).toBeNull();
   });
 });

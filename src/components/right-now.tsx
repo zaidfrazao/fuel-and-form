@@ -362,7 +362,8 @@ function Actions({
  * The bottom gutter is deliberately absent here and sits on the action bar
  * instead — see `Actions`, which is pinned to `bottom: 0` and would otherwise
  * be pinned below the page's own padding rather than inside it. The two quiet
- * states have no bar, so they carry the same inset themselves.
+ * states carry the same inset themselves, because their bar is conditional:
+ * it is there only when a log can be taken back.
  */
 function Screen({ children }: { children: ReactNode }) {
   return (
