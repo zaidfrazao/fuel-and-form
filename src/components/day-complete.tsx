@@ -1,6 +1,7 @@
 import { KeyValueGrid, type KeyValueItem } from "@/components/kv-grid";
 import type { CalendarDate } from "@/lib/date";
 import { entryTotals, type LoggedEntry, type LogStatus } from "@/lib/day-summary";
+import { figure, signed } from "@/lib/format";
 import { deltaFromTarget, type MacroTarget, type MacroTotals } from "@/lib/macros";
 import { dayLabel } from "@/lib/now-display";
 import { cn } from "@/lib/utils";
@@ -43,38 +44,6 @@ import { cn } from "@/lib/utils";
  * a number that pretended otherwise would be the app having an opinion about
  * someone's eating. The four figures and the log are the whole report.
  */
-
-/* -------------------------------------------------------------------------- */
-/* Numbers                                                                    */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Grouped thousands, at most one decimal — `1,715`, `32.5`.
- *
- * A fixed locale rather than the visitor's: `Intl` with no locale reads the
- * runtime's, which would print `1.715` for a European browser against a brand
- * voice written in English, and would make the suite's assertions depend on the
- * machine running them.
- *
- * One decimal because that is what the grams columns store (`numeric(6, 1)`).
- * kcal is an integer column, so the option never fires on it.
- */
-const NUMBER = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 1 });
-
-/**
- * A delta, with the Brand Guide's sign in front of it.
- *
- * U+2212 MINUS SIGN, not a hyphen: it is the glyph the guide writes the
- * convention in (`−21`, never "21 under") and the one that lines up under
- * tabular figures. Zero carries no sign at all — `+0` and `−0` both read as a
- * near miss on a day that hit the target exactly, and `macros.ts` already
- * guarantees the value is a true zero rather than JavaScript's `-0`.
- */
-function signed(value: number): string {
-  if (value === 0) return "0";
-
-  return value > 0 ? `+${NUMBER.format(value)}` : `−${NUMBER.format(-value)}`;
-}
 
 /* -------------------------------------------------------------------------- */
 /* Pieces                                                                     */
@@ -134,32 +103,32 @@ function Figures({ actual, target }: { actual: MacroTotals; target: MacroTarget 
 
   const meta = (targetValue: number, deltaValue: number) => (
     <>
-      of {NUMBER.format(targetValue)} · {signed(deltaValue)}
+      of {figure(targetValue)} · {signed(deltaValue)}
     </>
   );
 
   const items: KeyValueItem[] = [
     {
       label: "Target",
-      value: NUMBER.format(target.targetKcal),
+      value: figure(target.targetKcal),
       meta: (
         <span className={cn(delta.kcal > 0 && "text-error")}>{signed(delta.kcal)}</span>
       ),
     },
     {
       label: "Protein",
-      value: `${NUMBER.format(actual.proteinG)} g`,
+      value: `${figure(actual.proteinG)} g`,
       meta: meta(target.targetProteinG, delta.proteinG),
       emphasis: true,
     },
     {
       label: "Fat",
-      value: `${NUMBER.format(actual.fatG)} g`,
+      value: `${figure(actual.fatG)} g`,
       meta: meta(target.targetFatG, delta.fatG),
     },
     {
       label: "Carbs",
-      value: `${NUMBER.format(actual.carbG)} g`,
+      value: `${figure(actual.carbG)} g`,
       meta: meta(target.targetCarbG, delta.carbG),
     },
   ];
@@ -284,7 +253,7 @@ export function DayComplete({
             number and not as a labelled cell. */}
         <p className="flex items-baseline gap-[10px]">
           <span className="text-display text-text-primary">
-            {NUMBER.format(actual.kcal)}
+            {figure(actual.kcal)}
           </span>
           <span className="text-micro text-text-secondary uppercase">kcal</span>
         </p>

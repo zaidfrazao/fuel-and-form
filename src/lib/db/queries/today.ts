@@ -5,9 +5,10 @@ import { asc, eq } from "drizzle-orm";
 import { todayIn } from "@/lib/date";
 import type { DayLogs } from "@/lib/log-intent";
 import { type Cursor, type NowView, resolveNow, scheduleFor } from "@/lib/resolve-now";
+import { type Plan, type ResolvedMeal, templateDay } from "@/lib/resolve-plan";
 import { getDb } from "../index";
 import * as schema from "../schema";
-import type { Profile, WorkoutExercise } from "../schema";
+import type { Meal, Profile, WorkoutExercise } from "../schema";
 import { scope } from "../scope";
 import { logsFor } from "./log";
 
@@ -90,6 +91,35 @@ export type Today = {
    * it writes.
    */
   logs: DayLogs;
+  /**
+   * The user's whole meal library — the swap's candidates (FUEL-23).
+   *
+   * Already fetched for resolution, so this costs nothing new; it is here
+   * because the picker needs a list of what could be eaten instead, which is a
+   * different question from what IS planned and cannot be derived from `view`.
+   *
+   * Rows, archived ones included, exactly as resolution takes them. Narrowing
+   * happens twice downstream and for two different reasons: `app/page.tsx`
+   * drops the columns the browser has no business holding, and
+   * `meal-picker.tsx` drops archived meals because a retired meal is not a
+   * candidate. Neither of those is a decision for a query.
+   */
+  meals: Meal[];
+  /**
+   * What the TEMPLATE plans for today, overrides ignored (FUEL-23).
+   *
+   * The "before" half of a swap. A slot resolved from an override needs both
+   * answers to say what the swap cost — "Swapped. −21g protein, −140 kcal
+   * today." is the difference between them — and a screen that remembered the
+   * displaced meal from the tap instead would lose the sentence on the next
+   * reload and in every other tab.
+   *
+   * Resolved here rather than in the browser because it is the same `Plan` the
+   * view came from, already assembled: sending the plan instead so the client
+   * could resolve it would ship the template and every override to a screen
+   * that shows neither.
+   */
+  templatePlan: ResolvedMeal[];
 };
 
 /**
@@ -158,13 +188,15 @@ export async function loadToday(
       logsFor(userId, date),
     ]);
 
+  const plan: Plan = {
+    programStartDate: profile.programStartDate,
+    template: planTemplate,
+    overrides,
+    meals,
+  };
+
   const view = resolveNow({
-    plan: {
-      programStartDate: profile.programStartDate,
-      template: planTemplate,
-      overrides,
-      meals,
-    },
+    plan,
     training: {
       programStartDate: profile.programStartDate,
       template: trainingTemplate,
@@ -175,5 +207,14 @@ export async function loadToday(
     cursor,
   });
 
-  return { view, profile, exercises: byWorkout(exerciseRows), logs };
+  return {
+    view,
+    profile,
+    exercises: byWorkout(exerciseRows),
+    logs,
+    meals,
+    // The same plan and the same date the view was resolved from, so the two
+    // answers are a matched pair rather than two reads that could disagree.
+    templatePlan: templateDay(plan, date),
+  };
 }

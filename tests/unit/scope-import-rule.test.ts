@@ -33,10 +33,29 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 let eslint: ESLint;
 
-beforeAll(() => {
+beforeAll(async () => {
   // Loads the project's actual flat config from cwd. Testing a copy of the
   // patterns would assert that a regex matches itself.
   eslint = new ESLint({ cwd: process.cwd() });
+
+  // Then lint once and throw the answer away.
+  //
+  // The constructor does not read the config — ESLint resolves eslint.config.mjs
+  // lazily, on the first `lintText`. So without this the whole cost of loading
+  // the config, the TypeScript parser and every plugin lands on whichever case
+  // happens to run first, and the other 27 are milliseconds. That case was
+  // `blocks @/lib/db`, at a little over five seconds under `--coverage` against
+  // a 5000ms default: it passed on a fast run and failed on a slow one, and the
+  // name in the failure had nothing to do with the reason.
+  //
+  // Warming up here moves the one-off cost into the hook, where it belongs and
+  // where the budget is 10s. Raising `testTimeout` instead would have hidden
+  // the asymmetry rather than removed it, and left the next person to add a
+  // case wondering why the first one is always the slow one.
+  await eslint.lintText('export const warm = 1;\n', {
+    filePath: "src/lib/seed/rule-probe.ts",
+    warnIgnored: false,
+  });
 });
 
 /** The rule ids reported for one import, linted as if it were a file in src/. */

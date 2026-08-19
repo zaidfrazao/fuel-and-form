@@ -125,8 +125,14 @@ export const PREVIEW_ENTRY_ID = "preview";
  * the same helper anyway, because the `-0` clause has to apply to all four: a
  * delta of `-0` is a real JS value that renders as "−0", which reads as a
  * shortfall on a day that hit its target precisely.
+ *
+ * Exported for `swap-note.ts`, which subtracts two already-rounded totals and
+ * so needs the identical rule — including the `-0` clause, which is what stops
+ * a swap that changed nothing printing "−0g protein". One definition, because
+ * two copies of a rounding rule are two things to keep in step and the drift
+ * would show up in user-visible copy.
  */
-function round1(value: number): number {
+export function round1(value: number): number {
   const rounded = Math.round(value * 10) / 10;
 
   return rounded === 0 ? 0 : rounded;

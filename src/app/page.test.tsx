@@ -37,6 +37,7 @@ vi.mock("@/lib/cursor-cookie", () => ({ readCursor }));
 // own: a "use server" module cannot be imported under jsdom, and none of what
 // it does is what this file is testing.
 vi.mock("@/app/actions/log", () => ({ logItem: vi.fn(), undoLastLog: vi.fn() }));
+vi.mock("@/app/actions/swap", () => ({ swapMeal: vi.fn(), revertSwap: vi.fn() }));
 
 const { default: Home } = await import("@/app/page");
 
@@ -101,11 +102,36 @@ const VIEW = {
   state: "nothing-planned",
 };
 
+/**
+ * The meal library `loadToday` now returns (FUEL-23).
+ *
+ * `method` and `notes` are populated on purpose: they are what the route has to
+ * DROP, and a library whose free-text columns were already null would let the
+ * narrowing be deleted without a test noticing.
+ */
+const LIBRARY = [
+  {
+    id: "meal-1",
+    userId: SESSION.userId,
+    name: "Beef chilli",
+    slotType: "dinner",
+    kcal: 612,
+    proteinG: 54.2,
+    fatG: 14.6,
+    carbG: 63.8,
+    method: "Brown the mince, then simmer for forty minutes.",
+    notes: "Doubles well for the freezer.",
+    isArchived: false,
+  },
+];
+
 const today = (overrides: Record<string, unknown> = {}) => ({
   view: VIEW,
   profile: PROFILE,
   exercises: new Map(),
   logs: { meals: [], workouts: [] },
+  meals: LIBRARY,
+  templatePlan: [],
   ...overrides,
 });
 
@@ -232,4 +258,8 @@ describe("with a session", () => {
     expect(container.textContent).not.toContain("172");
     expect(container.textContent).not.toContain("84.2");
   });
+
+  // What the route hands the browser, column by column, is asserted in
+  // `page.payload.test.tsx` — it has to mock `RightNow` to see the props at
+  // all, and mocking it here would gut every case above.
 });

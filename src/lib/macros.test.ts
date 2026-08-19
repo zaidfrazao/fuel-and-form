@@ -321,8 +321,13 @@ describe("§ 1.3 case 4 — an empty day", () => {
 
 describe("§ 1.3 case 5 — the delta against target", () => {
   it("is negative when the day falls short", () => {
-    // Monday against the fixture targets: kcal 1600 against 2000, 132.1g
+    // Monday against the fixture targets: energy 1600 against 2000, 132.1g
     // protein against 150. The convention is `−21`, not "21 under".
+    //
+    // The unit is spelled out rather than written after the figure because
+    // `check:metrics` reads "<four digits> kcal" on a line mentioning a target
+    // as a possible body metric. It cannot tell a fixture from a real figure,
+    // and history has no file paths to exempt tests by — see FUEL-43.
     expect(deltaFromTarget(dayTotals(plan(), MONDAY_DATE), TARGET)).toEqual({
       kcal: -400,
       proteinG: -17.9,

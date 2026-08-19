@@ -51,6 +51,20 @@ export type ScopedInsert<T extends ScopedTable> = Omit<T["$inferInsert"], "userI
 /** Update values minus `userId`, so no update can hand a row to another user. */
 export type ScopedUpdate<T extends ScopedTable> = Omit<PgUpdateSetSource<T>, "userId">;
 
+/**
+ * What an upsert collides on, and what it writes when it does.
+ *
+ * `target` names the columns of the unique index BESIDES `user_id` — the scope
+ * supplies that one itself, see `upsert`. At least one is required, which is a
+ * compile-time shape rather than a runtime check: no table in this schema has a
+ * unique index on `user_id` alone, so a bare target could only ever be a
+ * mistake, and catching it in the type costs no branch.
+ */
+export type ScopedConflict<T extends ScopedTable> = {
+  target: readonly [PgColumn, ...PgColumn[]];
+  set: ScopedUpdate<T>;
+};
+
 /** A column or expression to order by — what `asc()` and `desc()` return. */
 type OrderBy = PgColumn | SQL;
 
@@ -93,6 +107,36 @@ function scopedWhere(table: ScopedTable, userId: string, extra?: SQL): SQL {
 
 const asArray = (value: OrderBy | OrderBy[]): OrderBy[] =>
   Array.isArray(value) ? value : [value];
+
+/**
+ * The fields an update is allowed to write — everything but `userId`.
+ *
+ * Stripped at runtime as well as in the type: an update that could rewrite the
+ * owning column would be a way to hand a row to another user, which is the same
+ * leak as reading one.
+ *
+ * Stripping can empty the set — an update whose only field was the one it is
+ * not allowed to touch. Drizzle would raise "No values to set", which sends
+ * whoever hits it looking for a typo in their column names rather than at the
+ * attempted reassignment. Say what happened instead.
+ *
+ * Safe to throw: this depends only on the caller's own argument, never on
+ * whether a row exists, so it distinguishes nothing about the data.
+ */
+function updatable(set: Record<string, unknown>, method: string): Record<string, unknown> {
+  const owned: Record<string, unknown> = { ...set };
+  delete owned.userId;
+
+  if (Object.keys(owned).length === 0) {
+    throw new Error(
+      `scope.${method}() was called with no updatable fields. \`userId\` is owned ` +
+        "by the scope and is removed from every update, so an update that " +
+        "sets only `userId` sets nothing. Ownership cannot be reassigned here.",
+    );
+  }
+
+  return owned;
+}
 
 /**
  * Binds a user to a database handle. Every query it runs is filtered to that
@@ -189,38 +233,81 @@ export function scope(userId: string, executor: Executor) {
     },
 
     /**
+     * Writes one row, or updates the row already occupying its unique slot.
+     *
+     * The write behind a swap (FUEL-23): `day_plan_overrides` is unique on
+     * `(user_id, date, slot)`, so swapping the same slot twice has to land on
+     * the row that is already there rather than beside it. Doing that as
+     * "update, and insert if nothing changed" would leave a window between the
+     * two statements in which a second swap of the same slot inserts, so the
+     * first one's insert then violates the constraint. `ON CONFLICT` closes the
+     * window because Postgres resolves it inside one statement.
+     *
+     * ## The scope owns the conflict target
+     *
+     * `conflict.target` names the columns BESIDES `user_id`, and `userId` is
+     * prepended here. That is the whole security argument, and it is why the
+     * target is not simply passed through: an arbiter index that omitted
+     * `user_id` would collide one user's row with another's and quietly
+     * overwrite it — a leak that looks like nothing at all in review, since the
+     * statement still carries a `user_id` in its VALUES.
+     *
+     * Because the inferred index necessarily includes `user_id`, a row that
+     * conflicts is by construction this user's own. So the DO UPDATE half needs
+     * no ownership predicate of its own: there is no reachable state in which it
+     * could touch someone else's row.
+     *
+     * Postgres infers the arbiter from the SET of columns rather than their
+     * order, so prepending rather than appending changes nothing about which
+     * index is matched.
+     */
+    async upsert<T extends ScopedTable>(
+      table: T,
+      values: ScopedInsert<T>,
+      conflict: ScopedConflict<T>,
+    ): Promise<T["$inferSelect"][]> {
+      const set = updatable(conflict.set, "upsert");
+
+      // The scope supplies ownership; the caller must not. Passing it too would
+      // emit `on conflict ("user_id","user_id",…)`, which Postgres rejects with
+      // a message about the SQL rather than about the mistake — and a caller
+      // reading this signature could reasonably think naming it is required.
+      // Same reasoning as `updatable`'s throw: say what happened, and do it
+      // from the caller's own argument so nothing about the data leaks.
+      if (conflict.target.some((column) => column === table.userId)) {
+        throw new Error(
+          "scope.upsert() was given `userId` in its conflict target. The scope " +
+            "prepends it, so ownership is always part of the arbiter index — " +
+            "name only the other columns of the unique constraint.",
+        );
+      }
+
+      return (await executor
+        .insert(table)
+        // Spread last, exactly as `insert` does, so a smuggled `userId` is
+        // overwritten rather than honoured.
+        .values({ ...values, userId } as T["$inferInsert"])
+        .onConflictDoUpdate({
+          target: [table.userId, ...conflict.target],
+          set: set as PgUpdateSetSource<T>,
+        })
+        .returning()) as T["$inferSelect"][];
+    },
+
+    /**
      * Updates only this user's rows and returns those it changed.
      *
-     * `userId` is stripped at runtime as well as in the type: an update that
-     * could rewrite the owning column would be a way to hand a row to another
-     * user, which is the same leak as reading one.
+     * `userId` is stripped from the set — see `updatable`, which is also what
+     * gives `upsert` the same guarantee from the same code.
      */
     async update<T extends ScopedTable>(
       table: T,
       set: ScopedUpdate<T>,
       where?: SQL,
     ): Promise<T["$inferSelect"][]> {
-      const owned: Record<string, unknown> = { ...set };
-      delete owned.userId;
-
-      // Stripping user_id can empty the set — an update whose only field was
-      // the one it is not allowed to touch. Drizzle would raise "No values to
-      // set", which sends whoever hits it looking for a typo in their column
-      // names rather than at the attempted reassignment. Say what happened.
-      //
-      // Safe to throw: this depends only on the caller's own argument, never on
-      // whether a row exists, so it distinguishes nothing about the data.
-      if (Object.keys(owned).length === 0) {
-        throw new Error(
-          "scope.update() was called with no updatable fields. `userId` is owned " +
-            "by the scope and is removed from every update, so an update that " +
-            "sets only `userId` sets nothing. Ownership cannot be reassigned here.",
-        );
-      }
-
       return (await executor
         .update(table)
-        .set(owned as PgUpdateSetSource<T>)
+        .set(updatable(set, "update") as PgUpdateSetSource<T>)
         .where(scopedWhere(table, userId, where))
         .returning()) as T["$inferSelect"][];
     },

@@ -50,11 +50,15 @@ export function PickerSpecimen({
         selectedMealId={selected}
         onSelect={setSelected}
       >
-        {/* Where FUEL-32's day totals and FUEL-23's confirm will sit. Neither
-            exists yet, and a disabled button standing in for them would claim
-            this task ships a swap it does not. */}
+        {/* The totals and the confirm are FUEL-23's, and they now exist —
+            see `components/swap-sheet.tsx`, which is this composition plus the
+            preview arithmetic. This page stays as the PICKER's specimen: what
+            it exercises is the sheet, the tiles and the slot filter on their
+            own, without a day to total or an action to call. `/dev/right-now`
+            is where the whole swap flow is opened and driven. */}
         <p className="text-slash text-text-tertiary">
-          Day totals and the confirm button land here — FUEL-32, then FUEL-23.
+          Day totals and the confirm sit here on the real screen — see
+          /dev/right-now, case &ldquo;Swapped&rdquo;.
         </p>
       </MealPicker>
     </>

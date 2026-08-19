@@ -3,17 +3,21 @@
 import { type ReactNode, startTransition, useOptimistic, useState } from "react";
 
 import { logItem, undoLastLog } from "@/app/actions/log";
+import { revertSwap, swapMeal } from "@/app/actions/swap";
 import { DayComplete } from "@/components/day-complete";
 import Link from "next/link";
 
 import { DayRuler } from "@/components/day-ruler";
 import { KeyValueGrid, SlashMeta } from "@/components/kv-grid";
+import { SwapSheet, type PlannedMeal, type SwappableMeal } from "@/components/swap-sheet";
 import { Button } from "@/components/ui/button";
+import type { CalendarDate } from "@/lib/date";
 import { type LoggedEntry, pendingEntry } from "@/lib/day-summary";
-import type { Meal, WorkoutExercise } from "@/lib/db/schema";
+import type { WorkoutExercise } from "@/lib/db/schema";
 import type { LogVerb } from "@/lib/log-intent";
-import type { MacroTarget } from "@/lib/macros";
+import type { MacroBearing, MacroTarget } from "@/lib/macros";
 import { itemLabel, itemName, rulerSlots } from "@/lib/now-display";
+import { swapNote } from "@/lib/swap-note";
 import {
   type AnytimeItem,
   type NowItem,
@@ -76,10 +80,27 @@ import {
  * **Actions are ink, not colour.** The primary is `Button`'s `default` variant,
  * which FUEL-2 re-pointed at `ink`. There is exactly one per screen.
  *
- * Swap remains `disabled` — the meal picker and the override it writes are P2's,
- * not this task's. It stays on the screen because its placement is P1's
- * criterion, and disabled rather than absent because a control that silently
- * does nothing when tapped is worse than one that says it cannot be used yet.
+ * ## The swap (FUEL-23)
+ *
+ * Swap is no longer `disabled`: it opens `swap-sheet.tsx`, and confirming one
+ * writes a dated override through `actions/swap.ts`. Three consequences are
+ * worth naming here rather than leaving to be discovered:
+ *
+ * **The payload grew again.** The meal library now crosses, narrowed in
+ * `app/page.tsx` to what the picker draws and the preview totals, plus what the
+ * template plans today. Both are the signed-in user's own data over their own
+ * authenticated response, and both are needed in the browser for the same
+ * reason the timeline is: the sheet's totals have to move on the frame a tile
+ * is tapped, and a request per tap is the latency § Feedback rules out.
+ *
+ * **A swap is optimistic, but it does not advance.** The chosen meal replaces
+ * the slot's on the current frame — new name, new macros, Swapped tag, note —
+ * while the position stays exactly where it was. A swap changes WHAT the active
+ * item is, not whether it is done, and the server agrees: `swapMeal` writes no
+ * cursor.
+ *
+ * **The Swapped tag does not break the one-umber rule.** It is `accent-subtle`,
+ * a tinted ground, not `accent`. See `SwappedTag` below.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -92,6 +113,36 @@ function Eyebrow({ children }: { children: ReactNode }) {
 }
 
 /**
+ * The mark on a slot that has diverged from the template — P2's "overridden
+ * cells are visually marked".
+ *
+ * `accent-subtle`, which the palette table names for exactly this: "Swapped
+ * cells and the Swapped tag — the only tinted grounds in the system".
+ *
+ * ## Why the text is `text-primary` and not `accent`
+ *
+ * § The Four Rules says umber "marks the present moment and nothing else",
+ * lists "the swap tint" among the things it marks, and then says **one umber
+ * element per screen**. On `/` that element is already spoken for — it is the
+ * ruler's NOW marker. Drawing this tag in saturated `accent` would make two.
+ *
+ * The tint is not the accent, so both sentences hold at once: the ground is
+ * `accent-subtle`, the label is ordinary text on it, and the one thing on this
+ * screen wearing umber is still the marker that says "you are here".
+ *
+ * Not colour alone, either (§ Accessibility): the word "Swapped" is the signal
+ * and the tint reinforces it, so the mark survives greyscale and a colour-blind
+ * reader loses nothing.
+ */
+function SwappedTag() {
+  return (
+    <span className="rounded-[4px] bg-accent-subtle px-1.5 py-0.5 text-micro uppercase text-text-primary">
+      Swapped
+    </span>
+  );
+}
+
+/**
  * The subject of the screen: what it is, at 40px, and when it was due.
  *
  * The eyebrow is the slot and the Title is the item's own name, which is the
@@ -100,13 +151,37 @@ function Eyebrow({ children }: { children: ReactNode }) {
  * the name has the row to itself at the size that makes it readable across a
  * kitchen.
  */
-function Subject({ item, at }: { item: NowItem; at?: string }) {
+function Subject({
+  item,
+  at,
+  swapped,
+  name,
+}: {
+  item: NowItem;
+  at?: string;
+  swapped?: boolean;
+  /**
+   * Overrides the item's own name.
+   *
+   * An un-confirmed swap has changed which meal this is, and the heading is the
+   * first thing that has to say so — it is the answer to the question the
+   * screen exists to ask. Without this the macros and the tag would update on
+   * the frame while the 40px title still named the meal that was replaced.
+   */
+  name?: string;
+}) {
   return (
     <header className="flex flex-col gap-1">
-      <p className="text-micro uppercase text-text-secondary">{itemLabel(item)}</p>
+      {/* The tag sits beside the slot label rather than beside the name: it
+          qualifies WHICH dinner this is, and the Title is meant to have its row
+          to itself at the size that makes it readable across a kitchen. */}
+      <div className="flex items-center gap-2">
+        <p className="text-micro uppercase text-text-secondary">{itemLabel(item)}</p>
+        {swapped && <SwappedTag />}
+      </div>
       {/* The one h1 on the page. A screen whose whole job is answering "what
           now?" should have the answer as its heading, not the product name. */}
-      <h1 className="text-title text-text-primary">{itemName(item)}</h1>
+      <h1 className="text-title text-text-primary">{name ?? itemName(item)}</h1>
       {at !== undefined && <SlashMeta>{at}</SlashMeta>}
     </header>
   );
@@ -122,7 +197,7 @@ function Subject({ item, at }: { item: NowItem; at?: string }) {
  * "protein stays emphasised by weight, not colour", because colour is spoken
  * for by the accent.
  */
-function MealMacros({ meal }: { meal: Meal }) {
+function MealMacros({ meal }: { meal: MacroBearing }) {
   return (
     <KeyValueGrid
       items={[
@@ -283,13 +358,18 @@ function Anytime({ items }: { items: readonly AnytimeItem[] }) {
 function Actions({
   item,
   undoable,
+  swapped,
   failure,
   onAct,
+  onSwap,
 }: {
   item?: ScheduledItem;
   undoable: boolean;
+  /** Whether the active item resolved from an override, so Revert is offered. */
+  swapped: boolean;
   failure: Attempt | null;
   onAct: (attempt: Attempt) => void;
+  onSwap: () => void;
 }) {
   if (!item && !undoable && !failure) return null;
 
@@ -311,9 +391,7 @@ function Actions({
           role="alert"
           className="flex items-center justify-between gap-3 border-b border-border pb-3"
         >
-          <p className="text-caption text-error">
-            {failure.kind === "undo" ? "Couldn’t undo that." : "Couldn’t save that."}
-          </p>
+          <p className="text-caption text-error">{banner(failure)}</p>
           <Button variant="link" size="xs" onClick={() => onAct(failure)}>
             Try again
           </Button>
@@ -329,8 +407,11 @@ function Actions({
             {item.kind === "meal" ? "Log eaten" : "Mark done"}
           </Button>
           <div className="flex gap-3">
+            {/* No longer disabled — FUEL-23 gives it the sheet it was waiting
+                for. Secondary, per § Buttons, which names Swap as its example
+                of "a real action that isn't the main one". */}
             {item.kind === "meal" && (
-              <Button disabled variant="secondary" className="flex-1">
+              <Button variant="secondary" className="flex-1" onClick={onSwap}>
                 Swap
               </Button>
             )}
@@ -351,10 +432,30 @@ function Actions({
        * is a tap that was correct, and the control for taking it back is for
        * the uncommon one.
        */}
-      {undoable && (
-        <Button variant="link" className="self-start" onClick={() => onAct({ kind: "undo" })}>
-          Undo
-        </Button>
+      {/*
+       * Both tertiary controls, on one row — § Buttons gives the Text variant
+       * to "Revert" by name, and Undo has it for the same reason: the common
+       * case is a tap that was correct, and the control for taking it back is
+       * for the uncommon one.
+       *
+       * Revert is offered only while the slot IS overridden, which is § Feedback's
+       * "revertible from where it was performed, for the rest of that day" —
+       * the state itself is what makes the control available, so it survives a
+       * reload without anything having to remember the swap happened.
+       */}
+      {(undoable || (item && swapped)) && (
+        <div className="flex items-center gap-4">
+          {undoable && (
+            <Button variant="link" onClick={() => onAct({ kind: "undo" })}>
+              Undo
+            </Button>
+          )}
+          {item && swapped && (
+            <Button variant="link" onClick={() => onAct({ kind: "revert", item })}>
+              Revert
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -396,7 +497,30 @@ function Screen({ children }: { children: ReactNode }) {
  */
 type Attempt =
   | { kind: "act"; item: ScheduledItem; verb: LogVerb }
-  | { kind: "undo" };
+  | { kind: "undo" }
+  | { kind: "revert"; item: ScheduledItem }
+  | { kind: "swap"; item: ScheduledItem; meal: SwappableMeal };
+
+/**
+ * What the banner says about a refused attempt.
+ *
+ * Three sentences rather than one, because § Tone of Voice asks copy to "name
+ * what happened" and forbids "Something went wrong". "Couldn't save that" is
+ * accurate for a log and wrong for a revert, which was not saving anything.
+ *
+ * A swap's refusal is reported here, on the card, even though the tap happened
+ * in the sheet: § Feedback puts the banner "at the point of action", and by the
+ * time an answer comes back the sheet has closed. The card is where the swap
+ * was started and where its result is visible, so it is the point of action
+ * that still exists.
+ */
+function banner(failure: Attempt): string {
+  if (failure.kind === "undo") return "Couldn’t undo that.";
+  if (failure.kind === "revert") return "Couldn’t revert that.";
+  if (failure.kind === "swap") return "Couldn’t swap that.";
+
+  return "Couldn’t save that.";
+}
 
 /**
  * What a tap does to the screen before the server has answered.
@@ -415,20 +539,114 @@ type Attempt =
  * appears. `dayLog` orders the server's entries by `logged_at` — the same order
  * undo takes them back in — so popping the last one is the reverse of pushing.
  */
-type Progress = { position: number; entries: LoggedEntry[] };
+type Progress = {
+  position: number;
+  entries: LoggedEntry[];
+  /**
+   * The meal a swap put into a slot, before the server has confirmed it.
+   *
+   * Keyed by item key and holding the CHOSEN meal, so the card can show the new
+   * name, the new macros and the Swapped tag on the frame the sheet closes —
+   * § Feedback's 300ms budget applies to a swap exactly as it does to a log.
+   *
+   * In this value rather than in a second `useOptimistic` for the reason the
+   * doc above gives: two optimistic values can revert independently, and a swap
+   * that reverted while the position did not would leave the card showing the
+   * old meal under a Revert button for an override that was never written.
+   *
+   * A map because the anytime list is reachable too, and because a key is
+   * exactly what the action takes — nothing here has to decide which slot a
+   * swap belongs to, which is a decision only the server is allowed to make.
+   *
+   * `null` is a REVERT: the slot is going back to the template. Present as a
+   * key rather than absent, because absence already means "the server's answer
+   * stands" — and the server's answer for a slot being reverted is still the
+   * override. Deleting the key would leave the card showing the swap it was
+   * just asked to undo until the round trip finished.
+   */
+  swaps: ReadonlyMap<string, SwappableMeal | null>;
+};
 
-type Move = { kind: "logged"; entry: LoggedEntry } | { kind: "undone" };
+type Move =
+  | { kind: "logged"; entry: LoggedEntry }
+  | { kind: "undone" }
+  | { kind: "swapped"; key: string; meal: SwappableMeal }
+  | { kind: "reverted"; key: string };
 
-const applyMove = (current: Progress, move: Move): Progress =>
-  move.kind === "logged"
-    ? { position: current.position + 1, entries: [...current.entries, move.entry] }
-    : { position: current.position - 1, entries: current.entries.slice(0, -1) };
+function applyMove(current: Progress, move: Move): Progress {
+  if (move.kind === "logged") {
+    return {
+      ...current,
+      position: current.position + 1,
+      entries: [...current.entries, move.entry],
+    };
+  }
+
+  if (move.kind === "undone") {
+    return {
+      ...current,
+      position: current.position - 1,
+      entries: current.entries.slice(0, -1),
+    };
+  }
+
+  const swaps = new Map(current.swaps);
+
+  swaps.set(move.key, move.kind === "reverted" ? null : move.meal);
+
+  // Position untouched: a swap changes WHAT the active item is, not whether it
+  // is done. The server agrees — `swapMeal` writes no cursor.
+  return { ...current, swaps };
+}
+
+/**
+ * What the screen shows the instant a control is tapped, before the server has
+ * been asked.
+ *
+ * One function per direction — this builds the optimistic move, `perform` runs
+ * the write — so that a fifth control cannot be added to one and forgotten in
+ * the other: both are exhaustive over `Attempt`, and TypeScript says so.
+ */
+function optimistic(attempt: Attempt, date: CalendarDate): Move {
+  switch (attempt.kind) {
+    case "undo":
+      return { kind: "undone" };
+    case "swap":
+      return { kind: "swapped", key: attempt.item.key, meal: attempt.meal };
+    case "revert":
+      return { kind: "reverted", key: attempt.item.key };
+    default:
+      // The entry the tap implies, built through `logIntent` so the word this
+      // screen prints and the status the row is written with are the same
+      // decision. `view.date` rather than the clock: the day being logged is
+      // the day that was resolved.
+      return { kind: "logged", entry: pendingEntry(attempt.item, attempt.verb, date) };
+  }
+}
+
+/** The write a tap asks for. Every one of these answers rather than throwing. */
+function perform(attempt: Attempt): Promise<{ ok: boolean }> {
+  switch (attempt.kind) {
+    case "undo":
+      return undoLastLog();
+    case "swap":
+      // The KEY and the meal id, and nothing else. The date and the slot are
+      // re-derived on the server from the key — see actions/swap.ts.
+      return swapMeal(attempt.item.key, attempt.meal.id);
+    case "revert":
+      return revertSwap(attempt.item.key);
+    default:
+      return logItem(attempt.item.key, attempt.verb);
+  }
+}
 
 export function RightNow({
   view,
   exercises,
   entries,
   target,
+  meals,
+  templatePlan,
 }: {
   view: NowView;
   /** `workouts.id` → its exercises, from `loadToday`. */
@@ -444,8 +662,29 @@ export function RightNow({
    * could name.
    */
   entries: LoggedEntry[];
-  /** The four target figures from `profiles`, for the day-complete summary. */
+  /**
+   * The four target figures from `profiles`.
+   *
+   * Read twice: by the day-complete summary, and by the swap sheet's preview,
+   * which shows the resulting day against target before the swap is confirmed.
+   */
   target: MacroTarget;
+  /**
+   * The meal library the picker offers — narrowed in `app/page.tsx`.
+   *
+   * Archived rows may be present; `meal-picker.tsx` filters them, and
+   * `actions/swap.ts` refuses them again on the way in.
+   */
+  meals: readonly SwappableMeal[];
+  /**
+   * What the TEMPLATE plans today, overrides ignored — `loadToday`'s answer.
+   *
+   * The "before" half of every swap note on this screen. It does not change
+   * when a swap is made, which is the whole point of the override model and is
+   * why the optimistic layer above can leave it alone: swapping dinner twice
+   * still measures both against the same template dinner.
+   */
+  templatePlan: readonly PlannedMeal[];
 }) {
   /*
    * The optimistic layer — § Feedback's "optimistic by default", and the whole
@@ -460,26 +699,19 @@ export function RightNow({
    * wrote the log, so the base has caught up and nothing moves; on failure it
    * wrote neither, so the card and the undo control revert together.
    */
-  const [progress, move] = useOptimistic(
-    { position: positionOf(view), entries },
+  const [progress, move] = useOptimistic<Progress, Move>(
+    { position: positionOf(view), entries, swaps: new Map() },
     applyMove,
   );
 
   const [failure, setFailure] = useState<Attempt | null>(null);
+  const [picking, setPicking] = useState(false);
 
   function act(attempt: Attempt) {
     setFailure(null);
 
     startTransition(async () => {
-      move(
-        attempt.kind === "undo"
-          ? { kind: "undone" }
-          : // The entry the tap implies, built through `logIntent` so the word
-            // this screen prints and the status the row is written with are the
-            // same decision. `view.date` rather than the clock: the day being
-            // logged is the day that was resolved.
-            { kind: "logged", entry: pendingEntry(attempt.item, attempt.verb, view.date) },
-      );
+      move(optimistic(attempt, view.date));
 
       // The `try` covers the CALL, not the action. `logItem` and `undoLastLog`
       // catch everything themselves and answer `{ ok: false }` — but reaching
@@ -492,10 +724,7 @@ export function RightNow({
       // the failure mode § Feedback exists to rule out, on the connection this
       // app is most likely to meet.
       try {
-        const result =
-          attempt.kind === "undo"
-            ? await undoLastLog()
-            : await logItem(attempt.item.key, attempt.verb);
+        const result = await perform(attempt);
 
         // Success is silent — § Feedback: "the UI reflecting the new state IS
         // the confirmation". There is no toast here on purpose; the card has
@@ -529,12 +758,105 @@ export function RightNow({
 
   const now = positionAt(base, progress.position);
 
+  const active = now.state === "active" ? now.active : undefined;
+
+  /**
+   * What is planned for a slot right now, with any un-confirmed swap applied.
+   *
+   * The server's answer unless the optimistic layer holds a swap for this key,
+   * in which case the chosen meal wins and the slot counts as an override —
+   * which is what puts the Swapped tag and the note on the card on the frame
+   * the sheet closes, rather than after a round trip.
+   */
+  const shown = (item: NowItem & { key: string }) => {
+    if (item.kind !== "meal") return undefined;
+
+    const slot = item.meal.slot;
+    const server = {
+      slot,
+      meal: item.meal.meal,
+      isOverride: item.meal.source === "override",
+    };
+
+    if (!progress.swaps.has(item.key)) return server;
+
+    const chosen = progress.swaps.get(item.key);
+
+    if (chosen) return { slot, meal: chosen, isOverride: true };
+
+    // A revert in flight. What it goes back to is the template's meal, which is
+    // why `templatePlan` carries names as well as macros.
+    //
+    // No template entry means the swap had filled a slot the template leaves
+    // empty, so reverting removes the item from the day altogether — a change
+    // to the day's SHAPE, which the optimistic layer deliberately does not
+    // make (see `applyMove`: the position is never touched here). The server's
+    // answer stands for the length of the round trip, and `refresh()` drops the
+    // item. Rare, brief, and correct in the meantime.
+    const template = templatePlan.find((entry) => entry.slot === slot);
+
+    return template ? { slot, meal: template.meal, isOverride: false } : server;
+  };
+
+  const activeMeal = active ? shown(active) : undefined;
+
+  /**
+   * Every meal planned today, in slot order, with un-confirmed swaps applied.
+   *
+   * The base the sheet's preview edits. Built from the timeline AND the anytime
+   * list, because both are meals that count towards the day — a slot whose time
+   * was cleared in settings still has calories in it, and a preview that
+   * omitted it would under-report the whole day rather than one row.
+   */
+  const plannedToday = [...base.timeline, ...base.anytime]
+    .map(shown)
+    .filter((item): item is NonNullable<typeof item> => item !== undefined);
+
+  /**
+   * The sentence under a swapped card — the Brand Guide's Swap copy.
+   *
+   * `null` for a slot resolved from the template, because nothing was swapped
+   * and there is nothing to state. The "before" is `templatePlan`, which does
+   * not move when a swap is made, so swapping twice still measures against the
+   * template rather than against the previous swap — the day's cost is what it
+   * is, not the sum of how many times the user changed their mind.
+   */
+  const note = activeMeal?.isOverride
+    ? swapNote(
+        templatePlan.find((item) => item.slot === activeMeal.slot)?.meal ?? null,
+        activeMeal.meal,
+      )
+    : null;
+
   const actions = (
     <Actions
-      item={now.state === "active" ? now.active : undefined}
+      item={active}
       undoable={progress.entries.length > 0}
+      swapped={activeMeal?.isOverride ?? false}
       failure={failure}
       onAct={act}
+      onSwap={() => setPicking(true)}
+    />
+  );
+
+  /*
+   * The picker, mounted only while the active item is a meal.
+   *
+   * Rendered outside the two early-returning states below on purpose: it
+   * portals to `document.body`, so where it sits in this tree does not affect
+   * where it draws — but a sheet that outlived the card it was opened from
+   * would be asking about a slot that is no longer active.
+   */
+  const sheet = active && activeMeal && (
+    <SwapSheet
+      open={picking}
+      onOpenChange={setPicking}
+      slot={activeMeal.slot}
+      date={base.date}
+      planned={plannedToday}
+      meals={meals}
+      target={target}
+      onConfirm={(meal) => act({ kind: "swap", item: active, meal })}
     />
   );
 
@@ -629,20 +951,40 @@ export function RightNow({
     );
   }
 
-  const { active } = now;
-
   return (
     <Screen>
       {/* 30px between blocks — § Spacing & Layout's section rhythm. */}
       <div className="flex flex-col gap-[30px]">
-        <Subject item={active} at={active.at} />
+        <Subject
+          item={now.active}
+          at={now.active.at}
+          swapped={activeMeal?.isOverride}
+          name={activeMeal?.meal.name}
+        />
 
         {ruler}
 
-        {active.kind === "meal" ? (
-          <MealMacros meal={active.meal.meal} />
+        {activeMeal ? (
+          <div className="flex flex-col gap-3">
+            <MealMacros meal={activeMeal.meal} />
+
+            {/*
+             * § Feedback keeps routine success silent, and this is not an
+             * acknowledgement of a tap — it is the state of a slot that has
+             * diverged from the template, present for as long as the override
+             * is and in every tab, not just the one that swapped. See
+             * lib/swap-note.ts, which argues the distinction in full.
+             */}
+            {note && <p className="text-caption text-text-secondary">{note}</p>}
+          </div>
         ) : (
-          <ExerciseList exercises={exercises.get(active.workout.workout.id) ?? []} />
+          <ExerciseList
+            exercises={
+              now.active.kind === "workout"
+                ? (exercises.get(now.active.workout.workout.id) ?? [])
+                : []
+            }
+          />
         )}
 
         <UpNext items={now.upcoming} />
@@ -653,6 +995,7 @@ export function RightNow({
       </div>
 
       {actions}
+      {sheet}
     </Screen>
   );
 }

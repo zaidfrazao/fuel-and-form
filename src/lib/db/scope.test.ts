@@ -208,6 +208,115 @@ describe("scope", () => {
     });
   });
 
+  describe("upsert", () => {
+    it("stamps the scope's user_id onto the inserted row", async () => {
+      const { s, last } = spy();
+      await s.upsert(
+        fixture,
+        { id: "a", label: "Oats", kcal: 500 },
+        { target: [fixture.label], set: { kcal: 500 } },
+      );
+
+      expect(last().params).toContain(OWNER);
+    });
+
+    it("puts user_id in the conflict target, ahead of the caller's columns", async () => {
+      // The line the whole method rests on. An arbiter index that omitted
+      // user_id would collide one user's row with another's and overwrite it —
+      // and the statement would still carry a user_id in its VALUES, so
+      // nothing about it would look wrong.
+      const { s, last } = spy();
+      await s.upsert(
+        fixture,
+        { id: "a", label: "Oats", kcal: 500 },
+        { target: [fixture.label], set: { kcal: 500 } },
+      );
+
+      expect(last().query).toContain('on conflict ("user_id","label") do update');
+    });
+
+    it("takes every column of a composite target", async () => {
+      const { s, last } = spy();
+      await s.upsert(
+        fixture,
+        { id: "a", label: "Oats", kcal: 500 },
+        { target: [fixture.label, fixture.kcal], set: { id: "b" } },
+      );
+
+      expect(last().query).toContain('on conflict ("user_id","label","kcal")');
+    });
+
+    it("writes the conflict set on the update half", async () => {
+      const { s, last } = spy();
+      await s.upsert(
+        fixture,
+        { id: "a", label: "Oats", kcal: 500 },
+        { target: [fixture.label], set: { kcal: 620 } },
+      );
+
+      expect(last().query).toContain('do update set "kcal" = $');
+      expect(last().params).toContain(620);
+    });
+
+    it("overwrites a user_id smuggled into the values", async () => {
+      const smuggled = { id: "a", label: "Oats", kcal: 500, userId: OTHER } as unknown as {
+        id: string;
+        label: string;
+        kcal: number;
+      };
+
+      const { s, last } = spy();
+      await s.upsert(fixture, smuggled, { target: [fixture.label], set: { kcal: 500 } });
+
+      expect(last().params).toContain(OWNER);
+      expect(last().params).not.toContain(OTHER);
+    });
+
+    it("refuses to reassign ownership through the conflict set", async () => {
+      // The other half of the same leak: the insert cannot name a user_id, so
+      // an upsert that could set one on collision would be the way around it.
+      const smuggled = { kcal: 620, userId: OTHER } as unknown as { kcal: number };
+
+      const { s, last } = spy();
+      await s.upsert(fixture, { id: "a", label: "Oats", kcal: 500 }, {
+        target: [fixture.label],
+        set: smuggled,
+      });
+
+      expect(last().query).not.toContain('do update set "user_id"');
+      expect(last().params).not.toContain(OTHER);
+    });
+
+    it("refuses a conflict target that names user_id itself", async () => {
+      // The scope prepends it. A caller naming it too would emit
+      // `on conflict ("user_id","user_id","label")`, and Postgres would
+      // complain about the SQL rather than about the mistake.
+      const { s } = spy();
+
+      await expect(
+        s.upsert(fixture, { id: "a", label: "Oats", kcal: 500 }, {
+          target: [fixture.userId, fixture.label],
+          set: { kcal: 620 },
+        }),
+      ).rejects.toThrow(/prepends it/);
+    });
+
+    it("refuses a conflict set whose only field was the smuggled user_id", async () => {
+      const onlyUserId = { userId: OTHER } as unknown as { kcal: number };
+
+      const { s } = spy();
+
+      const attempt = () =>
+        s.upsert(fixture, { id: "a", label: "Oats", kcal: 500 }, {
+          target: [fixture.label],
+          set: onlyUserId,
+        });
+
+      await expect(attempt()).rejects.toThrow(/scope\.upsert\(\)/);
+      await expect(attempt()).rejects.toThrow(/Ownership cannot be reassigned/);
+    });
+  });
+
   describe("update", () => {
     it("filters by user_id", async () => {
       const { s, last } = spy();
@@ -236,6 +345,17 @@ describe("scope", () => {
 
       expect(last().query).not.toContain('set "user_id"');
       expect(last().params).not.toContain(OTHER);
+    });
+
+    it("names itself in the refusal, so the message points at the right call", async () => {
+      // `update` and `upsert` share `updatable`, so the method name has to be
+      // passed in. Asserting it here is what stops the two swapping over
+      // unnoticed and sending someone to the wrong line.
+      const onlyUserId = { userId: OTHER } as unknown as { label: string };
+
+      const { s } = spy();
+
+      await expect(s.update(fixture, onlyUserId)).rejects.toThrow(/scope\.update\(\)/);
     });
 
     it("refuses an update whose only field was the smuggled user_id", async () => {
@@ -280,10 +400,14 @@ describe("scope", () => {
       await s.select(fixture);
       await s.selectOne(fixture);
       await s.insert(fixture, { id: "a", label: "Oats", kcal: 500 });
+      await s.upsert(fixture, { id: "a", label: "Oats", kcal: 500 }, {
+        target: [fixture.label],
+        set: { kcal: 620 },
+      });
       await s.update(fixture, { label: "Eggs" });
       await s.delete(fixture);
 
-      expect(seen).toHaveLength(5);
+      expect(seen).toHaveLength(6);
       for (const { params } of seen) {
         expect(params).toContain(OWNER);
       }
@@ -299,6 +423,10 @@ describe("scope", () => {
       for (const result of [
         await s.select(fixture),
         await s.insert(fixture, { id: "a", label: "Oats", kcal: 500 }),
+        await s.upsert(fixture, { id: "a", label: "Oats", kcal: 500 }, {
+          target: [fixture.label],
+          set: { kcal: 620 },
+        }),
         await s.update(fixture, { label: "Eggs" }),
         await s.delete(fixture),
       ]) {
@@ -309,7 +437,7 @@ describe("scope", () => {
       }
     });
 
-    it("exposes nothing but the five scoped methods", async () => {
+    it("exposes nothing but the six scoped methods", async () => {
       // The executor is closed over, never a property, so holding a Scope gives
       // no way to run a statement of one's own. The lint rule in
       // eslint.config.mjs is what stops a caller importing getDb() to get one.
@@ -322,6 +450,7 @@ describe("scope", () => {
         "select",
         "selectOne",
         "update",
+        "upsert",
       ]);
       expect(asObject.executor).toBeUndefined();
     });
