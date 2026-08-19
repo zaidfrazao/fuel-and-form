@@ -97,7 +97,7 @@ function WeekNav({ monday }: { monday: CalendarDate }) {
       <Link
         href={`/plan?week=${previous}`}
         aria-label={`Previous week, ${weekLabel(previous)}`}
-        className="text-label text-text-secondary underline decoration-text-tertiary underline-offset-4"
+        className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
       >
         <span aria-hidden="true">&lsaquo; Prev</span>
       </Link>
@@ -108,14 +108,14 @@ function WeekNav({ monday }: { monday: CalendarDate }) {
        * that moved it — without this a screen-reader user would hear nothing
        * about where they had arrived.
        */}
-      <p aria-live="polite" className="text-label tabular-nums text-text-primary">
+      <p aria-live="polite" className="text-body tabular-nums text-text-primary">
         {weekLabel(monday)}
       </p>
 
       <Link
         href={`/plan?week=${next}`}
         aria-label={`Next week, ${weekLabel(next)}`}
-        className="text-label text-text-secondary underline decoration-text-tertiary underline-offset-4"
+        className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
       >
         <span aria-hidden="true">Next &rsaquo;</span>
       </Link>
@@ -192,7 +192,7 @@ export default async function PlanPage({
       <header className="flex flex-col gap-2">
         <Link
           href="/"
-          className="text-label text-text-secondary underline decoration-text-tertiary underline-offset-4"
+          className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
         >
           Right now
         </Link>
@@ -256,7 +256,7 @@ export default async function PlanPage({
       )}
 
       {elsewhere && (
-        <p className="text-caption text-text-secondary">
+        <p className="text-slash text-text-secondary">
           <Link href="/plan" className="underline decoration-text-tertiary underline-offset-4">
             Back to this week
           </Link>
@@ -265,7 +265,7 @@ export default async function PlanPage({
 
       <Link
         href="/plan/template"
-        className="text-label text-text-secondary underline decoration-text-tertiary underline-offset-4"
+        className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
       >
         Edit the weekly template
       </Link>

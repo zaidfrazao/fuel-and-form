@@ -110,9 +110,9 @@ describe.skipIf(!configured)("loading a week, scoped", () => {
 
     const week = await loadWeek(fixture.alice.userId, NOON, MONDAY);
 
-    const swapped = week!.days.flatMap((day) =>
-      day.meals.filter((meal) => meal.source === "override").map((meal) => day.date),
-    );
+    const swapped = week!.days
+      .filter((day) => day.meals.some((meal) => meal.source === "override"))
+      .map((day) => day.date);
 
     expect(swapped).toEqual([WEDNESDAY]);
   });

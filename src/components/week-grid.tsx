@@ -393,7 +393,7 @@ export function WeekGrid({
           role="alert"
           className="flex items-center justify-between gap-3 border-b border-border pb-3"
         >
-          <p className="text-caption text-error">{banner(failure)}</p>
+          <p className="text-slash text-error">{banner(failure)}</p>
           <Button variant="link" size="xs" onClick={() => act(failure)}>
             Try again
           </Button>

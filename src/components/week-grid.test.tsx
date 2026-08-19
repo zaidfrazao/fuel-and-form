@@ -111,6 +111,17 @@ const swappedTuesday = () =>
 
 const cell = (name: string | RegExp) => screen.getByRole("button", { name });
 
+/**
+ * The same lookup, awaited — for anything that appears through a transition.
+ *
+ * The optimistic value is applied inside `startTransition`, and a banner lands
+ * after an awaited action resolves. Neither is on the frame the click returns
+ * on, so a synchronous `getBy` races React's flush: it happened to win
+ * uninstrumented and lost under coverage, which is the same flake waiting to
+ * happen on a loaded CI runner.
+ */
+const findCell = (name: string | RegExp) => screen.findByRole("button", { name });
+
 beforeEach(() => {
   vi.clearAllMocks();
   swapOnDate.mockResolvedValue({ ok: true });
@@ -306,7 +317,7 @@ describe("editing a cell", () => {
 
     // § Feedback is "optimistic by default": the cell shows the new meal on the
     // frame the sheet closes, tinted as the override it is about to become.
-    const swapped = cell(/Thu 12 Mar dinner: Chickpea Curry/);
+    const swapped = await findCell(/Thu 12 Mar dinner: Chickpea Curry/);
     expect(swapped.className).toContain("bg-accent-subtle");
 
     release();
@@ -324,8 +335,15 @@ describe("editing a cell", () => {
 
     // § Feedback: "inline banner at the point of action, value reverted, 'Try
     // again'. Never a modal."
-    expect(screen.getByRole("alert").textContent).toContain("Couldn’t save that meal.");
-    expect(cell("Thu 12 Mar dinner: Chilli con Carne")).toBeTruthy();
+    //
+    // Awaited, not read synchronously. The refusal arrives from a promise and
+    // the banner is then set inside a nested transition, so a `getBy` here
+    // races that continuation — it passed uninstrumented and failed under
+    // coverage, which is the same flake waiting to happen in CI.
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Couldn’t save that meal.",
+    );
+    expect(await findCell("Thu 12 Mar dinner: Chilli con Carne")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
 
@@ -345,7 +363,7 @@ describe("editing a cell", () => {
     await user.click(screen.getByRole("button", { name: /Chickpea Curry/ }));
     await user.click(screen.getByRole("button", { name: "Swap" }));
 
-    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(await screen.findByRole("alert")).toBeTruthy();
   });
 });
 
@@ -378,8 +396,8 @@ describe("repeat and revert", () => {
 
     // Both days, immediately. Painting only the tapped cell would show the user
     // one day of a change they were told covered two.
-    expect(cell(/Wed 11 Mar dinner: Chickpea Curry/)).toBeTruthy();
-    expect(cell(/Thu 12 Mar dinner: Chickpea Curry/)).toBeTruthy();
+    expect(await findCell(/Wed 11 Mar dinner: Chickpea Curry/)).toBeTruthy();
+    expect(await findCell(/Thu 12 Mar dinner: Chickpea Curry/)).toBeTruthy();
 
     release();
   });
@@ -420,7 +438,7 @@ describe("repeat and revert", () => {
 
     // The template's meal, not an empty cell — the override is being removed,
     // and resolution finds the template entry again the moment it is gone.
-    const restored = cell("Tue 10 Mar dinner: Chilli con Carne");
+    const restored = await findCell("Tue 10 Mar dinner: Chilli con Carne");
     expect(restored.className).not.toContain("bg-accent-subtle");
 
     release();
@@ -452,7 +470,7 @@ describe("repeat and revert", () => {
     await user.click(cell(/Tue 10 Mar lunch: Chickpea Curry/));
     await user.click(screen.getByRole("button", { name: "Revert to template" }));
 
-    expect(cell("Tue 10 Mar lunch: not planned")).toBeTruthy();
+    expect(await findCell("Tue 10 Mar lunch: not planned")).toBeTruthy();
 
     release();
   });
@@ -467,6 +485,8 @@ describe("repeat and revert", () => {
     await user.click(screen.getByRole("button", { name: "Revert to template" }));
 
     // § Tone of Voice: name what happened. A revert did not fail to "save".
-    expect(screen.getByRole("alert").textContent).toContain("Couldn’t revert that meal.");
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Couldn’t revert that meal.",
+    );
   });
 });
