@@ -101,6 +101,28 @@ async function planFor(
   return week && { userId: session.userId, week };
 }
 
+/**
+ * Whether a date is one this plan can hold anything on.
+ *
+ * `resolveSlot` checks `program_start_date` FIRST, before it consults overrides
+ * — so a row written to an earlier date is stored and then never resolves. It
+ * would not appear on the grid, would not reach the export, and could not be
+ * reverted through the UI, because a revert re-derives the row from what
+ * resolution returns and resolution returns nothing. An orphan, in other words,
+ * created by a tap that appeared to work.
+ *
+ * `/` could not reach this state: it addresses today, which is after the start
+ * by construction. The grid is the first screen that can name an arbitrary
+ * date, which is why the check has to exist here and did not before.
+ *
+ * Refused rather than clamped, on `repeat.ts`'s reasoning: writing to the
+ * program's first day because someone asked for the week before it would be
+ * answering a question nobody asked.
+ */
+function isScheduled(week: Week, date: CalendarDate): boolean {
+  return date >= week.profile.programStartDate;
+}
+
 /** What resolution currently puts in a cell — `undefined` when nothing does. */
 function cellIn(week: Week, date: CalendarDate, slot: MealSlot) {
   return week.days
@@ -147,6 +169,12 @@ export async function swapOnDate(
     if (!resolved) return FAILED;
 
     const { userId, week } = resolved;
+
+    // Nothing is planned before the program starts, so nothing can be swapped
+    // there either. No `refresh()`: the screen is already showing the empty
+    // cells this refusal is about, and re-resolving would fix nothing.
+    if (!isScheduled(week, date)) return FAILED;
+
     const meal = schedulable(week, mealId);
 
     // The browser's copy of the library disagrees with the database — a meal
@@ -198,6 +226,11 @@ export async function repeatFromDate(
     if (!resolved) return FAILED;
 
     const { userId, week } = resolved;
+
+    // The run starts here and only moves forward, so a start on or after the
+    // program start puts every date in it after the start too.
+    if (!isScheduled(week, date)) return FAILED;
+
     const meal = schedulable(week, mealId);
 
     if (!meal) {

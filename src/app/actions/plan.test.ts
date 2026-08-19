@@ -71,7 +71,10 @@ const CHILLI = meal("m1");
 const CURRY = meal("m2");
 const RETIRED = meal("m3", { isArchived: true });
 
-const profile = { targetKcal: 1780 } as Profile;
+/** The program starts on the Monday, so the Sunday before it is unschedulable. */
+const BEFORE = "2026-03-08";
+
+const profile = { targetKcal: 1780, programStartDate: MON } as Profile;
 
 /** Tuesday dinner, resolved from wherever the test says. */
 const dinner = (source: "template" | "override", entryId: string): ResolvedDay => ({
@@ -155,6 +158,27 @@ describe("swapOnDate", () => {
     expect(writeOverride).not.toHaveBeenCalled();
   });
 
+  test("refuses a date before the program starts", async () => {
+    // `resolveSlot` checks `program_start_date` before it consults overrides,
+    // so a row written here would be stored, never resolve, never appear on the
+    // grid or in the export, and could not be reverted — the revert re-derives
+    // the row from resolution, and resolution returns nothing. An orphan made
+    // by a tap that looked like it worked.
+    await expect(swapOnDate(BEFORE, "dinner", "m2")).resolves.toEqual({ ok: false });
+
+    expect(writeOverride).not.toHaveBeenCalled();
+    // No refresh: the screen is already showing the empty cells this is about.
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  test("allows the program's first day itself", async () => {
+    // The bound is inclusive. An exclusive one would make the first day of the
+    // plan the one day it cannot be changed.
+    await expect(swapOnDate(MON, "dinner", "m2")).resolves.toEqual({ ok: true });
+
+    expect(writeOverride).toHaveBeenCalled();
+  });
+
   test("refuses without a session", async () => {
     getSession.mockResolvedValue(null);
 
@@ -217,6 +241,16 @@ describe("repeatFromDate", () => {
 
   test("refuses a fractional count", async () => {
     await expect(repeatFromDate(TUE, "dinner", "m2", 2.5)).resolves.toEqual({
+      ok: false,
+    });
+
+    expect(writeOverrides).not.toHaveBeenCalled();
+  });
+
+  test("refuses a run starting before the program does", async () => {
+    // Only the start is checked: the run moves forward, so a start on or after
+    // the program start puts every date in it after the start too.
+    await expect(repeatFromDate(BEFORE, "dinner", "m2", 3)).resolves.toEqual({
       ok: false,
     });
 
