@@ -197,6 +197,41 @@ function hydrate(
 }
 
 /**
+ * What the TEMPLATE alone says for one slot on one date — overrides ignored.
+ *
+ * The recurring intent, resolved without the dated divergences layered over it.
+ * Two questions need it, and both belong to the swap (FUEL-23):
+ *
+ *   - *What did this displace?* The swap's note — "Swapped. −21g protein, −140
+ *     kcal today." — is the difference between what is planned now and what
+ *     would have been. That is measured against this, not against whatever was
+ *     in the slot a moment ago, which is why the note survives a reload rather
+ *     than being remembered from the tap that caused it.
+ *   - *Revert to what?* Deleting the override restores exactly this row, and a
+ *     screen offering "Revert" should be able to say so before it is tapped.
+ *
+ * Same `null` cases as `resolveSlot`, and the same reason: a slot the template
+ * never fills is data, not an error. A slot that IS overridden still answers
+ * with the template's meal here — that is the whole point — and answers `null`
+ * when the swap filled a slot the template leaves empty.
+ *
+ * `source` is `"template"` and `entryId` the template entry's, because that is
+ * what this resolved; a caller comparing it against `resolveSlot`'s answer can
+ * tell the two apart on either field.
+ */
+export function templateSlot(
+  plan: Plan,
+  date: CalendarDate,
+  slot: MealSlot,
+): ResolvedMeal | null {
+  if (!isScheduled(plan, date)) return null;
+
+  const entry = templateEntry(plan.template, dayOfWeek(date), slot);
+
+  return entry ? hydrate(plan, slot, entry.mealId, "template", entry.id) : null;
+}
+
+/**
  * The meal planned for one slot on one date, or `null` if none is.
  *
  * `null` covers three ordinary states — before the program starts, a slot the
@@ -207,6 +242,11 @@ function hydrate(
  * Overrides are consulted FIRST and unconditionally, not as a replacement for
  * something already there. A swap into a slot the template leaves empty is a
  * real action — an extra meal, today only — and it resolves like any other.
+ *
+ * The template half is `templateSlot`, called rather than restated, so the two
+ * cannot come to different conclusions about what the recurring intent is. A
+ * swap's note is the difference between these two answers, and a difference is
+ * only meaningful when both sides were computed the same way.
  */
 export function resolveSlot(
   plan: Plan,
@@ -226,9 +266,7 @@ export function resolveSlot(
     return hydrate(plan, slot, override.mealId, "override", override.id);
   }
 
-  const entry = templateEntry(plan.template, dayOfWeek(date), slot);
-
-  return entry ? hydrate(plan, slot, entry.mealId, "template", entry.id) : null;
+  return templateSlot(plan, date, slot);
 }
 
 /**

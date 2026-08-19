@@ -7,7 +7,7 @@ import type { DayLogs } from "@/lib/log-intent";
 import { type Cursor, type NowView, resolveNow, scheduleFor } from "@/lib/resolve-now";
 import { getDb } from "../index";
 import * as schema from "../schema";
-import type { Profile, WorkoutExercise } from "../schema";
+import type { Meal, Profile, WorkoutExercise } from "../schema";
 import { scope } from "../scope";
 import { logsFor } from "./log";
 
@@ -90,6 +90,20 @@ export type Today = {
    * it writes.
    */
   logs: DayLogs;
+  /**
+   * The user's whole meal library — the swap's candidates (FUEL-23).
+   *
+   * Already fetched for resolution, so this costs nothing new; it is here
+   * because the picker needs a list of what could be eaten instead, which is a
+   * different question from what IS planned and cannot be derived from `view`.
+   *
+   * Rows, archived ones included, exactly as resolution takes them. Narrowing
+   * happens twice downstream and for two different reasons: `app/page.tsx`
+   * drops the columns the browser has no business holding, and
+   * `meal-picker.tsx` drops archived meals because a retired meal is not a
+   * candidate. Neither of those is a decision for a query.
+   */
+  meals: Meal[];
 };
 
 /**
@@ -175,5 +189,5 @@ export async function loadToday(
     cursor,
   });
 
-  return { view, profile, exercises: byWorkout(exerciseRows), logs };
+  return { view, profile, exercises: byWorkout(exerciseRows), logs, meals };
 }
