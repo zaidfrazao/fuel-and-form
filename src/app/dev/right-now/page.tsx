@@ -142,6 +142,56 @@ const WALK: AnytimeItem = {
 
 const TIMELINE = [COFFEE, BREAKFAST, SNACK, LUNCH, SESSION, DINNER];
 
+/**
+ * Dinner as it looks after a swap — FUEL-23.
+ *
+ * Resolved from an OVERRIDE rather than the template, which is the only thing
+ * that puts the Swapped tag and the note on the card. The numbers are chosen so
+ * the note reads the Brand Guide's own example: chickpea curry against the beef
+ * chilli in `TEMPLATE_PLAN` is −21g protein and −140 kcal.
+ */
+const SWAPPED_DINNER = at(
+  {
+    kind: "meal",
+    meal: {
+      slot: "dinner",
+      meal: meal("m7", "Chickpea curry", { kcal: 884, proteinG: 47.3, fatG: 26.4, carbG: 108.1 }),
+      source: "override",
+      entryId: "override-1",
+    },
+  },
+  "meal:e5",
+  "19:00",
+  1140,
+);
+
+const SWAPPED_TIMELINE = [COFFEE, BREAKFAST, SNACK, LUNCH, SESSION, SWAPPED_DINNER];
+
+/**
+ * The library the picker offers, and what the template plans today.
+ *
+ * Both invented, like everything else on this page. The library is deliberately
+ * more than one slot type deep so the sheet's "Show all meals" toggle has
+ * something to reveal, and it includes an archived row so the filter that drops
+ * it is visible by its absence.
+ */
+const LIBRARY = [
+  meal("m4", "Beef chilli", { kcal: 1024, proteinG: 68.3, fatG: 34.1, carbG: 82.5 }),
+  meal("m7", "Chickpea curry", { kcal: 884, proteinG: 47.3, fatG: 26.4, carbG: 108.1 }),
+  meal("m8", "Salmon and greens", { kcal: 742, proteinG: 52.1, fatG: 38.4, carbG: 28.9 }),
+  meal("m9", "Lentil stew", { kcal: 690, proteinG: 34.2, fatG: 18.1, carbG: 92.4 }),
+  meal("m1", "Overnight oats with berries", { slotType: "breakfast", kcal: 486, proteinG: 32.5, fatG: 11.8, carbG: 58.2 }),
+  meal("m2", "Greek yoghurt", { slotType: "snack", kcal: 184, proteinG: 19.4, fatG: 5.1, carbG: 14 }),
+  meal("m10", "Retired traybake", { isArchived: true }),
+];
+
+/** What the template plans, which a swap never changes. */
+const TEMPLATE_PLAN = TIMELINE.filter((item) => item.kind === "meal").map((item) => ({
+  slot: item.meal.slot,
+  meal: item.meal.meal,
+}));
+
+
 const EXERCISES = new Map<string, WorkoutExercise[]>([
   [
     "w1",
@@ -203,12 +253,17 @@ const LOGGED: LoggedEntry[] = [
   { id: "l7", name: "Daily walk", status: "done" },
 ];
 
-const activeAt = (index: number, minutesOfDay: number): NowView => ({
+const activeAt = (
+  index: number,
+  minutesOfDay: number,
+  timeline = TIMELINE,
+): NowView => ({
   ...base(minutesOfDay),
+  timeline,
   state: "active",
   index,
-  active: TIMELINE[index]!,
-  upcoming: TIMELINE.slice(index + 1),
+  active: timeline[index]!,
+  upcoming: timeline.slice(index + 1),
 });
 
 /* -------------------------------------------------------------------------- */
@@ -233,6 +288,11 @@ const CASES: Record<
     label: "Long figures",
     note: "Four-digit kcal beside one-decimal grams. The case that decides whether the grid holds at 375px.",
     view: activeAt(5, 19 * 60 + 20),
+  },
+  swapped: {
+    label: "Swapped",
+    note: "Dinner resolved from an override. The Swapped tag is accent-subtle — a tinted ground, not the accent, which stays on the NOW marker. The note is the Brand Guide's own copy example, and Revert is offered beside Undo.",
+    view: activeAt(5, 19 * 60 + 20, SWAPPED_TIMELINE),
   },
   last: {
     label: "Last item",
@@ -282,6 +342,8 @@ export default async function RightNowSpecimen({
         exercises={EXERCISES}
         entries={current.entries ?? []}
         target={TARGET}
+        meals={LIBRARY}
+        templatePlan={TEMPLATE_PLAN}
       />
 
       <div className="mx-auto flex max-w-[640px] flex-col gap-3 border-t border-border px-[22px] py-6 md:px-7">

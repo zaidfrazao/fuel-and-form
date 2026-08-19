@@ -14,6 +14,7 @@ import {
   resolveSlot,
   resolveWeek,
   SLOT_ORDER,
+  templateDay,
   templateSlot,
 } from "./resolve-plan";
 
@@ -723,5 +724,46 @@ describe("templateSlot — the recurring intent, overrides ignored", () => {
 
   it("throws on a malformed date rather than comparing it as text", () => {
     expect(() => templateSlot(plan(), "10/03/2026", "dinner")).toThrow(/Not a calendar date/);
+  });
+});
+
+describe("templateDay", () => {
+  const TUE = "2026-03-10";
+
+  it("is what the day would have been, in the order it is eaten", () => {
+    const subject = plan([override(TUE, "dinner", "curry")]);
+
+    expect(templateDay(subject, TUE).map((item) => [item.slot, item.meal.id])).toEqual([
+      ["breakfast", "oats"],
+      ["lunch", "chicken-salad"],
+      ["dinner", "chilli"],
+    ]);
+  });
+
+  it("agrees with resolveDay on a day with no overrides", () => {
+    expect(templateDay(plan(), TUE)).toEqual(resolveDay(plan(), TUE));
+  });
+
+  it("omits a slot the swap filled from nothing, and keeps one it emptied of nothing", () => {
+    // Not "resolveDay minus the overridden slots". Tuesday has no template
+    // snack, so a swapped-in snack has no counterpart here — and dinner keeps
+    // its template entry even though a swap replaced it.
+    const subject = plan([override(TUE, "snack", "yoghurt"), override(TUE, "dinner", "curry")]);
+
+    expect(templateDay(subject, TUE).map((item) => item.slot)).toEqual([
+      "breakfast",
+      "lunch",
+      "dinner",
+    ]);
+    expect(resolveDay(subject, TUE).map((item) => item.slot)).toEqual([
+      "breakfast",
+      "lunch",
+      "snack",
+      "dinner",
+    ]);
+  });
+
+  it("is empty before the program starts", () => {
+    expect(templateDay(plan(), "2026-02-24")).toEqual([]);
   });
 });

@@ -292,6 +292,31 @@ export function resolveDay(plan: Plan, date: CalendarDate): ResolvedMeal[] {
 }
 
 /**
+ * What the template alone plans for a date, in the order it is eaten.
+ *
+ * `resolveDay`'s counterpart, built on `templateSlot` the same way and for the
+ * same reason: one rule, applied five times, rather than two implementations of
+ * it. A screen showing a swapped day needs both answers — what is planned, and
+ * what would have been — and getting them from a matched pair is what stops the
+ * "before" and the "after" being resolved by subtly different rules.
+ *
+ * Note that this is NOT `resolveDay` minus the overridden slots: a slot the
+ * swap emptied of nothing still appears here if the template fills it, and a
+ * slot the swap filled from nothing does not.
+ */
+export function templateDay(plan: Plan, date: CalendarDate): ResolvedMeal[] {
+  const meals: ResolvedMeal[] = [];
+
+  for (const slot of SLOT_ORDER) {
+    const resolved = templateSlot(plan, date, slot);
+
+    if (resolved) meals.push(resolved);
+  }
+
+  return meals;
+}
+
+/**
  * The seven days of the week containing `date`, Monday first.
  *
  * The shape P2's weekly grid renders. Monday-first is the display convention;

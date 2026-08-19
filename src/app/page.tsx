@@ -83,6 +83,41 @@ export default async function Home() {
         targetFatG: profile.targetFatG,
         targetCarbG: profile.targetCarbG,
       }}
+      // The swap's candidates, column by column rather than as rows (FUEL-23).
+      // `method` and `notes` are free text that only meal detail shows, and
+      // there is no reason for a recipe's method to sit in the page payload of
+      // a screen that never renders it. What crosses is what the picker draws
+      // and what the preview totals.
+      meals={today.meals.map((meal) => ({
+        id: meal.id,
+        name: meal.name,
+        slotType: meal.slotType,
+        kcal: meal.kcal,
+        proteinG: meal.proteinG,
+        fatG: meal.fatG,
+        carbG: meal.carbG,
+        isArchived: meal.isArchived,
+      }))}
+      // What the template plans today — the "before" every swap note is
+      // measured against, and what a revert puts back. Narrowed the same way,
+      // and to the same shape the preview uses, so the two halves of a delta
+      // are the same kind of thing.
+      //
+      // The name is here because a revert renders optimistically: the card has
+      // to show the meal coming back on the frame the control is tapped, and
+      // it cannot name a meal whose name never crossed. The recipe's method and
+      // notes still do not.
+      templatePlan={today.templatePlan.map((item) => ({
+        slot: item.slot,
+        meal: {
+          id: item.meal.id,
+          name: item.meal.name,
+          kcal: item.meal.kcal,
+          proteinG: item.meal.proteinG,
+          fatG: item.meal.fatG,
+          carbG: item.meal.carbG,
+        },
+      }))}
     />
   );
 }

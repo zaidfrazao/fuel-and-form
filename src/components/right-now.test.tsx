@@ -18,17 +18,28 @@ import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve
  */
 const logItem = vi.fn();
 const undoLastLog = vi.fn();
+const swapMeal = vi.fn();
+const revertSwap = vi.fn();
 
 vi.mock("@/app/actions/log", () => ({
   logItem: (...args: unknown[]) => logItem(...args),
   undoLastLog: (...args: unknown[]) => undoLastLog(...args),
 }));
 
+vi.mock("@/app/actions/swap", () => ({
+  swapMeal: (...args: unknown[]) => swapMeal(...args),
+  revertSwap: (...args: unknown[]) => revertSwap(...args),
+}));
+
 beforeEach(() => {
   logItem.mockReset();
   undoLastLog.mockReset();
+  swapMeal.mockReset();
+  revertSwap.mockReset();
   logItem.mockResolvedValue({ ok: true });
   undoLastLog.mockResolvedValue({ ok: true });
+  swapMeal.mockResolvedValue({ ok: true });
+  revertSwap.mockResolvedValue({ ok: true });
 });
 
 /**
@@ -109,9 +120,14 @@ function exercise(fields: Partial<WorkoutExercise> & { id: string }): WorkoutExe
   };
 }
 
-const mealItem = (fields: Partial<Meal> = {}, slot: Meal["slotType"] = "breakfast"): NowItem => ({
+const mealItem = (
+  fields: Partial<Meal> = {},
+  slot: Meal["slotType"] = "breakfast",
+  /** "override" is what puts the Swapped tag, the note and Revert on the card. */
+  source: "template" | "override" = "template",
+): NowItem => ({
   kind: "meal",
-  meal: { slot, meal: meal(fields), source: "template", entryId: "entry-1" },
+  meal: { slot, meal: meal(fields), source, entryId: source === "override" ? "override-1" : "entry-1" },
 });
 
 const workoutItem = (fields: Partial<Workout> = {}): NowItem => ({
@@ -195,13 +211,42 @@ const entry = (fields: Partial<LoggedEntry> & { id: string }): LoggedEntry => ({
   ...fields,
 });
 
+/**
+ * The library the swap sheet offers.
+ *
+ * Two dinners so the picker has a real choice, one breakfast so "Show all
+ * meals" reveals something, and one archived row that must never appear.
+ */
+const LIBRARY = [
+  { id: "meal-3", name: "Chilli", slotType: "dinner" as const, kcal: 700, proteinG: 45, fatG: 20, carbG: 60, isArchived: false },
+  { id: "meal-4", name: "Chickpea curry", slotType: "dinner" as const, kcal: 560, proteinG: 24, fatG: 18, carbG: 70, isArchived: false },
+  { id: "meal-1", name: "Overnight oats", slotType: "breakfast" as const, kcal: 420, proteinG: 32.5, fatG: 12, carbG: 48, isArchived: false },
+  { id: "meal-9", name: "Retired traybake", slotType: "dinner" as const, kcal: 800, proteinG: 40, fatG: 30, carbG: 70, isArchived: true },
+];
+
+/** What the template plans today — the "before" of every swap note. */
+const TEMPLATE_PLAN = [
+  { slot: "breakfast" as const, meal: { id: "meal-1", name: "Overnight oats", kcal: 420, proteinG: 32.5, fatG: 12, carbG: 48 } },
+  { slot: "lunch" as const, meal: { id: "meal-2", name: "Chicken salad", kcal: 500, proteinG: 40, fatG: 15, carbG: 45 } },
+  { slot: "dinner" as const, meal: { id: "meal-3", name: "Chilli", kcal: 700, proteinG: 45, fatG: 20, carbG: 60 } },
+];
+
 const renderNow = (
   view: NowView,
   exercises: ReadonlyMap<string, WorkoutExercise[]> = EXERCISES,
   /** The day's log so far — what the summary prints, and what undo takes back. */
   entries: LoggedEntry[] = [],
 ) => (
-  render(<RightNow view={view} exercises={exercises} entries={entries} target={TARGET} />)
+  render(
+    <RightNow
+      view={view}
+      exercises={exercises}
+      entries={entries}
+      target={TARGET}
+      meals={LIBRARY}
+      templatePlan={TEMPLATE_PLAN}
+    />,
+  )
 );
 
 /** A day's log of `count` lines, for the cases that only care that there is one. */
@@ -647,18 +692,17 @@ describe("the actions", () => {
     expect(screen.queryByRole("button", { name: "Swap" })).toBeNull();
   });
 
-  test("swap is the only disabled control — the meal picker is P2's", () => {
+  test("no control on the action bar is disabled — swap opens the picker now", () => {
+    // It was disabled until FUEL-23, waiting for the sheet and the override it
+    // writes. Asserted as "none of the three", so that a control disabled by a
+    // later change has to be argued for rather than slipping in.
     renderNow(active(0));
 
-    expect((screen.getByRole("button", { name: "Swap" }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
-    expect(
-      (screen.getByRole("button", { name: "Log eaten" }) as HTMLButtonElement).disabled,
-    ).toBe(false);
-    expect((screen.getByRole("button", { name: "Skip" }) as HTMLButtonElement).disabled).toBe(
-      false,
-    );
+    for (const name of ["Log eaten", "Swap", "Skip"]) {
+      expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled, name).toBe(
+        false,
+      );
+    }
   });
 
   test("the primary is ink-filled, and there is exactly one", () => {
@@ -1043,5 +1087,270 @@ describe("undo", () => {
 
     expect(banner.textContent).toContain("Couldn’t undo that.");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chicken salad");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The swap — FUEL-23                                                         */
+/* -------------------------------------------------------------------------- */
+
+/** A view whose dinner resolved from an override rather than the template. */
+const swappedDinner = at(
+  mealItem({ id: "meal-4", name: "Chickpea curry", kcal: 560, proteinG: 24, fatG: 18, carbG: 70 }, "dinner", "override"),
+  "meal:e4",
+  "19:00",
+  1140,
+);
+
+const swappedView = (): NowView =>
+  ({
+    ...BASE,
+    timeline: [BREAKFAST, LUNCH, SESSION, swappedDinner],
+    state: "active",
+    index: 3,
+    active: swappedDinner,
+    upcoming: [],
+  }) as NowView;
+
+/** Opens the sheet from the card and hands back the tile for `name`. */
+async function choose(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(screen.getByRole("button", { name: "Swap" }));
+
+  const sheet = screen.getByRole("dialog");
+
+  await user.click(within(sheet).getByRole("button", { name: new RegExp(name) }));
+
+  return sheet;
+}
+
+describe("swapping a meal", () => {
+  test("Swap opens the picker for the active slot", async () => {
+    const user = userEvent.setup();
+
+    renderNow(active(3));
+    await user.click(screen.getByRole("button", { name: "Swap" }));
+
+    // Named for the slot being swapped, not for the meal in it — the sheet is
+    // asking "what goes in dinner", and the answer may be anything.
+    expect(screen.getByRole("dialog", { name: /Swap dinner/ })).toBeTruthy();
+  });
+
+  test("offers the library, and never an archived meal", async () => {
+    const user = userEvent.setup();
+
+    renderNow(active(3));
+    await user.click(screen.getByRole("button", { name: "Swap" }));
+    await user.click(screen.getByRole("button", { name: "Show all meals" }));
+
+    const sheet = screen.getByRole("dialog");
+
+    expect(within(sheet).getByRole("button", { name: /Chickpea curry/ })).toBeTruthy();
+    // A retired meal is not a candidate — meal-picker.tsx filters it, and
+    // actions/swap.ts refuses it again on the way in.
+    expect(within(sheet).queryByRole("button", { name: /Retired traybake/ })).toBeNull();
+  });
+
+  test("sends the item KEY and the chosen meal id, and nothing else", async () => {
+    // The security shape. The date and the slot are the server's to derive; a
+    // payload carrying them would be a payload to tamper with.
+    const user = userEvent.setup();
+
+    renderNow(active(3));
+
+    const sheet = await choose(user, "Chickpea curry");
+
+    await user.click(within(sheet).getByRole("button", { name: "Swap" }));
+
+    await waitFor(() => expect(swapMeal).toHaveBeenCalled());
+    expect(swapMeal).toHaveBeenCalledWith("meal:e4", "meal-4");
+  });
+
+  test("shows the new meal, its macros and the tag before the server answers", async () => {
+    // § Feedback's 300ms budget applies to a swap exactly as it does to a log.
+    const user = userEvent.setup();
+    const held = deferred<{ ok: boolean }>();
+
+    swapMeal.mockReturnValue(held.promise);
+
+    renderNow(active(3));
+
+    const sheet = await choose(user, "Chickpea curry");
+
+    await user.click(within(sheet).getByRole("button", { name: "Swap" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chickpea curry"),
+    );
+    expect(screen.getByText("Swapped")).toBeTruthy();
+    // The macro grid follows the meal, not the slot.
+    expect(screen.getByText("560")).toBeTruthy();
+
+    held.settle({ ok: true });
+    await waitFor(() => expect(swapMeal).toHaveBeenCalled());
+  });
+
+  test("does not advance the card", async () => {
+    // A swap changes WHAT the active item is, not whether it is done. Dinner is
+    // the last item here, so advancing would land on the day-complete summary.
+    const user = userEvent.setup();
+
+    renderNow(active(3));
+
+    const sheet = await choose(user, "Chickpea curry");
+
+    await user.click(within(sheet).getByRole("button", { name: "Swap" }));
+
+    await waitFor(() => expect(swapMeal).toHaveBeenCalled());
+    expect(screen.queryByText(/Day complete/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Log eaten" })).toBeTruthy();
+  });
+
+  test("reverts the card and says what happened when the write is refused", async () => {
+    // § Feedback: "inline banner at the point of action, value reverted, Try
+    // again. Never a modal." And § Tone of Voice: name what happened — this was
+    // not a log failing to save.
+    const user = userEvent.setup();
+
+    swapMeal.mockResolvedValue({ ok: false });
+
+    renderNow(active(3));
+
+    const sheet = await choose(user, "Chickpea curry");
+
+    await user.click(within(sheet).getByRole("button", { name: "Swap" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    expect(screen.getByRole("alert").textContent).toContain("Couldn’t swap that.");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chilli");
+    expect(screen.queryByText("Swapped")).toBeNull();
+  });
+
+  test("retries the same swap from the banner", async () => {
+    const user = userEvent.setup();
+
+    swapMeal.mockResolvedValue({ ok: false });
+
+    renderNow(active(3));
+
+    const sheet = await choose(user, "Chickpea curry");
+
+    await user.click(within(sheet).getByRole("button", { name: "Swap" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => expect(swapMeal).toHaveBeenCalledTimes(2));
+    // The SAME swap, not a fresh one — the retry cannot reopen the sheet to ask
+    // again, so the attempt has to carry what it needs to be re-run.
+    expect(swapMeal.mock.calls[1]).toEqual(["meal:e4", "meal-4"]);
+  });
+
+  test("says nothing at all when the write succeeds", async () => {
+    // Routine success is silent. There is no toast anywhere in this app — the
+    // card showing the new meal IS the confirmation.
+    const user = userEvent.setup();
+
+    renderNow(active(3));
+
+    const sheet = await choose(user, "Chickpea curry");
+
+    await user.click(within(sheet).getByRole("button", { name: "Swap" }));
+
+    await waitFor(() => expect(swapMeal).toHaveBeenCalled());
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  test("a session offers no Swap", () => {
+    renderNow(active(2));
+
+    expect(screen.queryByRole("button", { name: "Swap" })).toBeNull();
+  });
+});
+
+describe("a slot that is already swapped", () => {
+  test("marks the card, and states the cost in the Brand Guide's words", () => {
+    // The copy example itself: the template dinner is 700 kcal / 45g protein,
+    // the override is 560 / 24. § Feedback keeps success silent — this is not
+    // an acknowledgement of a tap but the state of an overridden slot, which is
+    // why it is here on a first render with no tap in sight.
+    renderNow(swappedView());
+
+    expect(screen.getByText("Swapped")).toBeTruthy();
+    expect(screen.getByText("Swapped. −21g protein, −140 kcal today.")).toBeTruthy();
+  });
+
+  test("tints the tag rather than accenting it", () => {
+    // § The Four Rules: one umber element per screen, and on `/` that is the
+    // ruler's NOW marker. `accent-subtle` is a tinted ground and not the
+    // accent, which is what lets the tag exist without making two.
+    renderNow(swappedView());
+
+    const tag = screen.getByText("Swapped");
+
+    expect(tag.className).toContain("bg-accent-subtle");
+    expect(tag.className).not.toContain("bg-accent ");
+    expect(tag.className).not.toContain("text-accent");
+  });
+
+  test("does not rely on colour alone", () => {
+    // § Accessibility: "never colour alone". The word is the signal; the tint
+    // reinforces it, and the mark survives greyscale.
+    renderNow(swappedView());
+
+    expect(screen.getByText("Swapped").textContent).toBe("Swapped");
+  });
+
+  test("offers Revert, which deletes the override by its own key", async () => {
+    const user = userEvent.setup();
+
+    renderNow(swappedView());
+
+    await user.click(screen.getByRole("button", { name: "Revert" }));
+
+    await waitFor(() => expect(revertSwap).toHaveBeenCalledWith("meal:e4"));
+  });
+
+  test("drops the tag and the note the moment Revert is tapped", async () => {
+    const user = userEvent.setup();
+    const held = deferred<{ ok: boolean }>();
+
+    revertSwap.mockReturnValue(held.promise);
+
+    renderNow(swappedView());
+    await user.click(screen.getByRole("button", { name: "Revert" }));
+
+    await waitFor(() => expect(screen.queryByText("Swapped")).toBeNull());
+    expect(screen.queryByText(/−21g protein/)).toBeNull();
+
+    held.settle({ ok: true });
+    await waitFor(() => expect(revertSwap).toHaveBeenCalled());
+  });
+
+  test("says what happened when a revert is refused", async () => {
+    const user = userEvent.setup();
+
+    revertSwap.mockResolvedValue({ ok: false });
+
+    renderNow(swappedView());
+    await user.click(screen.getByRole("button", { name: "Revert" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    // Not "Couldn't save that" — a revert was not saving anything, and
+    // § Tone of Voice asks copy to name what happened.
+    expect(screen.getByRole("alert").textContent).toContain("Couldn’t revert that.");
+    expect(screen.getByText("Swapped")).toBeTruthy();
+  });
+});
+
+describe("a slot resolved from the template", () => {
+  test("carries no tag, no note and no Revert", () => {
+    // The other half of "overridden cells are visually marked": an unmarked
+    // cell has to actually be unmarked, or the mark means nothing.
+    renderNow(active(3));
+
+    expect(screen.queryByText("Swapped")).toBeNull();
+    expect(screen.queryByText(/Swapped\./)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Revert" })).toBeNull();
   });
 });
