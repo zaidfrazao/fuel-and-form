@@ -118,9 +118,9 @@ describe("the week's shape", () => {
   });
 
   it("breaks a duplicate by sort order, then id — the resolver's tie-break", () => {
-    // Only reachable for rows written before FUEL-25's unique constraint. The
-    // editor and the resolver must pick the SAME row, or the screen would offer
-    // to change one meal while next Tuesday serves the other.
+    // Not a hypothetical: the seed puts two snacks on every weekday. The editor
+    // and the resolver must pick the SAME row, or the screen would offer to
+    // change one meal while next Tuesday serves the other.
     const week = templateWeek(
       [
         row(2, "dinner", "second", { sortOrder: 1, id: "a" }),

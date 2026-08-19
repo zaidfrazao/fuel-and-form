@@ -66,6 +66,7 @@ export default defineConfig({
         "src/lib/resolve-now.ts",
         "src/lib/rotation.ts",
         "src/lib/slot-times.ts",
+        "src/lib/template-plan.ts",
       ],
       thresholds: {
         "src/lib/db/scope.ts": FULLY_COVERED,
@@ -148,6 +149,21 @@ export default defineConfig({
         // time this failed to reject would not break settings, it would break
         // `/` on every subsequent request, until someone edited the row by hand.
         "src/lib/slot-times.ts": FULLY_COVERED,
+        // FUEL-25, and the same argument as cursor.ts, repeat.ts and
+        // slot-times.ts: `isDayOfWeek` and `isMealSlot` are the template
+        // endpoint's refusals, and every branch in them is reachable by anyone
+        // who can POST to the app. What they guard is the widest write in the
+        // app by blast radius — one row, and one row that decides every future
+        // occurrence of a weekday. An unmeasured branch here is not a wrong
+        // answer on a screen; it is a template row the resolver can never
+        // reach, silently accepted, that the editor then cannot show and the
+        // user cannot delete.
+        //
+        // The shaping half is gated for a quieter reason: it breaks a duplicate
+        // the same way resolve-plan.ts does, and the day those two disagree is
+        // the day the editor offers to change one row while the resolver serves
+        // another.
+        "src/lib/template-plan.ts": FULLY_COVERED,
       },
     },
   },

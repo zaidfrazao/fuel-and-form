@@ -22,13 +22,6 @@
       "when": 1787065102475,
       "tag": "0002_careless_monster_badoon",
       "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1787153931389,
-      "tag": "0003_superb_goblin_queen",
-      "breakpoints": true
     }
   ]
 }

@@ -134,14 +134,30 @@ export type TemplateRow = {
  * a meal stops it being chosen again, it does not rewrite the plan behind the
  * user's back.
  *
- * ## The duplicate tie-break
+ * ## One cell, one meal — and why that needs a tie-break rather than a constraint
  *
- * Lowest `sortOrder`, then id — the same total order `resolve-plan.ts` uses,
- * restated rather than imported because that one is not exported and both are
- * three lines. `plan_template_entries` is unique on `(user_id, day_of_week,
- * slot)` as of FUEL-25, so a duplicate can only be a row written before that
- * migration; the editor and the resolver agreeing about which one wins is what
- * stops this screen offering to change a row that is not the one being served.
+ * `plan_template_entries` genuinely can hold two rows for one weekday's slot,
+ * and does: `lib/seed/plan.ts` puts two snacks on every weekday, because the
+ * pair is what makes the day's protein target. schema.ts explains why a unique
+ * constraint cannot be added.
+ *
+ * So the cell shows ONE meal — lowest `sortOrder`, then id — and that is not a
+ * simplification, it is `resolve-plan.ts`'s answer restated. `resolveSlot`
+ * returns one meal per slot, so the meal named here is the meal that will
+ * actually be eaten, and the row `writeTemplateEntry` edits is the same one.
+ * All three agreeing is what stops this screen offering to change a row that is
+ * not the one being served.
+ *
+ * The order is restated rather than imported because `resolve-plan.ts` does not
+ * export it and both are three lines. The cost is that the two could drift; the
+ * check is the integration test that edits a two-snack cell and asserts the
+ * resolver serves what the editor changed.
+ *
+ * KNOWN, and named here because this is where it becomes visible: the second
+ * snack has no cell of its own, so this screen cannot edit or remove it
+ * individually. It cannot be eaten either — `resolveSlot` never returns it —
+ * which is the pre-existing inconsistency schema.ts records. Clearing the slot
+ * removes both.
  */
 export function templateWeek<M extends Pick<Meal, "id">>(
   entries: readonly TemplateRow[],

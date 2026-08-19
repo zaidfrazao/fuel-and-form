@@ -156,9 +156,10 @@ export async function setTemplateMeal(
  * Stops the template planning anything for a weekday's slot.
  *
  * No meal to validate, so the two guards are the whole of it. The delete is
- * addressed by weekday and slot rather than by row id — the unique constraint
- * makes at most one row match, so the cell IS the address, and no uuid has to
- * cross the wire to be trusted.
+ * addressed by weekday and slot rather than by row id: the cell IS the address,
+ * so no uuid has to cross the wire to be trusted. A cell can hold more than one
+ * row — the seed's two snacks — and clearing it removes all of them, which is
+ * what "the template plans nothing here" means; queries/template.ts argues it.
  *
  * A cell that was already empty answers `ok`, not failure, on the same terms
  * `revertSwap` does: the screen offers no Clear control in that state, so

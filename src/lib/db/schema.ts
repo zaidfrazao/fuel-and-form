@@ -393,17 +393,29 @@ export const mealIngredients = pgTable(
  * `day_plan_overrides` instead, which is what makes a swap one-off by
  * construction rather than by discipline.
  *
- * The unique constraint on `(user_id, day_of_week, slot)` is FUEL-25's, and it
- * is the same constraint `day_plan_overrides` carries one level down: it is
- * what makes "the template row for a slot" singular, and therefore what lets
- * editing the template be an upsert rather than a delete-then-insert with a
- * window in the middle where a weekday has no dinner at all.
+ * ## Deliberately NOT unique on `(user_id, day_of_week, slot)`
  *
- * resolve-plan.ts predicted it — "no matching unique constraint … worth adding,
- * and flagged as a follow-up" — and resolves duplicates deterministically
- * regardless. That tie-break stays. A resolver has to be total whatever is in
- * the table, and rows written before this migration are exactly the case a
- * constraint added later cannot speak for.
+ * `day_plan_overrides` carries exactly that constraint, and resolve-plan.ts
+ * once suggested this table should match it. It must not, and FUEL-25 found out
+ * the direct way: adding it makes the app's own seed unloadable.
+ *
+ * `lib/seed/plan.ts` puts TWO snacks on every weekday — "both snacks are eaten
+ * every weekday … dropping either costs 18-30g of protein against a 148g goal,
+ * so they are not optional extras" — and `sort_order` exists to give the pair a
+ * stable order. seed/plan.test.ts asserts that shape. A unique index would
+ * refuse the second row outright, and the migration would fail against any
+ * database that already holds one.
+ *
+ * The two tables differ because they answer different questions. An override is
+ * a single dated divergence and has to be singular, or a revert would not know
+ * which row to delete. The template is a plan for a day, and a day can hold two
+ * snacks.
+ *
+ * KNOWN INCONSISTENCY, pre-dating this: `resolveSlot` returns ONE meal per
+ * slot, so the seed's second snack never actually resolves onto a screen or an
+ * export. That is worth fixing — the resolver and the seed disagree about
+ * whether a slot can hold two meals — but it is a change to what `/` shows,
+ * not a schema question, and it is not FUEL-25's.
  */
 export const planTemplateEntries = pgTable(
   "plan_template_entries",
@@ -425,15 +437,6 @@ export const planTemplateEntries = pgTable(
       onDelete: "cascade",
     }),
     index("plan_template_entries_user_day_idx").on(t.userId, t.dayOfWeek),
-
-    // One meal per weekday per slot — see the block above. Named for the
-    // columns in order, matching `day_plan_overrides_user_date_slot_key`, so
-    // the two tables' constraints read as the pair they are.
-    uniqueIndex("plan_template_entries_user_day_slot_key").on(
-      t.userId,
-      t.dayOfWeek,
-      t.slot,
-    ),
   ],
 );
 

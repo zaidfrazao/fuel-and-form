@@ -42,16 +42,23 @@ import {
  * `day_plan_overrides` is unique on `(user_id, date, slot)`, the PRD's weekly
  * grid is a "7-day × slot table" whose cells open a meal picker, and a swap
  * writes exactly one row. So a slot holds one meal, and `resolveSlot` returns
- * one or nothing.
+ * one or nothing. `plan_template_entries` has no matching unique constraint, and
+ * a duplicated template entry therefore resolves deterministically (lowest
+ * `sort_order`, then id) instead of by whatever order the rows came back in.
  *
- * `plan_template_entries` now carries the matching constraint on `(user_id,
- * day_of_week, slot)` — FUEL-25 added it, because editing the template needs a
- * row it can upsert onto. The deterministic tie-break below (lowest
- * `sort_order`, then id) STAYS, and not out of caution: a resolver has to be
- * total whatever is in the table, and rows written before that migration are
- * exactly the case a constraint added afterwards cannot speak for. It costs a
- * sort of a handful of rows and removes a class of answer that would otherwise
- * depend on the order Postgres happened to return them in.
+ * That constraint was once flagged here as a follow-up worth adding. It is not:
+ * FUEL-25 tried, and `lib/seed/plan.ts` puts two snacks on every weekday on
+ * purpose — the pair is what makes the day's protein target — so a unique index
+ * refuses the app's own seed. schema.ts now records the reasoning beside the
+ * table.
+ *
+ * Which leaves a REAL inconsistency, pre-dating all of this and worth naming
+ * where the tie-break lives: because this returns one meal per slot, the second
+ * of those two snacks never resolves onto a screen or into an export. The seed
+ * and the resolver disagree about whether a slot can hold two meals, and the
+ * tie-break below is currently what hides the disagreement. Fixing it means
+ * deciding which of the two is right — a change to what `/` shows, not a
+ * change to this comment.
  */
 
 /** Which table an answer came from — an override is rendered as a swap (P2). */

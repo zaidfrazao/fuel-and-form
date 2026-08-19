@@ -66,7 +66,7 @@ import {
 /** The meal fields this screen draws and hands to the picker. */
 export type EditableMeal = PickableMeal;
 
-/** A cell's address. The unique constraint makes it a primary key. */
+/** A cell's address — the weekday and slot a row belongs to, not its row id. */
 type Cell = { dayOfWeek: DayOfWeek; slot: MealSlot };
 
 /**

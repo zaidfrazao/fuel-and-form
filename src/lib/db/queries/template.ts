@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 
 import type { DayOfWeek } from "@/lib/date";
 import { getDb } from "../index";
@@ -90,19 +90,52 @@ export async function loadTemplate(userId: string): Promise<Template> {
   return { entries, meals };
 }
 
+/** Everything in one cell — at most two rows in practice. See `writeTemplateEntry`. */
+const inCell = ({ dayOfWeek, slot }: TemplateCell) =>
+  and(
+    eq(schema.planTemplateEntries.dayOfWeek, dayOfWeek),
+    eq(schema.planTemplateEntries.slot, slot),
+  );
+
 /**
  * Sets what a weekday's slot recurs to, replacing whatever it held.
  *
- * An upsert on `plan_template_entries_user_day_slot_key`, the constraint
- * FUEL-25 added for exactly this. The alternative — delete the old row, insert
- * the new one — has a window between the two statements in which that weekday
- * has no dinner at all, and a request that failed in the middle would leave it
- * that way permanently. One statement has no middle.
+ * ## Why this is not an upsert
  *
- * `sortOrder` is deliberately not written. It defaults to 0 on insert and is
- * left alone on update, so an entry that was ordered by hand keeps its position
- * when its meal changes: this function answers "what is eaten", and reordering
- * a day is a different question with no control on this screen yet.
+ * It was, briefly. `plan_template_entries` has no unique constraint on
+ * `(user_id, day_of_week, slot)` to conflict on, and FUEL-25 added one before
+ * discovering it cannot exist: `lib/seed/plan.ts` puts two snacks on every
+ * weekday on purpose, so the index refuses the app's own seed. schema.ts
+ * carries the full reasoning.
+ *
+ * So the cell is read, then written — an UPDATE of the row that is already
+ * there, or an INSERT when the cell is empty. Two round trips rather than one,
+ * on a screen where that is not the constraint the 300ms budget is about: the
+ * optimistic layer has already redrawn the row by the time either statement
+ * runs.
+ *
+ * ## Which row, when a cell holds two
+ *
+ * The one the RESOLVER would serve: lowest `sort_order`, then id, which is the
+ * total order `resolve-plan.ts` uses. The editor shows one meal per cell
+ * because resolution answers with one meal per slot, so the row it offers to
+ * change has to be the row that is actually eaten. Any other choice would let
+ * someone change a snack and watch the screen keep serving the other one.
+ *
+ * ## The gap between the read and the write
+ *
+ * Two statements, so two requests editing the same cell at the same instant
+ * could both find no row and both insert. The result is a duplicate the
+ * resolver already tie-breaks — the same state the seed's two snacks are in,
+ * not a corruption — and reaching it needs one person to tap two devices in the
+ * same few milliseconds. Worth naming, not worth a transaction: this is a
+ * single-owner app, and the alternative would put a lock in the path of a
+ * screen that is otherwise two selects and an update.
+ *
+ * `sortOrder` is deliberately not written on either path. It defaults to 0 on
+ * insert and is left alone on update, so a day ordered by hand keeps its order
+ * when a meal in it changes: this function answers "what is eaten", and
+ * reordering a day is a different question with no control on this screen.
  */
 export async function writeTemplateEntry(
   userId: string,
@@ -110,23 +143,31 @@ export async function writeTemplateEntry(
 ): Promise<void> {
   const s = scope(userId, getDb());
 
-  await s.upsert(
-    schema.planTemplateEntries,
-    { dayOfWeek, slot, mealId },
-    {
-      // `userId` is deliberately absent: `scope.upsert` prepends it and throws
-      // if a caller names it, because ownership is always part of the arbiter
-      // index. The two columns here are the rest of that unique constraint.
-      target: [schema.planTemplateEntries.dayOfWeek, schema.planTemplateEntries.slot],
-      // Only the meal, and from `excluded` rather than from the captured
-      // argument — Postgres's name for the row PROPOSED for insertion, which is
-      // how queries/swap.ts writes the same clause. Identical here, where the
-      // batch is always one row, and identical for a reason: two upserts in the
-      // codebase written two different ways is an invitation for the batching
-      // one to be edited into the shape of the singular one.
-      set: { mealId: sql`excluded.meal_id` },
-    },
-  );
+  const existing = (
+    await s.select(schema.planTemplateEntries, inCell({ dayOfWeek, slot }), {
+      // The resolver's tie-break, run by Postgres. Ordering on the uuid rather
+      // than on its text is the same order: the canonical form is those bytes
+      // hex-encoded with hyphens at fixed positions, so it sorts identically to
+      // the string comparison `resolve-plan.ts` does in memory.
+      orderBy: [
+        asc(schema.planTemplateEntries.sortOrder),
+        asc(schema.planTemplateEntries.id),
+      ],
+      limit: 1,
+    })
+  ).at(0);
+
+  if (existing) {
+    await s.update(
+      schema.planTemplateEntries,
+      { mealId },
+      eq(schema.planTemplateEntries.id, existing.id),
+    );
+
+    return;
+  }
+
+  await s.insert(schema.planTemplateEntries, { dayOfWeek, slot, mealId });
 }
 
 /**
@@ -140,9 +181,21 @@ export async function writeTemplateEntry(
  *
  * Scoped by weekday and slot rather than by row id, which is the same choice
  * `revertSwap` makes for the opposite reason. There, the id is re-derived
- * server-side so a forged request cannot name an arbitrary row; here there is
- * no id to derive — the constraint guarantees at most one row matches, so the
- * cell itself is the address.
+ * server-side so a forged request cannot name an arbitrary row; here the cell
+ * itself is the address, and no uuid has to cross the wire to be trusted.
+ *
+ * ## It removes EVERY row in the cell, and that is a decision
+ *
+ * A weekday's snack slot can hold two rows (see schema.ts), and deleting only
+ * the one the resolver serves would leave the other behind — so "Clear this
+ * slot" would empty the row on screen and then fill it again from a meal the
+ * user cannot see, which reads as the control not working. "The template plans
+ * nothing here" is what the words say, so it is what the statement does.
+ *
+ * The meals themselves are untouched: this deletes plan rows, and the library
+ * is where a meal lives. § Buttons reserves the destructive variant for Delete
+ * and discard, and this is neither — the slot can be refilled from the same
+ * sheet, with the same meal.
  *
  * Returns whether anything was removed. A cell that was already empty is not a
  * failure: the caller was looking at a screen, and a screen can be behind.
@@ -155,10 +208,7 @@ export async function clearTemplateEntry(
 
   const removed = await s.delete(
     schema.planTemplateEntries,
-    and(
-      eq(schema.planTemplateEntries.dayOfWeek, dayOfWeek),
-      eq(schema.planTemplateEntries.slot, slot),
-    ),
+    inCell({ dayOfWeek, slot }),
   );
 
   return removed.length > 0;
