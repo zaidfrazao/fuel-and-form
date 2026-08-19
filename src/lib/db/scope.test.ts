@@ -287,6 +287,20 @@ describe("scope", () => {
       expect(last().params).not.toContain(OTHER);
     });
 
+    it("refuses a conflict target that names user_id itself", async () => {
+      // The scope prepends it. A caller naming it too would emit
+      // `on conflict ("user_id","user_id","label")`, and Postgres would
+      // complain about the SQL rather than about the mistake.
+      const { s } = spy();
+
+      await expect(
+        s.upsert(fixture, { id: "a", label: "Oats", kcal: 500 }, {
+          target: [fixture.userId, fixture.label],
+          set: { kcal: 620 },
+        }),
+      ).rejects.toThrow(/prepends it/);
+    });
+
     it("refuses a conflict set whose only field was the smuggled user_id", async () => {
       const onlyUserId = { userId: OTHER } as unknown as { kcal: number };
 

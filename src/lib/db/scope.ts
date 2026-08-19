@@ -268,6 +268,20 @@ export function scope(userId: string, executor: Executor) {
     ): Promise<T["$inferSelect"][]> {
       const set = updatable(conflict.set, "upsert");
 
+      // The scope supplies ownership; the caller must not. Passing it too would
+      // emit `on conflict ("user_id","user_id",…)`, which Postgres rejects with
+      // a message about the SQL rather than about the mistake — and a caller
+      // reading this signature could reasonably think naming it is required.
+      // Same reasoning as `updatable`'s throw: say what happened, and do it
+      // from the caller's own argument so nothing about the data leaks.
+      if (conflict.target.some((column) => column === table.userId)) {
+        throw new Error(
+          "scope.upsert() was given `userId` in its conflict target. The scope " +
+            "prepends it, so ownership is always part of the arbiter index — " +
+            "name only the other columns of the unique constraint.",
+        );
+      }
+
       return (await executor
         .insert(table)
         // Spread last, exactly as `insert` does, so a smuggled `userId` is

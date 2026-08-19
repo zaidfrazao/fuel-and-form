@@ -292,6 +292,20 @@ describe("what swapMeal refuses", () => {
     expect(writeOverride).not.toHaveBeenCalled();
   });
 
+  test("reconciles the screen when the meal is gone or retired", async () => {
+    // Both refusals mean the browser's library disagrees with the database —
+    // the meal was archived or deleted in another tab. Without a refresh the
+    // picker would go on offering it and every retry would fail identically,
+    // which is a loop with no way out of it.
+    await swapMeal("meal:template-entry", STEW.id);
+    expect(refresh).toHaveBeenCalled();
+
+    refresh.mockClear();
+
+    await swapMeal("meal:template-entry", "00000000-0000-0000-0000-000000000000");
+    expect(refresh).toHaveBeenCalled();
+  });
+
   test("refuses an archived meal", async () => {
     // The picker filters archived meals out, so no screen offers one. That is
     // only a rule if the write path agrees with it — otherwise the way anyone

@@ -142,7 +142,19 @@ export async function swapMeal(key: string, mealId: string): Promise<SwapResult>
     // from — a meal the screen could offer is a meal this accepts.
     const meal = day.meals.find((candidate) => candidate.id === mealId);
 
-    if (!meal || meal.isArchived) return FAILED;
+    // Refused, and the screen is reconciled on the way out.
+    //
+    // The optimistic value reverts on its own — React discards it when the
+    // transition ends, with or without this. What `refresh()` fixes is the
+    // OTHER half: both refusals here mean the browser's copy of the library
+    // disagrees with the database, because the meal was archived or deleted in
+    // another tab. Without a refresh the picker would go on offering the same
+    // meal, and every retry would fail the same way with nothing to act on.
+    if (!meal || meal.isArchived) {
+      refresh();
+
+      return FAILED;
+    }
 
     await writeOverride(userId, {
       // The resolved day, not the clock. `loadToday` derived this date from the

@@ -1,5 +1,5 @@
 import { signed } from "./format";
-import { type MacroBearing, totalMacros } from "./macros";
+import { type MacroBearing, round1, totalMacros } from "./macros";
 
 /**
  * The sentence under a swapped meal — Brand Guide § UI Copy Examples:
@@ -83,20 +83,4 @@ export function swapNote(from: MacroBearing | null, to: MacroBearing): string {
   ].filter((clause): clause is string => clause !== false);
 
   return clauses.length === 0 ? UNCHANGED : `Swapped. ${clauses.join(", ")} today.`;
-}
-
-/**
- * One decimal place, and never `-0`.
- *
- * The same rule `macros.ts` applies to every total it produces, restated for
- * the one subtraction that happens outside it: 40.2 − 61.5 is
- * −21.299999999999997 in binary floating point, and a protein figure that long
- * is a bug the reader can see. The `-0` clause matters more here than anywhere
- * — `−0g protein` would print for a swap that changed nothing, which is both
- * wrong and the case the bare "Swapped." exists for.
- */
-function round1(value: number): number {
-  const rounded = Math.round(value * 10) / 10;
-
-  return rounded === 0 ? 0 : rounded;
 }
