@@ -90,12 +90,41 @@ export async function loadTemplate(userId: string): Promise<Template> {
   return { entries, meals };
 }
 
-/** Everything in one cell — at most two rows in practice. See `writeTemplateEntry`. */
+/** Everything in one cell — a weekday's slot, which may hold more than one row. */
 const inCell = ({ dayOfWeek, slot }: TemplateCell) =>
   and(
     eq(schema.planTemplateEntries.dayOfWeek, dayOfWeek),
     eq(schema.planTemplateEntries.slot, slot),
   );
+
+/**
+ * The row a cell is REPRESENTED by — the one `resolveSlot` serves and the
+ * editor draws.
+ *
+ * One function, used by both writes, because "which of a cell's rows does this
+ * screen mean" has to be one answer. Two copies of the ordering would let an
+ * edit change one snack while a clear removed the other.
+ *
+ * Lowest `sort_order`, then id, run by Postgres. Ordering on the uuid rather
+ * than on its text is the same order: the canonical form is those bytes
+ * hex-encoded with hyphens at fixed positions, and hex digits sort in nibble
+ * order, so it sorts identically to the string comparison `resolve-plan.ts`
+ * does in memory. Checked against Postgres rather than assumed.
+ */
+async function servedRow(
+  s: ReturnType<typeof scope>,
+  cell: TemplateCell,
+): Promise<schema.PlanTemplateEntry | undefined> {
+  const rows = await s.select(schema.planTemplateEntries, inCell(cell), {
+    orderBy: [
+      asc(schema.planTemplateEntries.sortOrder),
+      asc(schema.planTemplateEntries.id),
+    ],
+    limit: 1,
+  });
+
+  return rows.at(0);
+}
 
 /**
  * Sets what a weekday's slot recurs to, replacing whatever it held.
@@ -116,11 +145,10 @@ const inCell = ({ dayOfWeek, slot }: TemplateCell) =>
  *
  * ## Which row, when a cell holds two
  *
- * The one the RESOLVER would serve: lowest `sort_order`, then id, which is the
- * total order `resolve-plan.ts` uses. The editor shows one meal per cell
- * because resolution answers with one meal per slot, so the row it offers to
- * change has to be the row that is actually eaten. Any other choice would let
- * someone change a snack and watch the screen keep serving the other one.
+ * `servedRow`'s — the one the RESOLVER would serve. The editor shows one meal
+ * per cell because resolution answers with one meal per slot, so the row it
+ * offers to change has to be the row that is actually eaten. Any other choice
+ * would let someone change a snack and watch the screen keep serving the other.
  *
  * ## The gap between the read and the write
  *
@@ -143,19 +171,7 @@ export async function writeTemplateEntry(
 ): Promise<void> {
   const s = scope(userId, getDb());
 
-  const existing = (
-    await s.select(schema.planTemplateEntries, inCell({ dayOfWeek, slot }), {
-      // The resolver's tie-break, run by Postgres. Ordering on the uuid rather
-      // than on its text is the same order: the canonical form is those bytes
-      // hex-encoded with hyphens at fixed positions, so it sorts identically to
-      // the string comparison `resolve-plan.ts` does in memory.
-      orderBy: [
-        asc(schema.planTemplateEntries.sortOrder),
-        asc(schema.planTemplateEntries.id),
-      ],
-      limit: 1,
-    })
-  ).at(0);
+  const existing = await servedRow(s, { dayOfWeek, slot });
 
   if (existing) {
     await s.update(
@@ -179,18 +195,31 @@ export async function writeTemplateEntry(
  * error. PRD § P2's weekend is exactly that — breakfast and coffee, and no
  * lunch entry at all.
  *
- * Scoped by weekday and slot rather than by row id, which is the same choice
- * `revertSwap` makes for the opposite reason. There, the id is re-derived
- * server-side so a forged request cannot name an arbitrary row; here the cell
- * itself is the address, and no uuid has to cross the wire to be trusted.
+ * Addressed by the cell rather than by a row id from the client, which is the
+ * same choice `revertSwap` makes: `revertSwap` re-derives the id server-side so
+ * a forged request cannot name an arbitrary row, and here the cell is the
+ * address, so no uuid has to cross the wire to be trusted at all.
  *
- * ## It removes EVERY row in the cell, and that is a decision
+ * ## It removes ONE row — the one the screen was showing
  *
- * A weekday's snack slot can hold two rows (see schema.ts), and deleting only
- * the one the resolver serves would leave the other behind — so "Clear this
- * slot" would empty the row on screen and then fill it again from a meal the
- * user cannot see, which reads as the control not working. "The template plans
- * nothing here" is what the words say, so it is what the statement does.
+ * A weekday's snack slot can hold two rows (schema.ts explains why), and the
+ * editor shows one meal per cell, so a DELETE over the whole cell would remove
+ * a row the user never saw.
+ *
+ * That is not a tidy-up, it is unrecoverable: the editor can put exactly one
+ * meal in a cell, so once both snacks are gone the two-snack shape cannot be
+ * rebuilt through the UI at all — and that shape is load-bearing, since
+ * `lib/seed/plan.ts` says dropping a snack costs 18-30g of protein against a
+ * 148g goal. There is no undo on this screen to soften it.
+ *
+ * So each tap removes exactly the row that was on screen, and a second tap
+ * removes what is revealed. The cost is that clearing a two-snack slot takes
+ * two taps and the first one appears to change the meal rather than empty the
+ * cell — which is honest, because that is what happened, and it is the only
+ * way the hidden row becomes visible at all.
+ *
+ * `writeTemplateEntry` picks the same row by the same rule, so the row this
+ * removes is always the row the editor offered and the resolver serves.
  *
  * The meals themselves are untouched: this deletes plan rows, and the library
  * is where a meal lives. § Buttons reserves the destructive variant for Delete
@@ -206,9 +235,13 @@ export async function clearTemplateEntry(
 ): Promise<boolean> {
   const s = scope(userId, getDb());
 
+  const served = await servedRow(s, { dayOfWeek, slot });
+
+  if (!served) return false;
+
   const removed = await s.delete(
     schema.planTemplateEntries,
-    inCell({ dayOfWeek, slot }),
+    eq(schema.planTemplateEntries.id, served.id),
   );
 
   return removed.length > 0;

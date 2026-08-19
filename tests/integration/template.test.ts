@@ -369,11 +369,12 @@ describe.skipIf(!configured)("editing the template, scoped", () => {
       expect(resolveSlot(await planFor(alice), NEXT_MONDAY, "breakfast")).toBeNull();
     });
 
-    it("empties a slot that holds more than one entry", async () => {
-      // Deleting only the row the resolver serves would empty the cell on
-      // screen and then refill it from a meal the user cannot see — which reads
-      // as the control not working. "The template plans nothing here" is what
-      // the words say.
+    it("removes only the row that was on screen, revealing the other", async () => {
+      // The hazard this is guarding against: the editor can put exactly ONE
+      // meal in a cell, so a delete over the whole cell would destroy the
+      // two-snack shape with no way to rebuild it through the UI — and the
+      // seed says dropping a snack costs 18-30g of protein against a 148g goal.
+      // One tap removes what was shown; a second removes what it reveals.
       const { alice } = fixture;
       const second = await addMeal(alice, "Alice's second snack");
 
@@ -381,6 +382,12 @@ describe.skipIf(!configured)("editing the template, scoped", () => {
         { dayOfWeek: MONDAY_DOW, slot: "snack", mealId: alice.mealId, sortOrder: 0 },
         { dayOfWeek: MONDAY_DOW, slot: "snack", mealId: second, sortOrder: 1 },
       ]);
+
+      await clearTemplateEntry(alice.userId, { dayOfWeek: MONDAY_DOW, slot: "snack" });
+
+      expect(resolveSlot(await planFor(alice), NEXT_MONDAY, "snack")).toMatchObject({
+        meal: { id: second },
+      });
 
       await clearTemplateEntry(alice.userId, { dayOfWeek: MONDAY_DOW, slot: "snack" });
 

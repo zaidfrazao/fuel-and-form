@@ -154,10 +154,11 @@ export type TemplateRow = {
  * resolver serves what the editor changed.
  *
  * KNOWN, and named here because this is where it becomes visible: the second
- * snack has no cell of its own, so this screen cannot edit or remove it
- * individually. It cannot be eaten either — `resolveSlot` never returns it —
- * which is the pre-existing inconsistency schema.ts records. Clearing the slot
- * removes both.
+ * snack has no cell of its own, so this screen shows one of the two at a time.
+ * It cannot be eaten either — `resolveSlot` never returns it — which is the
+ * pre-existing inconsistency schema.ts records. Clearing the slot removes the
+ * one on screen and reveals the other, which is the only way a row the resolver
+ * hides becomes visible at all.
  */
 export function templateWeek<M extends Pick<Meal, "id">>(
   entries: readonly TemplateRow[],
