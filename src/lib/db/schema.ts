@@ -392,6 +392,30 @@ export const mealIngredients = pgTable(
  * This is the table a swap must NOT touch. Divergence lands in
  * `day_plan_overrides` instead, which is what makes a swap one-off by
  * construction rather than by discipline.
+ *
+ * ## Deliberately NOT unique on `(user_id, day_of_week, slot)`
+ *
+ * `day_plan_overrides` carries exactly that constraint, and resolve-plan.ts
+ * once suggested this table should match it. It must not, and FUEL-25 found out
+ * the direct way: adding it makes the app's own seed unloadable.
+ *
+ * `lib/seed/plan.ts` puts TWO snacks on every weekday — "both snacks are eaten
+ * every weekday … dropping either costs 18-30g of protein against a 148g goal,
+ * so they are not optional extras" — and `sort_order` exists to give the pair a
+ * stable order. seed/plan.test.ts asserts that shape. A unique index would
+ * refuse the second row outright, and the migration would fail against any
+ * database that already holds one.
+ *
+ * The two tables differ because they answer different questions. An override is
+ * a single dated divergence and has to be singular, or a revert would not know
+ * which row to delete. The template is a plan for a day, and a day can hold two
+ * snacks.
+ *
+ * KNOWN INCONSISTENCY, pre-dating this: `resolveSlot` returns ONE meal per
+ * slot, so the seed's second snack never actually resolves onto a screen or an
+ * export. That is worth fixing — the resolver and the seed disagree about
+ * whether a slot can hold two meals — but it is a change to what `/` shows,
+ * not a schema question, and it is not FUEL-25's.
  */
 export const planTemplateEntries = pgTable(
   "plan_template_entries",

@@ -123,6 +123,26 @@ describe("schema", () => {
       expect(columnNames(unique?.config.columns ?? [])).toEqual(["user_id", "date", "slot"]);
     });
 
+    /**
+     * The constraint `day_plan_overrides` has and this table must NOT — FUEL-25
+     * added it, found out, and took it back off.
+     *
+     * `lib/seed/plan.ts` puts two snacks on every weekday deliberately, and
+     * seed/plan.test.ts asserts that shape. A unique index on
+     * `(user_id, day_of_week, slot)` refuses the second row, so the migration
+     * would fail against any database holding the app's own seed.
+     *
+     * Asserted rather than left as a comment because the absence LOOKS like an
+     * oversight: the two tables sit next to each other, one is unique on its
+     * (date, slot) pair, and "make them match" is the obvious tidy-up. This is
+     * the test that says the mismatch is the design.
+     */
+    it("plan_template_entries allows a weekday's slot to hold more than one meal", () => {
+      const { indexes } = getTableConfig(schema.planTemplateEntries);
+
+      expect(indexes.some((index) => index.config.unique)).toBe(false);
+    });
+
     it("weight_logs allows one weigh-in per (user, date)", () => {
       const { indexes } = getTableConfig(schema.weightLogs);
       const unique = indexes.find((index) => index.config.unique);

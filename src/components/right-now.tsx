@@ -375,15 +375,12 @@ function Anytime({ items }: { items: readonly AnytimeItem[] }) {
 function Actions({
   item,
   undoable,
-  swapped,
   failure,
   onAct,
   onSwap,
 }: {
   item?: ScheduledItem;
   undoable: boolean;
-  /** Whether the active item resolved from an override, so Revert is offered. */
-  swapped: boolean;
   failure: Attempt | null;
   onAct: (attempt: Attempt) => void;
   onSwap: () => void;
@@ -444,35 +441,91 @@ function Actions({
       )}
 
       {/*
-       * Tertiary, so the text variant — § Buttons gives that one to "Revert".
-       * Undo must not compete with the primary for attention: the common case
-       * is a tap that was correct, and the control for taking it back is for
-       * the uncommon one.
-       */}
-      {/*
-       * Both tertiary controls, on one row — § Buttons gives the Text variant
-       * to "Revert" by name, and Undo has it for the same reason: the common
-       * case is a tap that was correct, and the control for taking it back is
-       * for the uncommon one.
+       * Tertiary, so the Text variant — § Buttons gives that one to "Revert",
+       * and Undo has it for the same reason: the common case is a tap that was
+       * correct, and the control for taking it back is for the uncommon one.
        *
-       * Revert is offered only while the slot IS overridden, which is § Feedback's
-       * "revertible from where it was performed, for the rest of that day" —
-       * the state itself is what makes the control available, so it survives a
-       * reload without anything having to remember the swap happened.
+       * Undo is the only control left on this row. Revert used to sit beside it
+       * and now lives on the card — see `SwapNote`, which carries the argument.
+       * Undo stays because it belongs to the tap that was just made HERE: it
+       * takes back the log the primary button above it wrote, seconds ago, and
+       * moving it away from that button would be moving it away from its cause.
        */}
-      {(undoable || (item && swapped)) && (
+      {undoable && (
         <div className="flex items-center gap-4">
-          {undoable && (
-            <Button variant="link" onClick={() => onAct({ kind: "undo" })}>
-              Undo
-            </Button>
-          )}
-          {item && swapped && (
-            <Button variant="link" onClick={() => onAct({ kind: "revert", item })}>
-              Revert
-            </Button>
-          )}
+          <Button variant="link" onClick={() => onAct({ kind: "undo" })}>
+            Undo
+          </Button>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The swap's state, and the control that takes it back — FUEL-25.
+ *
+ * ## Why Revert is here and not in the action bar
+ *
+ * § Touch Targets: "destructive controls never sit adjacent to a frequently
+ * tapped one". In the bar it sat 12px below the Swap/Skip row and 64px below
+ * the 52px primary — inside the bottom third the guide reserves for the actions
+ * a thumb reaches for without looking, which on this screen are "Log eaten",
+ * "Skip" and "Swap". A slightly low tap on Swap landed on Revert, and the two
+ * are near-opposites: one opens a sheet that asks a question, the other
+ * silently deletes the override the sheet wrote.
+ *
+ * Up here it is a scroll-length away from all three, and § Feedback's
+ * "revertible from where it was performed, for the rest of that day" still
+ * holds in the sense that matters. The swap is DISPLAYED here — the Swapped tag
+ * beside the eyebrow, the note beneath the macros — and P2 words the criterion
+ * the same way round: "overridden cells are visually marked and can be reverted
+ * to template in one tap". The mark and the revert are one thought.
+ *
+ * The banner for a refused revert stays in the action bar with every other
+ * refusal, and that is not an inconsistency: § Feedback puts it "at the point of
+ * action", the bar is where this screen reports what it could not do, and the
+ * message names the operation — "Couldn't revert that." — so it is legible
+ * wherever it is read from.
+ *
+ * ## Offered by the state, not by the tap
+ *
+ * Rendered only while the slot IS overridden, which is what makes it survive a
+ * reload and appear in every tab: nothing has to remember that a swap happened,
+ * because the override itself is the memory. That was true of the old placement
+ * too and is worth restating, since it is the reason this is a conditional
+ * control rather than a disabled one.
+ *
+ * `size="sm"` is the guide's 46px, unchanged by the move: the button is inline
+ * with a caption now, and shrinking it to match the text would take it under
+ * the 44px minimum.
+ */
+function SwapNote({
+  note,
+  onRevert,
+}: {
+  /** `lib/swap-note.ts`'s sentence, or `null` when nothing was swapped. */
+  note: string | null;
+  /** Absent when the slot is not overridden — there is nothing to revert. */
+  onRevert?: () => void;
+}) {
+  if (!note && !onRevert) return null;
+
+  return (
+    <div className="flex items-center justify-between gap-3">
+      {/*
+       * § Feedback keeps routine success silent, and this is not an
+       * acknowledgement of a tap — it is the state of a slot that has diverged
+       * from the template, present for as long as the override is and in every
+       * tab, not just the one that swapped. See lib/swap-note.ts, which argues
+       * the distinction in full.
+       */}
+      <p className="text-caption text-text-secondary">{note}</p>
+
+      {onRevert && (
+        <Button variant="link" className="shrink-0 px-0" onClick={onRevert}>
+          Revert
+        </Button>
       )}
     </div>
   );
@@ -869,7 +922,6 @@ export function RightNow({
     <Actions
       item={active}
       undoable={progress.entries.length > 0}
-      swapped={activeMeal?.isOverride ?? false}
       failure={failure}
       onAct={act}
       onSwap={() => setPicking(true)}
@@ -1007,13 +1059,20 @@ export function RightNow({
             <MealMacros meal={activeMeal.meal} />
 
             {/*
-             * § Feedback keeps routine success silent, and this is not an
-             * acknowledgement of a tap — it is the state of a slot that has
-             * diverged from the template, present for as long as the override
-             * is and in every tab, not just the one that swapped. See
-             * lib/swap-note.ts, which argues the distinction in full.
+             * The swap's state and its revert, together — FUEL-25. Gated on
+             * `isOverride` rather than on the note: they describe the same
+             * condition, but the control is about whether a row exists to
+             * delete, and reading that off a sentence would make the criterion
+             * depend on copy.
              */}
-            {note && <p className="text-caption text-text-secondary">{note}</p>}
+            <SwapNote
+              note={note}
+              onRevert={
+                active && activeMeal.isOverride
+                  ? () => act({ kind: "revert", item: active })
+                  : undefined
+              }
+            />
           </div>
         ) : (
           <ExerciseList
