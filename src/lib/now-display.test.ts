@@ -2,7 +2,14 @@ import { describe, expect, test } from "vitest";
 
 import type { Meal, MealSlot, Workout } from "@/lib/db/schema";
 import { positionInSpan } from "@/components/day-ruler";
-import { dayLabel, itemLabel, itemName, rulerSlots, slotLabel } from "@/lib/now-display";
+import {
+  dayLabel,
+  itemLabel,
+  itemName,
+  rulerSlots,
+  slotLabel,
+  weekLabel,
+} from "@/lib/now-display";
 import type { NowItem, ScheduledItem } from "@/lib/resolve-now";
 
 /**
@@ -210,5 +217,38 @@ describe("dayLabel", () => {
   test("refuses a date that is not one", () => {
     // Loudly, rather than rendering "Invalid Date" into the corner of a screen.
     expect(() => dayLabel("2026-02-30")).toThrow(/No such date/);
+  });
+});
+
+/**
+ * The week header's label — FUEL-28.
+ *
+ * `dayLabel`'s sibling, and worth pinning for one reason of its own: it drops
+ * the parts that repeat, so every case is a decision about what may be left
+ * out. Leaving out too much is a header that says something false — "29 Dec – 4
+ * Jan 2026" claims a December that never happened.
+ */
+describe("weekLabel", () => {
+  test("names the month once when the week is inside one", () => {
+    expect(weekLabel("2026-08-10")).toBe("10 – 16 Aug 2026");
+  });
+
+  test("names both months when the week crosses one", () => {
+    expect(weekLabel("2026-07-27")).toBe("27 Jul – 2 Aug 2026");
+  });
+
+  test("names both years when the week crosses one", () => {
+    // The case where dropping either year would be a lie about which December.
+    expect(weekLabel("2025-12-29")).toBe("29 Dec 2025 – 4 Jan 2026");
+  });
+
+  test("reads the date's own parts, not a UTC midnight", () => {
+    // Same trap `dayLabel` names: `new Date("2026-08-10")` is the 9th in the
+    // zone this suite pins, so a label built that way would be off by one.
+    expect(weekLabel("2026-08-10")).toMatch(/^10 /);
+  });
+
+  test("refuses a date that is not one", () => {
+    expect(() => weekLabel("2026-02-30")).toThrow(/No such date/);
   });
 });

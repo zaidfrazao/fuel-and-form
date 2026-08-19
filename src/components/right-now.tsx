@@ -978,12 +978,25 @@ export function RightNow({
    * what that criterion is about.
    */
   const settingsLink = (
-    <Link
-      href="/settings"
-      className="text-caption text-text-tertiary underline decoration-text-tertiary underline-offset-4"
-    >
-      Slot times
-    </Link>
+    <span className="flex items-center gap-4">
+      {/*
+       * The week, from the day — FUEL-28. Beside Slot times and in the same
+       * register, for the same reason: it is below everything the screen is
+       * for, so `/` still "renders the current item with no navigation".
+       */}
+      <Link
+        href="/plan"
+        className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
+      >
+        Weekly plan
+      </Link>
+      <Link
+        href="/settings"
+        className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
+      >
+        Slot times
+      </Link>
+    </span>
   );
 
   /*

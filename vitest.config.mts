@@ -67,6 +67,7 @@ export default defineConfig({
         "src/lib/rotation.ts",
         "src/lib/slot-times.ts",
         "src/lib/template-plan.ts",
+        "src/lib/week-grid.ts",
       ],
       thresholds: {
         "src/lib/db/scope.ts": FULLY_COVERED,
@@ -164,6 +165,16 @@ export default defineConfig({
         // the day the editor offers to change one row while the resolver serves
         // another.
         "src/lib/template-plan.ts": FULLY_COVERED,
+        // FUEL-28, and template-plan.ts's argument one table across. It decides
+        // which of thirty-five cells is empty, and an empty cell is not
+        // cosmetic here: it is what the 45° hatch marks, what a tap fills, and
+        // — through `source` — what the `accent-subtle` tint is drawn from.
+        //
+        // Every way it can be wrong is a plausible-looking screen rather than a
+        // crash: a slot silently missing from a column, a swapped cell drawn as
+        // an ordinary one, the one umber marker on the wrong day. None of them
+        // throw, and none would look wrong in a diff.
+        "src/lib/week-grid.ts": FULLY_COVERED,
       },
     },
   },

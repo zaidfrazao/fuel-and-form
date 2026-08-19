@@ -1,0 +1,274 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+
+import { WeekGrid } from "@/components/week-grid";
+import { getSession } from "@/lib/auth/session";
+import { addDays, type CalendarDate, parseCalendarDate, startOfWeek } from "@/lib/date";
+import { loadWeek } from "@/lib/db/queries/week";
+import type { Meal } from "@/lib/db/schema";
+import { weekLabel } from "@/lib/now-display";
+
+/**
+ * `/plan` — the weekly grid. PRD § P2, and FUEL-28.
+ *
+ * Thin, like `/`, `/settings` and `/plan/template`: the fetch is
+ * `lib/db/queries/week.ts`, the shaping is `lib/week-grid.ts`, the render is
+ * `components/week-grid.tsx`. What happens here is the auth check, the week the
+ * URL asks for, and the narrowing.
+ *
+ * ## Why the week lives in the URL
+ *
+ * `/` holds its cursor in a COOKIE, and `lib/cursor.ts` argues why: the promise
+ * attached to a tap is that the view "is never wrong for longer than one tap",
+ * which has to survive the phone being locked, and a view position in a URL
+ * could be shared or bookmarked wrong.
+ *
+ * This is the opposite case and takes the opposite answer. A week is a place
+ * rather than a position in today — moving between weeks is navigation, so it
+ * should work with the browser's back button, and prev/next as `<Link>`s means
+ * the next week is prefetched and the grid needs no client state to move at
+ * all. A bookmarked week is a feature here, not a hazard: it names seven
+ * specific dates and means the same thing whenever it is opened.
+ *
+ * ## A bad `?week=` renders this week rather than failing
+ *
+ * `parseCalendarDate` throws on a malformed date, and this is a query parameter
+ * — the one input on the screen that a stranger fully controls. `parseCursor`
+ * makes the same call for the same reason: the honest answer to a value we do
+ * not recognise is the answer to no value at all, and a throw would turn an
+ * edited URL into a 500.
+ *
+ * The date is not otherwise constrained. Any date names a real week, including
+ * ones before the program started or years out — `resolveSlot` answers `null`
+ * for a date before `program_start_date`, so those render as seven empty
+ * columns, which is true.
+ *
+ * ## The auth check is here rather than in a layout
+ *
+ * The reasoning `page.tsx`, `login/page.tsx` and `plan/template/page.tsx` all
+ * set out: a check in a layout does not stop nested segments or Server Actions
+ * from running, so it belongs next to the data. `loadWeek` is the next line and
+ * is scoped to the session's user; the three Server Actions behind the grid
+ * resolve the session again for themselves, because they are separately
+ * reachable.
+ */
+
+export const metadata: Metadata = {
+  title: "Weekly plan · Fuel & Form",
+  robots: { index: false, follow: false },
+};
+
+/**
+ * The week a query parameter asks for, or `null` for the current one.
+ *
+ * Never throws. A repeated parameter arrives as an array and is refused rather
+ * than having one of its values picked — a URL that says two different things
+ * has not asked a question this screen can answer.
+ */
+function requestedWeek(value: string | string[] | undefined): CalendarDate | null {
+  if (typeof value !== "string") return null;
+
+  try {
+    parseCalendarDate(value);
+
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Prev, next and "This week" — § Buttons' Text variant, which is what a
+ * tertiary navigation control is.
+ *
+ * `<Link>`s rather than buttons, so the week is a real destination: back works,
+ * the URL can be shared, and Next prefetches the neighbouring weeks. The
+ * chevrons are decorative — the accessible name is the week each one leads to,
+ * because "previous" alone tells a screen-reader user nothing about where they
+ * would land.
+ */
+function WeekNav({ monday }: { monday: CalendarDate }) {
+  const previous = addDays(monday, -7);
+  const next = addDays(monday, 7);
+
+  return (
+    <nav aria-label="Week" className="flex items-center justify-between gap-3">
+      <Link
+        href={`/plan?week=${previous}`}
+        aria-label={`Previous week, ${weekLabel(previous)}`}
+        className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
+      >
+        <span aria-hidden="true">&lsaquo; Prev</span>
+      </Link>
+
+      {/*
+       * The week's own name, between the two controls that move it. Live,
+       * because the label changes on navigation while focus stays on the link
+       * that moved it — without this a screen-reader user would hear nothing
+       * about where they had arrived.
+       */}
+      <p aria-live="polite" className="text-body tabular-nums text-text-primary">
+        {weekLabel(monday)}
+      </p>
+
+      <Link
+        href={`/plan?week=${next}`}
+        aria-label={`Next week, ${weekLabel(next)}`}
+        className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
+      >
+        <span aria-hidden="true">Next &rsaquo;</span>
+      </Link>
+    </nav>
+  );
+}
+
+/**
+ * The meal fields that cross to the browser.
+ *
+ * `method` and `notes` are the ones deliberately left behind: they are free
+ * text a recipe screen renders and this table does not, and a page payload is
+ * not the place to ship a kitchen's worth of prose for seven days of meal
+ * names. `app/page.tsx` and `plan/template/page.tsx` narrow theirs the same way
+ * and for the same reason.
+ *
+ * The four macros DO cross, unlike the template editor's two, because the swap
+ * sheet totals the day against target before a confirm — that preview is the
+ * question the sheet exists to answer, and it cannot be computed from kcal and
+ * protein alone.
+ */
+const narrow = (meal: Meal) => ({
+  id: meal.id,
+  name: meal.name,
+  slotType: meal.slotType,
+  kcal: meal.kcal,
+  proteinG: meal.proteinG,
+  fatG: meal.fatG,
+  carbG: meal.carbG,
+  isArchived: meal.isArchived,
+});
+
+export default async function PlanPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const session = await getSession();
+
+  if (!session) redirect("/login");
+
+  const { week } = await searchParams;
+
+  // The clock is read once, here. Everything below takes the instant as an
+  // argument — the same arrangement `app/page.tsx` keeps for `/`, and the
+  // reason the week a test asks for is the week it gets.
+  const plan = await loadWeek(session.userId, new Date(), requestedWeek(week));
+
+  // No profile row: the user exists but has not been set up, so there is no
+  // timezone and therefore no week to be in. § Tone of Voice asks an empty
+  // state to describe what will appear rather than nudge.
+  if (!plan) {
+    return (
+      <main className="mx-auto flex min-h-dvh w-full max-w-[640px] flex-col justify-center gap-2 px-[22px] md:px-7">
+        <h1 className="text-title text-text-primary">No plan yet</h1>
+        <p className="text-body text-text-secondary">
+          The weekly plan appears here once a profile and a weekly template exist
+          for this account.
+        </p>
+      </main>
+    );
+  }
+
+  // Whether the grid is showing some week other than the one containing today.
+  // `startOfWeek` decides, rather than a comparison against the seven dates, so
+  // this and `loadWeek` cannot come to different conclusions about where a week
+  // begins.
+  const elsewhere = startOfWeek(plan.today) !== plan.monday;
+
+  return (
+    // 1024px, not 640px — § Spacing: "max content width: 640px single-column;
+    // 1024px for the week grid".
+    <main className="mx-auto flex min-h-dvh w-full max-w-[1024px] flex-col gap-7 px-[22px] py-8 md:px-7">
+      <header className="flex flex-col gap-2">
+        <Link
+          href="/"
+          className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
+        >
+          Right now
+        </Link>
+        <h1 className="text-title text-text-primary">Weekly plan</h1>
+        {/*
+         * What a tap on this screen does, before anything is tapped — the
+         * mirror of the sentence `/plan/template` opens with, and the same
+         * § Tone of Voice reasoning. The two screens write different tables and
+         * the difference is the whole of P2, so each says which one it is.
+         */}
+        <p className="text-body text-text-secondary">
+          What you are eating this week. Changing a meal here affects that date
+          only — the weekly template is unchanged.
+        </p>
+      </header>
+
+      <WeekNav monday={plan.monday} />
+
+      {/* No meals: nothing can be planned, and the grid would open a picker with
+          nothing in it. § Tone of Voice again — describe what will appear. */}
+      {plan.meals.length > 0 ? (
+        <WeekGrid
+          today={plan.today}
+          // Narrowed as `app/page.tsx` and `plan/template/page.tsx` narrow
+          // theirs: `method` and `notes` are free text this screen never
+          // renders, and there is no reason for a recipe's method to sit in the
+          // page payload of a table showing meal names. What crosses is what
+          // the cells draw, what the picker's tiles need, and the four macros
+          // the swap preview totals.
+          days={plan.days.map((day) => ({
+            date: day.date,
+            meals: day.meals.map(({ slot, meal, source, entryId }) => ({
+              slot,
+              source,
+              entryId,
+              meal: narrow(meal),
+            })),
+          }))}
+          templateDays={plan.templateDays.map((day) => ({
+            date: day.date,
+            meals: day.meals.map(({ slot, meal, source, entryId }) => ({
+              slot,
+              source,
+              entryId,
+              meal: narrow(meal),
+            })),
+          }))}
+          meals={plan.meals.map(narrow)}
+          target={{
+            targetKcal: plan.profile.targetKcal,
+            targetProteinG: plan.profile.targetProteinG,
+            targetFatG: plan.profile.targetFatG,
+            targetCarbG: plan.profile.targetCarbG,
+          }}
+        />
+      ) : (
+        <p className="text-body text-text-secondary">
+          The weekly plan appears here once there are meals in the library to
+          plan with.
+        </p>
+      )}
+
+      {elsewhere && (
+        <p className="text-slash text-text-secondary">
+          <Link href="/plan" className="underline decoration-text-tertiary underline-offset-4">
+            Back to this week
+          </Link>
+        </p>
+      )}
+
+      <Link
+        href="/plan/template"
+        className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
+      >
+        Edit the weekly template
+      </Link>
+    </main>
+  );
+}
