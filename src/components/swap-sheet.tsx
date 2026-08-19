@@ -5,6 +5,7 @@ import { useState } from "react";
 import { KeyValueGrid } from "@/components/kv-grid";
 import { MealPicker, type PickableMeal } from "@/components/meal-picker";
 import { Button } from "@/components/ui/button";
+import { REPEAT_MAX, REPEAT_MIN } from "@/lib/repeat";
 import type { MealSlot } from "@/lib/db/schema";
 import { figure, signed } from "@/lib/format";
 import {
@@ -106,6 +107,19 @@ export type SwapSheetProps = {
    * view rather than fetching one.
    */
   onConfirm: (meal: SwappableMeal) => void;
+  /**
+   * The same meal, on this date and the `days - 1` after it — FUEL-24.
+   *
+   * Optional, and absent means the control is not rendered at all. That is what
+   * lets the dev specimen page and the picker's own tests mount this sheet
+   * without acquiring an opinion about a repeat — and it will matter again when
+   * the weekly grid (FUEL-28) reuses the sheet for a cell whose date is not
+   * today, where "repeat forward from here" may need a different answer.
+   *
+   * `days` counts the date the sheet is showing as the first of the run, so it
+   * is the number the button prints. See `lib/repeat.ts` on why.
+   */
+  onRepeat?: (meal: SwappableMeal, days: number) => void;
 };
 
 /**
@@ -132,6 +146,109 @@ function previewOf(
   return summariseDay(holds ? replaced : [...replaced, { slot, meal: candidate }]);
 }
 
+/**
+ * "Repeat for N days", and the count it names — FUEL-24.
+ *
+ * ## Why it is a text button and the confirm is not
+ *
+ * § Buttons gives the Text variant to tertiary actions and names "Repeat for 2
+ * days" as its own example, which settles the question the task's acceptance
+ * criterion also settles: this is NOT a second filled button. Two filled
+ * buttons in one sheet would be two primaries, and the screen would have
+ * stopped saying which action it is for. A repeat is the uncommon case — the
+ * common one is swapping today's dinner and nothing else — so it gets the
+ * weight of a Revert rather than the weight of a Swap.
+ *
+ * ## The stepper is not a third button
+ *
+ * It adjusts the count the one text button will act on; it commits nothing. So
+ * the sheet still has exactly one primary and one tertiary ACTION, and the
+ * criterion's "a text button" stays literally true. The count lives in the
+ * button's own label rather than only in the stepper, because the label is what
+ * the user reads before tapping and a control that said "Repeat" while a
+ * separate number said "5" would be asking them to assemble the sentence.
+ *
+ * The bounds come from `lib/repeat.ts` — the same two constants the Server
+ * Action validates against. A stepper that could reach a count the endpoint
+ * refuses would read as the button being broken rather than as a limit.
+ *
+ * `days` is at least two, so the noun is always plural and there is no singular
+ * case to get right. That is a property of `REPEAT_MIN`, which exists because a
+ * repeat of one day is the substitute this sheet already offers.
+ */
+function RepeatRow({
+  days,
+  onDays,
+  onRepeat,
+  disabled,
+}: {
+  days: number;
+  onDays: (days: number) => void;
+  onRepeat: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <Button type="button" variant="link" disabled={disabled} onClick={onRepeat}>
+        Repeat for {days} days
+      </Button>
+
+      {/*
+       * Grouped and labelled, because the two buttons are meaningless apart:
+       * "minus" on its own says nothing about what it takes one away from.
+       *
+       * Live whether or not a meal has been chosen, unlike the text button
+       * beside it. The stepper COMMITS nothing — it adjusts how many days the
+       * one action would cover — and disabling a setting because the action it
+       * feeds is not ready yet makes the row look broken rather than pending.
+       * Someone who knows they cooked four portions can say so and then pick
+       * the meal; the order the two are given in does not matter.
+       */}
+      <div role="group" aria-label="Days to repeat" className="flex items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label="One day fewer"
+          disabled={days <= REPEAT_MIN}
+          onClick={() => onDays(days - 1)}
+        >
+          {/* A minus SIGN, not a hyphen — the hyphen sits above the digits'
+              optical centre and reads as a dash between two controls. */}
+          &minus;
+        </Button>
+
+        {/*
+         * Live, because the number changes without the focus moving: the
+         * stepper button keeps focus while the value under it changes, so
+         * without this a screen-reader user would hear nothing at all until
+         * they navigated back to the text button.
+         *
+         * The digit is hidden from assistive technology and a worded copy is
+         * announced instead. A bare "3" is ambiguous read aloud — three what —
+         * and the visible glyph has the tabular figures the rest of the app
+         * uses, which the worded version would break.
+         */}
+        <span aria-live="polite" className="min-w-5 text-center text-body tabular-nums">
+          <span aria-hidden="true">{days}</span>
+          <span className="sr-only">{days} days</span>
+        </span>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label="One day more"
+          disabled={days >= REPEAT_MAX}
+          onClick={() => onDays(days + 1)}
+        >
+          +
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function SwapSheet({
   open,
   onOpenChange,
@@ -141,6 +258,7 @@ export function SwapSheet({
   meals,
   target,
   onConfirm,
+  onRepeat,
 }: SwapSheetProps) {
   /*
    * The selection, held here rather than in `right-now.tsx`.
@@ -151,6 +269,15 @@ export function SwapSheet({
    * reads as the swap having half-happened.
    */
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  /*
+   * How many days a repeat would cover, held beside the selection and cleared
+   * with it. Starting at `REPEAT_MIN` every time the sheet opens is the same
+   * decision the selection makes: a sheet reopened after a cancelled swap that
+   * still read "Repeat for 6 days" would be offering a count the user chose in
+   * a conversation they abandoned.
+   */
+  const [days, setDays] = useState(REPEAT_MIN);
 
   const selected = meals.find((meal) => meal.id === selectedId);
 
@@ -168,7 +295,20 @@ export function SwapSheet({
     // Cleared on the way out rather than on the way in: Radix keeps the portal
     // mounted through the close transition, so resetting at open would be
     // visible as the ring disappearing a frame before the sheet does.
-    if (!next) setSelectedId(null);
+    if (!next) {
+      setSelectedId(null);
+      setDays(REPEAT_MIN);
+    }
+  }
+
+  function repeat() {
+    if (!selected || !onRepeat) return;
+
+    // Closed before the write, exactly as `confirm` is, and for the reason
+    // argued there. The banner for a refused repeat lands on the card beneath,
+    // which is where the sheet was opened from.
+    onRepeat(selected, days);
+    close(false);
   }
 
   function confirm() {
@@ -272,6 +412,22 @@ export function SwapSheet({
         <Button type="button" className="w-full" disabled={!selected} onClick={confirm}>
           Swap
         </Button>
+
+        {/*
+         * Beneath the confirm, and only when the caller has somewhere to send
+         * it. Disabled until a tile is chosen for the same reason the confirm
+         * is: there is no meal to push forward yet, and a control that silently
+         * does nothing when tapped is worse than one that says it cannot be
+         * used yet.
+         */}
+        {onRepeat && (
+          <RepeatRow
+            days={days}
+            onDays={setDays}
+            onRepeat={repeat}
+            disabled={!selected}
+          />
+        )}
       </div>
     </MealPicker>
   );

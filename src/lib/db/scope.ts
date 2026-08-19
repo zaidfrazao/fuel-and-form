@@ -233,7 +233,7 @@ export function scope(userId: string, executor: Executor) {
     },
 
     /**
-     * Writes one row, or updates the row already occupying its unique slot.
+     * Writes rows, updating any already occupying their unique slots.
      *
      * The write behind a swap (FUEL-23): `day_plan_overrides` is unique on
      * `(user_id, date, slot)`, so swapping the same slot twice has to land on
@@ -260,10 +260,33 @@ export function scope(userId: string, executor: Executor) {
      * Postgres infers the arbiter from the SET of columns rather than their
      * order, so prepending rather than appending changes nothing about which
      * index is matched.
+     *
+     * ## One row or many, in ONE statement
+     *
+     * The array form is FUEL-24's repeat: the same meal onto a run of
+     * consecutive dates. It takes the union `insert` already takes, so the
+     * scope's two write methods do not disagree with each other about their own
+     * shape, and `userId` is stamped onto EVERY row rather than onto the first.
+     *
+     * A batch is one statement rather than a loop for a reason the caller
+     * cannot supply itself: a loop can be interrupted between iterations, so a
+     * repeat could land on Tuesday and Wednesday and not Thursday, leaving a
+     * plan that is half of what the button said. One statement is atomic, so a
+     * repeat either happens or does not — and it needs no transaction wrapper
+     * to be so, which keeps `queries/` free of the pool handle.
+     *
+     * The one thing a caller must guarantee: the rows in a batch must not
+     * collide with EACH OTHER on the arbiter. Postgres refuses a single
+     * `INSERT ... ON CONFLICT DO UPDATE` that would affect the same row twice —
+     * "cannot affect row a second time" — and it is a runtime error, not a
+     * type error. For the repeat the slot is fixed and `repeatDates` returns
+     * strictly increasing distinct dates, so no two rows share `(date, slot)`
+     * and the case is unreachable; `repeat.test.ts` asserts that distinctness
+     * explicitly rather than leaving it as an assumption about a helper.
      */
     async upsert<T extends ScopedTable>(
       table: T,
-      values: ScopedInsert<T>,
+      values: ScopedInsert<T> | ScopedInsert<T>[],
       conflict: ScopedConflict<T>,
     ): Promise<T["$inferSelect"][]> {
       const set = updatable(conflict.set, "upsert");
@@ -282,11 +305,41 @@ export function scope(userId: string, executor: Executor) {
         );
       }
 
+      // Normalised exactly as `insert` does, and for the same reason: one code
+      // path stamps ownership, so the singular case cannot acquire a guarantee
+      // the batch case lacks.
+      const rows = Array.isArray(values) ? values : [values];
+
+      // An empty batch, which only became expressible when this method started
+      // taking arrays. Postgres rejects an `INSERT ... VALUES` with no tuples
+      // as a syntax error, so without this the failure would surface from
+      // inside the scope — the one module in the app whose errors most need to
+      // be about the caller's mistake rather than about the SQL.
+      //
+      // A throw rather than a silent `[]`, on the same grounds as the two
+      // refusals above: returning nothing would let "I wrote no rows" and "I
+      // was asked to write no rows" look identical at the call site, and a
+      // caller that built its batch from a filter that happened to empty would
+      // never find out. Callers that legitimately may have nothing to write
+      // check first — see `writeOverrides` in queries/swap.ts.
+      if (rows.length === 0) {
+        throw new Error(
+          "scope.upsert() was given an empty array. Postgres has no statement " +
+            "for inserting no rows — check for an empty batch before calling, " +
+            "so that writing nothing is a decision rather than a failed write.",
+        );
+      }
+
+      const owned = rows.map((row) => ({
+        ...row,
+        // Spread last, exactly as `insert` does, so a smuggled `userId` is
+        // overwritten rather than honoured — on every row, not just the first.
+        userId,
+      }));
+
       return (await executor
         .insert(table)
-        // Spread last, exactly as `insert` does, so a smuggled `userId` is
-        // overwritten rather than honoured.
-        .values({ ...values, userId } as T["$inferInsert"])
+        .values(owned as T["$inferInsert"][])
         .onConflictDoUpdate({
           target: [table.userId, ...conflict.target],
           set: set as PgUpdateSetSource<T>,

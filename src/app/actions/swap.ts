@@ -4,14 +4,16 @@ import { refresh } from "next/cache";
 
 import { getSession } from "@/lib/auth/session";
 import { readCursor } from "@/lib/cursor-cookie";
-import { deleteOverride, writeOverride } from "@/lib/db/queries/swap";
+import { deleteOverride, writeOverride, writeOverrides } from "@/lib/db/queries/swap";
+import { repeatDates } from "@/lib/repeat";
 import { loadToday } from "@/lib/db/queries/today";
 import type { Today } from "@/lib/db/queries/today";
 import type { ResolvedMeal } from "@/lib/resolve-plan";
 import type { NowView } from "@/lib/resolve-now";
 
 /**
- * Substituting today's meal — P2's swap, from the "Right Now" card.
+ * Substituting today's meal, and repeating it forward — P2's two swap modes,
+ * from the "Right Now" card.
  *
  * The sibling of `log.ts` and built on the same three rules, which are argued
  * there in full and only summarised here: a Server Action is a public endpoint,
@@ -39,6 +41,20 @@ import type { NowView } from "@/lib/resolve-now";
  *
  * So the worst a hand-rolled POST can do is swap one of the user's own meals
  * into one of their own slots, today — which is the feature.
+ *
+ * ## The repeat widens that by exactly one number (FUEL-24)
+ *
+ * `repeatMeal` takes a third value, `days`, and it is a different KIND of
+ * client input from the meal id: it does not pick which row is written, it
+ * multiplies how MANY are. The date it starts from is still server-derived and
+ * the slot is still re-resolved from the key, so the run can only ever move
+ * forwards from today, in the caller's own slot, with the caller's own meal —
+ * but without a bound, one request could write an unlimited number of rows.
+ *
+ * That bound lives in `lib/repeat.ts` rather than here, with the argument for
+ * its size and for refusing rather than clamping. What this file is responsible
+ * for is treating a count it will not act on the same way it treats a meal it
+ * will not accept: an answer, not an exception.
  *
  * ## Why archived meals are refused here too
  *
@@ -173,6 +189,112 @@ export async function swapMeal(key: string, mealId: string): Promise<SwapResult>
     // Names the failure for whoever runs the app. The user gets a banner and a
     // "Try again", which is everything they can act on.
     console.error("Could not swap the meal.", error);
+
+    return FAILED;
+  }
+}
+
+/**
+ * Writes the same meal into this slot on `days` consecutive dates, starting
+ * today — PRD § P2's "Repeat", and the thawed-too-much-mince case.
+ *
+ * ## It is `swapMeal` with a different number of dates, on purpose
+ *
+ * Every check above is repeated here in the same order and with the same
+ * refusal, because a repeat is a swap that happens more than once and any
+ * divergence between the two would be a way to reach one of them through the
+ * other's validation. The two are not merged into one action with a defaulted
+ * `days`, though, and that is deliberate: `swapMeal` would then carry a
+ * parameter that widens what its callers can write, and every existing call
+ * site would have to be read to confirm it does not pass one. Two entry points
+ * that share their checks are easier to hold than one whose blast radius
+ * depends on an argument.
+ *
+ * ## The dates
+ *
+ * The run starts at `day.view.date` — the day `loadToday` resolved from the
+ * user's configured timezone — and never at `new Date()`. Reading the clock
+ * again here could land on the other side of midnight and start the run on a
+ * date the screen never showed, which for a repeat is worse than for a swap: it
+ * would be off by one on every date in the run rather than on one of them.
+ *
+ * Week ends, month ends, leap days and daylight saving are `addDays`'s problem
+ * and were solved before this task existed, which is why there is no calendar
+ * arithmetic in this file.
+ *
+ * ## One statement, and N individually revertible rows
+ *
+ * `writeOverrides` sends one `INSERT ... ON CONFLICT`, so the acceptance
+ * criterion's "in one action" is true of the database and not only of the tap:
+ * there is no state in which Tuesday and Wednesday were written and Thursday
+ * was not. And because each date is its own row, "each created override is
+ * individually revertible" needs nothing further — `revertSwap` already removes
+ * exactly one, and reverting Wednesday leaves Tuesday and Thursday alone.
+ *
+ * Today's is revertible immediately, from the card, through the control that is
+ * already there. The later dates become revertible when they arrive — and from
+ * the weekly grid once FUEL-28 renders one, which is where a control for a date
+ * that is not today can exist at all.
+ *
+ * Dates already carrying an override are UPDATED rather than duplicated, by the
+ * same unique constraint that makes swapping dinner twice an upsert. Repeating
+ * across a day that was already swapped is an ordinary thing to do — it is what
+ * "I made too much, ignore what I said about Wednesday" means.
+ */
+export async function repeatMeal(
+  key: string,
+  mealId: string,
+  days: number,
+): Promise<SwapResult> {
+  try {
+    const resolved = await today();
+
+    if (!resolved) return FAILED;
+
+    const { userId, day } = resolved;
+    const planned = mealFor(day.view, key);
+
+    if (!planned) {
+      refresh();
+
+      return FAILED;
+    }
+
+    const meal = day.meals.find((candidate) => candidate.id === mealId);
+
+    if (!meal || meal.isArchived) {
+      refresh();
+
+      return FAILED;
+    }
+
+    const dates = repeatDates(day.view.date, days);
+
+    // A count this app does not act on: out of range, fractional, or not a
+    // number at all. Nothing the sheet can produce reaches here, so this is a
+    // forged request or a bug in the control.
+    //
+    // No `refresh()`, unlike the two refusals above, and the difference is the
+    // whole reason those have one. They mean the BROWSER'S COPY of the data
+    // disagrees with the database — a meal archived in another tab, a plan
+    // changed underneath — so re-resolving is what makes a retry able to
+    // succeed. A bad `days` says nothing about the data; the screen is already
+    // correct, and refreshing it would cost a re-render to fix nothing.
+    if (!dates) return FAILED;
+
+    await writeOverrides(
+      userId,
+      // The server's slot and the validated meal on every date. Neither is
+      // taken from the client per-date — there is one slot and one meal in a
+      // repeat, which is what makes it a repeat.
+      dates.map((date) => ({ date, slot: planned.slot, mealId: meal.id })),
+    );
+
+    refresh();
+
+    return DONE;
+  } catch (error) {
+    console.error("Could not repeat the meal.", error);
 
     return FAILED;
   }

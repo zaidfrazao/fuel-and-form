@@ -53,6 +53,8 @@ The resolver: for a given `(user_id, date, slot)`, return the `day_plan_override
 
 **Coverage: 100%, enforced.**
 
+Cases 11 and 12 are the resolver half of the repeat, and they were already passing before FUEL-24 built one — the resolver consults overrides per `(date, slot)` unconditionally, so N dated rows resolve correctly however they were written. What they assume is that something produced the right N dates; § 1.6 is that something, and `tests/integration/swap.test.ts` joins the two by writing a run and resolving it back.
+
 Case 15 was added during FUEL-8. It is neither case 3 (a *different* slot is overridden) nor case 10 (nothing is overridden), and it settles whether overrides are consulted unconditionally or only as a replacement for an entry that already exists. It has to be unconditionally, or "add a meal to today only" has no way to work.
 
 ### 1.2 Circuit A/B rotation — `lib/rotation.ts`
@@ -132,7 +134,34 @@ One deliberate blind spot: gitignored files are not scanned, because `scripts/se
 >
 > **So the default run fails today, and that is the correct result.** `--tree-only` is green; the full scan reports seven real figures across ten commits and exits non-zero. It stays red until FUEL-43 rewrites history. This is also why the pre-commit hook runs `--tree-only`: gating commits on a pre-existing history problem would block every commit until the rewrite lands, everyone would learn to reach for `--no-verify`, and the hook would be worthless on the day it mattered.
 
-### 1.6 The Tier 1 gate
+### 1.6 Repeat bounds and dates — `lib/repeat.ts`
+
+**Traces to:** P2 — *"'Repeat for N days' creates overrides across the selected consecutive dates in one action"*; added during FUEL-24.
+
+`repeatDates(from, days)` answers with the consecutive dates a repeat covers, or `null` for a count the app will not act on. `REPEAT_MIN`/`REPEAT_MAX` bound it at 2–7, and `REPEAT_COUNTS` — the list the sheet's stepper offers — is derived from the same two constants, so the control cannot offer a count the endpoint refuses.
+
+| # | Case | Expected |
+|---|---|---|
+| 1 | `days` at either bound | A run of exactly that many dates |
+| 2 | One day | `null` — that is the substitute, not a repeat |
+| 3 | Longer than a week | `null` — beyond that it is a template edit, which the PRD makes separate |
+| 4 | Zero, negative, or absurd (100,000) | `null`, and nothing written |
+| 5 | A fraction, NaN, either infinity | `null`, never a throw |
+| 6 | A non-number past the type system | `null` |
+| 7 | The run includes the day it starts on | "Repeat for 2 days" is two dates, matching the button's copy |
+| 8 | Week, month, year, leap and non-leap February, DST boundaries | Each date exactly one calendar day on |
+| 9 | The dates are distinct and strictly increasing | The precondition the single-statement batch write depends on |
+| 10 | A malformed start date | Throws — `from` is server-derived, so a bad one is a bug, not a refusal |
+
+**Coverage: 100%, enforced.**
+
+`days` is the first client-supplied value in the app that multiplies how many rows a request writes rather than choosing which one. That is why it is here rather than validated inline at the action, and why every branch is a refusal: unbounded, one request could write an unlimited number of override rows into the caller's own plan, and nothing downstream would object. Case 5 is the one that must not throw — `Array.from({ length: Infinity })` would turn a refusal into a 500 on a Server Action whose whole contract is that it answers instead of throwing.
+
+Refused rather than clamped, throughout. Clamping a 30 to a 7 would write a different number of days from the one the control named, and naming the count is the control's entire job.
+
+---
+
+### 1.7 The Tier 1 gate
 
 ```bash
 npm run test           # Vitest — all of the above
@@ -274,5 +303,6 @@ No real credentials in any test file. The owner test password comes from a `.env
 
 ## Document History
 
+- **Updated:** 2026-08-19 — added § 1.6 (`lib/repeat.ts`) during FUEL-24, and renumbered the Tier 1 gate to § 1.7.
 - **Created:** 2026-08-10
 - **Derived from:** `docs/PRD.md` (2026-08-10), `docs/BRAND_GUIDE.md` v3 (2026-08-10)

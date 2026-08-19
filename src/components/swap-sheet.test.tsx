@@ -5,6 +5,7 @@ import { describe, expect, test, vi } from "vitest";
 
 import { type PlannedMeal, SwapSheet, type SwappableMeal } from "@/components/swap-sheet";
 import type { MacroTarget } from "@/lib/macros";
+import { REPEAT_COUNTS, REPEAT_MAX } from "@/lib/repeat";
 
 /**
  * The swap preview — PRD § P4's "a swap preview shows the resulting day totals
@@ -56,6 +57,7 @@ const PLANNED: PlannedMeal[] = [
 ];
 
 const onConfirm = vi.fn();
+const onRepeat = vi.fn();
 
 /**
  * The sheet, open, with its `open` state owned by a harness.
@@ -68,10 +70,13 @@ function Harness({
   planned = PLANNED,
   meals = LIBRARY,
   slot = "dinner" as const,
+  repeatable = true,
 }: {
   planned?: PlannedMeal[];
   meals?: SwappableMeal[];
   slot?: PlannedMeal["slot"];
+  /** Whether the caller offers a repeat at all — the prop is optional. */
+  repeatable?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -89,6 +94,7 @@ function Harness({
         meals={meals}
         target={target}
         onConfirm={onConfirm}
+        onRepeat={repeatable ? onRepeat : undefined}
       />
     </>
   );
@@ -98,6 +104,7 @@ async function open(props: Parameters<typeof Harness>[0] = {}) {
   const user = userEvent.setup();
 
   onConfirm.mockReset();
+  onRepeat.mockReset();
   render(<Harness {...props} />);
   await user.click(screen.getByRole("button", { name: "Open" }));
 
@@ -313,5 +320,229 @@ describe("the selection", () => {
     expect(
       (within(reopened).getByRole("button", { name: "Swap" }) as HTMLButtonElement).disabled,
     ).toBe(true);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Repeat — FUEL-24                                                           */
+/* -------------------------------------------------------------------------- */
+
+/** The one text button, whatever count it currently names. */
+const repeatButton = (sheet: HTMLElement) =>
+  within(sheet).getByRole("button", { name: /^Repeat for \d+ days$/ });
+
+/** Whether a control is currently refusing taps. */
+const isDisabled = (element: HTMLElement) => (element as HTMLButtonElement).disabled;
+
+const stepper = (sheet: HTMLElement, direction: "One day more" | "One day fewer") =>
+  within(sheet).getByRole("button", { name: direction });
+
+const choose = (sheet: HTMLElement, user: ReturnType<typeof userEvent.setup>) =>
+  user.click(within(sheet).getByRole("button", { name: /Chickpea curry/ }));
+
+describe("the repeat control", () => {
+  test("sits beneath the confirm, not beside it", async () => {
+    // § Progressive Disclosure's order, and the acceptance criterion's
+    // "beneath the primary confirm". Compared by document position rather than
+    // by looking for a class, so a restyle that kept the order passes and a
+    // reorder that kept the styling fails.
+    const { sheet } = await open();
+
+    const swap = within(sheet).getByRole("button", { name: "Swap" });
+    const position = swap.compareDocumentPosition(repeatButton(sheet));
+
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test("is a text button, not a second filled one", async () => {
+    // The criterion says so outright, and § Buttons gives "Repeat for 2 days"
+    // to the Text variant by name. Two filled buttons would be two primaries,
+    // and the sheet would have stopped saying which action it is for.
+    //
+    // Asserted through `data-variant`, which `Button` writes for exactly this:
+    // the class list is a cva composition that a restyle would churn. The
+    // "exactly one filled button" case above is the other half of this, and it
+    // is what would fail if the repeat ever became a second primary.
+    const { sheet } = await open();
+
+    expect(repeatButton(sheet).getAttribute("data-variant")).toBe("link");
+    expect(
+      within(sheet).getByRole("button", { name: "Swap" }).getAttribute("data-variant"),
+    ).toBe("default");
+  });
+
+  test("names the count it will act on", async () => {
+    // The Brand Guide's literal copy, and the whole reason the number is in the
+    // label: a control saying "Repeat" beside a separate "5" would be asking
+    // the reader to assemble the sentence themselves.
+    const { sheet } = await open();
+
+    expect(within(sheet).getByRole("button", { name: "Repeat for 2 days" })).not.toBeNull();
+  });
+
+  test("is disabled until a meal is chosen", async () => {
+    // The confirm's rule, for the confirm's reason: there is no meal to push
+    // forward yet, and a control that silently does nothing when tapped is
+    // worse than one that says it cannot be used.
+    const { sheet, user } = await open();
+
+    expect(isDisabled(repeatButton(sheet))).toBe(true);
+
+    await choose(sheet, user);
+
+    expect(isDisabled(repeatButton(sheet))).toBe(false);
+  });
+
+  test("reports the chosen meal and the chosen count", async () => {
+    const { sheet, user } = await open();
+
+    await choose(sheet, user);
+    await user.click(stepper(sheet, "One day more"));
+    await user.click(repeatButton(sheet));
+
+    expect(onRepeat).toHaveBeenCalledWith(expect.objectContaining({ id: "m2" }), 3);
+  });
+
+  test("does not also confirm a one-day swap", async () => {
+    // The two exits are separate writes. A repeat that fired both would write
+    // the override twice — harmless in the database, and a second banner and a
+    // second failed retry if either half were refused.
+    const { sheet, user } = await open();
+
+    await choose(sheet, user);
+    await user.click(repeatButton(sheet));
+
+    expect(onRepeat).toHaveBeenCalled();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  test("closes the sheet, as the confirm does", async () => {
+    const { sheet, user } = await open();
+
+    await choose(sheet, user);
+    await user.click(repeatButton(sheet));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("is absent entirely when the caller offers no repeat", async () => {
+    // The prop is optional so the sheet can be mounted without acquiring an
+    // opinion about a repeat — the dev specimen page, and FUEL-28's grid cells
+    // for a date that is not today.
+    const { sheet } = await open({ repeatable: false });
+
+    expect(within(sheet).queryByRole("button", { name: /^Repeat for/ })).toBeNull();
+    expect(within(sheet).queryByRole("button", { name: "One day more" })).toBeNull();
+    expect(within(sheet).getByRole("button", { name: "Swap" })).not.toBeNull();
+  });
+});
+
+describe("the day count", () => {
+  test("starts at the shortest run", async () => {
+    const { sheet } = await open();
+
+    expect(repeatButton(sheet).textContent).toBe("Repeat for 2 days");
+  });
+
+  test("steps up and back down", async () => {
+    const { sheet, user } = await open();
+
+    await user.click(stepper(sheet, "One day more"));
+    await user.click(stepper(sheet, "One day more"));
+
+    expect(repeatButton(sheet).textContent).toBe("Repeat for 4 days");
+
+    await user.click(stepper(sheet, "One day fewer"));
+
+    expect(repeatButton(sheet).textContent).toBe("Repeat for 3 days");
+  });
+
+  test("cannot go below the shortest run", async () => {
+    // Two, not one. A repeat of a single day is the substitute this sheet
+    // already offers, and the endpoint refuses it — so the control must not be
+    // able to ask for it, or the button would read as broken rather than bounded.
+    const { sheet } = await open();
+
+    expect(isDisabled(stepper(sheet, "One day fewer"))).toBe(true);
+  });
+
+  test("cannot go past a week", async () => {
+    // `REPEAT_MAX`. Beyond a week a repeat stops meaning "this batch of mince"
+    // and starts meaning the template, which the PRD makes a separate action.
+    const { sheet, user } = await open();
+
+    const more = stepper(sheet, "One day more");
+
+    // Five taps from 2 reaches 7; the sixth must not be possible.
+    for (let tap = 0; tap < 5; tap += 1) await user.click(more);
+
+    expect(repeatButton(sheet).textContent).toBe("Repeat for 7 days");
+    expect(isDisabled(more)).toBe(true);
+  });
+
+  test("offers exactly the counts the endpoint accepts", async () => {
+    // The drift this pins: a stepper that could reach a count `repeatDates`
+    // refuses would look like the button failing rather than a limit holding.
+    // Walked rather than assumed, so widening the range in lib/repeat.ts moves
+    // both sides of this together or fails.
+    const { sheet, user } = await open();
+
+    const more = stepper(sheet, "One day more");
+    const reached: number[] = [];
+
+    // One more tap than the range is wide, so a stepper that ran past the end
+    // would be caught rather than stopping the loop at the expected count.
+    for (let tap = 0; tap <= REPEAT_COUNTS.length; tap += 1) {
+      reached.push(Number(/\d+/.exec(repeatButton(sheet).textContent ?? "")?.[0]));
+
+      if (isDisabled(more)) break;
+
+      await user.click(more);
+    }
+
+    expect(reached).toEqual([...REPEAT_COUNTS]);
+    expect(reached.at(-1)).toBe(REPEAT_MAX);
+  });
+
+  test("announces the count where the focus does not move", async () => {
+    // The stepper button keeps focus while the value beneath it changes, so
+    // without a live region a screen-reader user hears nothing until they
+    // navigate back to the text button. A bare "3" is ambiguous read aloud,
+    // hence the worded copy beside the hidden digit.
+    const { sheet, user } = await open();
+
+    await user.click(stepper(sheet, "One day more"));
+
+    // Scoped through the stepper's own group. The sheet has a SECOND polite
+    // live region — the day totals — which comes first in document order, so a
+    // bare `[aria-live]` query would silently assert against that one instead.
+    // Scoped by ROLE and LABEL rather than by a styling class, so a restyle
+    // cannot quietly point this at the wrong element.
+    const live = sheet.querySelector(
+      '[role="group"][aria-label="Days to repeat"] [aria-live="polite"]',
+    );
+
+    // The ANNOUNCED text and the SEEN glyph, asserted separately rather than as
+    // the concatenation `textContent` happens to produce. The concatenation is
+    // an artefact of putting both in one element, so asserting it would couple
+    // this test to the markup and break on an accessibility refactor that
+    // preserved the announcement exactly.
+    expect(live?.querySelector(".sr-only")?.textContent).toBe("3 days");
+    expect(live?.querySelector('[aria-hidden="true"]')?.textContent).toBe("3");
+  });
+
+  test("resets when the sheet is closed and reopened", async () => {
+    // The selection's rule, for the selection's reason: a sheet reopened after
+    // an abandoned repeat should not still be offering a count chosen in a
+    // conversation the user walked away from.
+    const { sheet, user } = await open();
+
+    await user.click(stepper(sheet, "One day more"));
+    expect(repeatButton(sheet).textContent).toBe("Repeat for 3 days");
+
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Open" }));
+
+    expect(repeatButton(screen.getByRole("dialog")).textContent).toBe("Repeat for 2 days");
   });
 });
