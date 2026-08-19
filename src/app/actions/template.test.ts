@@ -220,6 +220,18 @@ describe("the two flows cannot reach each other's table", () => {
     return readFileSync(join(process.cwd(), "src/app/actions", file), "utf8");
   };
 
+  /**
+   * An import of `module`, however it is punctuated.
+   *
+   * A regex rather than a literal, because the literal form would only catch
+   * the quote style and spacing that happen to be in the file today: switching
+   * to single quotes, or to `await import(...)`, would slip past an assertion
+   * that still looked like it was checking something. This matches `from`,
+   * `import(` and `require(` with either quote.
+   */
+  const imports = (module: string) =>
+    new RegExp(String.raw`(from|import\s*\(|require\s*\()\s*['"]${module}['"]`);
+
   test("the template action never writes an override", async () => {
     // The machine-checkable half of "editing the template is never triggered
     // accidentally". The screen's defences — a different route, different copy,
@@ -227,14 +239,30 @@ describe("the two flows cannot reach each other's table", () => {
     // not: the module graph does not connect the two.
     const source = await read("template.ts");
 
-    expect(source).not.toContain("from \"@/lib/db/queries/swap\"");
+    expect(source).not.toMatch(imports("@/lib/db/queries/swap"));
+    // And the table itself, in case a future edit reaches it another way. The
+    // import check is the one about the module graph; this is the tripwire.
     expect(source).not.toContain("dayPlanOverrides");
   });
 
   test("the swap action never writes the template", async () => {
     const source = await read("swap.ts");
 
-    expect(source).not.toContain("from \"@/lib/db/queries/template\"");
+    expect(source).not.toMatch(imports("@/lib/db/queries/template"));
     expect(source).not.toContain("planTemplateEntries");
+  });
+
+  test("the guard matches an import however it is punctuated", () => {
+    // The assertions above are negative, so nothing about them fails if the
+    // pattern stops matching anything at all. This is the positive control:
+    // each form a real import could take must be caught.
+    const pattern = imports("@/lib/db/queries/swap");
+
+    expect(`import { writeOverride } from "@/lib/db/queries/swap";`).toMatch(pattern);
+    expect(`import { writeOverride } from '@/lib/db/queries/swap';`).toMatch(pattern);
+    expect(`const q = await import("@/lib/db/queries/swap");`).toMatch(pattern);
+    expect(`const q = require('@/lib/db/queries/swap');`).toMatch(pattern);
+    // And must not fire on a different module that shares a prefix.
+    expect(`import { loadToday } from "@/lib/db/queries/today";`).not.toMatch(pattern);
   });
 });
