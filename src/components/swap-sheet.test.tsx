@@ -513,9 +513,21 @@ describe("the day count", () => {
 
     await user.click(stepper(sheet, "One day more"));
 
-    const live = sheet.querySelector('[aria-live="polite"].tabular-nums');
+    // Scoped through the stepper's own group. The sheet has a SECOND polite
+    // live region — the day totals — which comes first in document order, so a
+    // bare `[aria-live]` query would silently assert against that one instead.
+    // Scoped by ROLE and LABEL rather than by a styling class, so a restyle
+    // cannot quietly point this at the wrong element.
+    const live = sheet.querySelector(
+      '[role="group"][aria-label="Days to repeat"] [aria-live="polite"]',
+    );
 
-    expect(live?.textContent).toBe("33 days");
+    // The ANNOUNCED text and the SEEN glyph, asserted separately rather than as
+    // the concatenation `textContent` happens to produce. The concatenation is
+    // an artefact of putting both in one element, so asserting it would couple
+    // this test to the markup and break on an accessibility refactor that
+    // preserved the announcement exactly.
+    expect(live?.querySelector(".sr-only")?.textContent).toBe("3 days");
     expect(live?.querySelector('[aria-hidden="true"]')?.textContent).toBe("3");
   });
 

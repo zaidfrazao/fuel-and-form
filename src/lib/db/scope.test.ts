@@ -391,6 +391,20 @@ describe("scope", () => {
         expect(last().query).toContain('on conflict ("user_id","label") do update');
       });
 
+      it("refuses an empty array rather than emitting a statement", async () => {
+        // Only expressible since this method started taking arrays. Postgres
+        // has no `INSERT ... VALUES` with zero tuples, so the alternative is a
+        // syntax error surfacing from inside the scope — and a silent `[]`
+        // would make "wrote no rows" indistinguishable from "was asked to".
+        const { s, seen } = spy();
+
+        await expect(
+          s.upsert(fixture, [], { target: [fixture.label], set: { kcal: 700 } }),
+        ).rejects.toThrow(/empty array/);
+
+        expect(seen).toHaveLength(0);
+      });
+
       it("takes a single-element array as readily as a bare row", async () => {
         // The boundary between the two shapes. A repeat of the shortest run is
         // still an array, and `queries/swap.ts` routes the singular write

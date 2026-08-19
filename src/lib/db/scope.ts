@@ -308,7 +308,29 @@ export function scope(userId: string, executor: Executor) {
       // Normalised exactly as `insert` does, and for the same reason: one code
       // path stamps ownership, so the singular case cannot acquire a guarantee
       // the batch case lacks.
-      const owned = (Array.isArray(values) ? values : [values]).map((row) => ({
+      const rows = Array.isArray(values) ? values : [values];
+
+      // An empty batch, which only became expressible when this method started
+      // taking arrays. Postgres rejects an `INSERT ... VALUES` with no tuples
+      // as a syntax error, so without this the failure would surface from
+      // inside the scope — the one module in the app whose errors most need to
+      // be about the caller's mistake rather than about the SQL.
+      //
+      // A throw rather than a silent `[]`, on the same grounds as the two
+      // refusals above: returning nothing would let "I wrote no rows" and "I
+      // was asked to write no rows" look identical at the call site, and a
+      // caller that built its batch from a filter that happened to empty would
+      // never find out. Callers that legitimately may have nothing to write
+      // check first — see `writeOverrides` in queries/swap.ts.
+      if (rows.length === 0) {
+        throw new Error(
+          "scope.upsert() was given an empty array. Postgres has no statement " +
+            "for inserting no rows — check for an empty batch before calling, " +
+            "so that writing nothing is a decision rather than a failed write.",
+        );
+      }
+
+      const owned = rows.map((row) => ({
         ...row,
         // Spread last, exactly as `insert` does, so a smuggled `userId` is
         // overwritten rather than honoured — on every row, not just the first.
