@@ -19,6 +19,7 @@ import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve
 const logItem = vi.fn();
 const undoLastLog = vi.fn();
 const swapMeal = vi.fn();
+const repeatMeal = vi.fn();
 const revertSwap = vi.fn();
 
 vi.mock("@/app/actions/log", () => ({
@@ -28,6 +29,7 @@ vi.mock("@/app/actions/log", () => ({
 
 vi.mock("@/app/actions/swap", () => ({
   swapMeal: (...args: unknown[]) => swapMeal(...args),
+  repeatMeal: (...args: unknown[]) => repeatMeal(...args),
   revertSwap: (...args: unknown[]) => revertSwap(...args),
 }));
 
@@ -35,10 +37,12 @@ beforeEach(() => {
   logItem.mockReset();
   undoLastLog.mockReset();
   swapMeal.mockReset();
+  repeatMeal.mockReset();
   revertSwap.mockReset();
   logItem.mockResolvedValue({ ok: true });
   undoLastLog.mockResolvedValue({ ok: true });
   swapMeal.mockResolvedValue({ ok: true });
+  repeatMeal.mockResolvedValue({ ok: true });
   revertSwap.mockResolvedValue({ ok: true });
 });
 
@@ -1265,6 +1269,150 @@ describe("swapping a meal", () => {
     renderNow(active(2));
 
     expect(screen.queryByRole("button", { name: "Swap" })).toBeNull();
+  });
+});
+
+describe("repeating a meal", () => {
+  /** Choose a meal, set the count, and tap the text button. */
+  async function repeat(
+    user: ReturnType<typeof userEvent.setup>,
+    name: string,
+    days: number,
+  ) {
+    const sheet = await choose(user, name);
+
+    for (let tap = 0; tap < days - 2; tap += 1) {
+      await user.click(within(sheet).getByRole("button", { name: "One day more" }));
+    }
+
+    await user.click(
+      within(sheet).getByRole("button", { name: `Repeat for ${days} days` }),
+    );
+
+    return sheet;
+  }
+
+  test("sends the item KEY, the chosen meal id and the count", async () => {
+    // The security shape a repeat adds to the swap's: the START date and the
+    // slot are still the server's to derive, and the only new value is how many
+    // days the run covers. A payload carrying the dates themselves would be a
+    // payload to tamper with — and a repeat's would be several.
+    const user = userEvent.setup();
+
+    renderNow(active(3));
+    await repeat(user, "Chickpea curry", 3);
+
+    await waitFor(() => expect(repeatMeal).toHaveBeenCalled());
+    expect(repeatMeal).toHaveBeenCalledWith("meal:e4", "meal-4", 3);
+    expect(swapMeal).not.toHaveBeenCalled();
+  });
+
+  test("shows today's card swapped before the server answers", async () => {
+    // A repeat writes several days; ONE of them has a card here. So the
+    // optimistic answer is exactly a swap's — the new meal, its macros and the
+    // tag, on the current frame — and the later dates are simply not this
+    // screen's business.
+    const user = userEvent.setup();
+    const held = deferred<{ ok: boolean }>();
+
+    repeatMeal.mockReturnValue(held.promise);
+
+    renderNow(active(3));
+    await repeat(user, "Chickpea curry", 4);
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chickpea curry");
+    expect(screen.getByText("Swapped")).toBeTruthy();
+
+    held.settle({ ok: true });
+  });
+
+  test("does not advance the day", async () => {
+    // The swap's rule, and the server agrees: `repeatMeal` writes no cursor. A
+    // repeat changes WHAT the active item is, not whether it is done.
+    const user = userEvent.setup();
+    const held = deferred<{ ok: boolean }>();
+
+    repeatMeal.mockReturnValue(held.promise);
+
+    renderNow(active(3));
+    await repeat(user, "Chickpea curry", 3);
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chickpea curry");
+    expect(screen.getByRole("button", { name: "Log eaten" })).toBeTruthy();
+
+    held.settle({ ok: true });
+  });
+
+  test("names what failed, and it is not a swap", async () => {
+    // § Tone of Voice: name what happened. "Couldn't swap that" would be wrong
+    // here — the user asked for four days, and none of them were written.
+    const user = userEvent.setup();
+
+    repeatMeal.mockResolvedValue({ ok: false });
+
+    renderNow(active(3));
+    await repeat(user, "Chickpea curry", 3);
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    expect(screen.getByRole("alert").textContent).toContain("Couldn’t repeat that.");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chilli");
+    expect(screen.queryByText("Swapped")).toBeNull();
+  });
+
+  test("retries the SAME count from the banner", async () => {
+    // The reason `days` rides on the Attempt. The sheet has closed by the time
+    // a refusal comes back, so a retry that forgot the count would quietly
+    // write two days where the user asked for five.
+    const user = userEvent.setup();
+
+    repeatMeal.mockResolvedValue({ ok: false });
+
+    renderNow(active(3));
+    await repeat(user, "Chickpea curry", 5);
+    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => expect(repeatMeal).toHaveBeenCalledTimes(2));
+    expect(repeatMeal.mock.calls[1]).toEqual(["meal:e4", "meal-4", 5]);
+  });
+
+  test("says nothing at all when the write succeeds", async () => {
+    const user = userEvent.setup();
+
+    renderNow(active(3));
+    await repeat(user, "Chickpea curry", 3);
+
+    await waitFor(() => expect(repeatMeal).toHaveBeenCalled());
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  test("closes the sheet, as the swap does", async () => {
+    const user = userEvent.setup();
+
+    renderNow(active(3));
+    await repeat(user, "Chickpea curry", 3);
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("leaves Revert offered for today's date", async () => {
+    // The acceptance criterion's "individually revertible", as far as THIS
+    // screen can speak to it: today's override is one row, and the control that
+    // removes it is the one already on the card. The later dates are separate
+    // rows and become revertible from the weekly grid (FUEL-28).
+    const user = userEvent.setup();
+    const held = deferred<{ ok: boolean }>();
+
+    repeatMeal.mockReturnValue(held.promise);
+
+    renderNow(active(3));
+    await repeat(user, "Chickpea curry", 4);
+
+    expect(screen.getByRole("button", { name: "Revert" })).toBeTruthy();
+
+    held.settle({ ok: true });
   });
 });
 

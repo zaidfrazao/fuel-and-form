@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { getDb } from "@/lib/db";
-import { deleteOverride, writeOverride } from "@/lib/db/queries/swap";
+import { deleteOverride, writeOverride, writeOverrides } from "@/lib/db/queries/swap";
 import * as schema from "@/lib/db/schema";
 import { scope } from "@/lib/db/scope";
+import { repeatDates } from "@/lib/repeat";
 import { type Plan, resolveSlot } from "@/lib/resolve-plan";
 
 import { testDatabaseUrl } from "./env";
@@ -239,6 +240,254 @@ describe.skipIf(!configured)("swapping, scoped", () => {
           mealId: bob.mealId,
         }),
       ).rejects.toThrow();
+    });
+  });
+
+  /**
+   * The repeat — FUEL-24.
+   *
+   * The action's own tests prove it builds the right list of dates with every
+   * collaborator mocked. What only a real Postgres can settle is what that list
+   * BECOMES: N separate rows, each resolvable on its own date and each
+   * removable on its own, written by one statement that either lands entirely
+   * or not at all. Every one of those is a property of the data, and the last
+   * two are the task's acceptance criteria stated in the only place they are
+   * checkable.
+   */
+  describe("writeOverrides", () => {
+    /** The dates a run of `days` starting at `from` covers. */
+    const run = (from: string, days: number) =>
+      (repeatDates(from, days) ?? []).map((date) => ({
+        date,
+        slot: "breakfast" as const,
+      }));
+
+    it("writes one row per date, across the whole run", async () => {
+      const { alice } = fixture;
+      const curry = await addMeal(alice, "Alice's second breakfast");
+
+      await writeOverrides(
+        alice.userId,
+        run(MONDAY, 3).map((row) => ({ ...row, mealId: curry })),
+      );
+
+      const rows = (await as(alice).select(schema.dayPlanOverrides)).filter(
+        (row) => row.slot === "breakfast" && row.date >= MONDAY,
+      );
+
+      expect(rows.map((row) => row.date).sort()).toEqual([
+        "2026-03-09",
+        "2026-03-10",
+        "2026-03-11",
+      ]);
+
+      // Separate rows, not one row covering a range. This is what "each created
+      // override is individually revertible" rests on, and it is checked before
+      // the revert case below so a failure points at the write.
+      expect(new Set(rows.map((row) => row.id)).size).toBe(3);
+    });
+
+    it("resolves the repeated meal on every date of the run", async () => {
+      // § 1.1 case 11's expectation, reached through the write path rather than
+      // through a hand-built fixture: all three resolve to the override.
+      const { alice } = fixture;
+      const curry = await addMeal(alice, "Alice's second breakfast");
+
+      await writeOverrides(
+        alice.userId,
+        run(MONDAY, 3).map((row) => ({ ...row, mealId: curry })),
+      );
+
+      const plan = await planFor(alice);
+
+      for (const date of ["2026-03-09", "2026-03-10", "2026-03-11"]) {
+        const resolved = resolveSlot(plan, date, "breakfast");
+
+        expect(resolved?.source).toBe("override");
+        expect(resolved?.meal.id).toBe(curry);
+      }
+
+      // The day after the run is untouched — the repeat did not smear past its
+      // own end. It resolves to nothing rather than to a template entry
+      // because the fixture seeds breakfast on MONDAYS only, so a Thursday has
+      // nothing behind the slot at all. "Not an override" is the assertion that
+      // matters; what it falls back to is the resolver's business, and the
+      // template fallback is proven on a Monday two cases below.
+      expect(resolveSlot(plan, "2026-03-12", "breakfast")).toBeNull();
+    });
+
+    it("resolves correctly across a month boundary", async () => {
+      // § 1.1 case 12's dates. March has 31 days, so a run that stepped by
+      // string arithmetic or by local midnights would land on 2026-03-32 or
+      // repeat a date — and the resolver would then answer for a day the user
+      // never has.
+      const { alice } = fixture;
+      const curry = await addMeal(alice, "Alice's second breakfast");
+
+      await writeOverrides(
+        alice.userId,
+        run("2026-03-30", 3).map((row) => ({ ...row, mealId: curry })),
+      );
+
+      const plan = await planFor(alice);
+
+      expect(
+        ["2026-03-30", "2026-03-31", "2026-04-01"].map(
+          (date) => resolveSlot(plan, date, "breakfast")?.source,
+        ),
+      ).toEqual(["override", "override", "override"]);
+
+      // Neither flank was written. Both are non-Mondays, so they resolve to
+      // nothing — see the note above on what the fixture's template holds.
+      expect(resolveSlot(plan, "2026-03-29", "breakfast")).toBeNull();
+      expect(resolveSlot(plan, "2026-04-02", "breakfast")).toBeNull();
+    });
+
+    it("leaves each date of the run individually revertible", async () => {
+      // The acceptance criterion, proven rather than assumed. Removing the
+      // MIDDLE date is the case that would fail if the run were one row or if
+      // the rows shared an id: the middle day goes back to the template while
+      // the days either side of it stay exactly where they were.
+      //
+      // The run starts on the SUNDAY so that its middle date is the Monday the
+      // fixture seeds a breakfast template for. That is what lets this assert
+      // the revert lands back on the template rather than merely on nothing —
+      // which is the half of "revertible" the criterion is actually about.
+      const { alice } = fixture;
+      const curry = await addMeal(alice, "Alice's second breakfast");
+
+      await writeOverrides(
+        alice.userId,
+        run("2026-03-08", 3).map((row) => ({ ...row, mealId: curry })),
+      );
+
+      const monday = (await as(alice).select(schema.dayPlanOverrides)).find(
+        (row) => row.date === MONDAY,
+      );
+
+      expect(await deleteOverride(alice.userId, monday!.id)).toBe(true);
+
+      const plan = await planFor(alice);
+
+      expect(resolveSlot(plan, "2026-03-08", "breakfast")?.source).toBe("override");
+      expect(resolveSlot(plan, MONDAY, "breakfast")?.source).toBe("template");
+      expect(resolveSlot(plan, "2026-03-10", "breakfast")?.source).toBe("override");
+    });
+
+    it("leaves plan_template_entries byte for byte unchanged", async () => {
+      // The override model's whole promise, and a repeat is the write with the
+      // most opportunity to break it: seven dates, every one of which has a
+      // template entry sitting behind it.
+      const { alice } = fixture;
+      const curry = await addMeal(alice, "Alice's second breakfast");
+
+      const before = await as(alice).select(schema.planTemplateEntries);
+
+      await writeOverrides(
+        alice.userId,
+        run(MONDAY, 7).map((row) => ({ ...row, mealId: curry })),
+      );
+
+      expect(await as(alice).select(schema.planTemplateEntries)).toEqual(before);
+    });
+
+    it("leaves the same weekday next week resolving to the template", async () => {
+      // A seven-day run reaches the day BEFORE next Monday and stops. The
+      // recurring intent is untouched, which is what makes a repeat a dated
+      // divergence rather than an edit to the plan.
+      const { alice } = fixture;
+      const curry = await addMeal(alice, "Alice's second breakfast");
+
+      await writeOverrides(
+        alice.userId,
+        run(MONDAY, 7).map((row) => ({ ...row, mealId: curry })),
+      );
+
+      const plan = await planFor(alice);
+
+      expect(resolveSlot(plan, "2026-03-15", "breakfast")?.source).toBe("override");
+      expect(resolveSlot(plan, NEXT_MONDAY, "breakfast")?.source).toBe("template");
+    });
+
+    it("updates a date that was already overridden, rather than duplicating it", async () => {
+      // "I made too much, ignore what I said about Tuesday." The unique index
+      // on (user_id, date, slot) and the ON CONFLICT that targets it are both
+      // invisible to a unit test: a wrong conflict target would still build a
+      // statement that looked right here.
+      const { alice } = fixture;
+      const first = await addMeal(alice, "Alice's second breakfast");
+      const second = await addMeal(alice, "Alice's third breakfast");
+
+      await writeOverride(alice.userId, {
+        date: "2026-03-10",
+        slot: "breakfast",
+        mealId: first,
+      });
+
+      await writeOverrides(
+        alice.userId,
+        run(MONDAY, 3).map((row) => ({ ...row, mealId: second })),
+      );
+
+      const rows = (await as(alice).select(schema.dayPlanOverrides)).filter(
+        (row) => row.date === "2026-03-10",
+      );
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.mealId).toBe(second);
+    });
+
+    it("writes the longest run Postgres will be asked for, in one statement", async () => {
+      // Seven rows in one INSERT ... ON CONFLICT. Postgres refuses a statement
+      // that would affect the same row twice, so this is also where a
+      // `repeatDates` that ever produced a duplicate date would surface — as a
+      // thrown error rather than as a quietly short run.
+      const { alice } = fixture;
+      const curry = await addMeal(alice, "Alice's second breakfast");
+
+      await writeOverrides(
+        alice.userId,
+        run(MONDAY, 7).map((row) => ({ ...row, mealId: curry })),
+      );
+
+      const rows = (await as(alice).select(schema.dayPlanOverrides)).filter(
+        (row) => row.date >= MONDAY && row.date < NEXT_MONDAY,
+      );
+
+      expect(rows).toHaveLength(7);
+    });
+
+    it("touches no other user's plan", async () => {
+      // The scope's guarantee, applied to a batch. Stamping ownership onto only
+      // the first row of an array is the exact mistake this shape invites.
+      const { alice, bob } = fixture;
+      const curry = await addMeal(alice, "Alice's second breakfast");
+
+      const bobsBefore = await as(bob).select(schema.dayPlanOverrides);
+
+      await writeOverrides(
+        alice.userId,
+        run(MONDAY, 5).map((row) => ({ ...row, mealId: curry })),
+      );
+
+      expect(await as(bob).select(schema.dayPlanOverrides)).toEqual(bobsBefore);
+
+      const mine = await as(alice).select(schema.dayPlanOverrides);
+
+      expect(mine.every((row) => row.userId === alice.userId)).toBe(true);
+    });
+
+    it("writes nothing at all for an empty batch", async () => {
+      // An INSERT with no tuples is a syntax error, not a no-op. The guard is
+      // in `writeOverrides`; this is what proves it is a guard and not a
+      // comment.
+      const { alice } = fixture;
+
+      const before = await as(alice).select(schema.dayPlanOverrides);
+
+      await writeOverrides(alice.userId, []);
+
+      expect(await as(alice).select(schema.dayPlanOverrides)).toEqual(before);
     });
   });
 

@@ -61,6 +61,7 @@ export default defineConfig({
         "src/lib/day-summary.ts",
         "src/lib/log-intent.ts",
         "src/lib/macros.ts",
+        "src/lib/repeat.ts",
         "src/lib/resolve-plan.ts",
         "src/lib/resolve-now.ts",
         "src/lib/rotation.ts",
@@ -97,6 +98,15 @@ export default defineConfig({
         // maths go unmeasured would cover the easy half of the risk the PRD
         // actually names.
         "src/lib/date.ts": FULLY_COVERED,
+        // FUEL-24, and the same reasoning as cursor.ts and slot-times.ts: every
+        // branch in it is a refusal reachable by anyone who can POST to the
+        // repeat action. It is the first value in the app that MULTIPLIES the
+        // rows a request writes rather than choosing which one — so an
+        // unmeasured branch here is not a wrong answer on a screen, it is an
+        // unbounded write nobody looked at. The one that must not throw matters
+        // most: `Array.from({ length: Infinity })` would turn a refusal into a
+        // 500 on a Server Action whose contract is that it never throws.
+        "src/lib/repeat.ts": FULLY_COVERED,
         "src/lib/resolve-plan.ts": FULLY_COVERED,
         // P1's acceptance criteria, and the resolver they all pass through. It
         // belongs here for the same reason resolve-plan.ts does, one step further

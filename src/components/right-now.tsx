@@ -3,7 +3,7 @@
 import { type ReactNode, startTransition, useOptimistic, useState } from "react";
 
 import { logItem, undoLastLog } from "@/app/actions/log";
-import { revertSwap, swapMeal } from "@/app/actions/swap";
+import { repeatMeal, revertSwap, swapMeal } from "@/app/actions/swap";
 import { DayComplete } from "@/components/day-complete";
 import Link from "next/link";
 
@@ -101,6 +101,23 @@ import {
  *
  * **The Swapped tag does not break the one-umber rule.** It is `accent-subtle`,
  * a tinted ground, not `accent`. See `SwappedTag` below.
+ *
+ * ## The repeat (FUEL-24)
+ *
+ * The sheet's second exit: the same meal on today and the days after it. It
+ * changes nothing structural here, and the reason is worth stating because it
+ * looks like it should.
+ *
+ * `/` renders ONE day. A repeat writes several, but only one of them has a card
+ * on this screen — so the optimistic move is the same `swapped` move a plain
+ * swap makes, for today's key, and the other dates are simply not this screen's
+ * business. They arrive through `refresh()` on whatever screen does show them,
+ * which today is none and after FUEL-28 is the weekly grid.
+ *
+ * The count travels on the `Attempt` rather than living in the sheet, because
+ * "Try again" has to re-run the same repeat and the sheet has closed by the
+ * time a refusal comes back. That is the same argument the `Attempt` union was
+ * built on, applied to the one piece of state a repeat has and a swap does not.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -499,7 +516,15 @@ type Attempt =
   | { kind: "act"; item: ScheduledItem; verb: LogVerb }
   | { kind: "undo" }
   | { kind: "revert"; item: ScheduledItem }
-  | { kind: "swap"; item: ScheduledItem; meal: SwappableMeal };
+  | { kind: "swap"; item: ScheduledItem; meal: SwappableMeal }
+  /**
+   * The same meal on this date and the days after it — FUEL-24.
+   *
+   * Carries `days` because a retry has to re-run the SAME repeat: "Try again"
+   * on a failed five-day run must not quietly write two. The sheet is gone by
+   * then, so the count has nowhere else to be remembered.
+   */
+  | { kind: "repeat"; item: ScheduledItem; meal: SwappableMeal; days: number };
 
 /**
  * What the banner says about a refused attempt.
@@ -518,6 +543,7 @@ function banner(failure: Attempt): string {
   if (failure.kind === "undo") return "Couldn’t undo that.";
   if (failure.kind === "revert") return "Couldn’t revert that.";
   if (failure.kind === "swap") return "Couldn’t swap that.";
+  if (failure.kind === "repeat") return "Couldn’t repeat that.";
 
   return "Couldn’t save that.";
 }
@@ -612,6 +638,13 @@ function optimistic(attempt: Attempt, date: CalendarDate): Move {
     case "undo":
       return { kind: "undone" };
     case "swap":
+    // A repeat and a swap look IDENTICAL on this screen, which is why they
+    // share a move rather than getting a fourth. The run covers days that have
+    // no card here — `/` renders one day — so the only date the optimistic
+    // layer can honestly speak for is today's, and today's is a swap. Inventing
+    // state for tomorrow would be the client asserting something about a day it
+    // has never resolved, and `refresh()` is what makes the rest true.
+    case "repeat":
       return { kind: "swapped", key: attempt.item.key, meal: attempt.meal };
     case "revert":
       return { kind: "reverted", key: attempt.item.key };
@@ -633,6 +666,10 @@ function perform(attempt: Attempt): Promise<{ ok: boolean }> {
       // The KEY and the meal id, and nothing else. The date and the slot are
       // re-derived on the server from the key — see actions/swap.ts.
       return swapMeal(attempt.item.key, attempt.meal.id);
+    case "repeat":
+      // The key, the meal and the count. The start date and the slot are
+      // re-derived on the server from the key, exactly as a swap's are.
+      return repeatMeal(attempt.item.key, attempt.meal.id, attempt.days);
     case "revert":
       return revertSwap(attempt.item.key);
     default:
@@ -857,6 +894,7 @@ export function RightNow({
       meals={meals}
       target={target}
       onConfirm={(meal) => act({ kind: "swap", item: active, meal })}
+      onRepeat={(meal, days) => act({ kind: "repeat", item: active, meal, days })}
     />
   );
 
