@@ -104,7 +104,16 @@ async function open(props: Parameters<typeof Harness>[0] = {}) {
   return { user, sheet: screen.getByRole("dialog") };
 }
 
-/** The value and its slash metadata for one column of the totals grid. */
+/**
+ * The value and its slash metadata for one column of the totals grid.
+ *
+ * `KeyValueGrid` renders each pair as `<div><dt>label</dt><dd>…</dd></div>`, so
+ * the label's parent is exactly one column. That matters more than it looks:
+ * if this reached the whole `<dl>` instead, every assertion below would be
+ * matching a substring of all four columns at once and would pass for the wrong
+ * reason — including if the figures were swapped between columns. The first
+ * case in this describe pins that, so the helper is self-checking.
+ */
 function column(sheet: HTMLElement, label: string) {
   const heading = within(sheet).getByText(label);
   const pair = heading.parentElement!;
@@ -130,6 +139,12 @@ describe("the resulting day totals", () => {
 
     expect(column(sheet, "Calories")).toContain("960");
     expect(column(sheet, "Protein")).toContain("54 g");
+
+    // The helper reads ONE column, not the whole grid. Without this the
+    // assertions above would pass even if `column` returned every figure on
+    // the sheet — and would keep passing if the two were transposed.
+    expect(column(sheet, "Calories")).not.toContain("54 g");
+    expect(column(sheet, "Protein")).not.toContain("960");
   });
 
   test("replace the slot's meal rather than adding to it", async () => {

@@ -88,6 +88,14 @@ export default async function Home() {
       // there is no reason for a recipe's method to sit in the page payload of
       // a screen that never renders it. What crosses is what the picker draws
       // and what the preview totals.
+      //
+      // WHEN `meals.is_untracked` LANDS (PRD Open Question 4), add it to BOTH
+      // narrowings below. `totalMacros` skips untracked meals, so a column
+      // dropped here would make the sheet's preview count a meal the day's
+      // real totals exclude — and the two would disagree by exactly that meal,
+      // silently, with no type error to catch it. `MacroBearing` declares the
+      // field optional precisely so this compiles either way, which is what
+      // makes the omission invisible.
       meals={today.meals.map((meal) => ({
         id: meal.id,
         name: meal.name,
