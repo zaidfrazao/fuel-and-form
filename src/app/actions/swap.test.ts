@@ -23,6 +23,7 @@ const {
   getSession,
   loadToday,
   writeOverride,
+  writeOverrides,
   deleteOverride,
   readCursor,
   refresh,
@@ -30,6 +31,7 @@ const {
   getSession: vi.fn(),
   loadToday: vi.fn(),
   writeOverride: vi.fn(),
+  writeOverrides: vi.fn(),
   deleteOverride: vi.fn(),
   readCursor: vi.fn(),
   refresh: vi.fn(),
@@ -37,11 +39,11 @@ const {
 
 vi.mock("@/lib/auth/session", () => ({ getSession }));
 vi.mock("@/lib/db/queries/today", () => ({ loadToday }));
-vi.mock("@/lib/db/queries/swap", () => ({ writeOverride, deleteOverride }));
+vi.mock("@/lib/db/queries/swap", () => ({ writeOverride, writeOverrides, deleteOverride }));
 vi.mock("@/lib/cursor-cookie", () => ({ readCursor }));
 vi.mock("next/cache", () => ({ refresh }));
 
-const { swapMeal, revertSwap } = await import("./swap");
+const { repeatMeal, swapMeal, revertSwap } = await import("./swap");
 
 const USER = "11111111-2222-3333-4444-555555555555";
 const OTHER_USER = "99999999-8888-7777-6666-555555555555";
@@ -157,6 +159,7 @@ beforeEach(() => {
   readCursor.mockResolvedValue(null);
   loadToday.mockResolvedValue(today());
   writeOverride.mockResolvedValue(undefined);
+  writeOverrides.mockResolvedValue(undefined);
   deleteOverride.mockResolvedValue(true);
 });
 
@@ -321,6 +324,198 @@ describe("what swapMeal refuses", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
 
     expect(await swapMeal("meal:template-entry", CURRY.id)).toEqual({ ok: false });
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Repeat                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/** The resolved day, moved to a date the run has to step off the end of. */
+const todayOn = (date: string) => ({ ...today(), view: { ...view(), date } });
+
+/** The dates a call actually wrote, in the order it wrote them. */
+const written = () =>
+  (writeOverrides.mock.calls[0]?.[1] as { date: string }[]).map((row) => row.date);
+
+describe("repeatMeal", () => {
+  test("writes the meal onto the resolved date and the days after it", async () => {
+    // "Repeat for 2 days" is Monday AND Tuesday — the count includes the day it
+    // starts on, which is what makes the button's copy and its write agree.
+    expect(await repeatMeal("meal:template-entry", CURRY.id, 2)).toEqual({ ok: true });
+
+    expect(writeOverrides).toHaveBeenCalledWith(USER, [
+      { date: "2026-03-09", slot: "dinner", mealId: CURRY.id },
+      { date: "2026-03-10", slot: "dinner", mealId: CURRY.id },
+    ]);
+  });
+
+  test("writes every date in ONE call", async () => {
+    // The acceptance criterion's "in one action", read as a property of the
+    // database rather than of the tap. A loop here would be a repeat that can
+    // land on Monday and Tuesday and not Wednesday.
+    await repeatMeal("meal:template-entry", CURRY.id, 5);
+
+    expect(writeOverrides).toHaveBeenCalledTimes(1);
+    expect(written()).toHaveLength(5);
+  });
+
+  test("keeps the slot the server resolved, on every date", async () => {
+    // The slot is re-derived from the key exactly as `swapMeal` derives it, and
+    // a repeat cannot vary it per date — one slot and one meal is what makes it
+    // a repeat rather than five separate swaps.
+    await repeatMeal("meal:template-entry", CURRY.id, 3);
+
+    const rows = writeOverrides.mock.calls[0]?.[1] as { slot: string; mealId: string }[];
+
+    expect(rows.every((row) => row.slot === "dinner")).toBe(true);
+    expect(rows.every((row) => row.mealId === CURRY.id)).toBe(true);
+  });
+
+  test("crosses a week boundary", async () => {
+    // Saturday into Sunday into Monday. The resolver stores day_of_week
+    // 0 = Sunday and displays Monday-first, so a run that stopped at either
+    // week end would be the most plausible-looking bug available here.
+    loadToday.mockResolvedValue(todayOn("2026-03-07"));
+
+    await repeatMeal("meal:template-entry", CURRY.id, 3);
+
+    expect(written()).toEqual(["2026-03-07", "2026-03-08", "2026-03-09"]);
+  });
+
+  test("crosses a month boundary", async () => {
+    loadToday.mockResolvedValue(todayOn("2026-03-30"));
+
+    await repeatMeal("meal:template-entry", CURRY.id, 3);
+
+    expect(written()).toEqual(["2026-03-30", "2026-03-31", "2026-04-01"]);
+  });
+
+  test("crosses a year boundary", async () => {
+    loadToday.mockResolvedValue(todayOn("2026-12-31"));
+
+    await repeatMeal("meal:template-entry", CURRY.id, 2);
+
+    expect(written()).toEqual(["2026-12-31", "2027-01-01"]);
+  });
+
+  test("starts from the resolved day, not the process clock", async () => {
+    // The suite runs in America/New_York and the resolved day is a London date.
+    // A version that read `new Date()` here would start the run on whatever
+    // today happens to be when the suite is run — and be wrong on EVERY date in
+    // the run rather than on one of them.
+    loadToday.mockResolvedValue(todayOn("2026-03-30"));
+
+    await repeatMeal("meal:template-entry", CURRY.id, 2);
+
+    expect(written()[0]).toBe("2026-03-30");
+  });
+
+  test("repeats from a slot that is already overridden", async () => {
+    // "I made too much, ignore what I said about Wednesday." The starting date
+    // already carries an override, and repeating from it is ordinary.
+    loadToday.mockResolvedValue(today(SWAPPED_DINNER));
+
+    expect(await repeatMeal("meal:override-row", CHILLI.id, 2)).toEqual({ ok: true });
+    expect(written()).toEqual(["2026-03-09", "2026-03-10"]);
+  });
+
+  test("re-resolves the day, so the screen catches up", async () => {
+    await repeatMeal("meal:template-entry", CURRY.id, 2);
+
+    expect(refresh).toHaveBeenCalled();
+  });
+});
+
+describe("what repeatMeal refuses", () => {
+  test("a count outside the range, writing nothing", async () => {
+    // Nothing the sheet can produce reaches here — this is the hand-rolled
+    // POST, and `days` is the one client value that multiplies rows written.
+    for (const days of [0, 1, 8, 30, 100_000, -3]) {
+      expect(await repeatMeal("meal:template-entry", CURRY.id, days)).toEqual({
+        ok: false,
+      });
+    }
+
+    expect(writeOverrides).not.toHaveBeenCalled();
+  });
+
+  test("a count that is not a whole number", async () => {
+    for (const days of [2.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(await repeatMeal("meal:template-entry", CURRY.id, days)).toEqual({
+        ok: false,
+      });
+    }
+
+    expect(writeOverrides).not.toHaveBeenCalled();
+  });
+
+  test("a count that is not a number at all", async () => {
+    expect(
+      await repeatMeal("meal:template-entry", CURRY.id, "3" as unknown as number),
+    ).toEqual({ ok: false });
+
+    expect(writeOverrides).not.toHaveBeenCalled();
+  });
+
+  test("a bad count without refreshing — the screen is not the thing that is wrong", async () => {
+    // The two refusals below DO refresh, because they mean the browser's copy
+    // of the library disagrees with the database. A bad count says nothing
+    // about the data, so re-resolving would cost a render and fix nothing.
+    await repeatMeal("meal:template-entry", CURRY.id, 99);
+
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  test("a meal that is not in the caller's own library", async () => {
+    expect(await repeatMeal("meal:template-entry", OWNERS_ONLY.id, 3)).toEqual({
+      ok: false,
+    });
+
+    expect(writeOverrides).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  test("an archived meal, on the same terms swapMeal refuses one", async () => {
+    // A retired meal must not be schedulable — and a repeat is the way to put
+    // one on seven days at once, so the check cannot be left to the picker.
+    expect(await repeatMeal("meal:template-entry", STEW.id, 3)).toEqual({ ok: false });
+
+    expect(writeOverrides).not.toHaveBeenCalled();
+  });
+
+  test("a key today's plan does not hold", async () => {
+    expect(await repeatMeal("meal:not-today", CURRY.id, 3)).toEqual({ ok: false });
+
+    expect(writeOverrides).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  test("a key naming a workout — there is no repeating a session", async () => {
+    expect(await repeatMeal("workout:e2", CURRY.id, 3)).toEqual({ ok: false });
+
+    expect(writeOverrides).not.toHaveBeenCalled();
+  });
+
+  test("no session", async () => {
+    getSession.mockResolvedValue(null);
+
+    expect(await repeatMeal("meal:template-entry", CURRY.id, 3)).toEqual({ ok: false });
+    expect(writeOverrides).not.toHaveBeenCalled();
+  });
+
+  test("no resolved day", async () => {
+    loadToday.mockResolvedValue(undefined);
+
+    expect(await repeatMeal("meal:template-entry", CURRY.id, 3)).toEqual({ ok: false });
+    expect(writeOverrides).not.toHaveBeenCalled();
+  });
+
+  test("never throws, whatever the database does", async () => {
+    writeOverrides.mockRejectedValue(new Error("connection refused"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(await repeatMeal("meal:template-entry", CURRY.id, 3)).toEqual({ ok: false });
   });
 });
 

@@ -315,6 +315,97 @@ describe("scope", () => {
       await expect(attempt()).rejects.toThrow(/scope\.upsert\(\)/);
       await expect(attempt()).rejects.toThrow(/Ownership cannot be reassigned/);
     });
+
+    /*
+     * FUEL-24's repeat: the same meal onto a run of consecutive dates, in ONE
+     * statement so it cannot land half-applied.
+     *
+     * The batch case gets its own ownership assertions rather than borrowing
+     * the singular ones. Stamping `userId` onto only the first row of an array
+     * is the exact mistake a `.map` refactor invites, and it would be invisible
+     * in review: the statement still carries a `user_id`, the first row still
+     * belongs to the caller, and the rest arrive with `undefined` — which the
+     * NOT NULL constraint rejects if you are lucky and the composite foreign
+     * key rejects if you are not. Either way the failure is a 500 from the
+     * database rather than a leak, but neither says what happened.
+     */
+    describe("a batch", () => {
+      const one = { id: "a", label: "Chilli", kcal: 700 };
+      const batch = [
+        one,
+        { id: "b", label: "Chilli", kcal: 700 },
+        { id: "c", label: "Chilli", kcal: 700 },
+      ];
+
+      it("writes every row in one statement", async () => {
+        const { s, last } = spy();
+        await s.upsert(fixture, batch, {
+          target: [fixture.label],
+          set: { kcal: 700 },
+        });
+
+        // Three tuples in one INSERT, not three INSERTs. `spy()` records the
+        // last statement, so a loop would leave only the third here — the row
+        // count in the query is what distinguishes atomic from not.
+        expect(last().query).toMatch(/values \(.+\), \(.+\), \(.+\)/);
+        expect(last().params.filter((param) => param === "c")).toHaveLength(1);
+      });
+
+      it("stamps the scope's user_id onto every row, not just the first", async () => {
+        const { s, last } = spy();
+        await s.upsert(fixture, batch, {
+          target: [fixture.label],
+          set: { kcal: 700 },
+        });
+
+        expect(last().params.filter((param) => param === OWNER)).toHaveLength(batch.length);
+      });
+
+      it("overwrites a user_id smuggled into any row of the batch", async () => {
+        // The last row rather than the first: a `[values[0], ...rest]` shape
+        // that stamped ownership once would pass an assertion about the first.
+        const smuggled = [
+          { id: "a", label: "Chilli", kcal: 700 },
+          { id: "b", label: "Chilli", kcal: 700, userId: OTHER },
+        ] as unknown as { id: string; label: string; kcal: number }[];
+
+        const { s, last } = spy();
+        await s.upsert(fixture, smuggled, {
+          target: [fixture.label],
+          set: { kcal: 700 },
+        });
+
+        expect(last().params.filter((param) => param === OWNER)).toHaveLength(2);
+        expect(last().params).not.toContain(OTHER);
+      });
+
+      it("still prepends user_id to the conflict target", async () => {
+        // The arbiter is what makes a colliding row necessarily the caller's
+        // own. A batch is more rows for it to be wrong about, not fewer.
+        const { s, last } = spy();
+        await s.upsert(fixture, batch, {
+          target: [fixture.label],
+          set: { kcal: 700 },
+        });
+
+        expect(last().query).toContain('on conflict ("user_id","label") do update');
+      });
+
+      it("takes a single-element array as readily as a bare row", async () => {
+        // The boundary between the two shapes. A repeat of the shortest run is
+        // still an array, and `queries/swap.ts` routes the singular write
+        // through the same path — so an implementation that special-cased
+        // length 1 would be a second code path with no second test.
+        const { s, last } = spy();
+        await s.upsert(fixture, [one], {
+          target: [fixture.label],
+          set: { kcal: 700 },
+        });
+
+        expect(last().params).toContain(OWNER);
+        expect(last().query).toContain("on conflict");
+      });
+    });
   });
 
   describe("update", () => {
