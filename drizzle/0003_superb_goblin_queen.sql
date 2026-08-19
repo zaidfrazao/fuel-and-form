@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "plan_template_entries_user_day_slot_key" ON "plan_template_entries" USING btree ("user_id","day_of_week","slot");

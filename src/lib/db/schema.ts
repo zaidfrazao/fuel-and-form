@@ -392,6 +392,18 @@ export const mealIngredients = pgTable(
  * This is the table a swap must NOT touch. Divergence lands in
  * `day_plan_overrides` instead, which is what makes a swap one-off by
  * construction rather than by discipline.
+ *
+ * The unique constraint on `(user_id, day_of_week, slot)` is FUEL-25's, and it
+ * is the same constraint `day_plan_overrides` carries one level down: it is
+ * what makes "the template row for a slot" singular, and therefore what lets
+ * editing the template be an upsert rather than a delete-then-insert with a
+ * window in the middle where a weekday has no dinner at all.
+ *
+ * resolve-plan.ts predicted it — "no matching unique constraint … worth adding,
+ * and flagged as a follow-up" — and resolves duplicates deterministically
+ * regardless. That tie-break stays. A resolver has to be total whatever is in
+ * the table, and rows written before this migration are exactly the case a
+ * constraint added later cannot speak for.
  */
 export const planTemplateEntries = pgTable(
   "plan_template_entries",
@@ -413,6 +425,15 @@ export const planTemplateEntries = pgTable(
       onDelete: "cascade",
     }),
     index("plan_template_entries_user_day_idx").on(t.userId, t.dayOfWeek),
+
+    // One meal per weekday per slot — see the block above. Named for the
+    // columns in order, matching `day_plan_overrides_user_date_slot_key`, so
+    // the two tables' constraints read as the pair they are.
+    uniqueIndex("plan_template_entries_user_day_slot_key").on(
+      t.userId,
+      t.dayOfWeek,
+      t.slot,
+    ),
   ],
 );
 

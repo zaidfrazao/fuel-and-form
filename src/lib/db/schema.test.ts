@@ -123,6 +123,23 @@ describe("schema", () => {
       expect(columnNames(unique?.config.columns ?? [])).toEqual(["user_id", "date", "slot"]);
     });
 
+    /**
+     * FUEL-25. The template's half of the pair above: editing the template
+     * upserts onto this constraint, so a missing one would turn "change every
+     * Tuesday's dinner" into a second row for Tuesday's dinner and leave the
+     * resolver's tie-break deciding which one a whole future of Tuesdays gets.
+     */
+    it("plan_template_entries allows one entry per (user, day_of_week, slot)", () => {
+      const { indexes } = getTableConfig(schema.planTemplateEntries);
+      const unique = indexes.find((index) => index.config.unique);
+
+      expect(columnNames(unique?.config.columns ?? [])).toEqual([
+        "user_id",
+        "day_of_week",
+        "slot",
+      ]);
+    });
+
     it("weight_logs allows one weigh-in per (user, date)", () => {
       const { indexes } = getTableConfig(schema.weightLogs);
       const unique = indexes.find((index) => index.config.unique);

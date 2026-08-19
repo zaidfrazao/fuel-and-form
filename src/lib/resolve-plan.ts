@@ -42,10 +42,16 @@ import {
  * `day_plan_overrides` is unique on `(user_id, date, slot)`, the PRD's weekly
  * grid is a "7-day × slot table" whose cells open a meal picker, and a swap
  * writes exactly one row. So a slot holds one meal, and `resolveSlot` returns
- * one or nothing. `plan_template_entries` has no matching unique constraint —
- * worth adding, and flagged as a follow-up rather than assumed here, so until it
- * exists a duplicated template entry resolves deterministically (lowest
- * `sort_order`, then id) instead of by whatever order the rows came back in.
+ * one or nothing.
+ *
+ * `plan_template_entries` now carries the matching constraint on `(user_id,
+ * day_of_week, slot)` — FUEL-25 added it, because editing the template needs a
+ * row it can upsert onto. The deterministic tie-break below (lowest
+ * `sort_order`, then id) STAYS, and not out of caution: a resolver has to be
+ * total whatever is in the table, and rows written before that migration are
+ * exactly the case a constraint added afterwards cannot speak for. It costs a
+ * sort of a handful of rows and removes a class of answer that would otherwise
+ * depend on the order Postgres happened to return them in.
  */
 
 /** Which table an answer came from — an override is rendered as a swap (P2). */
