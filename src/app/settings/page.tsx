@@ -83,7 +83,7 @@ export default async function SettingsPage() {
         >
           Weekly template
         </Link>
-        <p className="text-caption text-text-secondary">
+        <p className="text-slash text-text-secondary">
           What recurs each week, before any swaps. Editing it changes every
           future week; swapping a meal does not.
         </p>
@@ -94,7 +94,7 @@ export default async function SettingsPage() {
         >
           Weekly plan
         </Link>
-        <p className="text-caption text-text-secondary">
+        <p className="text-slash text-text-secondary">
           The seven days as they are actually planned, week by week. Changing a
           meal there affects that date only.
         </p>

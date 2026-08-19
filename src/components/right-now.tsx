@@ -986,13 +986,13 @@ export function RightNow({
        */}
       <Link
         href="/plan"
-        className="text-caption text-text-tertiary underline decoration-text-tertiary underline-offset-4"
+        className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
       >
         Weekly plan
       </Link>
       <Link
         href="/settings"
-        className="text-caption text-text-tertiary underline decoration-text-tertiary underline-offset-4"
+        className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
       >
         Slot times
       </Link>
