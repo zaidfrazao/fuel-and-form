@@ -71,9 +71,10 @@ export default async function SettingsPage() {
        * changed, which is exactly what a template is. It costs one extra tap,
        * and § Navigation's two-level depth allows it.
        *
-       * FUEL-28's weekly grid will want its own entry point, and should have
-       * one: from a grid the distinction is visible — a cell is a date, the
-       * template is not — in a way it is not from a single card.
+       * FUEL-28's weekly grid now has one, below. From a grid the distinction
+       * is visible — a cell is a date, the template is not — in a way it is not
+       * from a single card, so the two sit together here with a sentence each
+       * saying which table they write.
        */}
       <section className="flex flex-col gap-2 border-t border-border pt-5">
         <Link
@@ -85,6 +86,17 @@ export default async function SettingsPage() {
         <p className="text-caption text-text-secondary">
           What recurs each week, before any swaps. Editing it changes every
           future week; swapping a meal does not.
+        </p>
+
+        <Link
+          href="/plan"
+          className="pt-3 text-body text-text-primary underline decoration-text-tertiary underline-offset-4"
+        >
+          Weekly plan
+        </Link>
+        <p className="text-caption text-text-secondary">
+          The seven days as they are actually planned, week by week. Changing a
+          meal there affects that date only.
         </p>
       </section>
     </main>

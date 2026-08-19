@@ -120,6 +120,27 @@ export type SwapSheetProps = {
    * is the number the button prints. See `lib/repeat.ts` on why.
    */
   onRepeat?: (meal: SwappableMeal, days: number) => void;
+
+  /**
+   * Take this slot back to the template — P2's revert, offered in the sheet.
+   *
+   * Optional on the same terms as `onRepeat`, and absent means the control is
+   * not rendered: `/` offers Revert on the card beside Undo, where the swap was
+   * performed, so the sheet it opens has no need of a second one.
+   *
+   * The weekly grid (FUEL-28) is where this earns its place. A cell has no card
+   * beneath it to carry the control and no room for one at 375px, so the sheet
+   * the cell already opens is the only place a revert can live. That makes it
+   * two taps there against one on `/` — § Feedback scopes "revertible in one
+   * tap" to "from where it was performed", and a swap made on `/` is still one
+   * tap on `/`.
+   *
+   * Unlike the confirm and the repeat, this is live WITHOUT a selection. A
+   * revert is not a choice between meals; it removes the override and lets
+   * resolution find the template again, so requiring a tile to be ringed first
+   * would be asking for an answer to a question it does not pose.
+   */
+  onRevert?: () => void;
 };
 
 /**
@@ -259,6 +280,7 @@ export function SwapSheet({
   target,
   onConfirm,
   onRepeat,
+  onRevert,
 }: SwapSheetProps) {
   /*
    * The selection, held here rather than in `right-now.tsx`.
@@ -299,6 +321,16 @@ export function SwapSheet({
       setSelectedId(null);
       setDays(REPEAT_MIN);
     }
+  }
+
+  function revert() {
+    if (!onRevert) return;
+
+    // Closed before the write, as the confirm and the repeat are, and for the
+    // reason argued there. The banner for a refused revert lands on the grid
+    // beneath, which is where the sheet was opened from.
+    onRevert();
+    close(false);
   }
 
   function repeat() {
@@ -427,6 +459,21 @@ export function SwapSheet({
             onRepeat={repeat}
             disabled={!selected}
           />
+        )}
+
+        {/*
+         * § Buttons gives Revert the Text variant by name. Last in the sheet
+         * and never disabled: it is the one control here that acts on what is
+         * already true rather than on what has been chosen.
+         *
+         * Not the destructive variant. § Buttons reserves that for Delete and
+         * discard, and a revert destroys nothing — the template entry it
+         * returns to has been sitting there the whole time.
+         */}
+        {onRevert && (
+          <Button type="button" variant="link" onClick={revert}>
+            Revert to template
+          </Button>
         )}
       </div>
     </MealPicker>

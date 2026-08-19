@@ -5,7 +5,7 @@
 // them gained a field. Types are erased, so nothing of the component reaches
 // the bundle through this line.
 import type { Slot } from "@/components/day-ruler";
-import { type CalendarDate, parseCalendarDate } from "@/lib/date";
+import { addDays, type CalendarDate, type DateParts, parseCalendarDate } from "@/lib/date";
 import type { MealSlot } from "@/lib/db/schema";
 import type { NowItem, ScheduledItem } from "@/lib/resolve-now";
 
@@ -95,6 +95,57 @@ export function dayLabel(date: CalendarDate): string {
 const DAY_LABEL = new Intl.DateTimeFormat("en-GB", {
   weekday: "short",
   day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+});
+
+/**
+ * The seven days a week header names — `10 – 16 Aug 2026`.
+ *
+ * The range is built from its two ends rather than formatted as one thing,
+ * because the parts that repeat are the parts to drop: a header reading
+ * "10 Aug 2026 – 16 Aug 2026" makes the reader compare two strings to find the
+ * one number that differs. So the month appears once when both ends share it,
+ * and the year once when both ends share that.
+ *
+ * Three shapes, and each is the shortest unambiguous form of its case:
+ *
+ *   - `10 – 16 Aug 2026` — one month
+ *   - `27 Jul – 2 Aug 2026` — across a month
+ *   - `28 Dec 2025 – 3 Jan 2026` — across a year, where dropping either year
+ *     would say something false
+ *
+ * `monday` is snapped by the caller (`loadWeek` runs `startOfWeek`), so this
+ * formats the seven days from whatever it is given rather than re-deriving
+ * them — one place decides where a week starts, and `date.ts` is it.
+ *
+ * An en dash with hair spaces around it, not a hyphen: the hyphen is a joiner
+ * and reads as one date broken in half. Formatted in UTC from the dates' own
+ * parts, for the reason `dayLabel` gives at length — `new Date("2026-08-10")`
+ * is the 9th in New York.
+ */
+export function weekLabel(monday: CalendarDate): string {
+  const from = parseCalendarDate(monday);
+  const to = parseCalendarDate(addDays(monday, 6));
+
+  const sameYear = from.year === to.year;
+  const sameMonth = sameYear && from.month === to.month;
+
+  const start = sameMonth
+    ? `${from.day}`
+    : sameYear
+      ? `${from.day} ${monthName(from)}`
+      : `${from.day} ${monthName(from)} ${from.year}`;
+
+  return `${start} \u2013 ${to.day} ${monthName(to)} ${to.year}`;
+}
+
+/** The month's short name, from the date's own parts. See `dayLabel` on UTC. */
+function monthName({ year, month, day }: DateParts): string {
+  return MONTH_LABEL.format(Date.UTC(year, month - 1, day));
+}
+
+const MONTH_LABEL = new Intl.DateTimeFormat("en-GB", {
   month: "short",
   timeZone: "UTC",
 });
