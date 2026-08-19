@@ -1475,6 +1475,46 @@ describe("a slot that is already swapped", () => {
     await waitFor(() => expect(revertSwap).toHaveBeenCalled());
   });
 
+  test("keeps Revert away from the controls a thumb reaches for", () => {
+    // FUEL-25, and § Touch Targets: "destructive controls never sit adjacent to
+    // a frequently-tapped one". Revert deletes the override outright, and it
+    // used to sit 12px under Swap — the control that OPENS the sheet that wrote
+    // it. Asserted structurally rather than by pixel: what matters is that a
+    // mis-tap on the bar cannot reach it, and the bar is one container.
+    renderNow(swappedView());
+
+    const revert = screen.getByRole("button", { name: "Revert" });
+    // The primary's own parent IS the bar: `Actions` renders it and the
+    // Swap/Skip row inside one sticky container, with no wrapper between.
+    const bar = screen.getByRole("button", { name: "Log eaten" }).parentElement;
+
+    expect(bar?.className).toContain("sticky");
+    expect(bar?.contains(screen.getByRole("button", { name: "Swap" }))).toBe(true);
+    expect(bar?.contains(screen.getByRole("button", { name: "Skip" }))).toBe(true);
+    expect(bar?.contains(revert)).toBe(false);
+  });
+
+  test("sits with the mark it takes back", () => {
+    // The other half of the move. P2 words the criterion as one thought —
+    // "overridden cells are visually marked and can be reverted to template in
+    // one tap" — so Revert belongs with the note, not merely away from Swap.
+    renderNow(swappedView());
+
+    const note = screen.getByText(/Swapped\./);
+
+    expect(
+      note.parentElement?.contains(screen.getByRole("button", { name: "Revert" })),
+    ).toBe(true);
+  });
+
+  test("keeps Revert at the guide's minimum tap size", () => {
+    // § Touch Targets' 44px floor. Inline beside a caption is exactly where a
+    // control gets quietly shrunk to match the text around it.
+    renderNow(swappedView());
+
+    expect(screen.getByRole("button", { name: "Revert" }).dataset.size).toBe("sm");
+  });
+
   test("says what happened when a revert is refused", async () => {
     const user = userEvent.setup();
 
