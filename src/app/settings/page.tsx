@@ -56,6 +56,37 @@ export default async function SettingsPage() {
           Slot times appear here once a profile exists for this account.
         </p>
       )}
+
+      {/*
+       * The way to the template editor — FUEL-25's "reachable but distinct from
+       * swapping".
+       *
+       * Here rather than on `/`, and that is the whole point. `/`'s bottom third
+       * is the swap flow: Log eaten, Swap, Skip, and the sheet they open write
+       * dated overrides. A link to the screen that rewrites every future week,
+       * sitting among them, would put the two decisions one mis-tap apart —
+       * which is the thing the criterion rules out.
+       *
+       * Settings is where the app already keeps the things that are true until
+       * changed, which is exactly what a template is. It costs one extra tap,
+       * and § Navigation's two-level depth allows it.
+       *
+       * FUEL-28's weekly grid will want its own entry point, and should have
+       * one: from a grid the distinction is visible — a cell is a date, the
+       * template is not — in a way it is not from a single card.
+       */}
+      <section className="flex flex-col gap-2 border-t border-border pt-5">
+        <Link
+          href="/plan/template"
+          className="text-body text-text-primary underline decoration-text-tertiary underline-offset-4"
+        >
+          Weekly template
+        </Link>
+        <p className="text-caption text-text-secondary">
+          What recurs each week, before any swaps. Editing it changes every
+          future week; swapping a meal does not.
+        </p>
+      </section>
     </main>
   );
 }

@@ -63,6 +63,22 @@ export type MealPickerProps = {
   onOpenChange: (open: boolean) => void;
   /** The slot being filled. Sets the default filter and names the sheet. */
   slot: MealSlot;
+  /**
+   * Overrides the sheet's own title — FUEL-25.
+   *
+   * The default names the swap, because that is what opened this sheet for its
+   * first three tasks. The template editor opens the same tile grid to ask a
+   * different question, and the title is one of the two places a user reads
+   * before committing — the other being the confirm's label. A sheet headed
+   * "Swap dinner" above a button reading "Save to every Tuesday" would be two
+   * different accounts of what a tap is about to do, on one screen.
+   *
+   * A prop rather than a second component: the grid, the slot filter and the
+   * "Show all meals" toggle are genuinely the same question in both flows, and
+   * a fork would give the app two pickers that could drift. What differs is the
+   * sentence around them, which is what this names.
+   */
+  title?: string;
   /** The right of the topbar — `Mon 10 Aug`, from `dayLabel`. */
   date?: ReactNode;
   /** The whole library. Archived rows may be included; they are filtered here. */
@@ -80,6 +96,7 @@ export function MealPicker({
   open,
   onOpenChange,
   slot,
+  title,
   date,
   meals,
   currentMealId,
@@ -91,7 +108,7 @@ export function MealPicker({
     <Sheet
       open={open}
       onOpenChange={onOpenChange}
-      title={`Swap ${slotLabel(slot).toLowerCase()}`}
+      title={title ?? `Swap ${slotLabel(slot).toLowerCase()}`}
       meta={date}
     >
       {/* Its own component so that its `showAll` state unmounts with the sheet.
