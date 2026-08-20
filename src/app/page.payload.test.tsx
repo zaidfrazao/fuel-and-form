@@ -95,6 +95,41 @@ const VIEW = {
   state: "nothing-planned",
 };
 
+/**
+ * The daily walk as `loadToday` resolves it, and a log against it.
+ *
+ * The log is populated deliberately, exactly as `CHILLI`'s free text is: it
+ * carries an id, an instant, a status and a note, and every one of them is a
+ * field the row on screen does not draw. A fixture whose log was bare would let
+ * the narrowing in `walkEntryFor` be widened without this file noticing.
+ */
+const WALK_WORKOUT = {
+  id: "workout-9",
+  userId: SESSION.userId,
+  name: "Daily Walk",
+  type: "walk",
+  description: "Thirty to forty-five minutes, easy pace.",
+  rotationGroup: null,
+  rotationIndex: null,
+};
+
+const WALK_ITEM = {
+  kind: "workout",
+  workout: { workout: WALK_WORKOUT, source: "fixed", entryId: "entry-walk" },
+  key: "workout:entry-walk",
+};
+
+const WALK_LOG = {
+  id: "log-9",
+  userId: SESSION.userId,
+  date: "2026-03-09",
+  workoutId: "workout-9",
+  status: "done",
+  note: "a note no screen shows",
+  durationMin: 45,
+  loggedAt: new Date(Date.UTC(2026, 2, 9, 19, 4)),
+};
+
 const today = () => ({
   view: VIEW,
   profile: PROFILE,
@@ -108,6 +143,23 @@ const today = () => ({
 
 /** The props `RightNow` was rendered with. */
 const props = () => rightNow.mock.calls[0]![0] as Record<string, never>;
+
+/**
+ * Renders again with a different answer from `loadToday`, and returns the props
+ * that time.
+ *
+ * The `beforeEach` renders one default day, which is the right shape for the
+ * cases above — they are about columns that are always there. The walk is a
+ * state rather than a column, so its cases need a day it is logged on.
+ */
+async function renderWith(overrides: Record<string, unknown>) {
+  rightNow.mockClear();
+  loadToday.mockResolvedValue({ ...today(), ...overrides });
+
+  render(await Home());
+
+  return rightNow.mock.calls[0]![0] as Record<string, unknown>;
+}
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -198,5 +250,45 @@ describe("the profile", () => {
       targetFatG: 50,
       targetCarbG: 185,
     });
+  });
+});
+
+describe("the daily walk", () => {
+  test("carries the duration the row draws, and nothing else off the log", async () => {
+    const payload = await renderWith({
+      view: { ...VIEW, anytime: [WALK_ITEM] },
+      logs: { meals: [], workouts: [WALK_LOG] },
+    });
+
+    // Asserted by equality rather than field by field: the row shows Done and
+    // the minutes, so the id, the instant, the status and the note have no
+    // reason to leave the server — and a fifth field added later has to be
+    // added here deliberately.
+    expect(payload.walk).toEqual({ durationMin: 45 });
+  });
+
+  test("is null when the walk has not been logged", async () => {
+    const payload = await renderWith({ view: { ...VIEW, anytime: [WALK_ITEM] } });
+
+    // The row is rendered from the ITEM being in `anytime`; this says only what
+    // state it is in, and unlogged is the state a tap changes.
+    expect(payload.walk).toBeNull();
+  });
+
+  test("is null on a plan with no walk on it", async () => {
+    expect((await renderWith({})).walk).toBeNull();
+  });
+
+  test("marks the walk's line in the day's log", async () => {
+    const payload = await renderWith({
+      view: { ...VIEW, anytime: [WALK_ITEM] },
+      logs: { meals: [], workouts: [WALK_LOG] },
+    });
+
+    // What keeps the action bar's Undo off a row it cannot take back. The line
+    // itself still crosses — the walk happened, and the summary says so.
+    expect(payload.entries).toEqual([
+      { id: "log-9", name: "Daily Walk", status: "done", walk: true },
+    ]);
   });
 });
