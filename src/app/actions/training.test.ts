@@ -48,7 +48,6 @@ const DATE = "2026-03-09"; // a Monday inside the program
 const ENTRY = "entry-monday-circuit";
 const CIRCUIT = "workout-circuit-b";
 const WALK_ENTRY = "entry-daily-walk";
-const WALK = "workout-daily-walk";
 
 const workout = (id: string, name: string, type: string): Workout => ({
   id,
@@ -75,7 +74,7 @@ const training = (): Training => ({
         exercises: [],
       },
       {
-        workout: workout(WALK, "Daily Walk", "walk"),
+        workout: workout("workout-daily-walk", "Daily Walk", "walk"),
         source: "fixed",
         entryId: WALK_ENTRY,
         kind: "walk",
@@ -236,15 +235,31 @@ describe("setting a status", () => {
     logged.mockRestore();
   });
 
-  test("lets the walk be recorded through the same path", async () => {
-    // No control sends one yet — the walk's one-tap log is FUEL-29 — but the
-    // write path is the same one, and an action that could only reach half the
-    // day's items would be the wrong shape to hand the next task.
-    await setSessionStatus({ date: DATE, entryId: WALK_ENTRY, status: "done" });
+  test("refuses the walk, which is on the plan but has no control", async () => {
+    // The walk resolves on this date — it is on the template every day — so
+    // this refusal is not "the entry does not exist". It is deliberate: the
+    // screen renders the walk as a row and offers nothing to set, edit or clear
+    // it, so a walk row written here would be one no screen can show or take
+    // back. That is the same failure the action refuses for a workout the date
+    // does not schedule. FUEL-29 opens the path and adds the control together.
+    const result = await setSessionStatus({
+      date: DATE,
+      entryId: WALK_ENTRY,
+      status: "done",
+    });
+
+    expect(result).toEqual({ ok: false });
+    expect(recordSession).not.toHaveBeenCalled();
+  });
+
+  test("still resolves the session on a day that also holds a walk", async () => {
+    // The filter is on `kind`, not on position, so the walk sitting beside the
+    // session cannot shadow it — the seed puts the walk second on every weekday.
+    await setSessionStatus({ date: DATE, entryId: ENTRY, status: "done" });
 
     expect(recordSession).toHaveBeenCalledWith(
       USER,
-      expect.objectContaining({ workoutId: WALK }),
+      expect.objectContaining({ workoutId: CIRCUIT }),
     );
   });
 });

@@ -242,6 +242,33 @@ describe("setting a status", () => {
     expect(screen.getByLabelText<HTMLInputElement>("Duration").value).toBe("28");
   });
 
+  test("keeps a pasted non-number out of the duration, and out of the state", async () => {
+    // `inputMode` asks for a numeric keypad; it does not stop a paste. `NaN` is
+    // uniquely bad here — it renders as "NaN min", and because `NaN !== NaN` it
+    // would leave the dirty check true forever, offering "Save note" after
+    // every failed save with nothing on screen to explain it.
+    const user = userEvent.setup();
+
+    render(view());
+
+    const duration = screen.getByLabelText<HTMLInputElement>("Duration");
+
+    await user.type(duration, "2a8e");
+
+    expect(duration.value).toBe("28");
+
+    await user.click(screen.getByRole("button", { name: "Mark done" }));
+
+    // What reaches the action is the stripped value, so nothing downstream
+    // ever sees the `NaN` this test is about. The optimistic render of a
+    // duration is covered by the deferred case above; here the mocked action
+    // resolves at once and the fixture's own `entry` is still null, so the
+    // status correctly reverts to "Not recorded."
+    expect(setSessionStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ durationMin: "28" }),
+    );
+  });
+
   test("says nothing is recorded rather than nudging", () => {
     render(view());
 

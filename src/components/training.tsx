@@ -264,9 +264,26 @@ export function Training({
   /** Six weeks of dots from `lib/adherence.ts`. */
   adherence: Week[];
 }) {
-  // The session is what the actions act on. The walk is rendered — it is on the
-  // template every day and a screen that hid it would be lying about the day —
-  // but its one-tap log is FUEL-29's, not this task's.
+  /*
+   * The session is what the actions act on. The walk is rendered — it is on the
+   * template every day and a screen that hid it would be lying about the day —
+   * but its one-tap log is FUEL-29's, and `actions/training.ts` refuses it for
+   * that reason rather than writing a row nothing here could show or take back.
+   *
+   * KNOWN LIMITATION: a date with TWO sessions renders only the first, and the
+   * second is dropped with no sign of it. Nothing in the schema forbids two
+   * non-walk entries on one weekday — `training_template_entries` has no unique
+   * constraint on `(user_id, day_of_week)` and could not have one, since the
+   * walk shares every day with a session. PRD § P3 describes one session a day
+   * and the seed schedules one, so the case does not arise today.
+   *
+   * It is recorded rather than handled because handling it is a product
+   * question this task cannot answer alone: with two sessions, "Mark done" has
+   * to say WHICH, and that is a second action bar or a selection model rather
+   * than a fix. `lib/adherence.ts` makes the same first-session choice for the
+   * same reason, and schema.ts records the identical shape of gap for the
+   * seed's second snack, which `resolveSlot` also never surfaces.
+   */
   const session = sessions.find((item) => item.kind === "session");
   const walk = sessions.find((item) => item.kind === "walk");
 
@@ -410,7 +427,20 @@ export function Training({
                 <input
                   id="session-duration"
                   value={duration}
-                  onChange={(event) => setDuration(event.target.value)}
+                  /*
+                   * Digits only, stripped as they arrive.
+                   *
+                   * `inputMode` asks for a numeric keypad; it does not stop a
+                   * paste. Without this, "1e2" or "ab" reaches `Number()` as
+                   * `NaN`, and `NaN` is uniquely bad here: it renders as "NaN
+                   * min" while the request is in flight, and because
+                   * `NaN !== NaN` it makes the dirty check true forever — so
+                   * "Save note" would stay on offer after every failed save,
+                   * with nothing on screen explaining why. The action refuses
+                   * the value either way; this stops the screen from lying
+                   * about it in the meantime.
+                   */
+                  onChange={(event) => setDuration(event.target.value.replace(/\D/g, ""))}
                   // `inputMode` rather than `type="number"`, whose spinners are
                   // 24px targets and whose scroll-wheel behaviour changes a value
                   // nobody touched. `slot-times-form.tsx` made the same call.

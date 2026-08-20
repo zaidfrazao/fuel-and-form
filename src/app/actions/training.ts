@@ -47,6 +47,23 @@ import { parseSessionEntry } from "@/lib/session-entry";
  * a rotated day's workout changes with the date, so the entry is the stable
  * thing for a screen to name, and the workout is the date's answer.
  *
+ * ## Sessions only, and the walk deliberately not
+ *
+ * `actions/log.ts` searches the day's `anytime` items as well as its timeline,
+ * on the grounds that "a log module that could only reach half the day's items
+ * would be the wrong shape to hand the next task". That reasoning does not
+ * survive being applied here, and the difference is what the SCREEN can show.
+ *
+ * `/training` renders the walk as a row and offers no control on it — its
+ * one-tap log is FUEL-29's. So a walk row written through this action would be
+ * a row no screen displays, no control edits and no control clears, sitting in
+ * the weekly export as evidence. That is the exact failure this module refuses
+ * for a workout the date does not schedule, and it would be inconsistent to
+ * refuse one and allow the other because the second happens to be on the plan.
+ *
+ * FUEL-29 opens this path by widening the filter below at the same time as it
+ * adds the control — one change, both halves.
+ *
  * ## Nothing throws
  *
  * Every path returns `{ ok }`. A thrown Server Action is a 500 with nothing for
@@ -89,7 +106,9 @@ async function resolveSession(
   // No sessions is the answer for a date before `program_start_date` and for
   // one the template does not cover, so both are refused here without a
   // separate check: there is no entry to match, so nothing matches.
-  const resolved = training?.day.sessions.find((item) => item.entryId === entryId);
+  const resolved = training?.day.sessions.find(
+    (item) => item.entryId === entryId && item.kind === "session",
+  );
 
   return resolved && { userId: session.userId, workoutId: resolved.workout.id };
 }
