@@ -385,7 +385,7 @@ describe("where a dot leads", () => {
   test("keeps them out of the tab order and out of the accessible tree", () => {
     // 42 unnamed stops between the summary and the data table would be worse
     // than no links at all. § Touch Targets is why they cannot be the real
-    // control: a dot's target is about 26×21px, under the 44×44 minimum.
+    // control: a dot's target is 36×21px, under the 44×44 minimum.
     const { container } = render(
       <DotGrid weeks={WEEKS} today={TODAY} hrefFor={hrefFor} />,
     );

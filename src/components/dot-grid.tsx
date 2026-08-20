@@ -303,9 +303,9 @@ export function DotGrid({
    * ## The links are for POINTERS only, deliberately
    *
    * They are `aria-hidden` and out of the tab order, and both are load-bearing.
-   * A dot's tap target is the cell plus half its gutters — about 26×21px, which
-   * is under § Touch Targets' 44×44 and cannot be anything else inside a 240px
-   * graphic of 42 dots. That is fine for a shortcut and not fine for the only
+   * A dot's tap target is the cell plus its gutters — 36×21px measured at 375px
+   * wide, which is under § Touch Targets' 44×44 and cannot be anything else
+   * inside a 240px graphic of 42 dots. That is fine for a shortcut and not fine for the only
    * way in, so the accessible path is a real list: `recent-sessions.tsx` gives
    * the same dates 54px rows with names and statuses on them, and `/training`
    * renders it directly beneath this. The grid stays `role="img"` — which

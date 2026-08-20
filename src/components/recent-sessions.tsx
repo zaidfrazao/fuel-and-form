@@ -16,10 +16,10 @@ import { dayLabel } from "@/lib/now-display";
  *
  * The criterion asks for past sessions to be reachable from the adherence dot
  * grid, and they are: `dot-grid.tsx` takes an `hrefFor` and stretches a link
- * over each dot. But a dot is 11px on a 240px graphic, so its target is about
- * 26×21px however generously the gutters are split — under § Touch Targets'
- * 44×44, and not fixable without redrawing a signature graphic the guide
- * specifies to the pixel.
+ * over each dot. But a dot is 11px on a 240px graphic, so its target is 36×21px
+ * with every pixel of the gutters given away — under § Touch Targets' 44×44,
+ * and not fixable without redrawing a signature graphic the guide specifies to
+ * the pixel.
  *
  * So the grid keeps the glance and this keeps the tap. § Component Patterns →
  * Lists is the shape: rows on the canvas separated by hairlines, no card and no

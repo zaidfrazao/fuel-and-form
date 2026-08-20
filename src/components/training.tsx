@@ -489,7 +489,7 @@ export function Training({
 
         {/*
          * The dot grid's twin, and FUEL-30's actual control — the dots above are
-         * pointer-only at 26×21px, and these rows are the same dates at 54px for
+         * pointer-only at 36×21px, and these rows are the same dates at 54px for
          * a thumb and for a keyboard. `recent-sessions.tsx` carries the whole
          * argument.
          *

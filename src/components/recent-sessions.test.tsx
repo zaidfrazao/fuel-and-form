@@ -10,7 +10,7 @@ import type { RecentSession } from "@/lib/adherence";
  * `lib/adherence.test.ts` owns which dates end up in the list; this file owns
  * what a row is once one has. Two of the criteria live here rather than there:
  * the rows have to be reachable — that is the acceptance criterion the dots
- * cannot satisfy on their own, at 26×21px — and they have to state an outcome
+ * cannot satisfy on their own, at 36×21px — and they have to state an outcome
  * in words, because § The Governing Principle asks a skipped session and a
  * completed one to be rendered with the same visual weight.
  *
