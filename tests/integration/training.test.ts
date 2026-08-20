@@ -481,3 +481,187 @@ describe.skipIf(!configured)("recording a session, scoped", () => {
     ).toBe(false);
   });
 });
+
+/**
+ * The daily walk's own write — FUEL-29.
+ *
+ * `src/components/walk-row.tsx` and its two callers are asserted in the
+ * hermetic suite with the action mocked, and `actions/log-walk.ts` cannot be
+ * called from here at all: it resolves a session cookie, which is a request and
+ * not a fixture. What is left is the part the action delegates, and it is the
+ * part the feature actually rests on.
+ *
+ * Two claims, both of which live in the database rather than in the code:
+ *
+ *   1. The walk resolves out of `loadTraining` with `kind: 'walk'` and the
+ *      `entryId` the row sends back, so the action's `find` has something to
+ *      match. That derivation is `resolve-training.ts`'s and is unit-tested, but
+ *      it reads `workouts.type` off a real row — and a `type` that came back as
+ *      anything other than the string 'walk' would make every tap on the row
+ *      resolve to nothing and be refused, silently, with a banner.
+ *   2. The walk's row and the session's row coexist on one date and are cleared
+ *      independently. `workout_logs` is unique on `(user_id, date, workout_id)`,
+ *      which is exactly what allows this — the walk shares every day with a
+ *      session — and it is also what makes a second tap on the walk an update
+ *      rather than the unique-index violation a plain insert would raise.
+ */
+describe.skipIf(!configured)("recording the daily walk, scoped", () => {
+  let fixture: Fixture;
+
+  beforeEach(async () => {
+    await truncateAll(getDb());
+    fixture = await seedFixture();
+  });
+
+  /** The walk on every day of the week, sorting after whatever else a day has. */
+  async function seedWalk(userId: string): Promise<string> {
+    const owned = scope(userId, getDb());
+
+    const [walk] = await owned.insert(schema.workouts, {
+      name: "Daily Walk",
+      type: "walk",
+    });
+
+    await owned.insert(
+      schema.trainingTemplateEntries,
+      [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
+        dayOfWeek,
+        workoutId: walk!.id,
+        sortOrder: 1,
+      })),
+    );
+
+    return walk!.id;
+  }
+
+  /** What `resolveWalk` does, minus the session it cannot have here. */
+  async function resolveWalk(userId: string, date: string) {
+    const training = await loadTraining(userId, date, new Date());
+
+    return training?.day.sessions.find((item) => item.kind === "walk");
+  }
+
+  const logsOf = (userId: string) =>
+    scope(userId, getDb()).select(schema.workoutLogs, undefined, {
+      orderBy: [asc(schema.workoutLogs.date)],
+    });
+
+  it("resolves the walk on a date, entry and all", async () => {
+    const walkId = await seedWalk(fixture.alice.userId);
+
+    const walk = await resolveWalk(fixture.alice.userId, ALICE_LOGGED);
+
+    // The kind is read off `workouts.type` on a row that has been to Postgres
+    // and back. The entry is what the screen names and the action matches.
+    expect(walk?.workout.id).toBe(walkId);
+    expect(walk?.kind).toBe("walk");
+    expect(walk?.entryId).toBeTruthy();
+    // No exercise rows, which is the honest model rather than a missing one.
+    expect(walk?.exercises).toEqual([]);
+  });
+
+  it("resolves on a weekend, where there is no session to share the day with", async () => {
+    await seedWalk(fixture.alice.userId);
+
+    // 2026-01-10 is a Saturday. "Every day including weekends" is a property of
+    // the template, and this is that property surviving the round trip.
+    expect((await resolveWalk(fixture.alice.userId, SATURDAY))?.kind).toBe("walk");
+  });
+
+  it("records one row for the walk beside the session's own", async () => {
+    const { userId, workoutId } = fixture.alice;
+    const walkId = await seedWalk(userId);
+
+    await recordSession(userId, {
+      date: ALICE_LOGGED,
+      workoutId: walkId,
+      status: "done",
+      note: null,
+      durationMin: null,
+    });
+
+    const logs = await logsOf(userId);
+
+    // Two rows on one date: the fixture's session, and the walk. The unique
+    // index is on `(user_id, date, workout_id)`, so it constrains the pair and
+    // not the day.
+    expect(logs.filter((log) => log.date === ALICE_LOGGED)).toHaveLength(2);
+    expect(logs.find((log) => log.workoutId === walkId)).toMatchObject({
+      status: "done",
+      note: null,
+      durationMin: null,
+    });
+    expect(logs.find((log) => log.workoutId === workoutId)?.status).toBe("done");
+  });
+
+  it("updates the walk on a second tap rather than writing another row", async () => {
+    const { userId } = fixture.alice;
+    const walkId = await seedWalk(userId);
+
+    const log = (durationMin: number | null) =>
+      recordSession(userId, {
+        date: ALICE_LOGGED,
+        workoutId: walkId,
+        status: "done",
+        note: null,
+        durationMin,
+      });
+
+    await log(null);
+    await log(45);
+    await log(null);
+
+    const rows = (await logsOf(userId)).filter((row) => row.workoutId === walkId);
+
+    // One row throughout. A duration added and then cleared is the same
+    // statement three times — which is what makes the presets toggleable, and
+    // what a plain insert would have turned into a unique-index violation on
+    // the second tap.
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.durationMin).toBeNull();
+  });
+
+  it("clears the walk without touching the session on the same date", async () => {
+    const { userId, workoutId } = fixture.alice;
+    const walkId = await seedWalk(userId);
+
+    await recordSession(userId, {
+      date: ALICE_LOGGED,
+      workoutId: walkId,
+      status: "done",
+      note: null,
+      durationMin: 30,
+    });
+
+    expect(await clearSession(userId, ALICE_LOGGED, walkId)).toBe(true);
+
+    const remaining = (await logsOf(userId)).filter((log) => log.date === ALICE_LOGGED);
+
+    expect(remaining.map((log) => log.workoutId)).toEqual([workoutId]);
+    // Taking it back twice is not a failure the second time; it is a screen
+    // that was behind. The action answers `ok` either way.
+    expect(await clearSession(userId, ALICE_LOGGED, walkId)).toBe(false);
+  });
+
+  it("never reaches another user's walk", async () => {
+    const walkId = await seedWalk(fixture.alice.userId);
+
+    await recordSession(fixture.alice.userId, {
+      date: ALICE_LOGGED,
+      workoutId: walkId,
+      status: "done",
+      note: null,
+      durationMin: null,
+    });
+
+    // Bob holding Alice's walk id is the demo-isolation case, and the answer is
+    // the WHERE clause rather than a check: the row does not match, so the
+    // delete removes nothing and cannot tell him whether it existed.
+    expect(await clearSession(fixture.bob.userId, ALICE_LOGGED, walkId)).toBe(false);
+    // Alice's row is untouched — the assertion that makes the one above mean
+    // something rather than merely pass.
+    expect(
+      (await logsOf(fixture.alice.userId)).some((log) => log.workoutId === walkId),
+    ).toBe(true);
+  });
+});

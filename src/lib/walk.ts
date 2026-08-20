@@ -74,6 +74,16 @@ export function isWalk<T extends NowItem>(
  * that is no longer on today's plan is not in the set — and its log row is
  * therefore left in the undo stack, which is right. That row has no row on the
  * screen to revert it from, so the bar is the only way back to it.
+ *
+ * Callers pass the whole day — timeline and anytime together — even though the
+ * walk is only ever unscheduled through the app. `settings` deliberately offers
+ * no time for it (see `EDITABLE_WORKOUT_TYPES`), so a walk on the TIMELINE can
+ * only come from a hand-edited `profiles.workout_times`, and in that state it
+ * would be logged from the action bar and left with no way back. That is the
+ * lesser of the two wrongs: the alternative is `actions/log.ts` and
+ * `day-summary.ts` answering this question over different halves of the same
+ * day, which is a screen that offers an Undo the server refuses, or hides one it
+ * would have performed.
  */
 export function walkWorkoutIds(items: readonly NowItem[]): ReadonlySet<string> {
   return new Set(

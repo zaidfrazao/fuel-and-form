@@ -188,7 +188,18 @@ export async function undoLastLog(): Promise<LogResult> {
     // taking one back through here would step the card past an item that is
     // still logged. `lib/walk.ts` carries the argument, and the walk's own row
     // carries its revert.
-    const target = latestLog(withoutWalks(today.logs, walkWorkoutIds(today.view.anytime)));
+    //
+    // The timeline AND the anytime list, which is the same union `dayLog` is
+    // given in `app/page.tsx`. The two have to be asked the same question: this
+    // decides which row Undo takes back, that decides whether Undo is offered,
+    // and a screen offering a control the server will not act on — or hiding one
+    // it would — is the drift the shared helper exists to prevent.
+    const stack = withoutWalks(
+      today.logs,
+      walkWorkoutIds([...today.view.timeline, ...today.view.anytime]),
+    );
+
+    const target = latestLog(stack);
 
     // Only step the view back if a row was actually removed. `deleteLog`
     // returns false for a log already gone — another tab got there first — and

@@ -1073,14 +1073,20 @@ export function RightNow({
            * where the walk is in neither place.
            */}
           {walkItem && walk === null && (
-            <ul className="flex flex-col">
-              <WalkRow
-                date={base.date}
-                entryId={walkItem.workout.entryId}
-                name={itemName(walkItem)}
-                entry={null}
-              />
-            </ul>
+            <section className="flex flex-col gap-[14px]">
+              {/* Labelled like the list it is a narrowing of, rather than left
+                  as a bare row under the crop marks — an unlabelled control
+                  below a closed page reads as something that fell off it. */}
+              <Eyebrow>Anytime</Eyebrow>
+              <ul className="flex flex-col">
+                <WalkRow
+                  date={base.date}
+                  entryId={walkItem.workout.entryId}
+                  name={itemName(walkItem)}
+                  entry={null}
+                />
+              </ul>
+            </section>
           )}
         </div>
 

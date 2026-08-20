@@ -169,6 +169,12 @@ export function WalkRow({
               key={minutes}
               variant="secondary"
               size="xs"
+              // Which duration is set is said in WORDS, by the status above,
+              // and not by promoting one of these buttons. `training.tsx` makes
+              // the same call for its three statuses and gives the reason:
+              // moving which button is emphasised shifts the row under the
+              // reader's thumb between renders. `aria-pressed` is how the same
+              // fact reaches a screen reader.
               aria-pressed={shown.durationMin === minutes}
               // Tapping the preset that is already set clears the duration
               // rather than rewriting it — the way back from a mistap that is
