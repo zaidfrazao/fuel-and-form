@@ -261,6 +261,147 @@ describe("the resulting day totals", () => {
     expect(live).toBeTruthy();
     expect(within(live as HTMLElement).getByText("Calories")).toBeTruthy();
   });
+
+  test("move again when the selection moves to a second tile", async () => {
+    // "Updates as the selected tile changes" — the acceptance criterion is about
+    // the SECOND tap, and the case above only makes the first. A preview that
+    // computed once and froze passes every other test in this file: the figures
+    // would be right for the meal the reader settled on first and wrong for the
+    // one they settled on, which is the only reading that matters.
+    const { user, sheet } = await open();
+
+    await user.click(within(sheet).getByRole("button", { name: /Chickpea curry/ }));
+    expect(column(sheet, "Calories")).toContain("960");
+
+    // 1,100 − 700 + 900 = 1,300, and nothing of the curry left in it.
+    await user.click(within(sheet).getByRole("button", { name: /Salmon and greens/ }));
+
+    expect(column(sheet, "Calories")).toContain("1,300");
+    expect(column(sheet, "Calories")).not.toContain("960");
+    expect(column(sheet, "Protein")).toContain("90 g");
+  });
+
+  test("go back to the day as it stands when the swapped-away meal is chosen", async () => {
+    // The selection landing back on the ink anchor is a real tap, not a no-op:
+    // the reader compared two meals and came back. The figures have to come back
+    // with them — a preview that only ever moved AWAY from the base would leave
+    // the panel claiming a cost for a swap that changes nothing.
+    const { user, sheet } = await open();
+
+    await user.click(within(sheet).getByRole("button", { name: /Chickpea curry/ }));
+    await user.click(within(sheet).getByRole("button", { name: /Chilli/ }));
+
+    expect(column(sheet, "Calories")).toContain("1,100");
+    expect(column(sheet, "Protein")).toContain("75 g");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The panel the figures sit in — FUEL-32                                     */
+/* -------------------------------------------------------------------------- */
+
+/** The tinted block: the live region, which is the panel's own element. */
+const panel = (sheet: HTMLElement) =>
+  sheet.querySelector('[aria-live="polite"]') as HTMLElement;
+
+describe("the preview panel", () => {
+  test("sits above the confirm, never after it", async () => {
+    // The acceptance criterion is an ORDER, so this reads document position
+    // rather than finding both elements on the screen — a panel rendered below
+    // the button would satisfy every "is it there" assertion in this file while
+    // failing the one thing § Progressive Disclosure asks of it.
+    //
+    // Same comparison the repeat control's placement uses, for the same reason:
+    // a restyle that keeps the order passes, a reorder that keeps the styling
+    // fails.
+    const { sheet } = await open();
+
+    const position = panel(sheet).compareDocumentPosition(
+      within(sheet).getByRole("button", { name: "Swap" }),
+    );
+
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test("sits on the tinted ground", async () => {
+    // § Color Palette gives `accent-subtle` to swapped cells and the Swapped
+    // tag; this panel is the swap being CONSIDERED, read on the same ground.
+    // Pinned the way week-grid.test.tsx and right-now.test.tsx pin theirs.
+    const { sheet } = await open();
+
+    expect(panel(sheet).className).toContain("bg-accent-subtle");
+  });
+
+  test("does not spend the sheet's one umber element", async () => {
+    // § The Four Rules allows the picker exactly one, and it is the selection
+    // ring `Tile` draws. A tinted GROUND is not the accent — right-now.tsx
+    // settles that for the Swapped tag — so adding this panel must not have
+    // introduced a second umber thing anywhere in the sheet.
+    const { user, sheet } = await open();
+
+    await user.click(within(sheet).getByRole("button", { name: /Chickpea curry/ }));
+
+    expect(sheet.querySelectorAll('[class*="bg-accent"]:not([class*="bg-accent-subtle"])'))
+      .toHaveLength(0);
+    expect(sheet.querySelectorAll('[class*="text-accent"]')).toHaveLength(0);
+  });
+
+  test("steps its greys down from the tint rather than keeping text-secondary", async () => {
+    // The reason `tinted` exists. `text-secondary` measures 4.07:1 on
+    // `accent-subtle`, under § Accessibility's AA floor — so a panel that only
+    // changed its background would put every label and every metadata line below
+    // the standard the guide sets for itself.
+    //
+    // Asserted on the label, which is the element that would otherwise keep the
+    // failing grey. A class name rather than a computed ratio because jsdom
+    // resolves no stylesheet; the ratios themselves are recorded against
+    // `TINTED_TEXT` in kv-grid.tsx, where the values they are derived from live.
+    const { sheet } = await open();
+
+    const label = within(panel(sheet)).getByText("Calories");
+
+    expect(label.className).not.toContain("text-text-secondary");
+    expect(label.className).toContain("text-text-primary/[0.68]");
+  });
+
+  test("leaves the calorie delta's red at full strength", async () => {
+    // The whole reason the tinted tone works through `color` and not `opacity`.
+    // `opacity` applies to a subtree, and the delta is a `text-error` span
+    // INSIDE the metadata line — under a dimmed line the panel would be
+    // softening the one figure on it that is trying to be noticed.
+    const { user, sheet } = await open({
+      planned: [
+        { slot: "breakfast", meal: { id: "m4", name: "Overnight oats", kcal: 1800, proteinG: 130, fatG: 40, carbG: 150 } },
+        { slot: "dinner", meal: { id: "m1", name: "Chilli", kcal: 700, proteinG: 45, fatG: 20, carbG: 60 } },
+      ],
+    });
+
+    await user.click(within(sheet).getByRole("button", { name: /Salmon and greens/ }));
+
+    const red = panel(sheet).querySelector(".text-error") as HTMLElement;
+
+    expect(red.textContent).toBe("+700");
+    expect(red.closest('[class*="opacity-"]')).toBeNull();
+  });
+
+  test("persists nothing, however many tiles are tapped", async () => {
+    // The component-level half of macros § 1.3 case 6. That case proves the
+    // ARITHMETIC writes nothing — a pure function with no connection in reach.
+    // This proves the sheet around it does not either: a reader may price the
+    // whole library before deciding, and none of it is a swap until the confirm
+    // is tapped.
+    const { user, sheet } = await open();
+
+    await user.click(within(sheet).getByRole("button", { name: "Show all meals" }));
+
+    for (const meal of [CURRY, SALMON, OATS, CHILLI]) {
+      await user.click(within(sheet).getByRole("button", { name: new RegExp(meal.name) }));
+    }
+
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onRepeat).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
 });
 
 describe("the confirm", () => {
