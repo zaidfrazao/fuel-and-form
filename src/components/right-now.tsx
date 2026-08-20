@@ -11,6 +11,7 @@ import { DayRuler } from "@/components/day-ruler";
 import { ExerciseList } from "@/components/exercise-list";
 import { KeyValueGrid, SlashMeta } from "@/components/kv-grid";
 import { SwapSheet, type PlannedMeal, type SwappableMeal } from "@/components/swap-sheet";
+import { WalkRow } from "@/components/walk-row";
 import { Button } from "@/components/ui/button";
 import type { CalendarDate } from "@/lib/date";
 import { type LoggedEntry, pendingEntry } from "@/lib/day-summary";
@@ -19,6 +20,7 @@ import type { LogVerb } from "@/lib/log-intent";
 import type { MacroBearing, MacroTarget } from "@/lib/macros";
 import { itemLabel, itemName, rulerSlots } from "@/lib/now-display";
 import { swapNote } from "@/lib/swap-note";
+import { isWalk, type WalkEntryView } from "@/lib/walk";
 import {
   type AnytimeItem,
   type NowItem,
@@ -270,22 +272,53 @@ function UpNext({ items }: { items: readonly ScheduledItem[] }) {
  * template every day, and an item pinned to a window it has no basis for would
  * displace dinner every evening.
  */
-function Anytime({ items }: { items: readonly AnytimeItem[] }) {
+/**
+ * The day's unscheduled items — the daily walk, and any slot whose time was
+ * cleared in settings.
+ *
+ * Only one of them is loggable from here, and that is the point of the split
+ * below. The walk is "a separate, always-present item logged with a single tap"
+ * (PRD § P3, FUEL-29), so it gets `walk-row.tsx` and its own control; a meal
+ * that merely has no window is still an ordinary meal, and logging it is the
+ * action bar's job once the card reaches it.
+ */
+function Anytime({
+  items,
+  date,
+  walks,
+}: {
+  items: readonly AnytimeItem[];
+  date: CalendarDate;
+  /** What is recorded against each walk, by entry id. See `RightNow`. */
+  walks: ReadonlyMap<string, WalkEntryView>;
+}) {
   if (items.length === 0) return null;
 
   return (
     <section className="flex flex-col gap-[14px]">
       <Eyebrow>Anytime</Eyebrow>
       <ul className="flex flex-col">
-        {items.map((item) => (
-          <li
-            key={item.key}
-            className="flex min-h-[54px] items-center justify-between gap-4 border-b border-border py-3 last:border-b-0"
-          >
-            <span className="truncate text-body text-text-primary">{itemName(item)}</span>
-            <span className="text-micro uppercase text-text-tertiary">{itemLabel(item)}</span>
-          </li>
-        ))}
+        {items.map((item) =>
+          isWalk(item) ? (
+            <WalkRow
+              key={item.key}
+              date={date}
+              entryId={item.workout.entryId}
+              name={itemName(item)}
+              entry={walks.get(item.workout.entryId) ?? null}
+            />
+          ) : (
+            <li
+              key={item.key}
+              className="flex min-h-[54px] items-center justify-between gap-4 border-b border-border py-3 last:border-b-0"
+            >
+              <span className="truncate text-body text-text-primary">{itemName(item)}</span>
+              <span className="text-micro uppercase text-text-tertiary">
+                {itemLabel(item)}
+              </span>
+            </li>
+          ),
+        )}
       </ul>
     </section>
   );
@@ -694,6 +727,7 @@ export function RightNow({
   target,
   meals,
   templatePlan,
+  walks,
 }: {
   view: NowView;
   /** `workouts.id` → its exercises, from `loadToday`. */
@@ -732,6 +766,20 @@ export function RightNow({
    * still measures both against the same template dinner.
    */
   templatePlan: readonly PlannedMeal[];
+  /**
+   * What is recorded against today's walks, keyed by template entry — FUEL-29.
+   *
+   * A missing key is a walk that has not been logged; a plan with no walk on it
+   * is an empty map. The row is rendered from the ITEM being in `anytime`, so
+   * the two do not need telling apart here. Narrowed in `app/page.tsx` to the
+   * one field a row draws — the `workout_logs` row also carries an id, an
+   * instant, a status that is always 'done' and a note no screen shows.
+   *
+   * A prop rather than part of `entries`, because the walk is not part of the
+   * card's optimistic layer: `walk-row.tsx` holds its own, for the reason
+   * `lib/walk.ts` gives.
+   */
+  walks: ReadonlyMap<string, WalkEntryView>;
 }) {
   /*
    * The optimistic layer — § Feedback's "optimistic by default", and the whole
@@ -804,6 +852,14 @@ export function RightNow({
   };
 
   const now = positionAt(base, progress.position);
+
+  /*
+   * Today's walk, if the plan has one — the item, not its log.
+   *
+   * Needed on its own only for the day-complete branch below, which does not
+   * render the Anytime list. Everywhere else the row comes out of that list.
+   */
+  const walkItem = base.anytime.find(isWalk);
 
   const active = now.state === "active" ? now.active : undefined;
 
@@ -878,7 +934,16 @@ export function RightNow({
   const actions = (
     <Actions
       item={active}
-      undoable={progress.entries.length > 0}
+      /*
+       * Every line except the walk's — FUEL-29.
+       *
+       * This control is a stack over what the BAR logged, and `lib/walk.ts`
+       * explains why the walk is not one of those: undoing moves the card back,
+       * and the walk never moved it forward. `actions/log.ts` narrows the same
+       * way on the server, so a day whose only log is the walk offers no Undo
+       * here AND has none to give if one were asked for.
+       */
+      undoable={progress.entries.some((entry) => !entry.walk)}
       failure={failure}
       onAct={act}
       onSwap={() => setPicking(true)}
@@ -986,8 +1051,43 @@ export function RightNow({
   if (now.state === "day-complete") {
     return (
       <Screen>
-        <div className="flex flex-1 flex-col pb-[max(1.375rem,env(safe-area-inset-bottom))]">
+        <div className="flex flex-1 flex-col gap-[30px] pb-[max(1.375rem,env(safe-area-inset-bottom))]">
           <DayComplete date={base.date} entries={progress.entries} target={target} />
+
+          {/*
+           * The one thing the closed page still offers — FUEL-29.
+           *
+           * A deliberate narrowing of the rule above, and worth stating because
+           * it reads as a contradiction of it. The walk is on the template every
+           * single day and is logged whenever, which in practice is the evening
+           * — PRD § P9 exists precisely because it is the thing most likely to
+           * be still outstanding after dark. The last item of the day is often
+           * dinner, so "the day is walked through" and "the walk is unlogged"
+           * routinely overlap, and a closed page in that state would be a screen
+           * that hid the only thing left to do until midnight rolled the date.
+           *
+           * Only while it is UNLOGGED, which is what keeps the page closed in
+           * every other respect: once the row exists it becomes a line in the
+           * summary above like every other log, and nothing is offered here at
+           * all. The transition covers the change-over, so there is no frame
+           * where the walk is in neither place.
+           */}
+          {walkItem && !walks.has(walkItem.workout.entryId) && (
+            <section className="flex flex-col gap-[14px]">
+              {/* Labelled like the list it is a narrowing of, rather than left
+                  as a bare row under the crop marks — an unlabelled control
+                  below a closed page reads as something that fell off it. */}
+              <Eyebrow>Anytime</Eyebrow>
+              <ul className="flex flex-col">
+                <WalkRow
+                  date={base.date}
+                  entryId={walkItem.workout.entryId}
+                  name={itemName(walkItem)}
+                  entry={null}
+                />
+              </ul>
+            </section>
+          )}
         </div>
 
         {actions}
@@ -1013,7 +1113,7 @@ export function RightNow({
 
           {base.timeline.length > 0 && ruler}
 
-          <Anytime items={base.anytime} />
+          <Anytime items={base.anytime} date={base.date} walks={walks} />
 
           {settingsLink}
         </div>
@@ -1068,7 +1168,7 @@ export function RightNow({
 
         <UpNext items={now.upcoming} />
 
-        <Anytime items={base.anytime} />
+        <Anytime items={base.anytime} date={base.date} walks={walks} />
 
         {settingsLink}
       </div>

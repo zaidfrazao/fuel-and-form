@@ -38,6 +38,7 @@ vi.mock("@/lib/cursor-cookie", () => ({ readCursor }));
 // it does is what this file is testing.
 vi.mock("@/app/actions/log", () => ({ logItem: vi.fn(), undoLastLog: vi.fn() }));
 vi.mock("@/app/actions/swap", () => ({ swapMeal: vi.fn(), revertSwap: vi.fn() }));
+vi.mock("@/app/actions/log-walk", () => ({ logWalk: vi.fn(), clearWalk: vi.fn() }));
 
 const { default: Home } = await import("@/app/page");
 

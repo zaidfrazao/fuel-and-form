@@ -7,6 +7,7 @@ import type { LoggedEntry } from "@/lib/day-summary";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
 import type { MacroTarget } from "@/lib/macros";
 import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve-now";
+import type { WalkEntryView } from "@/lib/walk";
 
 /**
  * The server actions are mocked, for the reason `login/page.test.tsx` gives
@@ -21,6 +22,13 @@ const undoLastLog = vi.fn();
 const swapMeal = vi.fn();
 const repeatMeal = vi.fn();
 const revertSwap = vi.fn();
+const logWalk = vi.fn();
+const clearWalk = vi.fn();
+
+vi.mock("@/app/actions/log-walk", () => ({
+  logWalk: (...args: unknown[]) => logWalk(...args),
+  clearWalk: (...args: unknown[]) => clearWalk(...args),
+}));
 
 vi.mock("@/app/actions/log", () => ({
   logItem: (...args: unknown[]) => logItem(...args),
@@ -39,6 +47,10 @@ beforeEach(() => {
   swapMeal.mockReset();
   repeatMeal.mockReset();
   revertSwap.mockReset();
+  logWalk.mockReset();
+  clearWalk.mockReset();
+  logWalk.mockResolvedValue({ ok: true });
+  clearWalk.mockResolvedValue({ ok: true });
   logItem.mockResolvedValue({ ok: true });
   undoLastLog.mockResolvedValue({ ok: true });
   swapMeal.mockResolvedValue({ ok: true });
@@ -153,6 +165,9 @@ const DINNER = at(mealItem({ id: "meal-3", name: "Chilli" }, "dinner"), "meal:e4
 
 const WALK: AnytimeItem = { ...workoutItem({ id: "workout-2", name: "Daily walk", type: "walk" }), key: "workout:e5" };
 
+/** The template entry the walk resolved from — what its row names on a write. */
+const WALK_ENTRY = "entry-2";
+
 const TIMELINE = [BREAKFAST, LUNCH, SESSION, DINNER];
 
 /**
@@ -240,6 +255,8 @@ const renderNow = (
   exercises: ReadonlyMap<string, WorkoutExercise[]> = EXERCISES,
   /** The day's log so far — what the summary prints, and what undo takes back. */
   entries: LoggedEntry[] = [],
+  /** What is recorded against the walk. Unlogged unless a case says otherwise. */
+  walk: WalkEntryView | null = null,
 ) => (
   render(
     <RightNow
@@ -249,6 +266,7 @@ const renderNow = (
       target={TARGET}
       meals={LIBRARY}
       templatePlan={TEMPLATE_PLAN}
+      walks={new Map(walk ? [[WALK_ENTRY, walk]] : [])}
     />,
   )
 );
@@ -418,6 +436,182 @@ describe("anytime items", () => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* The daily walk — FUEL-29                                                   */
+/* -------------------------------------------------------------------------- */
+
+/** The Anytime section, which is where the walk's row lives on this screen. */
+const anytime = () =>
+  screen.getByRole("heading", { name: "Anytime" }).nextElementSibling as HTMLElement;
+
+describe("the daily walk", () => {
+  test("logs in one tap, with no duration asked for first", async () => {
+    const user = userEvent.setup();
+
+    renderNow(active(0));
+
+    await user.click(within(anytime()).getByRole("button", { name: "Log walk" }));
+
+    // One tap, one write. The date and the entry are the row's, and the
+    // duration is absent rather than zero — see `parseDuration`.
+    await waitFor(() =>
+      expect(logWalk).toHaveBeenCalledWith({
+        date: "2026-03-09",
+        entryId: "entry-2",
+        durationMin: null,
+      }),
+    );
+  });
+
+  test("says Done on the frame it is tapped, before the server answers", async () => {
+    const user = userEvent.setup();
+    const held = deferred<{ ok: boolean }>();
+
+    logWalk.mockReturnValue(held.promise);
+
+    renderNow(active(0));
+
+    await user.click(within(anytime()).getByRole("button", { name: "Log walk" }));
+
+    // § Feedback's 300ms budget: the row has already changed while the request
+    // is still open. `findBy` rather than `getBy` — an optimistic assertion has
+    // to wait for the transition to paint, and `getBy` is the version that
+    // passes under `npm run test` and flakes under coverage.
+    expect((await within(anytime()).findByRole("status")).textContent).toContain("Done");
+    expect(within(anytime()).queryByRole("button", { name: "Log walk" })).toBeNull();
+
+    held.settle({ ok: true });
+    await waitFor(() => expect(logWalk).toHaveBeenCalled());
+  });
+
+  test("reverts and says so when the write is refused", async () => {
+    const user = userEvent.setup();
+
+    logWalk.mockResolvedValue({ ok: false });
+
+    renderNow(active(0));
+
+    await user.click(within(anytime()).getByRole("button", { name: "Log walk" }));
+
+    // The value is back — § Feedback: "value reverted, Try again" — and the
+    // banner is at the point of action rather than in the bar.
+    const alert = await screen.findByRole("alert");
+
+    expect(alert.textContent).toContain("Couldn’t save that.");
+    expect(
+      await within(anytime()).findByRole("button", { name: "Log walk" }),
+    ).toBeDefined();
+  });
+
+  test("re-runs the same write from Try again", async () => {
+    const user = userEvent.setup();
+
+    logWalk.mockResolvedValue({ ok: false });
+
+    renderNow(active(0));
+
+    await user.click(within(anytime()).getByRole("button", { name: "Log walk" }));
+    await user.click(await screen.findByRole("button", { name: "Try again" }));
+
+    await waitFor(() => expect(logWalk).toHaveBeenCalledTimes(2));
+    expect(logWalk.mock.calls[1]).toEqual(logWalk.mock.calls[0]);
+  });
+
+  test("offers the durations once the walk is logged, and not before", async () => {
+    renderNow(active(0));
+
+    expect(within(anytime()).queryByRole("button", { name: "30 min" })).toBeNull();
+
+    renderNow(active(0), EXERCISES, [], { durationMin: null });
+
+    expect(screen.getAllByRole("button", { name: "45 min" })).not.toHaveLength(0);
+  });
+
+  test("records a duration against the walk already logged", async () => {
+    const user = userEvent.setup();
+
+    renderNow(active(0), EXERCISES, [], { durationMin: null });
+
+    await user.click(within(anytime()).getByRole("button", { name: "45 min" }));
+
+    await waitFor(() =>
+      expect(logWalk).toHaveBeenCalledWith({
+        date: "2026-03-09",
+        entryId: "entry-2",
+        durationMin: 45,
+      }),
+    );
+  });
+
+  test("clears the duration when its own preset is tapped again", async () => {
+    const user = userEvent.setup();
+
+    renderNow(active(0), EXERCISES, [], { durationMin: 45 });
+
+    const preset = within(anytime()).getByRole("button", { name: "45 min" });
+
+    // The state is said to a screen reader as well as drawn.
+    expect(preset.getAttribute("aria-pressed")).toBe("true");
+
+    await user.click(preset);
+
+    await waitFor(() =>
+      expect(logWalk).toHaveBeenCalledWith({
+        date: "2026-03-09",
+        entryId: "entry-2",
+        durationMin: null,
+      }),
+    );
+  });
+
+  test("shows the duration beside Done", () => {
+    renderNow(active(0), EXERCISES, [], { durationMin: 30 });
+
+    expect(within(anytime()).getByRole("status").textContent).toContain("30 min");
+  });
+
+  test("takes the walk back from its own row", async () => {
+    const user = userEvent.setup();
+
+    renderNow(active(0), EXERCISES, [], { durationMin: 30 });
+
+    await user.click(within(anytime()).getByRole("button", { name: "Undo" }));
+
+    await waitFor(() =>
+      expect(clearWalk).toHaveBeenCalledWith({ date: "2026-03-09", entryId: "entry-2" }),
+    );
+    // The bar's Undo is a different control writing a different action. This
+    // one must not have reached for it.
+    expect(undoLastLog).not.toHaveBeenCalled();
+  });
+
+  test("is offered on a weekend, where nothing else is scheduled", () => {
+    // "Every day including weekends" is a property of the TEMPLATE, so a
+    // weekend here is simply a day whose timeline is empty and whose walk is
+    // not — the shape `resolveNow` returns for a Saturday.
+    renderNow({ ...BASE, state: "nothing-planned", timeline: [], anytime: [WALK] });
+
+    expect(screen.getByRole("button", { name: "Log walk" })).toBeDefined();
+  });
+
+  test("keeps the bar's Undo off the walk's own log", () => {
+    // A day whose only log is the walk. The bar's stack is over what the bar
+    // wrote, and it wrote none of this — see `lib/walk.ts`.
+    renderNow(active(0), EXERCISES, [entry({ id: "l1", name: "Daily walk", status: "done", walk: true })]);
+
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  test("still offers the bar's Undo for a meal logged beside the walk", () => {
+    renderNow(active(1), EXERCISES, [
+      entry({ id: "l1" }),
+      entry({ id: "l2", name: "Daily walk", status: "done", walk: true }),
+    ]);
+
+    expect(screen.getByRole("button", { name: "Undo" })).toBeDefined();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* The day ruler                                                              */
 /* -------------------------------------------------------------------------- */
 
@@ -497,6 +691,26 @@ describe("day-complete", () => {
     expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();
   });
 
+  test("still offers the walk while it is outstanding — FUEL-29", () => {
+    // The closed page's one exception. The evening is when the walk is logged,
+    // so a finished day with an unlogged walk is the ordinary case rather than
+    // an edge, and hiding it would leave nowhere to log it until midnight.
+    summary();
+
+    expect(screen.getByRole("button", { name: "Log walk" })).toBeDefined();
+  });
+
+  test("closes completely once the walk is logged", () => {
+    renderNow({ ...BASE, state: "day-complete" }, EXERCISES, LOGGED, {
+      durationMin: 45,
+    });
+
+    // The row is gone; the walk is a line in the summary above like any other
+    // log. No ruler, no Up next, no Anytime — the page is closed again.
+    expect(screen.queryByRole("button", { name: "Log walk" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Anytime" })).toBeNull();
+  });
+
   test("shows what the day actually came to", () => {
     summary();
 
@@ -563,10 +777,15 @@ describe("day-complete", () => {
   test("lists the day's logged items with their status", () => {
     summary();
 
-    const logged = screen.getByRole("list");
+    // The summary's own list, named by the heading above it. The unlogged walk
+    // puts a second list on this page (FUEL-29), which is the whole of why this
+    // is scoped rather than "the list".
+    const logged = screen.getByRole("heading", { name: "Logged" }).nextElementSibling!;
 
     expect(
-      within(logged).getAllByRole("listitem").map((row) => row.textContent),
+      within(logged as HTMLElement)
+        .getAllByRole("listitem")
+        .map((row) => row.textContent),
     ).toEqual([
       "Overnight oatsEaten",
       "Greek yoghurtSkipped",

@@ -70,6 +70,7 @@ export default defineConfig({
         "src/lib/session-entry.ts",
         "src/lib/slot-times.ts",
         "src/lib/template-plan.ts",
+        "src/lib/walk.ts",
         "src/lib/week-grid.ts",
       ],
       thresholds: {
@@ -195,6 +196,15 @@ export default defineConfig({
         // the day the editor offers to change one row while the resolver serves
         // another.
         "src/lib/template-plan.ts": FULLY_COVERED,
+        // FUEL-29. Small, and gated for what DEPENDS on it rather than for its
+        // own difficulty: three callers ask it the same question — the row on
+        // `/`, the undo stack in `actions/log.ts`, and the summary's line in
+        // `day-summary.ts` — and every way it can be wrong is silent. A walk
+        // left in the stack steps the card back past an item that is still
+        // logged; one wrongly taken out of it leaves a real log with no control
+        // anywhere that can take it back. Neither throws and neither looks
+        // wrong on the screen that caused it.
+        "src/lib/walk.ts": FULLY_COVERED,
         // FUEL-28, and template-plan.ts's argument one table across. It decides
         // which of thirty-five cells is empty, and an empty cell is not
         // cosmetic here: it is what the 45° hatch marks, what a tap fills, and

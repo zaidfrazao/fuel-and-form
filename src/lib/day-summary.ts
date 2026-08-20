@@ -67,6 +67,21 @@ export type LoggedEntry = {
    * zeroes are real.
    */
   macros?: MacroBearing;
+  /**
+   * Set on the daily walk's line, and on nothing else — FUEL-29.
+   *
+   * The line is printed like any other, because the walk happened and the day's
+   * record would be short without it. What the flag decides is whether `/`'s
+   * Undo control counts it: that control is a stack over the logs the ACTION BAR
+   * wrote, and `lib/walk.ts` sets out why the walk is not one of them. Without
+   * this, a day whose only log was the walk would offer an Undo that takes back
+   * nothing.
+   *
+   * Absent rather than `false`, on the same reasoning as `macros`: it is a
+   * property of one kind of line, and a `false` on every other would invite a
+   * reader to believe something distinguishes them.
+   */
+  walk?: true;
 };
 
 /** A meal's four figures, and none of the rest of the row. */
@@ -105,7 +120,24 @@ const macrosOf = ({ kcal, proteinG, fatG, carbG }: MacroBearing): MacroBearing =
  * P2's swap exists — which is precisely why it is written down now rather than
  * discovered later as a summary that quietly disagrees with itself.
  */
-export function dayLog(items: readonly NowItem[], logs: DayLogs): LoggedEntry[] {
+export function dayLog(
+  items: readonly NowItem[],
+  logs: DayLogs,
+  /**
+   * The workouts whose logs belong to a row of their own rather than to the
+   * action bar — the daily walk's, from `walkWorkoutIds(view.anytime)`.
+   *
+   * Passed in rather than derived from `items`, because `items` is the whole day
+   * and the answer depends on WHICH HALF of it a walk is in. That distinction is
+   * the caller's: `app/page.tsx` and `actions/log.ts` hand the same set to this
+   * and to `withoutWalks`, so the control this decides to offer and the row that
+   * one decides to take back cannot disagree.
+   *
+   * Defaulted to empty so a caller that has no view — a test asking only about
+   * names and ordering — need not invent one.
+   */
+  walks: ReadonlySet<string> = new Set(),
+): LoggedEntry[] {
   const meals = new Map(
     items.flatMap((item) => (item.kind === "meal" ? [[item.meal.meal.id, item.meal.meal]] : [])),
   );
@@ -137,6 +169,7 @@ export function dayLog(items: readonly NowItem[], logs: DayLogs): LoggedEntry[] 
         id: log.id,
         name: workouts.get(log.workoutId)?.name ?? "Training",
         status: log.status,
+        ...(walks.has(log.workoutId) ? { walk: true as const } : {}),
       } satisfies LoggedEntry,
     })),
   ];

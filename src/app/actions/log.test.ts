@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { Meal, MealLog, Workout } from "@/lib/db/schema";
+import type { Meal, MealLog, Workout, WorkoutLog } from "@/lib/db/schema";
 import type { DayLogs } from "@/lib/log-intent";
 import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve-now";
 
@@ -98,6 +98,21 @@ const WALK: AnytimeItem = {
   key: "workout:e3",
 };
 
+/**
+ * A meal with no window — a slot whose time was cleared in settings.
+ *
+ * The OTHER way an item lands in `anytime`, and since FUEL-29 the only one this
+ * module still writes: the walk beside it has `actions/log-walk.ts` and is
+ * refused here. Without this fixture the anytime cases below would all be about
+ * the walk, and there would be nothing left proving `itemFor` searches that list
+ * at all.
+ */
+const SNACK: AnytimeItem = {
+  kind: "meal",
+  meal: { slot: "snack", meal: meal("meal-2", "Greek yoghurt"), source: "template", entryId: "e4" },
+  key: "meal:e4",
+};
+
 const TIMELINE = [OATS, CIRCUIT];
 
 const NO_LOGS: DayLogs = { meals: [], workouts: [] };
@@ -107,7 +122,7 @@ const view = (index: number): NowView =>
     date: MON,
     minutesOfDay: 8 * 60,
     timeline: TIMELINE,
-    anytime: [WALK],
+    anytime: [WALK, SNACK],
     state: "active",
     index,
     active: TIMELINE[index]!,
@@ -119,6 +134,19 @@ const today = (index = 0, logs: DayLogs = NO_LOGS) => ({
   profile: {},
   exercises: new Map(),
   logs,
+});
+
+/** A row against the day's walk — `workout-2`, the fixture's anytime walk. */
+const walkLog = (fields: Partial<WorkoutLog> = {}): WorkoutLog => ({
+  id: "walk-log",
+  userId: USER,
+  date: MON,
+  workoutId: "workout-2",
+  status: "done",
+  note: null,
+  durationMin: null,
+  loggedAt: new Date("2026-03-09T19:30:00Z"),
+  ...fields,
 });
 
 const log = (fields: Partial<MealLog> = {}): MealLog => ({
@@ -281,22 +309,52 @@ describe("logging the active item", () => {
   });
 
   test("logs an anytime item without moving the cursor", async () => {
-    // The daily walk has no window and therefore no place in the timeline.
-    // Advancing for it would skip whatever the clock says is happening.
-    expect(await logItem("workout:e3", "log")).toEqual({ ok: true });
+    // A slot whose time was cleared in settings has no place in the timeline,
+    // so advancing for it would skip whatever the clock says is happening.
+    expect(await logItem("meal:e4", "log")).toEqual({ ok: true });
 
     expect(recordLog).toHaveBeenCalledWith(USER, {
-      kind: "workout",
+      kind: "meal",
       date: MON,
-      workoutId: "workout-2",
-      status: "done",
+      slot: "snack",
+      mealId: "meal-2",
+      status: "eaten",
     });
     expect(writeCursor).not.toHaveBeenCalled();
   });
 
   test("refreshes even when no cookie was written", async () => {
-    // Reconciliation cannot depend on the cookie's own re-render, or logging
-    // the walk would leave the screen showing a day without it.
+    // Reconciliation cannot depend on the cookie's own re-render, or logging an
+    // unscheduled item would leave the screen showing a day without it.
+    await logItem("meal:e4", "log");
+
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  test("refuses the daily walk, which is not this module's to write — FUEL-29", async () => {
+    // The walk's key RESOLVES here — it is an item of the day like any other —
+    // and no control sends it. But "no control sends it" is not a guard, and
+    // this is a public POST endpoint: a forged request reaching `recordLog`
+    // would INSERT a walk row with a status the walk's row cannot represent,
+    // and the same row would then read "Done" on that row and "Skipped" in the
+    // day summary beside it.
+    expect(await logItem("workout:e3", "skip")).toEqual({ ok: false });
+
+    expect(recordLog).not.toHaveBeenCalled();
+    expect(writeCursor).not.toHaveBeenCalled();
+  });
+
+  test("refuses the walk however it is addressed", async () => {
+    // Not only the skip. 'done' through this path would be a plain INSERT
+    // colliding with the unique index the moment `logWalk` had already written
+    // one — a refusal the user would read as "Try again" for a walk that is
+    // already logged.
+    expect(await logItem("workout:e3", "log")).toEqual({ ok: false });
+
+    expect(recordLog).not.toHaveBeenCalled();
+  });
+
+  test("corrects a screen that sent the walk, rather than leaving it stale", async () => {
     await logItem("workout:e3", "log");
 
     expect(refresh).toHaveBeenCalled();
@@ -344,5 +402,41 @@ describe("undo", () => {
     expect(await undoLastLog()).toEqual({ ok: true });
     expect(deleteLog).not.toHaveBeenCalled();
     expect(refresh).toHaveBeenCalled();
+  });
+
+  test("steps past the walk to the meal beneath it — FUEL-29", async () => {
+    // The walk is logged from its own row and reverted from there. It is also
+    // the MOST RECENT row here, so without the narrowing this control would
+    // silently take back the walk when the user meant the meal.
+    const meal = log({ id: "a", loggedAt: new Date("2026-03-09T07:05:00Z") });
+    const walk = walkLog({ loggedAt: new Date("2026-03-09T19:30:00Z") });
+
+    loadToday.mockResolvedValue(today(1, { meals: [meal], workouts: [walk] }));
+
+    expect(await undoLastLog()).toEqual({ ok: true });
+    expect(deleteLog).toHaveBeenCalledWith(USER, { kind: "meal", log: meal });
+  });
+
+  test("takes back nothing when the walk is all there is", async () => {
+    // And does not move the cursor. The walk never advanced it, so retreating
+    // would step the card past an item that is still logged — the failure the
+    // narrowing exists to prevent, rather than merely the wrong row deleted.
+    loadToday.mockResolvedValue(today(1, { meals: [], workouts: [walkLog()] }));
+
+    expect(await undoLastLog()).toEqual({ ok: true });
+    expect(deleteLog).not.toHaveBeenCalled();
+    expect(writeCursor).not.toHaveBeenCalled();
+  });
+
+  test("still takes back a session logged from the bar", async () => {
+    // The narrowing is the WALK's, not every workout's. A session logged from
+    // the card is the bar's own row and has to stay in its stack.
+    const session = walkLog({ id: "s", workoutId: "workout-1" });
+
+    loadToday.mockResolvedValue(today(1, { meals: [], workouts: [session] }));
+
+    await undoLastLog();
+
+    expect(deleteLog).toHaveBeenCalledWith(USER, { kind: "workout", log: session });
   });
 });

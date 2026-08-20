@@ -8,6 +8,7 @@ import { deleteLog, recordLog } from "@/lib/db/queries/log";
 import { loadToday } from "@/lib/db/queries/today";
 import { alreadyLogged, latestLog, logIntent, type LogVerb } from "@/lib/log-intent";
 import { advance, type NowItem, type NowView, retreat } from "@/lib/resolve-now";
+import { isWalk, walkWorkoutIds, withoutWalks } from "@/lib/walk";
 
 /**
  * The three taps P1's card offers: log it, skip it, take it back.
@@ -56,11 +57,16 @@ const FAILED: LogResult = { ok: false };
 /**
  * The item a key names, scheduled or not.
  *
- * `anytime` is searched as well as the timeline so the action layer can record
- * the daily walk, which has no window and therefore no place in the timeline.
- * No control currently sends one — P1's action bar acts on the active card —
- * but the write path is the same one, and a log module that could only reach
- * half the day's items would be the wrong shape to hand the next task.
+ * `anytime` is searched as well as the timeline because a slot whose time was
+ * cleared in settings lands there and is still an ordinary meal to log.
+ *
+ * It no longer searches it for the DAILY WALK, which is what this comment used
+ * to anticipate. FUEL-29 gave the walk `actions/log-walk.ts` instead — the write
+ * it needs is an upsert carrying a duration, and `recordLog` below is a plain
+ * insert with no room for one. The walk's key still RESOLVES here, because it is
+ * an item of the day like any other; what refuses it is the guard in `logItem`,
+ * and the guard is there rather than in this function because resolving an item
+ * and deciding what may be done to it are two questions.
  */
 function itemFor(view: NowView, key: string): NowItem | undefined {
   return (
@@ -121,6 +127,25 @@ export async function logItem(key: string, verb: LogVerb): Promise<LogResult> {
       return FAILED;
     }
 
+    // The walk is not this module's to write — FUEL-29 gave it
+    // `actions/log-walk.ts`, and no control on any screen sends its key here.
+    // "No control sends it" is not a guard, though, and this is a public POST
+    // endpoint: without this, a forged request could reach `recordLog` below
+    // and INSERT a walk row with status 'skipped', which is a status the walk's
+    // row cannot represent. The row would then read "Done" on the walk's row —
+    // which renders from the row EXISTING — and "Skipped" in the same screen's
+    // day summary, which renders from the column. One row, two answers, on a
+    // screen the user is asked to trust.
+    //
+    // The same argument the verb check above makes, and the same conclusion:
+    // failing open into a database row is the one thing a trust boundary must
+    // not do, even when the row it writes looks harmless.
+    if (isWalk(item)) {
+      refresh();
+
+      return FAILED;
+    }
+
     const intent = logIntent(item, verb, view.date);
 
     if (!alreadyLogged(today.logs, intent)) {
@@ -161,6 +186,11 @@ export async function logItem(key: string, verb: LogVerb): Promise<LogResult> {
  * in that state, so reaching here means the screen was behind, and `refresh()`
  * is the correction. A banner would be reporting a problem the user does not
  * have.
+ *
+ * "Everything logged today" is everything logged FROM HERE. The daily walk is
+ * logged from its own row and reverted from there too (FUEL-29), so its rows are
+ * taken out of the stack below — see `lib/walk.ts` for why leaving them in would
+ * move the card as well as delete the row.
  */
 export async function undoLastLog(): Promise<LogResult> {
   try {
@@ -172,7 +202,20 @@ export async function undoLastLog(): Promise<LogResult> {
 
     if (!today) return FAILED;
 
-    const target = latestLog(today.logs);
+    // The stack is over what the BAR logged, so the walk's rows come out of it
+    // first. Undo moves the cursor back, and the walk never moved it forward:
+    // taking one back through here would step the card past an item that is
+    // still logged. `lib/walk.ts` carries the argument, and the walk's own row
+    // carries its revert.
+    //
+    // `anytime` and not the whole day, which is the same set `dayLog` is given
+    // in `app/page.tsx`. This decides which row Undo takes back and that decides
+    // whether Undo is offered at all, so the two have to be asked the same
+    // question — see `walkWorkoutIds`, which is where the choice of half is
+    // argued.
+    const stack = withoutWalks(today.logs, walkWorkoutIds(today.view.anytime));
+
+    const target = latestLog(stack);
 
     // Only step the view back if a row was actually removed. `deleteLog`
     // returns false for a log already gone — another tab got there first — and

@@ -54,15 +54,20 @@ import { parseSessionEntry } from "@/lib/session-entry";
  * would be the wrong shape to hand the next task". That reasoning does not
  * survive being applied here, and the difference is what the SCREEN can show.
  *
- * `/training` renders the walk as a row and offers no control on it — its
- * one-tap log is FUEL-29's. So a walk row written through this action would be
- * a row no screen displays, no control edits and no control clears, sitting in
- * the weekly export as evidence. That is the exact failure this module refuses
- * for a workout the date does not schedule, and it would be inconsistent to
- * refuse one and allow the other because the second happens to be on the plan.
+ * A walk row written through this action would be a row this screen's controls
+ * cannot edit and cannot clear, sitting in the weekly export as evidence. That
+ * is the exact failure this module refuses for a workout the date does not
+ * schedule, and it would be inconsistent to refuse one and allow the other
+ * because the second happens to be on the plan.
  *
- * FUEL-29 opens this path by widening the filter below at the same time as it
- * adds the control — one change, both halves.
+ * This comment used to say FUEL-29 would open the path by widening the filter
+ * below. It did not: the walk got `actions/log-walk.ts`, and the filter stays as
+ * it is. Widening it would have meant the client sending a `status` for a
+ * control that offers exactly one — a value the user never chooses but a forged
+ * request still could, making 'partial' and 'skipped' reachable states for an
+ * item with no way to display them — and carrying a `note` onto a row that has
+ * no control for one. The walk is loggable on both screens now; what it is not
+ * is a session, and this filter is where that stays true.
  *
  * ## Nothing throws
  *

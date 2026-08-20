@@ -4,6 +4,7 @@ import Link from "next/link";
 import { RightNow } from "@/components/right-now";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { LoggedEntry } from "@/lib/day-summary";
+import type { WalkEntryView } from "@/lib/walk";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
 import type { MacroTarget } from "@/lib/macros";
 import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve-now";
@@ -250,7 +251,9 @@ const LOGGED: LoggedEntry[] = [
   { id: "l4", name: "Chicken and rice bowl", status: "eaten", macros: { kcal: 612, proteinG: 54.2, fatG: 14.6, carbG: 63.8 } },
   { id: "l5", name: "Circuit A", status: "done" },
   { id: "l6", name: "Beef chilli", status: "eaten", macros: { kcal: 1024, proteinG: 68.3, fatG: 34.1, carbG: 82.5 } },
-  { id: "l7", name: "Daily walk", status: "done" },
+  // The walk's line carries `walk` (FUEL-29), which is what keeps the Undo
+  // control off it: the bar's stack is over what the bar logged.
+  { id: "l7", name: "Daily walk", status: "done", walk: true },
 ];
 
 const activeAt = (
@@ -272,7 +275,14 @@ const activeAt = (
 
 const CASES: Record<
   string,
-  { label: string; note: string; view: NowView; entries?: LoggedEntry[] }
+  {
+    label: string;
+    note: string;
+    view: NowView;
+    entries?: LoggedEntry[];
+    /** What is recorded against the walk — FUEL-29. Unlogged unless named. */
+    walk?: WalkEntryView;
+  }
 > = {
   meal: {
     label: "Meal",
@@ -315,6 +325,18 @@ const CASES: Record<
     note: "Before the program starts, or a date the template does not cover. No ruler — there is no day to draw.",
     view: { ...base(9 * 60), state: "nothing-planned", timeline: [], anytime: [WALK] },
   },
+  "walk-logged": {
+    label: "Walk logged",
+    note: "The Anytime row after one tap, with a duration set. Done and the minutes are words, not colour, and the presets stay on offer so 45 can become 60 or nothing.",
+    view: activeAt(5, 19 * 60 + 20),
+    walk: { durationMin: 45 },
+  },
+  "complete-walk": {
+    label: "Day complete · walk outstanding",
+    note: "The one thing the closed page still offers. The evening is when the walk is usually logged, so the day being finished and the walk being unlogged routinely overlap — everything else about the page stays closed.",
+    view: { ...base(21 * 60 + 30), state: "day-complete" },
+    entries: LOGGED.slice(0, 6),
+  },
 };
 
 const DEFAULT_CASE = "meal";
@@ -341,6 +363,9 @@ export default async function RightNowSpecimen({
         view={current.view}
         exercises={EXERCISES}
         entries={current.entries ?? []}
+        // Keyed by the walk fixture's template entry, which is what a row holds
+        // and what a write names.
+        walks={new Map(current.walk ? [["e6", current.walk]] : [])}
         target={TARGET}
         meals={LIBRARY}
         templatePlan={TEMPLATE_PLAN}

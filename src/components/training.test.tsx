@@ -24,12 +24,15 @@ import type { TrainingItem } from "@/components/training";
  *     counts it.
  */
 
-const { setSessionStatus, clearSessionStatus } = vi.hoisted(() => ({
+const { setSessionStatus, clearSessionStatus, logWalk, clearWalk } = vi.hoisted(() => ({
   setSessionStatus: vi.fn(),
   clearSessionStatus: vi.fn(),
+  logWalk: vi.fn(),
+  clearWalk: vi.fn(),
 }));
 
 vi.mock("@/app/actions/training", () => ({ setSessionStatus, clearSessionStatus }));
+vi.mock("@/app/actions/log-walk", () => ({ logWalk, clearWalk }));
 
 const { Training } = await import("./training");
 
@@ -104,13 +107,18 @@ beforeEach(() => {
   vi.clearAllMocks();
   setSessionStatus.mockResolvedValue({ ok: true });
   clearSessionStatus.mockResolvedValue({ ok: true });
+  logWalk.mockResolvedValue({ ok: true });
+  clearWalk.mockResolvedValue({ ok: true });
 });
 
 describe("the session", () => {
   test("lists every exercise with its prescription, numbered", () => {
     render(view());
 
-    const rows = within(screen.getByRole("list")).getAllByRole("listitem");
+    // The exercise list, named by the heading above it. The walk's row is a
+    // list of its own on this page now (FUEL-29), which is why this is scoped.
+    const list = screen.getByRole("heading", { name: "Exercises" }).nextElementSibling!;
+    const rows = within(list as HTMLElement).getAllByRole("listitem");
 
     expect(rows).toHaveLength(3);
     expect(rows.map((row) => row.textContent)).toEqual([
@@ -139,13 +147,81 @@ describe("the session", () => {
     expect(screen.getByText("strength")).toBeTruthy();
   });
 
-  test("shows the walk without offering to log it", () => {
+  test("shows the walk, and offers its one tap — FUEL-29", () => {
     // It is on the template every day, so a screen that hid it would describe a
-    // different plan from the one being followed. Its one-tap log is FUEL-29.
+    // different plan from the one being followed.
     render(view());
 
     expect(screen.getByText("Daily Walk")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /walk/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Log walk" })).toBeTruthy();
+  });
+
+  test("logs the walk against the DATE being viewed, not today", async () => {
+    // The reason the walk's action is addressed by date at all: a walk missed
+    // on Wednesday is recorded on Wednesday, from the screen showing Wednesday.
+    const user = userEvent.setup();
+
+    render(view({ date: YESTERDAY }));
+
+    await user.click(screen.getByRole("button", { name: "Log walk" }));
+
+    await waitFor(() =>
+      expect(logWalk).toHaveBeenCalledWith({
+        date: YESTERDAY,
+        entryId: "entry-walk",
+        durationMin: null,
+      }),
+    );
+    // The session's action is a different action against a different row.
+    expect(setSessionStatus).not.toHaveBeenCalled();
+  });
+
+  test("offers the walk on a rest day, where there is no bar at all", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: [WALK] }));
+
+    await user.click(screen.getByRole("button", { name: "Log walk" }));
+
+    await waitFor(() => expect(logWalk).toHaveBeenCalled());
+  });
+
+  test("shows what is recorded against the walk, with its duration", () => {
+    render(
+      view({
+        sessions: [CIRCUIT, { ...WALK, entry: { status: "done", note: null, durationMin: 45 } }],
+      }),
+    );
+
+    const walkRow = screen.getByText("Daily Walk").closest("li")!;
+
+    expect(within(walkRow).getByRole("status").textContent).toContain("Done");
+    expect(within(walkRow).getByRole("status").textContent).toContain("45 min");
+    // Server state, not an optimistic one — nothing was tapped, so `getBy` is
+    // the right query here and no wait is being skipped.
+    expect(within(walkRow).getByRole("button", { name: "Undo" })).toBeTruthy();
+  });
+
+  test("takes the walk back without touching the session's record", async () => {
+    const user = userEvent.setup();
+
+    render(
+      view({
+        sessions: [
+          { ...CIRCUIT, entry: { status: "done", note: null, durationMin: 28 } },
+          { ...WALK, entry: { status: "done", note: null, durationMin: null } },
+        ],
+      }),
+    );
+
+    const walkRow = screen.getByText("Daily Walk").closest("li")!;
+
+    await user.click(within(walkRow).getByRole("button", { name: "Undo" }));
+
+    await waitFor(() =>
+      expect(clearWalk).toHaveBeenCalledWith({ date: TODAY, entryId: "entry-walk" }),
+    );
+    expect(clearSessionStatus).not.toHaveBeenCalled();
   });
 
   test("says a weekend is a rest day rather than an empty screen", () => {
