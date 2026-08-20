@@ -101,7 +101,7 @@ const VIEW = {
  * The log is populated deliberately, exactly as `CHILLI`'s free text is: it
  * carries an id, an instant, a status and a note, and every one of them is a
  * field the row on screen does not draw. A fixture whose log was bare would let
- * the narrowing in `walkEntryFor` be widened without this file noticing.
+ * the narrowing in `walkEntries` be widened without this file noticing.
  */
 const WALK_WORKOUT = {
   id: "workout-9",
@@ -263,20 +263,21 @@ describe("the daily walk", () => {
     // Asserted by equality rather than field by field: the row shows Done and
     // the minutes, so the id, the instant, the status and the note have no
     // reason to leave the server — and a fifth field added later has to be
-    // added here deliberately.
-    expect(payload.walk).toEqual({ durationMin: 45 });
+    // added here deliberately. Keyed by the template ENTRY, which is what the
+    // row holds and what a write names.
+    expect(payload.walks).toEqual(new Map([["entry-walk", { durationMin: 45 }]]));
   });
 
-  test("is null when the walk has not been logged", async () => {
+  test("has no entry for a walk that has not been logged", async () => {
     const payload = await renderWith({ view: { ...VIEW, anytime: [WALK_ITEM] } });
 
     // The row is rendered from the ITEM being in `anytime`; this says only what
     // state it is in, and unlogged is the state a tap changes.
-    expect(payload.walk).toBeNull();
+    expect(payload.walks).toEqual(new Map());
   });
 
-  test("is null on a plan with no walk on it", async () => {
-    expect((await renderWith({})).walk).toBeNull();
+  test("is empty on a plan with no walk on it", async () => {
+    expect((await renderWith({})).walks).toEqual(new Map());
   });
 
   test("marks the walk's line in the day's log", async () => {

@@ -136,6 +136,7 @@ describe("dayLog", () => {
           workoutLog({ id: "l3", workoutId: "workout-2", loggedAt: at(2) }),
         ],
       }),
+      new Set(["workout-2"]),
     );
 
     expect(entries.map((entry) => [entry.name, entry.walk])).toEqual([
@@ -145,16 +146,34 @@ describe("dayLog", () => {
     ]);
   });
 
-  test("leaves a walk the plan no longer holds unmarked", () => {
-    // Its row has no row on the screen to revert it from, so the bar is the
-    // only way back to it — which means the bar has to offer it.
+  test("marks nothing when the caller names no walk", () => {
+    // The set is the CALLER's answer to "which of these has a row of its own",
+    // not a property of the workout: a walk on the TIMELINE is logged from the
+    // action bar and has to stay in the bar's undo stack. `lib/walk.ts` argues
+    // why both callers pass `view.anytime` rather than the whole day.
     const entries = dayLog(
-      [mealItem(OATS)],
+      ITEMS,
       logs({ workouts: [workoutLog({ id: "l1", workoutId: "workout-2" })] }),
     );
 
     expect(entries.map((entry) => [entry.name, entry.walk])).toEqual([
-      ["Training", undefined],
+      ["Daily walk", undefined],
+    ]);
+  });
+
+  test("still names a log the plan no longer holds, unmarked", () => {
+    // It has no row on the screen to revert it from, so the bar is the only way
+    // back to it — which means the bar has to offer it.
+    const entries = dayLog(
+      [mealItem(OATS)],
+      logs({ workouts: [workoutLog({ id: "l1", workoutId: "workout-2" })] }),
+      new Set(["workout-2"]),
+    );
+
+    // The name falls back because resolution cannot name it; the flag is the
+    // caller's and is honoured regardless.
+    expect(entries.map((entry) => [entry.name, entry.walk])).toEqual([
+      ["Training", true],
     ]);
   });
 

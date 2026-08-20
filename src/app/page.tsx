@@ -5,7 +5,7 @@ import { getSession } from "@/lib/auth/session";
 import { readCursor } from "@/lib/cursor-cookie";
 import { dayLog } from "@/lib/day-summary";
 import { loadToday } from "@/lib/db/queries/today";
-import { walkEntryFor } from "@/lib/walk";
+import { walkEntries, walkWorkoutIds } from "@/lib/walk";
 
 /**
  * `/` — the "Right Now" view. PRD § P1.
@@ -73,12 +73,19 @@ export default async function Home() {
       // The day's log, turned into lines here rather than in the browser: the
       // rows carry a note, an instant and a set of ids, and the summary shows a
       // name and a status. What crosses is the answer.
-      entries={dayLog([...view.timeline, ...view.anytime], today.logs)}
-      // What is recorded against today's walk, and nothing else about the row
-      // — FUEL-29. The duration is the only field the row draws: the status is
+      entries={dayLog(
+        [...view.timeline, ...view.anytime],
+        today.logs,
+        // Which lines belong to the walk's own row rather than to the action
+        // bar — the same set `actions/log.ts` narrows the undo stack with, so
+        // the control offered here and the row taken back there agree.
+        walkWorkoutIds(view.anytime),
+      )}
+      // What is recorded against each of today's walks, by template entry —
+      // FUEL-29. The duration is the only field a row draws: the status is
       // always 'done' (a walk that did not happen has no row), and the id, the
       // instant and the note stay on the server like every other log's do.
-      walk={walkEntryFor(view.anytime, today.logs.workouts)}
+      walks={walkEntries(view.anytime, today.logs.workouts)}
       // The four target figures, named one at a time rather than by handing over
       // the profile row. Everything else on it is a body metric — height, start
       // and target weight, goal pace — and this screen shows none of them, so

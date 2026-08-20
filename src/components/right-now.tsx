@@ -285,12 +285,12 @@ function UpNext({ items }: { items: readonly ScheduledItem[] }) {
 function Anytime({
   items,
   date,
-  walk,
+  walks,
 }: {
   items: readonly AnytimeItem[];
   date: CalendarDate;
-  /** What is recorded against the walk, from the server. See `RightNow`. */
-  walk: WalkEntryView | null;
+  /** What is recorded against each walk, by entry id. See `RightNow`. */
+  walks: ReadonlyMap<string, WalkEntryView>;
 }) {
   if (items.length === 0) return null;
 
@@ -305,7 +305,7 @@ function Anytime({
               date={date}
               entryId={item.workout.entryId}
               name={itemName(item)}
-              entry={walk}
+              entry={walks.get(item.workout.entryId) ?? null}
             />
           ) : (
             <li
@@ -727,7 +727,7 @@ export function RightNow({
   target,
   meals,
   templatePlan,
-  walk,
+  walks,
 }: {
   view: NowView;
   /** `workouts.id` → its exercises, from `loadToday`. */
@@ -767,19 +767,19 @@ export function RightNow({
    */
   templatePlan: readonly PlannedMeal[];
   /**
-   * What is recorded against today's daily walk — FUEL-29.
+   * What is recorded against today's walks, keyed by template entry — FUEL-29.
    *
-   * `null` for a walk that has not been logged, and for a plan that has no walk
-   * on it at all; the row is rendered from the ITEM being in `anytime`, so the
-   * two do not need telling apart here. Narrowed in `app/page.tsx` to the one
-   * field the row draws — the `workout_logs` row also carries an id, an instant,
-   * a status that is always 'done' and a note no screen shows.
+   * A missing key is a walk that has not been logged; a plan with no walk on it
+   * is an empty map. The row is rendered from the ITEM being in `anytime`, so
+   * the two do not need telling apart here. Narrowed in `app/page.tsx` to the
+   * one field a row draws — the `workout_logs` row also carries an id, an
+   * instant, a status that is always 'done' and a note no screen shows.
    *
-   * It is a prop rather than part of `entries` because the walk is not part of
-   * the card's optimistic layer: `walk-row.tsx` holds its own, for the reason
+   * A prop rather than part of `entries`, because the walk is not part of the
+   * card's optimistic layer: `walk-row.tsx` holds its own, for the reason
    * `lib/walk.ts` gives.
    */
-  walk: WalkEntryView | null;
+  walks: ReadonlyMap<string, WalkEntryView>;
 }) {
   /*
    * The optimistic layer — § Feedback's "optimistic by default", and the whole
@@ -1072,7 +1072,7 @@ export function RightNow({
            * all. The transition covers the change-over, so there is no frame
            * where the walk is in neither place.
            */}
-          {walkItem && walk === null && (
+          {walkItem && !walks.has(walkItem.workout.entryId) && (
             <section className="flex flex-col gap-[14px]">
               {/* Labelled like the list it is a narrowing of, rather than left
                   as a bare row under the crop marks — an unlabelled control
@@ -1113,7 +1113,7 @@ export function RightNow({
 
           {base.timeline.length > 0 && ruler}
 
-          <Anytime items={base.anytime} date={base.date} walk={walk} />
+          <Anytime items={base.anytime} date={base.date} walks={walks} />
 
           {settingsLink}
         </div>
@@ -1168,7 +1168,7 @@ export function RightNow({
 
         <UpNext items={now.upcoming} />
 
-        <Anytime items={base.anytime} date={base.date} walk={walk} />
+        <Anytime items={base.anytime} date={base.date} walks={walks} />
 
         {settingsLink}
       </div>

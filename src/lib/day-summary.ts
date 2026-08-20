@@ -4,7 +4,6 @@ import { type DayLogs, type LogVerb, logIntent } from "./log-intent";
 import { type MacroBearing, type MacroTotals, totalMacros } from "./macros";
 import { itemName, slotLabel } from "./now-display";
 import type { NowItem, ScheduledItem } from "./resolve-now";
-import { walkWorkoutIds } from "./walk";
 
 /**
  * The day-complete summary's data — FUEL-20, PRD § P1's last criterion.
@@ -121,12 +120,24 @@ const macrosOf = ({ kcal, proteinG, fatG, carbG }: MacroBearing): MacroBearing =
  * P2's swap exists — which is precisely why it is written down now rather than
  * discovered later as a summary that quietly disagrees with itself.
  */
-export function dayLog(items: readonly NowItem[], logs: DayLogs): LoggedEntry[] {
-  // Which of the day's workouts is the walk, from the day's own resolution. A
-  // log naming a walk the plan no longer holds is not in the set and gets an
-  // ordinary line — the bar is the only way back to that row, so the bar has to
-  // offer it. See `walkWorkoutIds`.
-  const walks = walkWorkoutIds(items);
+export function dayLog(
+  items: readonly NowItem[],
+  logs: DayLogs,
+  /**
+   * The workouts whose logs belong to a row of their own rather than to the
+   * action bar — the daily walk's, from `walkWorkoutIds(view.anytime)`.
+   *
+   * Passed in rather than derived from `items`, because `items` is the whole day
+   * and the answer depends on WHICH HALF of it a walk is in. That distinction is
+   * the caller's: `app/page.tsx` and `actions/log.ts` hand the same set to this
+   * and to `withoutWalks`, so the control this decides to offer and the row that
+   * one decides to take back cannot disagree.
+   *
+   * Defaulted to empty so a caller that has no view — a test asking only about
+   * names and ordering — need not invent one.
+   */
+  walks: ReadonlySet<string> = new Set(),
+): LoggedEntry[] {
   const meals = new Map(
     items.flatMap((item) => (item.kind === "meal" ? [[item.meal.meal.id, item.meal.meal]] : [])),
   );

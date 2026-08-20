@@ -165,6 +165,9 @@ const DINNER = at(mealItem({ id: "meal-3", name: "Chilli" }, "dinner"), "meal:e4
 
 const WALK: AnytimeItem = { ...workoutItem({ id: "workout-2", name: "Daily walk", type: "walk" }), key: "workout:e5" };
 
+/** The template entry the walk resolved from — what its row names on a write. */
+const WALK_ENTRY = "entry-2";
+
 const TIMELINE = [BREAKFAST, LUNCH, SESSION, DINNER];
 
 /**
@@ -263,7 +266,7 @@ const renderNow = (
       target={TARGET}
       meals={LIBRARY}
       templatePlan={TEMPLATE_PLAN}
-      walk={walk}
+      walks={new Map(walk ? [[WALK_ENTRY, walk]] : [])}
     />,
   )
 );

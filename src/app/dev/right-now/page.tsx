@@ -363,7 +363,9 @@ export default async function RightNowSpecimen({
         view={current.view}
         exercises={EXERCISES}
         entries={current.entries ?? []}
-        walk={current.walk ?? null}
+        // Keyed by the walk fixture's template entry, which is what a row holds
+        // and what a write names.
+        walks={new Map(current.walk ? [["e6", current.walk]] : [])}
         target={TARGET}
         meals={LIBRARY}
         templatePlan={TEMPLATE_PLAN}

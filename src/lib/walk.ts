@@ -75,15 +75,24 @@ export function isWalk<T extends NowItem>(
  * therefore left in the undo stack, which is right. That row has no row on the
  * screen to revert it from, so the bar is the only way back to it.
  *
- * Callers pass the whole day — timeline and anytime together — even though the
- * walk is only ever unscheduled through the app. `settings` deliberately offers
- * no time for it (see `EDITABLE_WORKOUT_TYPES`), so a walk on the TIMELINE can
- * only come from a hand-edited `profiles.workout_times`, and in that state it
- * would be logged from the action bar and left with no way back. That is the
- * lesser of the two wrongs: the alternative is `actions/log.ts` and
- * `day-summary.ts` answering this question over different halves of the same
- * day, which is a screen that offers an Undo the server refuses, or hides one it
- * would have performed.
+ * ## Callers pass `view.anytime`, and not the whole day
+ *
+ * The question this answers is not "is this a walk" — `isWalk` is that — but
+ * "does this walk have a row of its own to be reverted from", and the row is
+ * rendered from the anytime list. So the anytime list is the honest input.
+ *
+ * It matters in one state, which no screen can reach: `settings` offers no time
+ * for the walk (see `EDITABLE_WORKOUT_TYPES`), but a hand-edited
+ * `profiles.workout_times` would give it a window and move it onto the TIMELINE,
+ * where it is the active card and is logged from the action bar like anything
+ * else. Scanning the whole day there would take the bar's own log out of the
+ * bar's own undo stack and leave it unreachable from anywhere. Scanning the
+ * anytime list leaves it exactly where it was logged from.
+ *
+ * Both callers — `app/page.tsx`, which decides whether Undo is OFFERED, and
+ * `actions/log.ts`, which decides what it TAKES BACK — must be given the same
+ * set. A screen offering a control the server will not act on, or hiding one it
+ * would have performed, is the drift this being one function exists to prevent.
  */
 export function walkWorkoutIds(items: readonly NowItem[]): ReadonlySet<string> {
   return new Set(
@@ -109,25 +118,45 @@ export function withoutWalks(logs: DayLogs, ids: ReadonlySet<string>): DayLogs {
 export type WalkEntryView = { durationMin: number | null };
 
 /**
- * What is recorded against the day's walk, for the row that renders it.
+ * What is recorded against each of the day's walks, keyed by TEMPLATE ENTRY id.
  *
- * `null` covers both "no walk on this plan" and "not logged yet", which the row
- * does not need to tell apart: it is rendered from the ITEM being present in the
- * day's `anytime` list, and this answers only what the item's state is.
+ * A map rather than a single answer, for the reason `walkWorkoutIds` is a set:
+ * nothing forbids two walk entries on one weekday, and a function that returned
+ * "the walk's duration" would hand the same figure to both rows — the second
+ * showing the first's minutes, with no way for a reader to tell. The seed
+ * schedules one; the shape that only works for one is the one that fails
+ * silently if that changes.
+ *
+ * Keyed by the entry rather than the workout because the entry is what a row
+ * holds and what a write names — `resolve-training.ts` gives the reason: a
+ * rotated day's workout changes with the date, so the entry is the stable name.
+ *
+ * A missing key is "not logged yet", which is also the answer for a plan with no
+ * walk on it; the row does not need to tell those apart, because it is rendered
+ * from the ITEM being present in the day's `anytime` list and this says only
+ * what state that item is in.
  *
  * The status is deliberately not carried. `logWalk` writes exactly one —
- * 'done' — so a status on this type would be a field with one value that a
- * screen could still branch on, and the branch would be dead code pretending to
- * be a decision. A walk that did not happen is a walk with no row.
+ * 'done' — so a status here would be a field with one value that a screen could
+ * still branch on, and the branch would be dead code pretending to be a
+ * decision. A walk that did not happen is a walk with no row.
  */
-export function walkEntryFor(
+export function walkEntries(
   items: readonly NowItem[],
   logs: readonly WorkoutLog[],
-): WalkEntryView | null {
-  const ids = walkWorkoutIds(items);
-  const log = logs.find((row) => ids.has(row.workoutId));
+): ReadonlyMap<string, WalkEntryView> {
+  const byWorkout = new Map(logs.map((log) => [log.workoutId, log]));
+  const entries = new Map<string, WalkEntryView>();
 
-  return log ? { durationMin: log.durationMin } : null;
+  for (const item of items) {
+    if (!isWalk(item)) continue;
+
+    const log = byWorkout.get(item.workout.workout.id);
+
+    if (log) entries.set(item.workout.entryId, { durationMin: log.durationMin });
+  }
+
+  return entries;
 }
 
 /**

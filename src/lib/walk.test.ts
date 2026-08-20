@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import type { Workout, WorkoutLog } from "@/lib/db/schema";
 import type { DayLogs } from "@/lib/log-intent";
 import type { NowItem } from "@/lib/resolve-now";
-import { isWalk, walkEntryFor, walkWorkoutIds, withoutWalks, WALK_PRESETS } from "@/lib/walk";
+import { isWalk, walkEntries, walkWorkoutIds, withoutWalks, WALK_PRESETS } from "@/lib/walk";
 
 /**
  * The daily walk, as the layers that are not the walk's own see it — FUEL-29.
@@ -169,42 +169,62 @@ describe("withoutWalks", () => {
   });
 });
 
-describe("walkEntryFor", () => {
-  test("is null when the walk has not been logged", () => {
-    expect(walkEntryFor([workoutItem(WALK)], [])).toBeNull();
+describe("walkEntries", () => {
+  test("is empty when the walk has not been logged", () => {
+    expect(walkEntries([workoutItem(WALK)], []).size).toBe(0);
   });
 
-  test("is null when the plan has no walk on it", () => {
+  test("is empty when the plan has no walk on it", () => {
     expect(
-      walkEntryFor([workoutItem(CIRCUIT)], [workoutLog({ id: "l1", workoutId: "workout-2" })]),
-    ).toBeNull();
+      walkEntries([workoutItem(CIRCUIT)], [workoutLog({ id: "l1", workoutId: "workout-2" })])
+        .size,
+    ).toBe(0);
   });
 
-  test("carries the duration, and nothing else about the row", () => {
-    const entry = walkEntryFor(
+  test("carries the duration under the entry id, and nothing else about the row", () => {
+    const entries = walkEntries(
       [workoutItem(WALK)],
       [workoutLog({ id: "l1", workoutId: "workout-2", durationMin: 45 })],
     );
 
+    // Keyed by the ENTRY, which is what a row holds and what a write names.
     // Not the id, not the instant, not the note — none of them are drawn.
-    expect(entry).toEqual({ durationMin: 45 });
+    expect(entries.get("entry-workout-2")).toEqual({ durationMin: 45 });
   });
 
   test("distinguishes a logged walk with no duration from an unlogged one", () => {
     // The two are one tap apart and look nothing alike on the row: one says
-    // Done and offers the presets, the other says Log walk.
-    expect(
-      walkEntryFor([workoutItem(WALK)], [workoutLog({ id: "l1", workoutId: "workout-2" })]),
-    ).toEqual({ durationMin: null });
+    // Done and offers the presets, the other says Log walk. A present key
+    // holding `{ durationMin: null }` is the first; an absent key is the second.
+    const entries = walkEntries(
+      [workoutItem(WALK)],
+      [workoutLog({ id: "l1", workoutId: "workout-2" })],
+    );
+
+    expect(entries.has("entry-workout-2")).toBe(true);
+    expect(entries.get("entry-workout-2")).toEqual({ durationMin: null });
   });
 
   test("ignores the session's row on a day that has both", () => {
     expect(
-      walkEntryFor(
+      walkEntries(
         [workoutItem(CIRCUIT), workoutItem(WALK)],
         [workoutLog({ id: "l1", workoutId: "workout-1", durationMin: 28 })],
-      ),
-    ).toBeNull();
+      ).size,
+    ).toBe(0);
+  });
+
+  test("answers for each walk separately when a day holds two", () => {
+    // The reason this is a map and not one figure: a single answer would hand
+    // the first walk's minutes to the second row, with nothing on screen to
+    // say the second was never logged.
+    const entries = walkEntries(
+      [workoutItem(WALK), workoutItem(SECOND_WALK)],
+      [workoutLog({ id: "l1", workoutId: "workout-2", durationMin: 30 })],
+    );
+
+    expect(entries.get("entry-workout-2")).toEqual({ durationMin: 30 });
+    expect(entries.has("entry-workout-3")).toBe(false);
   });
 });
 
