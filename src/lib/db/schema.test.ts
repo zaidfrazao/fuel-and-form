@@ -143,6 +143,37 @@ describe("schema", () => {
       expect(indexes.some((index) => index.config.unique)).toBe(false);
     });
 
+    /**
+     * FUEL-27. P3's "past sessions are editable by date" is only a coherent
+     * claim if a date's session has ONE status — otherwise a correction is a
+     * second row, and the screen, the dot grid and the export each need their
+     * own rule for which of the two to believe.
+     */
+    it("workout_logs allows one status per (user, date, workout)", () => {
+      const { indexes } = getTableConfig(schema.workoutLogs);
+      const unique = indexes.find((index) => index.config.unique);
+
+      expect(columnNames(unique?.config.columns ?? [])).toEqual([
+        "user_id",
+        "date",
+        "workout_id",
+      ]);
+    });
+
+    /**
+     * The counterpart, and the reason the two log tables differ. A slot can
+     * hold two meals — `lib/seed/plan.ts` puts two snacks on every weekday —
+     * so `(user_id, date, slot)` is not unique here and duplicates are guarded
+     * in `alreadyLogged` instead. Asserted for the same reason the
+     * `plan_template_entries` case is: the absence looks like an oversight next
+     * to the table above.
+     */
+    it("meal_logs allows a slot to be logged more than once on a date", () => {
+      const { indexes } = getTableConfig(schema.mealLogs);
+
+      expect(indexes.some((index) => index.config.unique)).toBe(false);
+    });
+
     it("weight_logs allows one weigh-in per (user, date)", () => {
       const { indexes } = getTableConfig(schema.weightLogs);
       const unique = indexes.find((index) => index.config.unique);

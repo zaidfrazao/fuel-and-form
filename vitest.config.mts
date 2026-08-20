@@ -53,6 +53,7 @@ export default defineConfig({
       provider: "v8",
       include: [
         "src/lib/db/scope.ts",
+        "src/lib/adherence.ts",
         "src/lib/auth/token.ts",
         "src/lib/auth/compare.ts",
         "src/lib/auth/cookies.ts",
@@ -111,6 +112,15 @@ export default defineConfig({
         // 500 on a Server Action whose contract is that it never throws.
         "src/lib/repeat.ts": FULLY_COVERED,
         "src/lib/resolve-plan.ts": FULLY_COVERED,
+        // FUEL-27. The dot grid is a claim about the user's own history, made
+        // at a glance and with no figures beside it to check it against — so a
+        // wrong dot is not a wrong number, it is a wrong account of what
+        // someone did. Every branch here is one of those accounts: an unlogged
+        // session that must not become a skip, a walk that must not answer for
+        // the session it shares a day with, a log matched to the workout the
+        // rotation actually landed on. None of them throw and none of them
+        // look wrong on the screen.
+        "src/lib/adherence.ts": FULLY_COVERED,
         // P1's acceptance criteria, and the resolver they all pass through. It
         // belongs here for the same reason resolve-plan.ts does, one step further
         // on: every branch in it decides which single card the app puts in front

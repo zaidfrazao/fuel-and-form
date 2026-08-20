@@ -630,7 +630,34 @@ export const trainingTemplateEntries = pgTable(
   ],
 );
 
-/** Session adherence — the record the weekly export is built from. */
+/**
+ * Session adherence — the record the weekly export is built from.
+ *
+ * ## One row per session per date, enforced (FUEL-27)
+ *
+ * P3's criterion is that a status is "settable", and that past sessions are
+ * "viewable and EDITABLE by date". Editing means the second answer replaces the
+ * first: a session marked done at 18:00 and corrected to partial at 18:01 has
+ * one outcome, not two. Without the unique index below there is no such thing
+ * as replacing it — every correction is another insert, and the dot grid, the
+ * screen and the weekly export are then all reading a set of rows with no rule
+ * for which one wins. Ordering by `logged_at` would be that rule, and it would
+ * be a rule each of the three had to remember separately.
+ *
+ * With the index, a correction is `on conflict do update` — one statement,
+ * atomic, and no reader has a tie to break. `weight_logs` makes the identical
+ * argument for the identical reason ("re-weighing is an update").
+ *
+ * `meal_logs` deliberately does NOT get this constraint, and the asymmetry is
+ * the same one `plan_template_entries` has against `day_plan_overrides`: a slot
+ * can hold two meals, so `(user_id, date, slot)` is not unique there and the
+ * app guards duplicates in `alreadyLogged` instead. A date's workout is one
+ * workout — the rotation resolves a single row per template entry — so here the
+ * database can hold the line the application would otherwise have to.
+ *
+ * It does not constrain a day to ONE row: the walk and the session are
+ * different `workout_id`s on the same date, and both are logged.
+ */
 export const workoutLogs = pgTable(
   "workout_logs",
   {
@@ -652,6 +679,11 @@ export const workoutLogs = pgTable(
       onDelete: "no action",
     }),
     index("workout_logs_user_date_idx").on(t.userId, t.date),
+
+    // The arbiter `scope.upsert` collides on. `user_id` leads for the same
+    // reason it leads every index here — it is in the WHERE clause of every
+    // statement — and the scope prepends it to the conflict target itself.
+    uniqueIndex("workout_logs_user_date_workout_key").on(t.userId, t.date, t.workoutId),
   ],
 );
 
