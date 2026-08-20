@@ -64,6 +64,7 @@ export default defineConfig({
         "src/lib/repeat.ts",
         "src/lib/resolve-plan.ts",
         "src/lib/resolve-now.ts",
+        "src/lib/resolve-training.ts",
         "src/lib/rotation.ts",
         "src/lib/slot-times.ts",
         "src/lib/template-plan.ts",
@@ -138,6 +139,15 @@ export default defineConfig({
         // branches whose failure mode is a plausible-looking wrong figure
         // rather than a crash — precisely what a coverage gate is for.
         "src/lib/macros.ts": FULLY_COVERED,
+        // FUEL-26, and the layer rotation.ts hands its answer to. It is gated
+        // for what it JOINS rather than for arithmetic it does not do: the
+        // exercise list and the walk/session distinction are what P3 renders,
+        // and both fail quietly. A list joined to the wrong workout is a
+        // plausible session — Circuit A's name over Circuit B's movements — and
+        // a walk mistaken for a session is a rest day that asks for a duration.
+        // Neither throws, and the empty-exercise branch is shared by the walk,
+        // which is ordinary, and by a caller that under-fetched, which is a bug.
+        "src/lib/resolve-training.ts": FULLY_COVERED,
         // § 1.2. The strategy singles out its case 4 — a skipped session must
         // resolve identically — and the guarantee behind it is that rotation.ts
         // never reads workout_logs. An unmeasured branch here is precisely where
