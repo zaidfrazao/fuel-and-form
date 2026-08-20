@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { CSSProperties } from "react";
 
 import { cn } from "@/lib/utils";
@@ -275,6 +276,7 @@ function summarise(rows: (Day | undefined)[][], today?: string): string {
 export function DotGrid({
   weeks,
   today,
+  hrefFor,
   className,
 }: {
   /** One array per week, oldest first. Up to seven days each. */
@@ -289,6 +291,29 @@ export function DotGrid({
    * day ruler omits its NOW marker on the same grounds.
    */
   today?: string;
+  /**
+   * Where a day leads, if anywhere — FUEL-30's "reachable from the adherence
+   * dot grid".
+   *
+   * Optional, and absent is the graphic this component has always been: the
+   * Weight screen and `/dev/dot-grid` pass nothing and render unchanged, which
+   * is the point of a prop rather than a hard-wired `/training?date=`. A dot
+   * knows the date it is drawn for; it has no business knowing the app's routes.
+   *
+   * ## The links are for POINTERS only, deliberately
+   *
+   * They are `aria-hidden` and out of the tab order, and both are load-bearing.
+   * A dot's tap target is the cell plus its gutters — 36×21px measured at 375px
+   * wide, which is under § Touch Targets' 44×44 and cannot be anything else
+   * inside a 240px graphic of 42 dots. That is fine for a shortcut and not fine
+   * for the only way in, so the accessible path is a real list:
+   * `recent-sessions.tsx` gives the same dates 54px rows with names and
+   * statuses on them, and `/training` renders it directly beneath this. The grid stays `role="img"` — which
+   * prunes its descendants anyway — so a screen reader still hears one summary
+   * and a data table rather than 42 links, and `tabIndex={-1}` keeps a keyboard
+   * out of a run of unnamed stops it could not have used.
+   */
+  hrefFor?: (date: string) => string;
   className?: string;
 }) {
   const rows = layOut(weeks);
@@ -328,13 +353,52 @@ export function DotGrid({
               // wholly ordinary week in a plan with weekend walks.
               <span
                 key={`${week}-${column}`}
-                className="grid h-[11px] place-items-center"
+                className="relative grid h-[11px] place-items-center"
               >
                 {day && (
-                  <span
-                    className="rounded-full"
-                    style={dotStyle(day.status, day.date === today)}
-                  />
+                  <>
+                    <span
+                      className="rounded-full"
+                      style={dotStyle(day.status, day.date === today)}
+                    />
+
+                    {/* The target, not the dot: an 11px disc is not something a
+                        thumb can hit, so the link is stretched over the cell
+                        plus half of each gutter — 4.5px across and 5px down,
+                        exactly half of the 9px and 10px between them. Adjacent
+                        targets meet and never overlap, so every pixel of the
+                        graphic belongs to the day under it, and nothing about
+                        the dot's own geometry moves. */}
+                    {hrefFor && (
+                      <Link
+                        href={hrefFor(day.date)}
+                        aria-hidden="true"
+                        tabIndex={-1}
+                        /*
+                         * Forty-two links, every one a different href, all in
+                         * the viewport at once. `prefetch` defaults to `auto`,
+                         * which for a dynamic route fetches the partial route
+                         * down to the nearest `loading.js` — and `app/` has
+                         * one, so the default would put forty-two background
+                         * requests on the wire the moment the grid scrolls
+                         * into view, in production, on a phone.
+                         *
+                         * The list below keeps the default and should: seven
+                         * links, and they are the control people actually use.
+                         * These are a shortcut on an 11px dot, and a shortcut
+                         * is not worth six times the requests of the thing it
+                         * shortcuts.
+                         *
+                         * Not asserted in a test — `prefetch` is a `Link` prop
+                         * that reaches no DOM attribute, so there is nothing
+                         * for jsdom to see. Verified against the prop's
+                         * documented defaults in `next/dist/docs`.
+                         */
+                        prefetch={false}
+                        className="absolute -inset-x-[4.5px] -inset-y-[5px]"
+                      />
+                    )}
+                  </>
                 )}
               </span>
             )),

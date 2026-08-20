@@ -229,3 +229,72 @@ describe("before there is anything to show", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 });
+
+/**
+ * FUEL-30 — the route's half of "past sessions are viewable and editable by
+ * date".
+ *
+ * The resolution is `queries/training.ts`'s and the rotation underneath it is
+ * `lib/rotation.ts`'s, whose § 1.2 case 6 already pins that a past date answers
+ * exactly as it did on the day. What is asserted here is that the route carries
+ * that answer through unchanged: the date the URL asked for is what gets
+ * resolved, the record shown is the one filed against THAT date, and today stays
+ * today while an earlier date is being reviewed.
+ */
+describe("a date that has already happened", () => {
+  const PAST = "2026-03-04"; // a Wednesday, eight days before TODAY
+
+  const past = () =>
+    training({
+      date: PAST,
+      today: TODAY,
+      day: { date: PAST, sessions: training().day.sessions },
+      logs: [{ ...LOG, date: PAST }],
+      adherence: [
+        [
+          { date: PAST, label: WORKOUT.name, status: "partial" },
+          { date: TODAY, label: WORKOUT.name, status: "none" },
+        ],
+      ],
+    });
+
+  test("resolves the date the URL asked for, not today", async () => {
+    loadTraining.mockResolvedValue(past());
+
+    await renderPage(PAST);
+
+    expect(loadTraining).toHaveBeenCalledWith(USER, PAST, expect.any(Date));
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(WORKOUT.name);
+  });
+
+  test("shows what was recorded against that date, ready to be corrected", async () => {
+    loadTraining.mockResolvedValue(past());
+
+    await renderPage(PAST);
+
+    // The status, the duration and the boxes the correction is made in. The
+    // write itself is `actions/training.test.ts`'s; what this asserts is that
+    // an edit to a past date starts from what that date actually holds.
+    expect(screen.getByRole("status").textContent).toContain("Partial");
+    expect(screen.getByRole("status").textContent).toContain("18 min");
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Note").value).toBe(LOG.note);
+    expect(screen.getByLabelText<HTMLInputElement>("Duration").value).toBe(
+      String(LOG.durationMin),
+    );
+  });
+
+  test("keeps the present where it is, and offers the way back to it", async () => {
+    loadTraining.mockResolvedValue(past());
+
+    await renderPage(PAST);
+
+    // Reviewing an earlier date does not move today: the nav still offers a
+    // next day, and FUEL-30's list still links forward to today's own screen.
+    expect(
+      screen.getByRole("link", { name: /Next day, Thu 5 Mar/ }).getAttribute("href"),
+    ).toBe("/training?date=2026-03-05");
+    expect(
+      screen.getByRole("link", { name: /12 Mar/ }).getAttribute("href"),
+    ).toBe(`/training?date=${TODAY}`);
+  });
+});

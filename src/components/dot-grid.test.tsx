@@ -322,3 +322,96 @@ describe("DotGrid", () => {
     expect(within(screen.getByRole("table")).getByText("Done, Circuit A")).toBeTruthy();
   });
 });
+
+/**
+ * FUEL-30 — a dot as a way to the date under it.
+ *
+ * The links are for pointers and nothing else: they carry no accessible name,
+ * they sit inside a `role="img"` that prunes them, and they are out of the tab
+ * order. That is the whole design — `recent-sessions.tsx` is the reachable half
+ * — so what these assert is that the graphic gained a destination without
+ * gaining a voice.
+ */
+describe("where a dot leads", () => {
+  const hrefFor = (date: string) => `/training?date=${date}`;
+
+  /** Anchors, including the ones ARIA hides — `getAllByRole` would not see them. */
+  const anchors = (container: HTMLElement) =>
+    [...container.querySelectorAll("a")].map((link) => ({
+      href: link.getAttribute("href"),
+      hidden: link.getAttribute("aria-hidden"),
+      tabIndex: link.tabIndex,
+    }));
+
+  test("is nowhere at all until a caller says where", () => {
+    // The Weight screen and `/dev/dot-grid` render this graphic and have no
+    // date screen to send anyone to. Absent has to stay the default, or every
+    // dot in the app becomes a link to a route only Training knows about.
+    const { container } = render(<DotGrid weeks={WEEKS} today={TODAY} />);
+
+    expect(anchors(container)).toEqual([]);
+  });
+
+  test("gives every day it draws its own date", () => {
+    const { container } = render(
+      <DotGrid weeks={WEEKS} today={TODAY} hrefFor={hrefFor} />,
+    );
+
+    const links = anchors(container);
+
+    expect(links).toHaveLength(42);
+    expect(links.at(0)?.href).toBe("/training?date=2026-07-06");
+    expect(links.at(-1)?.href).toBe("/training?date=2026-08-16");
+  });
+
+  test("leaves an empty cell empty", () => {
+    // The week that starts on a Thursday, from the placement test above. A link
+    // stretched over an absent day would be a tap that navigates to a date the
+    // grid is not claiming exists — and it would cover half the gutter beside a
+    // day that does, stealing part of its neighbour's target.
+    const thursday: Week = [
+      { date: "2026-08-13", status: "done" },
+      { date: "2026-08-14", status: "skipped" },
+    ];
+
+    const { container } = render(<DotGrid weeks={[thursday]} hrefFor={hrefFor} />);
+
+    expect(anchors(container).map((link) => link.href)).toEqual([
+      "/training?date=2026-08-13",
+      "/training?date=2026-08-14",
+    ]);
+  });
+
+  test("keeps them out of the tab order and out of the accessible tree", () => {
+    // 42 unnamed stops between the summary and the data table would be worse
+    // than no links at all. § Touch Targets is why they cannot be the real
+    // control: a dot's target is 36×21px, under the 44×44 minimum.
+    const { container } = render(
+      <DotGrid weeks={WEEKS} today={TODAY} hrefFor={hrefFor} />,
+    );
+
+    for (const link of anchors(container)) {
+      expect(link.hidden).toBe("true");
+      expect(link.tabIndex).toBe(-1);
+    }
+
+    expect(screen.queryAllByRole("link")).toEqual([]);
+  });
+
+  test("says the same thing to a screen reader either way", () => {
+    // The summary and the adjacent table are the accessible account of this
+    // graphic, and navigation is not part of what they describe.
+    const withLinks = render(
+      <DotGrid weeks={WEEKS} today={TODAY} hrefFor={hrefFor} />,
+    );
+    const summary = withLinks.getByRole("img").getAttribute("aria-label");
+    const table = withLinks.getByRole("table").textContent;
+
+    withLinks.unmount();
+
+    const plain = render(<DotGrid weeks={WEEKS} today={TODAY} />);
+
+    expect(plain.getByRole("img").getAttribute("aria-label")).toBe(summary);
+    expect(plain.getByRole("table").textContent).toBe(table);
+  });
+});
