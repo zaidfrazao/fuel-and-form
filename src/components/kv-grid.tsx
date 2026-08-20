@@ -50,6 +50,13 @@ export type KeyValueItem = {
  * without guessing at the value — the swap preview's untracked-meal caveat sits
  * beside this grid on the same ground, and two hand-written alphas would be two
  * greys one edit away from disagreeing.
+ *
+ * That export is a narrow concession, not a pattern to follow. It is a class
+ * STRING crossing a component boundary, which is exactly the coupling `tinted`
+ * exists to avoid, and it earns its place only because the caveat is one
+ * sentence that cannot reasonably move inside the grid. A second caller wanting
+ * this grey is the signal that the tinted panel should become a component of
+ * its own and own its own text — reach for that rather than for a third import.
  */
 export const TINTED_TEXT = "text-text-primary/[0.68]";
 
@@ -114,6 +121,16 @@ export function SlashMeta({
   tone?: SlashTone;
   className?: string;
 }) {
+  // Indexed without a `?? TONE.default` fallback, deliberately.
+  //
+  // `tone` is a closed union with a default, reached from two typed callsites in
+  // this repository and no deserialized or untyped consumer. A fallback would
+  // therefore be unreachable — but the reason not to add it is what it would do
+  // if it ever DID fire: silently render `text-secondary`, which on a tinted
+  // ground is the 4.07:1 this whole treatment exists to avoid. "Degrading
+  // gracefully" here means degrading into the exact accessibility failure the
+  // tone was introduced to fix, and doing it quietly, on the one panel where
+  // legibility is the point. A throw is the louder and more honest failure.
   const { line, mark } = TONE[tone];
 
   return (
