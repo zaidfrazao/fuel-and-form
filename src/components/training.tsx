@@ -197,13 +197,13 @@ function Subject({ item }: { item: TrainingItem }) {
  * are the same type, the same colour and the same row. What differs is the
  * word.
  *
- * `aria-live` so a status set by a tap is announced without moving focus. The
- * optimistic value is what is read, which is the point — it is what the screen
- * is showing.
+ * `role="status"` — a polite live region — so a status set by a tap is
+ * announced without moving focus. The optimistic value is what is read, which
+ * is the point: it is what the screen is showing.
  */
 function Recorded({ entry }: { entry: SessionEntryView | null }) {
   return (
-    <p aria-live="polite" className="text-body text-text-secondary">
+    <p role="status" className="text-body text-text-secondary">
       {entry ? (
         <>
           <span className="text-text-primary">{STATUS_LABEL[entry.status]}</span>

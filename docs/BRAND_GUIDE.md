@@ -72,11 +72,16 @@ Six weeks × seven days, one row per week, 11px dots on a 9px gutter.
 | Element | Rendering |
 |---|---|
 | Done | Filled `text-primary` |
+| Partial | Filled `text-tertiary`, same 11px as Done |
 | Skipped | 1.5px `text-tertiary` ring, no fill |
-| Walk-only / no session | 4px `text-tertiary` or `border` dot |
+| Walk-only / not recorded | 4px `text-tertiary` or `border` dot |
 | Today | Filled `accent` with a 3px `accent-subtle` halo |
 
 Shows the pattern and refuses to grade it, which is the PRD's position on adherence. Lives on Training and Weight.
+
+**Partial** was added in FUEL-27 and is not in `BRAND_GUIDE.html`. It has to exist: `workout_log_status` has held it since the first migration, the schema calls it "a first-class outcome, not a failure state", and both neighbouring dots misreport it — Done overstates, and the Skipped ring says something the user explicitly did not say. It differs by *ink* rather than by weight, so § The Governing Principle's "same visual weight" still holds across all three outcomes and the encoding survives greyscale.
+
+**An unrecorded day is not a skipped one.** A session nobody logged draws the small dot, not the ring, and the adjacent data table reads "Not recorded". A skip is something the user did and recorded; inferring one from an empty table would be the graphic accusing them of a decision they never made — which is the opposite of data rather than guilt.
 
 **Why they never collide:** they operate at different resolutions — one day at hour precision versus six weeks at day precision. No screen shows both.
 
@@ -338,4 +343,5 @@ Two components are bespoke and worth building first, since every screen depends 
 
 - **Created:** 2026-08-10
 - **v2:** accent changed from amber `#E8833A` to umber, collapsing the fill/ink token split; cards replaced by hairline-separated content on canvas.
-- **v3 (current):** display scale raised to 76px for a 7× ratio against 10.5px micro labels; accent restricted to meaning "now" only, with actions moving to ink; day ruler and dot grid introduced as signature graphics; flat line motifs, hatching, crop marks and slash metadata added as the material language. Flat discipline retained — no gradients, no textures, no shadows outside sheets.
+- **v3.1 (current):** the dot grid gains a Partial dot (FUEL-27) and its unrecorded day is named as such rather than as "no session". An addition to § The Dot Grid only; the HTML mock is unchanged and remains the source of truth for everything else.
+- **v3:** display scale raised to 76px for a 7× ratio against 10.5px micro labels; accent restricted to meaning "now" only, with actions moving to ink; day ruler and dot grid introduced as signature graphics; flat line motifs, hatching, crop marks and slash metadata added as the material language. Flat discipline retained — no gradients, no textures, no shadows outside sheets.

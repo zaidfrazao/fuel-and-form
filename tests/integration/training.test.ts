@@ -2,6 +2,7 @@ import { asc } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { getDb } from "@/lib/db";
+import { clearSession, loadTraining, recordSession } from "@/lib/db/queries/training";
 import * as schema from "@/lib/db/schema";
 import type { WorkoutExercise } from "@/lib/db/schema";
 import { scope } from "@/lib/db/scope";
@@ -259,5 +260,224 @@ describe.skipIf(!configured)("resolving a training day, scoped", () => {
     ]);
     expect(bobMonday[0]?.workout.userId).toBe(fixture.bob.userId);
     expect(bobMonday[0]?.workout.id).not.toBe(fixture.bob.workoutId);
+  });
+});
+
+/**
+ * Recording a session against a real Postgres — FUEL-27.
+ *
+ * The action layer is covered hermetically in `src/app/actions/training.test.ts`
+ * with the database mocked. What that suite structurally cannot assert is the
+ * one guarantee this feature rests on, because it lives in the database rather
+ * than in the code: `workout_logs` is unique on `(user_id, date, workout_id)`,
+ * so a correction UPDATES the row it corrects instead of adding a second one.
+ *
+ * Without it, "past sessions are editable by date" is not a coherent claim —
+ * the screen, the dot grid and the weekly export would each be reading a set of
+ * rows with no rule for which one wins, and the app would be picking by
+ * `logged_at` in three places that could drift.
+ *
+ * The fixture seeds Alice with one workout log on 2026-03-02, already `done`.
+ * That is the row these cases correct, clear and try to duplicate.
+ */
+
+const ALICE_LOGGED = "2026-03-02";
+
+describe.skipIf(!configured)("recording a session, scoped", () => {
+  let fixture: Fixture;
+
+  beforeEach(async () => {
+    await truncateAll(getDb());
+    fixture = await seedFixture();
+  });
+
+  /** Every log this user holds, oldest date first. */
+  const logsOf = (userId: string) =>
+    scope(userId, getDb()).select(schema.workoutLogs, undefined, {
+      orderBy: [asc(schema.workoutLogs.date)],
+    });
+
+  it("replaces the status on a date rather than adding a second row", async () => {
+    const { userId, workoutId } = fixture.alice;
+
+    await recordSession(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      status: "partial",
+      note: "cut it at three rounds",
+      durationMin: 22,
+    });
+
+    const logs = await logsOf(userId);
+
+    // One row, not two. This is the whole of the unique index's job.
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      status: "partial",
+      note: "cut it at three rounds",
+      durationMin: 22,
+    });
+  });
+
+  it("writes the absence of a note, so a correction can take one back", async () => {
+    const { userId, workoutId } = fixture.alice;
+
+    await recordSession(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      status: "done",
+      note: "felt strong",
+      durationMin: 28,
+    });
+    await recordSession(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      status: "done",
+      note: null,
+      durationMin: null,
+    });
+
+    const [log] = await logsOf(userId);
+
+    // `null` and "leave it alone" are different instructions, and the update
+    // has to honour the first — otherwise a cleared note silently survives.
+    expect(log?.note).toBeNull();
+    expect(log?.durationMin).toBeNull();
+  });
+
+  it("moves logged_at with the correction", async () => {
+    const { userId, workoutId } = fixture.alice;
+
+    const [before] = await logsOf(userId);
+
+    await recordSession(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      status: "skipped",
+      note: null,
+      durationMin: null,
+    });
+
+    const [after] = await logsOf(userId);
+
+    // The column means "when this was recorded", and after a correction the
+    // record was made at the correction — which is what keeps `latestLog` on
+    // `/` pointing at what most recently happened.
+    expect(after!.loggedAt.getTime()).toBeGreaterThan(before!.loggedAt.getTime());
+  });
+
+  it("keeps one row per workout, so the walk and the session both survive", async () => {
+    const { userId } = fixture.alice;
+    const s = scope(userId, getDb());
+
+    const [walk] = await s.insert(schema.workouts, { name: "Daily Walk", type: "walk" });
+
+    await recordSession(userId, {
+      date: ALICE_LOGGED,
+      workoutId: walk!.id,
+      status: "done",
+      note: null,
+      durationMin: null,
+    });
+
+    // The index constrains (date, workout), not the date. A day holds both.
+    expect(await logsOf(userId)).toHaveLength(2);
+  });
+
+  it("refuses a duplicate at the database, not merely in the app", async () => {
+    const { userId, workoutId } = fixture.alice;
+
+    // A plain insert, bypassing `recordSession` entirely — which is what a
+    // future caller reaching for `s.insert` would be doing. The constraint has
+    // to be the thing that stops it, or it is a habit rather than a guarantee.
+    await expect(
+      scope(userId, getDb()).insert(schema.workoutLogs, {
+        date: ALICE_LOGGED,
+        workoutId,
+        status: "skipped",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("clears a date's record and leaves the other dates alone", async () => {
+    const { userId, workoutId } = fixture.alice;
+
+    await recordSession(userId, {
+      date: "2026-03-09",
+      workoutId,
+      status: "done",
+      note: null,
+      durationMin: null,
+    });
+
+    expect(await clearSession(userId, ALICE_LOGGED, workoutId)).toBe(true);
+
+    const remaining = await logsOf(userId);
+
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.date).toBe("2026-03-09");
+
+    // Nothing left to remove is `false`, not an error — the caller uses it to
+    // tell a real revert from one that raced another tab.
+    expect(await clearSession(userId, ALICE_LOGGED, workoutId)).toBe(false);
+  });
+
+  it("never reaches another user's log, holding its workout id or not", async () => {
+    // § 1.4. Bob is a demo visitor; Alice is the owner. Every statement below
+    // is scoped, so Bob naming Alice's workout writes his OWN row and deletes
+    // nothing of hers.
+    const before = await logsOf(fixture.alice.userId);
+
+    expect(await clearSession(fixture.bob.userId, ALICE_LOGGED, fixture.alice.workoutId)).toBe(
+      false,
+    );
+    expect(await logsOf(fixture.alice.userId)).toEqual(before);
+  });
+
+  it("hands the screen the date's own logs and the grid's whole window", async () => {
+    const { userId, workoutId } = fixture.alice;
+
+    // Five weeks before the fixture's logged date — inside a six-week window
+    // ending on it, and therefore a dot on the grid.
+    await recordSession(userId, {
+      date: "2026-01-26",
+      workoutId,
+      status: "skipped",
+      note: null,
+      durationMin: null,
+    });
+
+    const training = await loadTraining(userId, ALICE_LOGGED, new Date());
+
+    expect(training?.date).toBe(ALICE_LOGGED);
+    // The date's own rows are filtered from the window rather than fetched
+    // again, so the two answers are the same read.
+    expect(training?.logs.map((log) => log.date)).toEqual([ALICE_LOGGED]);
+    expect(training?.adherence).toHaveLength(6);
+
+    const dots = training!.adherence.flat();
+
+    expect(dots.find((day) => day.date === "2026-01-26")?.status).toBe("skipped");
+    expect(dots.find((day) => day.date === ALICE_LOGGED)?.status).toBe("done");
+  });
+
+  it("leaves a log outside the window out of the grid", async () => {
+    const { userId, workoutId } = fixture.alice;
+
+    // A year earlier: a real row, and one no dot in this window can show. The
+    // read narrows to `adherenceWindow`, so it never crosses the wire at all.
+    await recordSession(userId, {
+      date: "2025-03-03",
+      workoutId,
+      status: "done",
+      note: null,
+      durationMin: null,
+    });
+
+    const training = await loadTraining(userId, ALICE_LOGGED, new Date());
+
+    expect(
+      training?.adherence.flat().some((day) => day.date === "2025-03-03"),
+    ).toBe(false);
   });
 });
