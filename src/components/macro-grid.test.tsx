@@ -151,6 +151,29 @@ describe("the overage rule", () => {
     expect(isMaterialOverage(-500, 2000)).toBe(false);
     expect(isMaterialOverage(0, 2000)).toBe(false);
   });
+
+  test("colours nothing when there is no target to be over", () => {
+    // Overage is a claim about a target. With none set, the multiplication
+    // alone would answer `delta > 0` and paint every figure red on precisely
+    // the profile that has not said what it is aiming at — so the case is
+    // decided here rather than inherited from the arithmetic.
+    expect(isMaterialOverage(500, 0)).toBe(false);
+    expect(isMaterialOverage(500, -100)).toBe(false);
+  });
+
+  test("reports a day against a zero target without colouring it", () => {
+    // The whole grid, not just the helper: the figures are still shown and
+    // still carry their signs — it is only the colour that is withheld.
+    const { container } = render(
+      <MacroGrid
+        totals={totals({ kcal: 900 })}
+        target={{ targetKcal: 0, targetProteinG: 0, targetFatG: 0, targetCarbG: 0 }}
+      />,
+    );
+
+    expect(caloriesDelta("+900").className).not.toContain("text-error");
+    expect(within(container.querySelector("dl")!).getByText("900")).toBeDefined();
+  });
 });
 
 describe("the day-complete arrangement", () => {

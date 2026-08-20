@@ -64,17 +64,34 @@ export const OVERAGE_TOLERANCE = 0.05;
 /**
  * Whether a positive delta is worth colouring.
  *
- * Positive only, and that is the whole rule: § Semantic Colors says the two
- * semantic tokens are "used on numbers only — never on a skip, a missed session,
- * or an under-target figure", and § UI Copy Examples writes `−8g protein` in
- * `text-secondary` beside `You missed your protein goal` in red under "Avoid".
- * Being under target is a fact about the day, not a fault in it, so a negative
- * delta is grey however large it is.
+ * Positive only, and that is the first half of the rule: § Semantic Colors says
+ * the two semantic tokens are "used on numbers only — never on a skip, a missed
+ * session, or an under-target figure", and § UI Copy Examples writes `−8g
+ * protein` in `text-secondary` beside `You missed your protein goal` in red
+ * under "Avoid". Being under target is a fact about the day, not a fault in it,
+ * so a negative delta is grey however large it is.
+ *
+ * ## A target of zero colours nothing
+ *
+ * Stated rather than left to the multiplication, which would otherwise answer
+ * `delta > 0` — every figure red, on precisely the profile that has not said
+ * what it is aiming at. That is the opposite of what the tolerance is for, and
+ * it would arrive as a screen full of red rather than as an error anyone could
+ * trace. Overage is a claim about a target, so with no target there is no claim
+ * to make, and the day's figures are reported without comment.
+ *
+ * Unreachable from the app today — `profiles` carries all four figures and
+ * settings cannot clear them — which is why it is written down here rather than
+ * discovered later. A seed, a migration or a future "no target for this day"
+ * mode all reach it without touching this file.
  *
  * Exported so the threshold can be tested as arithmetic rather than inferred
  * from a class name on a rendered span.
  */
 export function isMaterialOverage(delta: number, target: number): boolean {
+  if (delta <= 0) return false;
+  if (target <= 0) return false;
+
   return delta > target * OVERAGE_TOLERANCE;
 }
 
