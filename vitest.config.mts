@@ -67,6 +67,7 @@ export default defineConfig({
         "src/lib/resolve-now.ts",
         "src/lib/resolve-training.ts",
         "src/lib/rotation.ts",
+        "src/lib/session-entry.ts",
         "src/lib/slot-times.ts",
         "src/lib/template-plan.ts",
         "src/lib/week-grid.ts",
@@ -170,6 +171,15 @@ export default defineConfig({
         // time this failed to reject would not break settings, it would break
         // `/` on every subsequent request, until someone edited the row by hand.
         "src/lib/slot-times.ts": FULLY_COVERED,
+        // FUEL-27, and the same argument as repeat.ts and template-plan.ts's
+        // two guards: every branch is a refusal reachable by anyone who can
+        // POST to the training action, and each one fails silently rather than
+        // loudly. An unchecked status reaches Postgres as an invalid enum
+        // value, which throws — a 500 from an endpoint whose contract is that
+        // it never throws. An unchecked duration is simply STORED: -40, 0.5,
+        // 1e9, each of them a figure the weekly export will later sum and
+        // present as fact.
+        "src/lib/session-entry.ts": FULLY_COVERED,
         // FUEL-25, and the same argument as cursor.ts, repeat.ts and
         // slot-times.ts: `isDayOfWeek` and `isMealSlot` are the template
         // endpoint's refusals, and every branch in them is reachable by anyone

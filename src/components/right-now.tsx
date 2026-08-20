@@ -947,6 +947,18 @@ export function RightNow({
       >
         Weekly plan
       </Link>
+      {/*
+       * The session and its history — FUEL-27. Same register and the same
+       * argument as the two beside it: `/` renders the day's training card
+       * itself, so this is the way to the DATE-addressed screen — past
+       * sessions, the note, and the six-week grid — not a way to today's.
+       */}
+      <Link
+        href="/training"
+        className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
+      >
+        Training
+      </Link>
       <Link
         href="/settings"
         className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
