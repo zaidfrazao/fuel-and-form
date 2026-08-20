@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { RecentSessions } from "@/components/recent-sessions";
 import type { RecentSession } from "@/lib/adherence";
@@ -88,6 +88,21 @@ describe("the rows", () => {
       expect(outcome.className).toBe(outcomes[0]?.className);
       expect(outcome.className).not.toContain("error");
     }
+  });
+
+  test("draws a repeated date twice rather than collapsing it", () => {
+    // `recentSessions` keeps both rows when a caller's weeks name one date
+    // twice, so this has to render both — and without a duplicate React key,
+    // which is a console error rather than a visible fault.
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    const twice = [SESSIONS[0]!, SESSIONS[0]!];
+
+    render(<RecentSessions sessions={twice} viewing="2026-04-01" />);
+
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(warn).not.toHaveBeenCalled();
+
+    warn.mockRestore();
   });
 
   test("describes what will appear rather than nudging, when there is nothing", () => {

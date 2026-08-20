@@ -207,7 +207,9 @@ export function recentSessions(
       // session and for a walk and leaves it off a date with neither, so this
       // narrows away the empty days and `RecentSession.label` in one step —
       // walks having already gone in the filter above.
-      day.label === undefined ? [] : [{ date: day.date, label: day.label, status: day.status }],
+      day.label === undefined
+        ? []
+        : [{ date: day.date, label: day.label, status: day.status }],
     )
     // Newest first, and a genuine three-way rather than a `< ? 1 : -1`. Equal
     // dates have to compare 0 or the comparator is inconsistent, and 0 also

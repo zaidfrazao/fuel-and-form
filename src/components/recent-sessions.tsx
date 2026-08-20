@@ -136,8 +136,12 @@ export function RecentSessions({
      * above says it once for a sighted reader; this says it to the rotor.
      */
     <ul aria-label="Recent sessions" className="flex flex-col">
-      {sessions.map((session) => (
-        <Row key={session.date} session={session} viewing={viewing} />
+      {sessions.map((session, index) => (
+        // Keyed by position as well as date. `recentSessions` keeps both rows
+        // when a caller's weeks name one date twice — deliberately, so a
+        // duplicate is visible rather than silently halved — and a bare date
+        // key would make React collide the two and warn.
+        <Row key={`${index}-${session.date}`} session={session} viewing={viewing} />
       ))}
     </ul>
   );

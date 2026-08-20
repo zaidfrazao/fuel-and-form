@@ -305,10 +305,10 @@ export function DotGrid({
    * They are `aria-hidden` and out of the tab order, and both are load-bearing.
    * A dot's tap target is the cell plus its gutters — 36×21px measured at 375px
    * wide, which is under § Touch Targets' 44×44 and cannot be anything else
-   * inside a 240px graphic of 42 dots. That is fine for a shortcut and not fine for the only
-   * way in, so the accessible path is a real list: `recent-sessions.tsx` gives
-   * the same dates 54px rows with names and statuses on them, and `/training`
-   * renders it directly beneath this. The grid stays `role="img"` — which
+   * inside a 240px graphic of 42 dots. That is fine for a shortcut and not fine
+   * for the only way in, so the accessible path is a real list:
+   * `recent-sessions.tsx` gives the same dates 54px rows with names and
+   * statuses on them, and `/training` renders it directly beneath this. The grid stays `role="img"` — which
    * prunes its descendants anyway — so a screen reader still hears one summary
    * and a data table rather than 42 links, and `tabIndex={-1}` keeps a keyboard
    * out of a run of unnamed stops it could not have used.
@@ -374,6 +374,27 @@ export function DotGrid({
                         href={hrefFor(day.date)}
                         aria-hidden="true"
                         tabIndex={-1}
+                        /*
+                         * Forty-two links, every one a different href, all in
+                         * the viewport at once. `prefetch` defaults to `auto`,
+                         * which for a dynamic route fetches the partial route
+                         * down to the nearest `loading.js` — and `app/` has
+                         * one, so the default would put forty-two background
+                         * requests on the wire the moment the grid scrolls
+                         * into view, in production, on a phone.
+                         *
+                         * The list below keeps the default and should: seven
+                         * links, and they are the control people actually use.
+                         * These are a shortcut on an 11px dot, and a shortcut
+                         * is not worth six times the requests of the thing it
+                         * shortcuts.
+                         *
+                         * Not asserted in a test — `prefetch` is a `Link` prop
+                         * that reaches no DOM attribute, so there is nothing
+                         * for jsdom to see. Verified against the prop's
+                         * documented defaults in `next/dist/docs`.
+                         */
+                        prefetch={false}
                         className="absolute -inset-x-[4.5px] -inset-y-[5px]"
                       />
                     )}
