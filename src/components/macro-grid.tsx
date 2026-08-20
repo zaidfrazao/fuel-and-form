@@ -112,6 +112,7 @@ export function MacroGrid({
   target,
   calories = "actual",
   columns,
+  tinted,
   className,
 }: {
   /** What the day comes to — planned, previewed or logged; the grid does not care. */
@@ -121,6 +122,19 @@ export function MacroGrid({
   calories?: CaloriesFigure;
   /** Passed through to the grid. Three only when the figures are short. */
   columns?: 2 | 3;
+  /**
+   * Passed through to the grid — this one sits on `accent-subtle`.
+   *
+   * The swap preview's, and the reason this component takes it rather than
+   * reading it off a class: the grid's greys are `text-secondary`, which is
+   * measured against the untinted grounds and falls under AA on the tint. See
+   * `TINTED_TEXT` in kv-grid.tsx for the ratios.
+   *
+   * It changes no figure and no colour rule. The calorie delta is still `error`
+   * at full strength on a material overage, which is the whole reason the tinted
+   * tone works through `color` rather than `opacity`.
+   */
+  tinted?: boolean;
   className?: string;
 }) {
   const delta = deltaFromTarget(totals, target);
@@ -190,6 +204,11 @@ export function MacroGrid({
     // fail on an edit to `globals.css` that mentioned none of this. The columns
     // are `minmax(0, 1fr)` tracks, so they hold their width whatever lands in
     // them; the figures then hold their own alignment inside those tracks.
-    <KeyValueGrid items={items} columns={columns} className={cn("tabular-nums", className)} />
+    <KeyValueGrid
+      items={items}
+      columns={columns}
+      tinted={tinted}
+      className={cn("tabular-nums", className)}
+    />
   );
 }

@@ -14,9 +14,10 @@ import { slotLabel } from "@/lib/now-display";
  *
  * A bottom sheet of candidate meals as flat bento tiles, opened from a grid cell
  * (FUEL-28) or from Swap on `/`. Choosing one is all this does: the dated
- * override is FUEL-23's write, and the resulting day totals are FUEL-32's panel.
- * Both land in `children`, which is the foot of the sheet — § Progressive
- * Disclosure puts the totals *inside* the sheet, above the confirm button.
+ * override is FUEL-23's write, and the resulting day totals are FUEL-32's tinted
+ * panel. Both live in `swap-sheet.tsx` and arrive through `children`, which is
+ * the foot of the sheet — § Progressive Disclosure puts the totals *inside* the
+ * sheet, above the confirm button.
  *
  * ## Controlled, and given its meals
  *
@@ -88,7 +89,13 @@ export type MealPickerProps = {
   /** The chosen tile, if any. Controlled by the caller. */
   selectedMealId?: string | null;
   onSelect: (mealId: string) => void;
-  /** The foot of the sheet: FUEL-32's day totals, then FUEL-23's confirm. */
+  /**
+   * The foot of the sheet: FUEL-32's day totals, then FUEL-23's confirm.
+   *
+   * In that order, and the picker is not what enforces it — whatever is passed
+   * renders where it is put. The order is a claim about `swap-sheet.tsx`, and
+   * that is where the test asserting it lives.
+   */
   children?: ReactNode;
 };
 

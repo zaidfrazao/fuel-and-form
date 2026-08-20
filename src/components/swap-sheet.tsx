@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { TINTED_TEXT } from "@/components/kv-grid";
 import { MacroGrid } from "@/components/macro-grid";
 import { MealPicker, type PickableMeal } from "@/components/meal-picker";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { REPEAT_MAX, REPEAT_MIN } from "@/lib/repeat";
 import type { MealSlot } from "@/lib/db/schema";
 import { type MacroBearing, type MacroTarget, summariseDay } from "@/lib/macros";
 import { dayLabel } from "@/lib/now-display";
+import { cn } from "@/lib/utils";
 import type { CalendarDate } from "@/lib/date";
 
 /**
@@ -22,6 +24,12 @@ import type { CalendarDate } from "@/lib/date";
  * the confirm button". So the grid sits between the two, and it is the whole
  * reason the swap is safe to make: PRD § Problem Statement names "swaps silently
  * break macros" as one of the four problems the app exists for.
+ *
+ * The panel is FUEL-32's, finished here rather than in the picker it hangs in:
+ * FUEL-23 built the arithmetic and the placement, and FUEL-32 gave it the
+ * `accent-subtle` ground and the greys that ground needs. "Above the confirm,
+ * never after it" is an ORDER, so it is pinned by a test that reads document
+ * position rather than by one that finds both elements on the screen.
  *
  * ## The preview costs no round trip, and no `Plan` crosses the wire
  *
@@ -45,10 +53,18 @@ import type { CalendarDate } from "@/lib/date";
  *
  * ## One umber element
  *
- * None here. § The Four Rules allows the picker exactly one — the selection ring
- * `Tile` draws — and this component adds no colour of its own: the confirm is
- * `ink`, the totals are text, and an over-target kcal figure takes `error` on
- * the same terms the day-complete summary gives it.
+ * Still the picker's. § The Four Rules allows exactly one — the selection ring
+ * `Tile` draws — and nothing added here competes with it: the confirm is `ink`,
+ * the figures are text, and an over-target kcal takes `error` on the same terms
+ * the day-complete summary gives it.
+ *
+ * The preview panel's `accent-subtle` ground is not the exception it looks like.
+ * A tinted GROUND is not the accent — `right-now.tsx` settles that for the
+ * Swapped tag, which sits on the same token beside a screen whose one umber
+ * element is the NOW marker — and § Color Palette names `accent-subtle` for
+ * "swapped cells and the Swapped tag" specifically. This panel is the third of
+ * those: the other two mark a swap that happened, and this one marks the swap
+ * being considered.
  */
 
 /**
@@ -370,7 +386,16 @@ export function SwapSheet({
          * `polite` rather than `assertive`: it should be spoken after the
          * tile's own selected state, not cut across it.
          */}
-        <div aria-live="polite" aria-label={selected ? "Day totals after the swap" : "Day totals"}>
+        <div
+          aria-live="polite"
+          aria-label={selected ? "Day totals after the swap" : "Day totals"}
+          // The tint — FUEL-32's acceptance criterion, and the argument for it
+          // is in the docblock's § One umber element.
+          //
+          // `rounded-lg` to match the tiles above rather than the sheet's own
+          // 26px top radius: it is a block inside the sheet, not a second sheet.
+          className="rounded-lg bg-accent-subtle px-4 py-[18px]"
+        >
           {/*
            * The same grid the day itself carries on `/`, and that is the point
            * of it being one component: this previews the day a swap would
@@ -378,17 +403,26 @@ export function SwapSheet({
            * copies of the rule deciding which overage is coloured would let the
            * sheet preview a swap as safe and the card paint the identical number
            * red the moment it was confirmed.
+           *
+           * `tinted` is what keeps that true through the ground change. The
+           * grid's greys are `text-secondary`, which is measured against the
+           * untinted grounds and lands at 4.07:1 on this one — under §
+           * Accessibility's AA floor. See `TINTED_TEXT` in kv-grid.tsx.
            */}
-          <MacroGrid totals={totals} target={target} />
+          <MacroGrid totals={totals} target={target} tinted />
 
           {/*
            * The one caveat the figures cannot carry themselves. An untracked
            * meal contributes nothing to a total, so a day containing one is a
            * floor rather than a sum — and a preview that said so only in a
            * tooltip would be hiding it from the reader who most needs it.
+           *
+           * `TINTED_TEXT` rather than `text-secondary` for the reason the grid
+           * beside it takes `tinted`, and imported rather than retyped so the
+           * sentence and the figures above it cannot come out different greys.
            */}
           {totals.partial && (
-            <p className="pt-3 text-caption text-text-secondary">
+            <p className={cn("pt-3 text-caption", TINTED_TEXT)}>
               Excludes {totals.untrackedSlots.length} untracked{" "}
               {totals.untrackedSlots.length === 1 ? "meal" : "meals"}.
             </p>

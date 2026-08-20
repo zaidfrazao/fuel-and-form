@@ -98,7 +98,7 @@ export function Tile({
       <span className="grid flex-1 place-items-center">
         <Motif name={motif} className="h-[46px] w-[46px]" />
       </span>
-      {meta !== undefined && <SlashMeta subdued>{meta}</SlashMeta>}
+      {meta !== undefined && <SlashMeta tone="subdued">{meta}</SlashMeta>}
     </>
   );
 
