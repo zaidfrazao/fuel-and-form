@@ -376,10 +376,105 @@ describe("the active session", () => {
     expect(screen.getByText("No exercises listed.")).toBeDefined();
   });
 
-  test("renders no macro grid", () => {
+  test("carries the day's totals but no macro grid of its own", () => {
     renderNow(active(2));
 
-    expect(screen.queryByRole("term", { name: "Calories" })).toBeNull();
+    // A session has no macros, so the card shows none. The DAY's do not belong
+    // to the item in the middle of the screen, and a grid that appeared at
+    // breakfast and vanished at the afternoon session would be hiding the day's
+    // figures exactly when the next meal is the one being decided — FUEL-31.
+    //
+    // Queried by the two headings rather than by the cell labels, which are the
+    // same four words in both grids. The previous form of this test asked for
+    // `role="term"` by accessible name: a `dt` takes no name from its contents,
+    // so that query answered null whether or not a grid was there, and the test
+    // passed for the whole of the time it was checking nothing.
+    expect(screen.queryByText("This meal")).toBeNull();
+    expect(screen.getByText("Today")).toBeDefined();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The day's totals — FUEL-31                                                 */
+/* -------------------------------------------------------------------------- */
+
+/** The day grid, which is the second of the two on a meal card. */
+const dayGrid = (container: HTMLElement) => {
+  const grids = container.querySelectorAll("dl");
+
+  return grids[grids.length - 1]!;
+};
+
+describe("the day's totals", () => {
+  test("sums the resolved day against target, with signed deltas", () => {
+    const { container } = renderNow(active(0));
+
+    // Three meals at 420 / 32.5 / 12 / 48, against 2,000 / 150 / 60 / 200. The
+    // walk is on the day too and contributes nothing, which is what it should
+    // contribute: a workout has no macros.
+    const day = within(dayGrid(container));
+
+    expect(day.getByText("1,260")).toBeDefined();
+    expect(day.getByText("−740")).toBeDefined();
+    expect(day.getByText("97.5 g")).toBeDefined();
+    expect(day.getByText(/of 150 · −52.5/)).toBeDefined();
+    expect(day.getByText("36 g")).toBeDefined();
+    expect(day.getByText(/of 60 · −24/)).toBeDefined();
+    expect(day.getByText("144 g")).toBeDefined();
+    expect(day.getByText(/of 200 · −56/)).toBeDefined();
+  });
+
+  test("names both grids, so two sets of the same four labels can be told apart", () => {
+    renderNow(active(0));
+
+    expect(screen.getByText("This meal")).toBeDefined();
+    expect(screen.getByText("Today")).toBeDefined();
+  });
+
+  test("moves on a swap, before the server has answered", async () => {
+    // P4's promise, and the reason the totals are derived rather than stored:
+    // "a swap that costs the day 30g of protein says so at the moment of the
+    // swap, not in hindsight."
+    const user = userEvent.setup();
+    const held = deferred<{ ok: boolean }>();
+
+    swapMeal.mockReturnValue(held.promise);
+
+    const { container } = renderNow(active(3));
+
+    expect(within(dayGrid(container)).getByText("1,260")).toBeDefined();
+
+    const sheet = await choose(user, "Chickpea curry");
+
+    await user.click(within(sheet).getByRole("button", { name: "Swap" }));
+
+    // 420 + 420 + 560: dinner's 420 displaced by the curry, on the frame the
+    // sheet closes and while the write is still in flight.
+    await waitFor(() => expect(within(dayGrid(container)).getByText("1,400")).toBeDefined());
+    expect(within(dayGrid(container)).queryByText("1,260")).toBeNull();
+
+    held.settle({ ok: true });
+    await waitFor(() => expect(swapMeal).toHaveBeenCalled());
+  });
+
+  test("moves back on a revert", async () => {
+    const user = userEvent.setup();
+    const held = deferred<{ ok: boolean }>();
+
+    revertSwap.mockReturnValue(held.promise);
+
+    const { container } = renderNow(swappedView());
+
+    expect(within(dayGrid(container)).getByText("1,400")).toBeDefined();
+
+    await user.click(screen.getByRole("button", { name: "Revert" }));
+
+    // Back to what the TEMPLATE plans for dinner — 700 kcal, not the 420 the
+    // unswapped fixture carries — because that is what a revert restores.
+    await waitFor(() => expect(within(dayGrid(container)).getByText("1,540")).toBeDefined());
+
+    held.settle({ ok: true });
+    await waitFor(() => expect(revertSwap).toHaveBeenCalled());
   });
 });
 
