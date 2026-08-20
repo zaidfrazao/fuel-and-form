@@ -38,9 +38,13 @@ export type KeyValueItem = {
  * — so a panel that merely swapped its background would take every label and
  * every metadata line below the standard the guide sets for itself.
  *
- * Stepping down from `currentColor` instead reaches 5.60:1 in light and 7.65:1
+ * Stepping down from `currentColor` instead reaches 5.53:1 in light and 7.56:1
  * in dark, which is the same move `subdued` makes for the ink tile and for the
  * same reason: on a ground that is not `raised`, a fixed grey is the wrong grey.
+ *
+ * Every ratio here is measured in a browser rather than derived: Tailwind emits
+ * the alpha as an oklab `color-mix`, which lands a shade off what compositing
+ * the hex in sRGB predicts.
  *
  * Exported so the one panel using it can put a sentence of its own on the tint
  * without guessing at the value — the swap preview's untracked-meal caveat sits
@@ -51,7 +55,7 @@ export const TINTED_TEXT = "text-text-primary/[0.68]";
 
 /**
  * The slash mark's grey on a tinted ground, a step further back — 2.33:1 light,
- * 3.32:1 dark, against `text-tertiary`'s 2.19:1 on `raised` today.
+ * 3.27:1 dark, against `text-tertiary`'s 2.19:1 on `raised` today.
  *
  * A ratio this low is a floor rather than a failure: the mark is punctuation,
  * `aria-hidden`, and § Slash Metadata wants it "recede[d] behind the thing it
