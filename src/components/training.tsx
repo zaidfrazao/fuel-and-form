@@ -7,8 +7,10 @@ import { clearSessionStatus, setSessionStatus } from "@/app/actions/training";
 import { DotGrid, type Week } from "@/components/dot-grid";
 import { ExerciseList, type ListedExercise } from "@/components/exercise-list";
 import { SlashMeta } from "@/components/kv-grid";
+import { RecentSessions } from "@/components/recent-sessions";
 import { Button } from "@/components/ui/button";
 import { WalkRow } from "@/components/walk-row";
+import { recentSessions } from "@/lib/adherence";
 import { addDays, type CalendarDate } from "@/lib/date";
 import type { WorkoutLogStatus } from "@/lib/db/schema";
 import { dayLabel } from "@/lib/now-display";
@@ -472,7 +474,39 @@ export function Training({
            * omits it entirely, which is exactly right: a six-week window under
            * review after the fact has no present in it.
            */}
-          <DotGrid weeks={adherence} today={today} />
+          <DotGrid
+            weeks={adherence}
+            today={today}
+            /*
+             * FUEL-30: a dot is a way to the date under it. The link is
+             * pointer-only — 11px is not a touch target — and the list below is
+             * the same dates at 54px, for a thumb and for a keyboard. Both are
+             * explained at `hrefFor` in dot-grid.tsx.
+             */
+            hrefFor={(day) => `/training?date=${day}`}
+          />
+        </section>
+
+        {/*
+         * The dot grid's twin, and FUEL-30's actual control — the dots above are
+         * pointer-only at 26×21px, and these rows are the same dates at 54px for
+         * a thumb and for a keyboard. `recent-sessions.tsx` carries the whole
+         * argument.
+         *
+         * A section of its own rather than more content under Adherence, so the
+         * heading says what the rows are: the two are about the same six weeks
+         * but they answer different questions — the grid is the pattern, and
+         * this is the way back into it.
+         *
+         * Built from the grid's own days rather than from a second read, so a
+         * row and the dot above it cannot disagree, and capped at seven because
+         * this is a shortcut to the last few sessions and not an archive.
+         * Anything older is `DateNav`'s job, which reaches every date there has
+         * ever been.
+         */}
+        <section className="flex flex-col gap-[14px]">
+          <Eyebrow>Recent</Eyebrow>
+          <RecentSessions sessions={recentSessions(adherence, today)} viewing={date} />
         </section>
 
         {walk && (

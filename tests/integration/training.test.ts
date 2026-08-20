@@ -1,6 +1,7 @@
 import { asc } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { recentSessions } from "@/lib/adherence";
 import { getDb } from "@/lib/db";
 import { clearSession, loadTraining, recordSession } from "@/lib/db/queries/training";
 import * as schema from "@/lib/db/schema";
@@ -663,5 +664,98 @@ describe.skipIf(!configured)("recording the daily walk, scoped", () => {
     expect(
       (await logsOf(fixture.alice.userId)).some((log) => log.workoutId === walkId),
     ).toBe(true);
+  });
+});
+
+/**
+ * Reviewing a past date against a real Postgres — FUEL-30.
+ *
+ * `src/lib/rotation.test.ts` § 1.2 case 6 already proves the resolver gives a
+ * past date the answer it gave on the day, and it proves it the only way that
+ * claim can be proved conclusively: against a pure function that reads no
+ * history at all. What it cannot reach is the round trip. `program_start_date`
+ * and the date being asked for are both `date` columns, and the alternation is
+ * `daysBetween` over the two — so a driver handing back a `Date` instead of a
+ * 'YYYY-MM-DD' string would give a session on 5 January one name in January and
+ * another in March, in some timezones only.
+ *
+ * That is the failure this covers: the same date, asked about from two
+ * different presents, through the query the screen actually calls.
+ */
+describe.skipIf(!configured)("reviewing a past date, scoped", () => {
+  let fixture: Fixture;
+
+  beforeEach(async () => {
+    await truncateAll(getDb());
+    fixture = await seedFixture();
+  });
+
+  it("gives a past date the session it gave on the day", async () => {
+    const { userId } = fixture.alice;
+
+    // The program's own first session, viewed on the day…
+    const onTheDay = await loadTraining(userId, FIRST_MONDAY, new Date());
+    // …and the same date viewed a fortnight later, with two more sessions of
+    // the rotation behind it.
+    const later = await loadTraining(userId, THIRD_MONDAY, new Date());
+
+    expect(onTheDay?.day.sessions[0]?.workout.name).toBeDefined();
+    expect(later?.day.sessions[0]?.workout.name).toBeDefined();
+
+    const reviewed = await loadTraining(userId, FIRST_MONDAY, new Date());
+
+    expect(reviewed?.day.sessions[0]?.workout.id).toBe(
+      onTheDay?.day.sessions[0]?.workout.id,
+    );
+    // And the dot the later window draws for that date names the same workout,
+    // so the grid and the screen behind it cannot tell different stories about
+    // one day.
+    expect(
+      later?.adherence.flat().find((day) => day.date === FIRST_MONDAY)?.label,
+    ).toBe(onTheDay?.day.sessions[0]?.workout.name);
+  });
+
+  it("offers that date as a row under the grid", async () => {
+    const { userId } = fixture.alice;
+
+    const later = await loadTraining(userId, THIRD_MONDAY, new Date());
+
+    // What `/training` renders beneath the dots. The rows come from the grid's
+    // own days, so this is the same six weeks the query fetched — and the first
+    // Monday is reachable from the third without typing a URL.
+    const rows = recentSessions(later?.adherence ?? [], THIRD_MONDAY);
+
+    expect(rows.map((row) => row.date)).toContain(FIRST_MONDAY);
+    expect(rows.at(0)?.date).toBe(THIRD_MONDAY);
+  });
+
+  it("edits a past date without touching the rows around it", async () => {
+    const { userId, workoutId } = fixture.alice;
+
+    // A correction made now, filed against a date two weeks ago — the write
+    // "editable retrospectively" means, through the same upsert the action
+    // calls.
+    await recordSession(userId, {
+      date: FIRST_MONDAY,
+      workoutId,
+      status: "partial",
+      note: "went back and corrected this",
+      durationMin: 31,
+    });
+
+    const reviewed = await loadTraining(userId, FIRST_MONDAY, new Date());
+
+    expect(reviewed?.logs).toHaveLength(1);
+    expect(reviewed?.logs[0]).toMatchObject({
+      date: FIRST_MONDAY,
+      status: "partial",
+      durationMin: 31,
+    });
+
+    // The fixture's own log, on a later date, is untouched: a retrospective
+    // edit addresses one date and one workout.
+    const untouched = await loadTraining(userId, ALICE_LOGGED, new Date());
+
+    expect(untouched?.logs[0]).toMatchObject({ date: ALICE_LOGGED, status: "done" });
   });
 });

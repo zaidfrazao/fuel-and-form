@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { adherenceWeeks, adherenceWindow, type SessionLog } from "./adherence";
+import {
+  adherenceWeeks,
+  adherenceWindow,
+  recentSessions,
+  type SessionLog,
+} from "./adherence";
 import type { TrainingTemplateEntry, Workout } from "./db/schema";
 import type { TrainingPlan } from "./rotation";
 import { seedTrainingTemplate } from "./seed/plan";
@@ -234,5 +239,125 @@ describe("the session is what the day is about", () => {
         day.label === undefined ? ["date", "status"] : ["date", "label", "status"],
       );
     }
+  });
+});
+
+/**
+ * FUEL-30 — the same six weeks as a list a thumb can hit.
+ *
+ * The dots are the picture and this is the way back into it, so what matters
+ * here is which dates the list is willing to send someone to. `dot-grid.tsx`
+ * and `recent-sessions.tsx` carry the argument for why both exist.
+ */
+describe("the recent list", () => {
+  it("gives the last seven session dates, newest first", () => {
+    const weeks = adherenceWeeks(PLAN, [], ANCHOR);
+
+    // Wednesday 8 April back to Tuesday 31 March, with the weekend of the 4th
+    // and 5th absent: those are walk-only days, and this list is the way to the
+    // screen's editable session.
+    expect(recentSessions(weeks, ANCHOR).map((row) => row.date)).toEqual([
+      "2026-04-08",
+      "2026-04-07",
+      "2026-04-06",
+      "2026-04-03",
+      "2026-04-02",
+      "2026-04-01",
+      "2026-03-31",
+    ]);
+  });
+
+  it("carries the workout the date resolved to, and what was recorded", () => {
+    const logs: SessionLog[] = [
+      { date: "2026-04-06", workoutId: CIRCUIT_B_ID, status: "partial" },
+    ];
+
+    const [latest, , monday] = recentSessions(adherenceWeeks(PLAN, logs, ANCHOR), ANCHOR);
+
+    // The rotation's answer for each date and not the week's — Wednesday is
+    // Circuit A here and the Monday two days before it is Circuit B, because
+    // the cycle runs across weeks rather than resetting on one.
+    expect(latest).toEqual({ date: "2026-04-08", label: CIRCUIT_A, status: "none" });
+    // An unlogged session is `none` exactly as it is a small dot on the grid —
+    // the row states the absence without inventing a reason for it.
+    expect(monday).toEqual({ date: "2026-04-06", label: CIRCUIT_B, status: "partial" });
+  });
+
+  it("stops at today, because a future session cannot have happened", () => {
+    // The window runs to Sunday 12 April, four days past the anchor. Offering
+    // one of them would be inviting a record the user would have to take back —
+    // the same reason `DateNav` refuses to walk forward past today.
+    const weeks = adherenceWeeks(PLAN, [], ANCHOR);
+
+    expect(recentSessions(weeks, ANCHOR).map((row) => row.date)).not.toContain("2026-04-09");
+    expect(recentSessions(weeks, "2026-04-10").map((row) => row.date).at(0)).toBe(
+      "2026-04-10",
+    );
+  });
+
+  it("leaves out the days there is no session to go back to", () => {
+    // Three kinds of day the grid draws and this does not offer: a walk-only
+    // weekend, a date before the program started, and — through both — anything
+    // the template does not cover at all.
+    const weeks = adherenceWeeks(PLAN, [], "2026-03-08"); // the first Sunday
+
+    expect(recentSessions(weeks, "2026-03-08").map((row) => row.date)).toEqual([
+      "2026-03-06",
+      "2026-03-05",
+      "2026-03-04",
+      "2026-03-03",
+      "2026-03-02",
+    ]);
+  });
+
+  it("takes a different cap", () => {
+    expect(recentSessions(adherenceWeeks(PLAN, [], ANCHOR), ANCHOR, 2)).toHaveLength(2);
+    expect(recentSessions([], ANCHOR)).toEqual([]);
+  });
+
+  it("does not reorder the grid it is handed", () => {
+    // `sort` is in-place. Sorting the weeks themselves would move the dots as a
+    // side effect of drawing the list — rotation.ts guards the same property
+    // for the same reason.
+    const weeks = adherenceWeeks(PLAN, [], ANCHOR);
+    const before = weeks.map((week) => week.map((day) => ({ ...day })));
+
+    recentSessions(weeks, ANCHOR);
+
+    expect(weeks).toEqual(before);
+  });
+
+  it("sorts, rather than trusting the order it was handed", () => {
+    // `Week` says outright that order does not matter and that each day is
+    // placed by its own date, so a caller is entitled to hand these over in any
+    // order at all. A list that merely reversed its input would come out
+    // oldest-first for one that did.
+    const weeks = adherenceWeeks(PLAN, [], ANCHOR)
+      .map((week) => [...week].reverse())
+      .reverse();
+
+    expect(recentSessions(weeks, ANCHOR, 3).map((row) => row.date)).toEqual([
+      "2026-04-08",
+      "2026-04-07",
+      "2026-04-06",
+    ]);
+  });
+
+  it("keeps the first of two rows for one date, as the grid does", () => {
+    // A duplicate day is a caller's mistake rather than something the shaping
+    // produces, and `layOut` already decided what to do about one: keep the
+    // first given. A comparator that answered anything but 0 for equal dates
+    // would make which one survives arbitrary.
+    const twice = [
+      [
+        { date: "2026-04-06", label: CIRCUIT_A, status: "done" as const },
+        { date: "2026-04-06", label: CIRCUIT_B, status: "skipped" as const },
+      ],
+    ];
+
+    expect(recentSessions(twice, ANCHOR).map((row) => row.label)).toEqual([
+      CIRCUIT_A,
+      CIRCUIT_B,
+    ]);
   });
 });

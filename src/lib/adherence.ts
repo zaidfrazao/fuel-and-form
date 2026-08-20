@@ -152,6 +152,71 @@ function dayFor(
       { date, status: "none" };
 }
 
+/** How many rows `/training` offers under the grid — see `recentSessions`. */
+export const RECENT_SESSIONS = 7;
+
+/** One row of the list beneath the grid: a date, what was on it, how it went. */
+export type RecentSession = {
+  date: CalendarDate;
+  /** The workout's name. Present by construction — see the filter below. */
+  label: string;
+  status: DayStatus;
+};
+
+/**
+ * The most recent session dates the grid covers, newest first — FUEL-30.
+ *
+ * The dot grid is the picture of this data and it is 11px wide per day, which
+ * makes it a shortcut rather than a control: `dot-grid.tsx` gives the reasoning
+ * at its `hrefFor` prop. This is the same days as a list a thumb can actually
+ * hit, and it is built from the dots THEMSELVES rather than from a second read,
+ * so a row and the dot above it cannot end up disagreeing about a date.
+ *
+ * ## What is left out, and why
+ *
+ *   - **Days with no session.** A walk-only weekend and a date the template does
+ *     not cover are both real, viewable dates — `DateNav` walks to them and the
+ *     screen has an honest state for each. They are not rows here because the
+ *     list exists to reach the thing this screen can EDIT, and a row offering a
+ *     weekend would mostly be offering an empty screen.
+ *   - **Dates after `today`.** A future session cannot have happened, and
+ *     `training.tsx` already refuses to walk forward past today for the same
+ *     reason: a list that offered tomorrow would be inviting a record the user
+ *     would then have to notice and take back.
+ *
+ * Unlogged days stay in, as `none`. That is the case the list is most useful
+ * for — a session nobody recorded is exactly the one worth going back to — and
+ * dropping it would make the list quietly agree that an unrecorded day did not
+ * happen, which is the inference `lib/adherence.ts` refuses everywhere else.
+ *
+ * Neither `weeks` nor the arrays inside it are reordered: the days are mapped
+ * out before anything is sorted, because `sort` is in-place and a shaping
+ * function that rearranged the grid it was handed would move the dots as a side
+ * effect of drawing a list.
+ */
+export function recentSessions(
+  weeks: readonly Week[],
+  today: CalendarDate,
+  limit: number = RECENT_SESSIONS,
+): RecentSession[] {
+  return weeks
+    .flat()
+    .filter((day) => day.date <= today && day.status !== "walk")
+    .flatMap((day) =>
+      // A label is what says a day HAS something on it. `dayFor` sets one for a
+      // session and for a walk and leaves it off a date with neither, so this
+      // narrows away the empty days and `RecentSession.label` in one step —
+      // walks having already gone in the filter above.
+      day.label === undefined ? [] : [{ date: day.date, label: day.label, status: day.status }],
+    )
+    // Newest first, and a genuine three-way rather than a `< ? 1 : -1`. Equal
+    // dates have to compare 0 or the comparator is inconsistent, and 0 also
+    // makes the sort stable, so two rows for one date keep the order they were
+    // given — the call `layOut` already makes when a week holds a day twice.
+    .sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? 1 : -1))
+    .slice(0, limit);
+}
+
 /**
  * The six weeks of dots ending with `anchor`'s week.
  *

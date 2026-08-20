@@ -471,8 +471,10 @@ describe("the rules the guide states as absolutes", () => {
     // neither is diminished for being the less flattering answer.
     expect(skip.getAttribute("data-variant")).toBe(partial.getAttribute("data-variant"));
     expect(skip.getAttribute("data-size")).toBe(partial.getAttribute("data-size"));
-    // And the recorded status is stated, not coloured.
-    expect(screen.getByText("Skipped")).toBeTruthy();
+    // And the recorded status is stated, not coloured. Scoped to the live
+    // region `Recorded` renders, because FUEL-30's list below now says the same
+    // word about the same session — in the same ink, which is the point.
+    expect(within(screen.getByRole("status")).getByText("Skipped")).toBeTruthy();
   });
 
   test("puts exactly one umber element on the screen, and it is today's dot", () => {
@@ -539,7 +541,120 @@ describe("moving between dates", () => {
 
   test("names the date being viewed, and marks it when it is today", () => {
     render(view());
-    expect(screen.getByText(/Thu 20 Aug/)).toBeTruthy();
-    expect(screen.getByText("· Today")).toBeTruthy();
+
+    // Scoped to the nav: FUEL-30's list names today as well, and marks it
+    // "Viewing" rather than "Today" — the nav says where the present is, and
+    // the list says which row you are on.
+    const nav = within(screen.getByRole("navigation", { name: "Date" }));
+
+    expect(nav.getByText(/Thu 20 Aug/)).toBeTruthy();
+    expect(nav.getByText("· Today")).toBeTruthy();
+  });
+});
+
+/**
+ * FUEL-30 — "past sessions are viewable and editable by date", and the two
+ * things the screen owes that criterion.
+ *
+ * The date already had an address before this task: `/training?date=` and the
+ * prev/next nav above are FUEL-27's, and `actions/training.test.ts` covers what
+ * a write to a past date does. What was missing was a way IN that is not typing
+ * a URL or walking back one day at a time — and, on the editing half, an
+ * assertion that a correction to a past session is filed against the date being
+ * viewed rather than against today.
+ */
+describe("reaching a past date", () => {
+  test("sends every dot to the day under it", () => {
+    const { container } = render(view());
+
+    // Pointer-only, so `getAllByRole` cannot see them: they are inside the
+    // graphic's `role="img"` and out of the tab order. `dot-grid.test.tsx`
+    // holds the reasoning; what matters here is that the screen supplies the
+    // destination at all.
+    const dots = [...container.querySelectorAll("[role='img'] a")].map((link) =>
+      link.getAttribute("href"),
+    );
+
+    expect(dots).toContain("/training?date=2026-08-12");
+    expect(dots).toHaveLength(5);
+  });
+
+  test("lists the recent sessions as rows a thumb can hit", () => {
+    render(view());
+
+    const list = within(screen.getByRole("list", { name: "Recent sessions" }));
+
+    // Newest first, the walk-only Saturday absent — the list is the way to a
+    // session, and a weekend has none to edit. Today is present but inert.
+    expect(
+      screen.getAllByRole("link", { name: /Aug/ }).map((row) => row.getAttribute("href")),
+    ).toEqual(
+      expect.arrayContaining([
+        "/training?date=2026-08-12",
+        "/training?date=2026-08-11",
+        "/training?date=2026-08-10",
+      ]),
+    );
+    expect(list.queryByRole("link", { name: /15 Aug/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Thu 20 Aug/ })).toBeNull();
+  });
+
+  test("does not offer a date that has not happened", () => {
+    // The list stops at today for the same reason Next does. `recentSessions`
+    // enforces it; this is the screen agreeing.
+    render(view({ date: YESTERDAY }));
+
+    const rows = screen.getAllByRole("listitem").map((row) => row.textContent);
+
+    expect(rows.some((row) => row?.includes("Thu 20 Aug"))).toBe(true);
+    expect(rows.some((row) => row?.includes("Fri 21 Aug"))).toBe(false);
+  });
+
+  test("files a retrospective correction against the date being viewed", async () => {
+    const user = userEvent.setup();
+
+    render(
+      view({
+        date: YESTERDAY,
+        sessions: recorded({ status: "done", note: null, durationMin: null }),
+      }),
+    );
+
+    // The boxes start from what was recorded, so an edit begins from the truth
+    // rather than from an empty screen — then the correction goes to the date
+    // on screen, not to the day it is being made on.
+    await user.type(screen.getByLabelText("Note"), "Felt heavier than it looked.");
+    await user.type(screen.getByLabelText("Duration"), "38");
+    await user.click(screen.getByRole("button", { name: "Partial" }));
+
+    await waitFor(() =>
+      expect(setSessionStatus).toHaveBeenCalledWith({
+        date: YESTERDAY,
+        entryId: "entry-circuit",
+        status: "partial",
+        note: "Felt heavier than it looked.",
+        durationMin: "38",
+      }),
+    );
+  });
+
+  test("takes a past record back from the date it was made against", async () => {
+    const user = userEvent.setup();
+
+    render(
+      view({
+        date: YESTERDAY,
+        sessions: recorded({ status: "skipped", note: "Sore.", durationMin: null }),
+      }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+
+    await waitFor(() =>
+      expect(clearSessionStatus).toHaveBeenCalledWith({
+        date: YESTERDAY,
+        entryId: "entry-circuit",
+      }),
+    );
   });
 });
