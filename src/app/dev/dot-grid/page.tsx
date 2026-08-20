@@ -74,6 +74,17 @@ const CASES: { label: string; note: string; weeks: Week[]; today?: string }[] = 
     today: TODAY,
   },
   {
+    label: "Done, partial, skipped, side by side",
+    note: "FUEL-27's addition, and the case the greyscale rule now turns on. Three outcomes, three renderings, one weight — desaturate and all three must still be told apart.",
+    weeks: build([["done", "partial", "skipped", "partial", "done", "walk", "none"]], Date.UTC(2026, 7, 10)),
+  },
+  {
+    label: "Today partial",
+    note: "The accent takes the fill and the geometry is unchanged — an 11px disc, exactly as a done today is. The status is carried by the table beside it, not by the tone.",
+    weeks: build(withToday("partial")),
+    today: TODAY,
+  },
+  {
     label: "Today walk-only",
     note: "Still 4px, still small. Today changes the tone, never the geometry.",
     weeks: build(withToday("walk")),

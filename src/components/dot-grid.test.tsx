@@ -149,7 +149,7 @@ describe("DotGrid", () => {
     expect(summary).toContain("25 done");
     expect(summary).toContain("3 skipped");
     expect(summary).toContain("10 walk only");
-    expect(summary).toContain("4 no session");
+    expect(summary).toContain("4 not recorded");
   });
 
   test("states every day's status as text in the adjacent data table", () => {
@@ -186,7 +186,52 @@ describe("DotGrid", () => {
       .map((cell) => cell.textContent);
 
     expect(at(cells, 2)).toBe("Done, today");
-    expect(at(cells, 3)).toBe("No session");
+    expect(at(cells, 3)).toBe("Not recorded");
+  });
+
+  test("gives partial its own dot, at the same weight as done", () => {
+    // FUEL-27. `workout_log_status` has held `partial` since the first
+    // migration and schema.ts calls it "a first-class outcome, not a failure
+    // state" — so it may not borrow either neighbour's rendering. Same 11px as
+    // done (§ The Governing Principle: "the same visual weight — only the
+    // status label differs"), filled rather than ringed, and a different ink.
+    const mixed: Week = [
+      { date: "2026-08-10", status: "done" },
+      { date: "2026-08-11", status: "partial" },
+      { date: "2026-08-12", status: "skipped" },
+    ];
+
+    const { container } = render(<DotGrid weeks={[mixed]} />);
+    const [done, partial, skipped] = [
+      ...container.querySelectorAll<HTMLElement>(".rounded-full"),
+    ];
+
+    expect(partial?.style.width).toBe(done?.style.width);
+    expect(partial?.style.width).toBe(skipped?.style.width);
+    // Filled, so it is not read as a skip; a different ink from done, so the
+    // two are still distinguishable with colour removed.
+    expect(partial?.style.backgroundColor).toBe("var(--text-tertiary)");
+    expect(partial?.style.backgroundColor).not.toBe(done?.style.backgroundColor);
+    expect(partial?.style.boxShadow).toBe("");
+
+    // And it is stated as text, per § Accessibility — never carried by the dot
+    // alone.
+    expect(screen.getByRole("img").getAttribute("aria-label")).toContain("1 partial");
+    expect(within(screen.getByRole("table")).getByText("Partial")).toBeTruthy();
+  });
+
+  test("says a day is unrecorded rather than saying no session happened", () => {
+    // The distinction `lib/adherence.ts` depends on. An unlogged Circuit B is
+    // `none` — inferring a skip would have the graphic accusing the user of a
+    // decision they never made — and the data table has to say that without
+    // claiming there was no session, which would contradict the label beside it.
+    const unlogged: Week = [{ date: "2026-08-12", label: "Circuit B", status: "none" }];
+
+    render(<DotGrid weeks={[unlogged]} />);
+
+    expect(
+      within(screen.getByRole("table")).getByText("Not recorded, Circuit B"),
+    ).toBeTruthy();
   });
 
   test("keeps the data table inside a block wrapper that can actually clip it", () => {

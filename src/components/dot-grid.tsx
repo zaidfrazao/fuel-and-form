@@ -18,7 +18,24 @@ import { cn } from "@/lib/utils";
  * is the cheapest way to honour that.
  */
 
-export type DayStatus = "done" | "skipped" | "walk" | "none";
+/**
+ * What a day can look like.
+ *
+ * `partial` is FUEL-27's addition to the guide's table, and it is an addition
+ * rather than a reuse: `workout_log_status` has held it since the first
+ * migration, schema.ts calls it "a first-class outcome, not a failure state",
+ * and both of the neighbouring dots would misreport it — done overstates, and
+ * the skipped ring says something the user explicitly did not say. It renders
+ * at the same 11px as done, filled in `text-tertiary`, so it differs by INK
+ * rather than by weight and survives greyscale like the rest of them.
+ *
+ * `none` is what an unrecorded day is, and it covers three ordinary cases: a
+ * date the template does not train, a date that has not happened yet, and a
+ * session nobody logged. `lib/adherence.ts` refuses to turn the third into a
+ * `skipped`, which is why the label below reads "Not recorded" rather than
+ * "No session" — the grid states the absence without inventing a reason for it.
+ */
+export type DayStatus = "done" | "partial" | "skipped" | "walk" | "none";
 
 export type Day = {
   /**
@@ -69,9 +86,10 @@ const WEEKDAYS = [
 
 const STATUS_LABEL: Record<DayStatus, string> = {
   done: "Done",
+  partial: "Partial",
   skipped: "Skipped",
   walk: "Walk only",
-  none: "No session",
+  none: "Not recorded",
 };
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -180,7 +198,10 @@ function dotStyle(status: DayStatus, isToday: boolean): CSSProperties {
         : (ink ??
           (status === "done"
             ? "var(--text-primary)"
-            : status === "walk"
+            : // Partial and walk share an ink and differ by size: 11px against
+              // 4px. That is the guide's own encoding — "solid / ring / size" —
+              // and it is why partial does not need a colour of its own.
+              status === "partial" || status === "walk"
               ? "var(--text-tertiary)"
               : "var(--border)")),
     boxShadow: shadows.length ? shadows.join(", ") : undefined,
@@ -231,7 +252,7 @@ function summarise(rows: (Day | undefined)[][], today?: string): string {
     {},
   );
 
-  const tallied = (["done", "skipped", "walk", "none"] as const)
+  const tallied = (["done", "partial", "skipped", "walk", "none"] as const)
     .filter((status) => counts[status])
     .map((status) => `${counts[status]} ${STATUS_LABEL[status].toLowerCase()}`)
     .join(", ");

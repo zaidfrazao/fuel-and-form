@@ -127,8 +127,13 @@ export type Today = {
  *
  * Ordered by the query, not here: `sort_order` then id, which is total, so two
  * exercises sharing a position still list the same way on every request.
+ *
+ * Exported for `queries/training.ts`, which reads the same table for the same
+ * reason and hands the result to the same resolver. A second copy would be a
+ * second thing to get wrong about an ordering both screens' exercise lists
+ * depend on.
  */
-function byWorkout(rows: WorkoutExercise[]): Map<string, WorkoutExercise[]> {
+export function byWorkout(rows: WorkoutExercise[]): Map<string, WorkoutExercise[]> {
   const grouped = new Map<string, WorkoutExercise[]>();
 
   for (const row of rows) {

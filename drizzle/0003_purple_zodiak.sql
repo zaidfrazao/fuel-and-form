@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "workout_logs_user_date_workout_key" ON "workout_logs" USING btree ("user_id","date","workout_id");
