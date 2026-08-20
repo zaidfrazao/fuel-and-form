@@ -4,6 +4,7 @@ import { type DayLogs, type LogVerb, logIntent } from "./log-intent";
 import { type MacroBearing, type MacroTotals, totalMacros } from "./macros";
 import { itemName, slotLabel } from "./now-display";
 import type { NowItem, ScheduledItem } from "./resolve-now";
+import { walkWorkoutIds } from "./walk";
 
 /**
  * The day-complete summary's data — FUEL-20, PRD § P1's last criterion.
@@ -67,6 +68,21 @@ export type LoggedEntry = {
    * zeroes are real.
    */
   macros?: MacroBearing;
+  /**
+   * Set on the daily walk's line, and on nothing else — FUEL-29.
+   *
+   * The line is printed like any other, because the walk happened and the day's
+   * record would be short without it. What the flag decides is whether `/`'s
+   * Undo control counts it: that control is a stack over the logs the ACTION BAR
+   * wrote, and `lib/walk.ts` sets out why the walk is not one of them. Without
+   * this, a day whose only log was the walk would offer an Undo that takes back
+   * nothing.
+   *
+   * Absent rather than `false`, on the same reasoning as `macros`: it is a
+   * property of one kind of line, and a `false` on every other would invite a
+   * reader to believe something distinguishes them.
+   */
+  walk?: true;
 };
 
 /** A meal's four figures, and none of the rest of the row. */
@@ -106,6 +122,11 @@ const macrosOf = ({ kcal, proteinG, fatG, carbG }: MacroBearing): MacroBearing =
  * discovered later as a summary that quietly disagrees with itself.
  */
 export function dayLog(items: readonly NowItem[], logs: DayLogs): LoggedEntry[] {
+  // Which of the day's workouts is the walk, from the day's own resolution. A
+  // log naming a walk the plan no longer holds is not in the set and gets an
+  // ordinary line — the bar is the only way back to that row, so the bar has to
+  // offer it. See `walkWorkoutIds`.
+  const walks = walkWorkoutIds(items);
   const meals = new Map(
     items.flatMap((item) => (item.kind === "meal" ? [[item.meal.meal.id, item.meal.meal]] : [])),
   );
@@ -137,6 +158,7 @@ export function dayLog(items: readonly NowItem[], logs: DayLogs): LoggedEntry[] 
         id: log.id,
         name: workouts.get(log.workoutId)?.name ?? "Training",
         status: log.status,
+        ...(walks.has(log.workoutId) ? { walk: true as const } : {}),
       } satisfies LoggedEntry,
     })),
   ];

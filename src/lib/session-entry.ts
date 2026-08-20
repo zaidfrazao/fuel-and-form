@@ -116,6 +116,12 @@ function noteOf(value: unknown): string | null | undefined {
  *
  * The same three-state answer as `noteOf`, and the same reason for it.
  *
+ * Exported, unlike `noteOf`, because the daily walk records a duration and no
+ * note (FUEL-29) — `lib/walk.ts` parses its one untrusted field through this
+ * function rather than restating the bound. Same column, same limit, and a
+ * second copy of `Number.isInteger(...) && n > 0 && n <= MAX_DURATION_MIN` is a
+ * second thing to get wrong in exactly the way this file exists to prevent.
+ *
  * An empty string is `null` rather than a refusal, because that is what an
  * emptied number input sends and clearing the field is a thing the screen
  * offers. Everything else has to be a whole number of minutes in range:
@@ -126,7 +132,7 @@ function noteOf(value: unknown): string | null | undefined {
  * Zero is refused. A session that took no time did not happen, and the honest
  * way to say a duration is unknown is to leave it empty, which is `null`.
  */
-function durationOf(value: unknown): number | null | undefined {
+export function parseDuration(value: unknown): number | null | undefined {
   if (value === null || value === undefined || value === "") return null;
 
   const minutes = typeof value === "string" ? Number(value) : value;
@@ -151,7 +157,7 @@ export function parseSessionEntry(input: {
   if (!isSessionStatus(input.status)) return null;
 
   const note = noteOf(input.note);
-  const durationMin = durationOf(input.durationMin);
+  const durationMin = parseDuration(input.durationMin);
 
   if (note === undefined || durationMin === undefined) return null;
 

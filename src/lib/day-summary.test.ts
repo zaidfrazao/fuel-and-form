@@ -123,6 +123,41 @@ describe("dayLog", () => {
     expect(entries.map((entry) => entry.name)).toEqual(["Overnight oats", "Daily walk"]);
   });
 
+  test("marks the walk's line, and only the walk's — FUEL-29", () => {
+    // What the flag decides is whether `/`'s Undo counts the line: that control
+    // is a stack over what the action bar wrote, and the walk is logged from its
+    // own row. See `lib/walk.ts`.
+    const entries = dayLog(
+      ITEMS,
+      logs({
+        meals: [mealLog({ id: "l1", mealId: "meal-1" })],
+        workouts: [
+          workoutLog({ id: "l2", workoutId: "workout-1", loggedAt: at(1) }),
+          workoutLog({ id: "l3", workoutId: "workout-2", loggedAt: at(2) }),
+        ],
+      }),
+    );
+
+    expect(entries.map((entry) => [entry.name, entry.walk])).toEqual([
+      ["Overnight oats", undefined],
+      ["Circuit A", undefined],
+      ["Daily walk", true],
+    ]);
+  });
+
+  test("leaves a walk the plan no longer holds unmarked", () => {
+    // Its row has no row on the screen to revert it from, so the bar is the
+    // only way back to it — which means the bar has to offer it.
+    const entries = dayLog(
+      [mealItem(OATS)],
+      logs({ workouts: [workoutLog({ id: "l1", workoutId: "workout-2" })] }),
+    );
+
+    expect(entries.map((entry) => [entry.name, entry.walk])).toEqual([
+      ["Training", undefined],
+    ]);
+  });
+
   test("lists them in the order they were logged", () => {
     const entries = dayLog(
       ITEMS,

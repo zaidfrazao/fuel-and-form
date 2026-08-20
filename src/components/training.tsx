@@ -8,6 +8,7 @@ import { DotGrid, type Week } from "@/components/dot-grid";
 import { ExerciseList, type ListedExercise } from "@/components/exercise-list";
 import { SlashMeta } from "@/components/kv-grid";
 import { Button } from "@/components/ui/button";
+import { WalkRow } from "@/components/walk-row";
 import { addDays, type CalendarDate } from "@/lib/date";
 import type { WorkoutLogStatus } from "@/lib/db/schema";
 import { dayLabel } from "@/lib/now-display";
@@ -265,10 +266,11 @@ export function Training({
   adherence: Week[];
 }) {
   /*
-   * The session is what the actions act on. The walk is rendered — it is on the
-   * template every day and a screen that hid it would be lying about the day —
-   * but its one-tap log is FUEL-29's, and `actions/training.ts` refuses it for
-   * that reason rather than writing a row nothing here could show or take back.
+   * The session is what the BAR's actions act on. The walk is on the template
+   * every day and has its own row with its own one-tap log (FUEL-29), written
+   * through `actions/log-walk.ts`; `actions/training.ts` still refuses it, so
+   * the three statuses, the note and the duration field below can never be
+   * pointed at a row this screen renders as a row.
    *
    * KNOWN LIMITATION: a date with TWO sessions renders only the first, and the
    * second is dropped with no sign of it. Nothing in the schema forbids two
@@ -476,13 +478,28 @@ export function Training({
         {walk && (
           <section className="flex flex-col gap-[14px]">
             <Eyebrow>Anytime</Eyebrow>
-            {/* Rendered, not loggable — the walk's one-tap log is FUEL-29. It is
-              on the template every single day, so a screen that left it out
-              would be describing a different plan from the one being followed. */}
-            <p className="flex min-h-[54px] items-center justify-between gap-4 border-b border-border py-3">
-              <span className="text-body text-text-primary">{walk.name}</span>
-              <span className="text-micro uppercase text-text-tertiary">Walk</span>
-            </p>
+            {/*
+             * Loggable in one tap — FUEL-29, and the same row `/` renders. It is
+             * on the template every single day, so a screen that left it out
+             * would be describing a different plan from the one being followed,
+             * and a rest day is exactly when it is the only thing there is to
+             * log: the bar below this is absent on those days.
+             *
+             * The DATE is this screen's, not today's. That is the whole reason
+             * the walk's action is addressed by date rather than by a key the
+             * way `/`'s logs are — a walk missed on Tuesday is recorded on
+             * Tuesday, from the screen that shows Tuesday.
+             */}
+            <ul className="flex flex-col">
+              <WalkRow
+                date={date}
+                entryId={walk.entryId}
+                name={walk.name}
+                entry={
+                  walk.entry ? { durationMin: walk.entry.durationMin } : null
+                }
+              />
+            </ul>
           </section>
         )}
 

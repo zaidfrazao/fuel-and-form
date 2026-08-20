@@ -8,6 +8,7 @@ import { deleteLog, recordLog } from "@/lib/db/queries/log";
 import { loadToday } from "@/lib/db/queries/today";
 import { alreadyLogged, latestLog, logIntent, type LogVerb } from "@/lib/log-intent";
 import { advance, type NowItem, type NowView, retreat } from "@/lib/resolve-now";
+import { walkWorkoutIds, withoutWalks } from "@/lib/walk";
 
 /**
  * The three taps P1's card offers: log it, skip it, take it back.
@@ -56,11 +57,16 @@ const FAILED: LogResult = { ok: false };
 /**
  * The item a key names, scheduled or not.
  *
- * `anytime` is searched as well as the timeline so the action layer can record
- * the daily walk, which has no window and therefore no place in the timeline.
- * No control currently sends one — P1's action bar acts on the active card —
- * but the write path is the same one, and a log module that could only reach
- * half the day's items would be the wrong shape to hand the next task.
+ * `anytime` is searched as well as the timeline because a slot whose time was
+ * cleared in settings lands there and is still an ordinary meal to log.
+ *
+ * It no longer searches it for the DAILY WALK, which is what this comment used
+ * to anticipate. FUEL-29 gave the walk `actions/log-walk.ts` instead — the write
+ * it needs is an upsert carrying a duration, and `recordLog` below is a plain
+ * insert with no room for one. The walk is still reachable through here in the
+ * sense that its key would resolve; what stops it being logged twice by two
+ * paths is that no control sends it, and the module that does own it writes the
+ * same row idempotently.
  */
 function itemFor(view: NowView, key: string): NowItem | undefined {
   return (
@@ -161,6 +167,11 @@ export async function logItem(key: string, verb: LogVerb): Promise<LogResult> {
  * in that state, so reaching here means the screen was behind, and `refresh()`
  * is the correction. A banner would be reporting a problem the user does not
  * have.
+ *
+ * "Everything logged today" is everything logged FROM HERE. The daily walk is
+ * logged from its own row and reverted from there too (FUEL-29), so its rows are
+ * taken out of the stack below — see `lib/walk.ts` for why leaving them in would
+ * move the card as well as delete the row.
  */
 export async function undoLastLog(): Promise<LogResult> {
   try {
@@ -172,7 +183,12 @@ export async function undoLastLog(): Promise<LogResult> {
 
     if (!today) return FAILED;
 
-    const target = latestLog(today.logs);
+    // The stack is over what the BAR logged, so the walk's rows come out of it
+    // first. Undo moves the cursor back, and the walk never moved it forward:
+    // taking one back through here would step the card past an item that is
+    // still logged. `lib/walk.ts` carries the argument, and the walk's own row
+    // carries its revert.
+    const target = latestLog(withoutWalks(today.logs, walkWorkoutIds(today.view.anytime)));
 
     // Only step the view back if a row was actually removed. `deleteLog`
     // returns false for a log already gone — another tab got there first — and
