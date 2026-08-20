@@ -291,7 +291,7 @@ const CASES: Record<
   },
   workout: {
     label: "Session",
-    note: "Full exercise list, no macro grid, and no Swap — a session is skipped, not substituted.",
+    note: "Full exercise list and no Swap — a session is skipped, not substituted. It carries no macro grid of its OWN; the day's totals below it belong to the day, not to the item on the card.",
     view: activeAt(4, 17 * 60 + 45),
   },
   long: {

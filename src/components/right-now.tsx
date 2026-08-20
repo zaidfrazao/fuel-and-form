@@ -10,6 +10,7 @@ import Link from "next/link";
 import { DayRuler } from "@/components/day-ruler";
 import { ExerciseList } from "@/components/exercise-list";
 import { KeyValueGrid, SlashMeta } from "@/components/kv-grid";
+import { MacroGrid } from "@/components/macro-grid";
 import { SwapSheet, type PlannedMeal, type SwappableMeal } from "@/components/swap-sheet";
 import { WalkRow } from "@/components/walk-row";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,7 @@ import type { CalendarDate } from "@/lib/date";
 import { type LoggedEntry, pendingEntry } from "@/lib/day-summary";
 import type { WorkoutExercise } from "@/lib/db/schema";
 import type { LogVerb } from "@/lib/log-intent";
-import type { MacroBearing, MacroTarget } from "@/lib/macros";
+import { type MacroBearing, type MacroTarget, summariseDay } from "@/lib/macros";
 import { itemLabel, itemName, rulerSlots } from "@/lib/now-display";
 import { swapNote } from "@/lib/swap-note";
 import { isWalk, type WalkEntryView } from "@/lib/walk";
@@ -216,17 +217,72 @@ function Subject({
  * Protein carries `emphasis`, which is weight 700 against 600 — § Typography's
  * "protein stays emphasised by weight, not colour", because colour is spoken
  * for by the accent.
+ *
+ * ## Why it grew a heading
+ *
+ * It had none until FUEL-31, and did not need one: it was the only grid on the
+ * screen, sitting directly beneath the 40px name of the thing it described. The
+ * day's totals now sit 30px below it with the same four labels in the same
+ * order, and two unlabelled grids reading `Calories / Protein / Fat / Carbs`
+ * one after the other are not a layout a reader can resolve. Both are named, and
+ * neither name is a decoration.
  */
 function MealMacros({ meal }: { meal: MacroBearing }) {
   return (
-    <KeyValueGrid
-      items={[
-        { label: "Calories", value: `${meal.kcal}` },
-        { label: "Protein", value: `${meal.proteinG} g`, emphasis: true },
-        { label: "Fat", value: `${meal.fatG} g` },
-        { label: "Carbs", value: `${meal.carbG} g` },
-      ]}
-    />
+    <section className="flex flex-col gap-[14px]">
+      <Eyebrow>This meal</Eyebrow>
+
+      <KeyValueGrid
+        items={[
+          { label: "Calories", value: `${meal.kcal}` },
+          { label: "Protein", value: `${meal.proteinG} g`, emphasis: true },
+          { label: "Fat", value: `${meal.fatG} g` },
+          { label: "Carbs", value: `${meal.carbG} g` },
+        ]}
+      />
+    </section>
+  );
+}
+
+/**
+ * What the day comes to, against target — PRD § P4, FUEL-31.
+ *
+ * *"The day's planned macros, summed from whatever meals are actually scheduled
+ * for that date after overrides, shown against target with the delta. A swap
+ * that costs the day 30g of protein says so at the moment of the swap, not in
+ * hindsight."*
+ *
+ * ## It recomputes because there is nothing to recompute
+ *
+ * The criterion is that the totals move on any swap, revert or template edit,
+ * and no code below does anything to make that true. `planned` is
+ * `plannedToday`, which is the resolved day with any un-confirmed swap already
+ * applied — the same value the sheet previews against. So a swap moves these
+ * figures on the frame it is tapped, a revert moves them back, and a template
+ * edit arrives as new props from the server. There is no cached sum anywhere to
+ * invalidate, which is `macros.ts`'s point in refusing to hold one.
+ *
+ * ## Present on a workout card too
+ *
+ * The totals belong to the DAY, not to the item in the middle of the screen. A
+ * grid that appeared at breakfast and vanished at the afternoon session would be
+ * hiding the day's numbers exactly when the next meal is the one being decided.
+ */
+function DayTotals({
+  planned,
+  target,
+}: {
+  planned: readonly PlannedMeal[];
+  target: MacroTarget;
+}) {
+  return (
+    <section className="flex flex-col gap-[14px]">
+      {/* "Today" rather than "Day totals": § Content Guidelines asks for the
+          shortest true label, and the screen is already about today. */}
+      <Eyebrow>Today</Eyebrow>
+
+      <MacroGrid totals={summariseDay(planned)} target={target} />
+    </section>
   );
 }
 
@@ -1165,6 +1221,10 @@ export function RightNow({
             }
           />
         )}
+
+        {/* After the swap note, and that order is the argument: the note says
+            what the swap cost, and these are the figures it cost it from. */}
+        <DayTotals planned={plannedToday} target={target} />
 
         <UpNext items={now.upcoming} />
 

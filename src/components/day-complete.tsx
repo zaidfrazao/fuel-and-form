@@ -1,8 +1,8 @@
-import { KeyValueGrid, type KeyValueItem } from "@/components/kv-grid";
+import { MacroGrid } from "@/components/macro-grid";
 import type { CalendarDate } from "@/lib/date";
 import { entryTotals, type LoggedEntry, type LogStatus } from "@/lib/day-summary";
-import { figure, signed } from "@/lib/format";
-import { deltaFromTarget, type MacroTarget, type MacroTotals } from "@/lib/macros";
+import { figure } from "@/lib/format";
+import type { MacroTarget } from "@/lib/macros";
 import { dayLabel } from "@/lib/now-display";
 import { cn } from "@/lib/utils";
 
@@ -71,69 +71,6 @@ function CropMark({ corner, className }: { corner: string; className: string }) 
       <span className="absolute top-[5px] left-0 h-px w-[11px] bg-current" />
     </span>
   );
-}
-
-/**
- * The four figures — § Key/Value Grid, which "replaces the macro strip
- * entirely".
- *
- * Actual is the value; the target and the signed delta sit beneath it as slash
- * metadata, which is the guide's own arrangement in the mock. The kcal pair
- * reads `1,780` / `−65` because the number above it is already labelled by the
- * display figure; the three macros read `of 148 · −7`, so a column can be read
- * on its own without carrying a heading down from the top of the screen.
- *
- * Every one of the four carries its delta, including fat and carbs — the mock
- * shows deltas on kcal and protein only, and the acceptance criterion asks for
- * "kcal and all three macros with signed deltas". A column with the target but
- * no delta also makes the reader do the subtraction the screen exists to do.
- *
- * Protein is emphasised by weight — § Typography's "protein stays emphasised by
- * weight, not colour", because colour is spoken for by the accent.
- *
- * ## The one figure that takes a colour
- *
- * Over-target kcal, in `error` — § Tone of Voice writes exactly that: `+220
- * kcal` in `error` against `−8g protein` in `text-secondary`. It stops at kcal
- * deliberately: over target on protein is the day going well, and a rule that
- * painted every positive delta red would report a good day as a fault.
- */
-function Figures({ actual, target }: { actual: MacroTotals; target: MacroTarget }) {
-  const delta = deltaFromTarget(actual, target);
-
-  const meta = (targetValue: number, deltaValue: number) => (
-    <>
-      of {figure(targetValue)} · {signed(deltaValue)}
-    </>
-  );
-
-  const items: KeyValueItem[] = [
-    {
-      label: "Target",
-      value: figure(target.targetKcal),
-      meta: (
-        <span className={cn(delta.kcal > 0 && "text-error")}>{signed(delta.kcal)}</span>
-      ),
-    },
-    {
-      label: "Protein",
-      value: `${figure(actual.proteinG)} g`,
-      meta: meta(target.targetProteinG, delta.proteinG),
-      emphasis: true,
-    },
-    {
-      label: "Fat",
-      value: `${figure(actual.fatG)} g`,
-      meta: meta(target.targetFatG, delta.fatG),
-    },
-    {
-      label: "Carbs",
-      value: `${figure(actual.carbG)} g`,
-      meta: meta(target.targetCarbG, delta.carbG),
-    },
-  ];
-
-  return <KeyValueGrid items={items} />;
 }
 
 /**
@@ -258,7 +195,18 @@ export function DayComplete({
           <span className="text-micro text-text-secondary uppercase">kcal</span>
         </p>
 
-        <Figures actual={actual} target={target} />
+        {/*
+         * The four figures — § Key/Value Grid, which "replaces the macro strip
+         * entirely". Every one of them carries its delta, including fat and
+         * carbs: the guide's mock shows deltas on kcal and protein only, and a
+         * column with the target but no delta makes the reader do the
+         * subtraction the screen exists to do.
+         *
+         * `calories="target"` because the day's actual kcal is already the
+         * Display figure directly above — `macro-grid.tsx` sets out the
+         * arrangement.
+         */}
+        <MacroGrid totals={actual} target={target} calories="target" />
 
         <Logged entries={entries} />
       </div>

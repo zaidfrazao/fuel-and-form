@@ -2,18 +2,12 @@
 
 import { useState } from "react";
 
-import { KeyValueGrid } from "@/components/kv-grid";
+import { MacroGrid } from "@/components/macro-grid";
 import { MealPicker, type PickableMeal } from "@/components/meal-picker";
 import { Button } from "@/components/ui/button";
 import { REPEAT_MAX, REPEAT_MIN } from "@/lib/repeat";
 import type { MealSlot } from "@/lib/db/schema";
-import { figure, signed } from "@/lib/format";
-import {
-  deltaFromTarget,
-  type MacroBearing,
-  type MacroTarget,
-  summariseDay,
-} from "@/lib/macros";
+import { type MacroBearing, type MacroTarget, summariseDay } from "@/lib/macros";
 import { dayLabel } from "@/lib/now-display";
 import type { CalendarDate } from "@/lib/date";
 
@@ -309,8 +303,6 @@ export function SwapSheet({
 
   const totals = selected ? previewOf(planned, slot, selected) : summariseDay(planned);
 
-  const delta = deltaFromTarget(totals, target);
-
   function close(next: boolean) {
     onOpenChange(next);
 
@@ -379,45 +371,15 @@ export function SwapSheet({
          * tile's own selected state, not cut across it.
          */}
         <div aria-live="polite" aria-label={selected ? "Day totals after the swap" : "Day totals"}>
-          <KeyValueGrid
-            items={[
-              {
-                label: "Calories",
-                value: figure(totals.kcal),
-                meta: (
-                  <>
-                    of {figure(target.targetKcal)} ·{" "}
-                    {/* The one figure that takes a colour — § Tone of Voice writes
-                        `+220 kcal` in `error` against `−8g protein` in
-                        `text-secondary`. It stops at kcal: over target on protein
-                        is the day going well, and a rule that painted every
-                        positive delta red would report a good day as a fault. */}
-                    <span className={delta.kcal > 0 ? "text-error" : undefined}>
-                      {signed(delta.kcal)}
-                    </span>
-                  </>
-                ),
-              },
-              {
-                label: "Protein",
-                value: `${figure(totals.proteinG)} g`,
-                meta: <>of {figure(target.targetProteinG)} · {signed(delta.proteinG)}</>,
-                // § Typography: "protein stays emphasised by weight, not
-                // colour", because colour is spoken for by the accent.
-                emphasis: true,
-              },
-              {
-                label: "Fat",
-                value: `${figure(totals.fatG)} g`,
-                meta: <>of {figure(target.targetFatG)} · {signed(delta.fatG)}</>,
-              },
-              {
-                label: "Carbs",
-                value: `${figure(totals.carbG)} g`,
-                meta: <>of {figure(target.targetCarbG)} · {signed(delta.carbG)}</>,
-              },
-            ]}
-          />
+          {/*
+           * The same grid the day itself carries on `/`, and that is the point
+           * of it being one component: this previews the day a swap would
+           * produce, and the card underneath shows the day as it stands. Two
+           * copies of the rule deciding which overage is coloured would let the
+           * sheet preview a swap as safe and the card paint the identical number
+           * red the moment it was confirmed.
+           */}
+          <MacroGrid totals={totals} target={target} />
 
           {/*
            * The one caveat the figures cannot carry themselves. An untracked
