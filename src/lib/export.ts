@@ -161,11 +161,26 @@ function withoutUser<T extends { userId: string }>(row: T): Omit<T, "userId"> {
 }
 
 /**
- * Sorts a copy, so the caller's array — which it may still be rendering — stays
- * put. `weight-chart.ts` copies before sorting for the same reason.
+ * Sorts in place, which is safe here and nowhere else.
+ *
+ * Every caller hands this the result of a `.map()` — either `withoutUser` or an
+ * instant-stamping projection — so the array being sorted is always one this
+ * function's own call site just created, never the `ExportTables` the caller
+ * passed in. `buildExport` therefore leaves its argument untouched, which is
+ * the property that actually matters and the one the suite asserts.
+ *
+ * This began as `[...rows].sort(by)`, on `weight-chart.ts`'s precedent of
+ * copying before sorting. Mutation testing showed no test could tell the copy
+ * from its absence, and the reason is the maps above: the defensive copy was
+ * defending against a call that does not exist. Removed rather than left with a
+ * test that cannot fail — the same treatment FUEL-35 gave its unobservable
+ * comparator branch.
+ *
+ * The obligation this creates is on the CALLER, so it is stated here: pass a
+ * projection, never a row array straight off `tables`.
  */
-function ordered<T>(rows: readonly T[], by: (a: T, b: T) => number): T[] {
-  return [...rows].sort(by);
+function ordered<T>(rows: T[], by: (a: T, b: T) => number): T[] {
+  return rows.sort(by);
 }
 
 /**

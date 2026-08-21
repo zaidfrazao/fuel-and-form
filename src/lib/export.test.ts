@@ -522,9 +522,22 @@ describe("every tie-break", () => {
    *
    * One case per component of every sort chain, because a chain is only as
    * ordered as its least-exercised link: a `||` whose left side always decides
-   * is a tie-break nothing has ever run. Feeding the pair reversed is what makes
-   * each assertion able to fail — with the rows already in order, a comparator
-   * that did nothing at all would pass every one of these.
+   * is a tie-break nothing has ever run.
+   *
+   * ## The ids are deliberately the wrong way round
+   *
+   * Every chain ends on `id`, so a test whose ids happen to agree with the
+   * natural key passes even when the natural comparator is deleted — the
+   * tie-break silently produces the same answer. That is not a hypothetical:
+   * the first version of this block asserted the date ordering of
+   * `dayPlanOverrides` with ascending ids, and removing the date comparator
+   * entirely left every assertion green.
+   *
+   * So wherever a NATURAL key is meant to decide, the row that must come first
+   * carries the LATER id (`HI`), and the expected order is therefore the
+   * reverse of id order. Drop the comparator under test and the tie-break
+   * returns the pair reversed, which fails. Where the id itself is the last
+   * link, the rows are identical but for it and the expected order is plain.
    */
   const inOrder = <K extends keyof ExportTables>(
     table: K,
@@ -539,104 +552,131 @@ describe("every tie-break", () => {
     expect(ids).toEqual(expected);
   };
 
-  const A = "aaaaaaaa-0000-4000-8000-0000000000a1";
-  const B = "aaaaaaaa-0000-4000-8000-0000000000b2";
+  /** Sorts LAST by id, and is given to the row that must come FIRST. */
+  const HI = "ffffffff-0000-4000-8000-0000000000f9";
+  /** Sorts first by id. */
+  const LO = "aaaaaaaa-0000-4000-8000-0000000000a1";
+  const BY_ID: [string, string] = [LO, HI];
+  const AGAINST_ID: [string, string] = [HI, LO];
 
   test("meals: name, then id", () => {
-    inOrder("meals", [meal(A, "Apple"), meal(B, "Banana")], [A, B]);
-    inOrder("meals", [meal(A, "Same"), meal(B, "Same")], [A, B]);
+    inOrder("meals", [meal(HI, "Apple"), meal(LO, "Banana")], AGAINST_ID);
+    inOrder("meals", [meal(LO, "Same"), meal(HI, "Same")], BY_ID);
   });
 
   test("workouts: name, then id", () => {
-    inOrder("workouts", [workout(A, "Circuit A"), workout(B, "Circuit B")], [A, B]);
-    inOrder("workouts", [workout(A, "Same"), workout(B, "Same")], [A, B]);
+    inOrder("workouts", [workout(HI, "Circuit A"), workout(LO, "Circuit B")], AGAINST_ID);
+    inOrder("workouts", [workout(LO, "Same"), workout(HI, "Same")], BY_ID);
   });
 
   test("mealIngredients: meal, then sort order, then id", () => {
-    const other = { ...ingredient(B, 0), mealId: "ffffffff-0000-4000-8000-00000000000f" };
+    const otherMeal = {
+      ...ingredient(LO, 0),
+      mealId: "ffffffff-0000-4000-8000-00000000000f",
+    };
 
-    inOrder("mealIngredients", [ingredient(A, 0), other], [A, B]);
-    inOrder("mealIngredients", [ingredient(A, 1), ingredient(B, 2)], [A, B]);
-    inOrder("mealIngredients", [ingredient(A, 1), ingredient(B, 1)], [A, B]);
+    inOrder("mealIngredients", [ingredient(HI, 0), otherMeal], AGAINST_ID);
+    inOrder("mealIngredients", [ingredient(HI, 1), ingredient(LO, 2)], AGAINST_ID);
+    inOrder("mealIngredients", [ingredient(LO, 1), ingredient(HI, 1)], BY_ID);
   });
 
   test("workoutExercises: workout, then sort order, then id", () => {
-    const other = { ...exercise(B, 0), workoutId: "ffffffff-0000-4000-8000-00000000000f" };
+    const otherWorkout = {
+      ...exercise(LO, 0),
+      workoutId: "ffffffff-0000-4000-8000-00000000000f",
+    };
 
-    inOrder("workoutExercises", [exercise(A, 0), other], [A, B]);
-    inOrder("workoutExercises", [exercise(A, 1), exercise(B, 2)], [A, B]);
-    inOrder("workoutExercises", [exercise(A, 1), exercise(B, 1)], [A, B]);
+    inOrder("workoutExercises", [exercise(HI, 0), otherWorkout], AGAINST_ID);
+    inOrder("workoutExercises", [exercise(HI, 1), exercise(LO, 2)], AGAINST_ID);
+    inOrder("workoutExercises", [exercise(LO, 1), exercise(HI, 1)], BY_ID);
   });
 
   test("planTemplateEntries: weekday, then slot, then sort order, then id", () => {
-    const monday = templateEntry(A, 1);
-    const tuesday = templateEntry(B, 2);
-
-    inOrder("planTemplateEntries", [monday, tuesday], [A, B]);
     inOrder(
       "planTemplateEntries",
-      [monday, { ...templateEntry(B, 1), slot: "lunch" as const }],
-      [A, B],
+      [templateEntry(HI, 1), templateEntry(LO, 2)],
+      AGAINST_ID,
     );
     inOrder(
       "planTemplateEntries",
-      [monday, { ...templateEntry(B, 1), sortOrder: 1 }],
-      [A, B],
+      [templateEntry(HI, 1), { ...templateEntry(LO, 1), slot: "lunch" as const }],
+      AGAINST_ID,
     );
-    inOrder("planTemplateEntries", [monday, templateEntry(B, 1)], [A, B]);
+    inOrder(
+      "planTemplateEntries",
+      [templateEntry(HI, 1), { ...templateEntry(LO, 1), sortOrder: 1 }],
+      AGAINST_ID,
+    );
+    inOrder("planTemplateEntries", [templateEntry(LO, 1), templateEntry(HI, 1)], BY_ID);
   });
 
   test("trainingTemplateEntries: weekday, then sort order, then id", () => {
-    const monday = trainingEntry(A, 1);
-
-    inOrder("trainingTemplateEntries", [monday, trainingEntry(B, 2)], [A, B]);
     inOrder(
       "trainingTemplateEntries",
-      [monday, { ...trainingEntry(B, 1), sortOrder: 1 }],
-      [A, B],
+      [trainingEntry(HI, 1), trainingEntry(LO, 2)],
+      AGAINST_ID,
     );
-    inOrder("trainingTemplateEntries", [monday, trainingEntry(B, 1)], [A, B]);
+    inOrder(
+      "trainingTemplateEntries",
+      [trainingEntry(HI, 1), { ...trainingEntry(LO, 1), sortOrder: 1 }],
+      AGAINST_ID,
+    );
+    inOrder("trainingTemplateEntries", [trainingEntry(LO, 1), trainingEntry(HI, 1)], BY_ID);
   });
 
   test("dayPlanOverrides: date, then slot, then id", () => {
-    const early = { ...override(A, "2026-08-03"), slot: "breakfast" as const };
-
-    inOrder("dayPlanOverrides", [early, override(B, "2026-08-24")], [A, B]);
     inOrder(
       "dayPlanOverrides",
-      [early, { ...override(B, "2026-08-03"), slot: "lunch" as const }],
-      [A, B],
+      [override(HI, "2026-08-03"), override(LO, "2026-08-24")],
+      AGAINST_ID,
     );
     inOrder(
       "dayPlanOverrides",
-      [early, { ...override(B, "2026-08-03"), slot: "breakfast" as const }],
-      [A, B],
+      [
+        { ...override(HI, "2026-08-03"), slot: "breakfast" as const },
+        { ...override(LO, "2026-08-03"), slot: "lunch" as const },
+      ],
+      AGAINST_ID,
+    );
+    inOrder(
+      "dayPlanOverrides",
+      [override(LO, "2026-08-03"), override(HI, "2026-08-03")],
+      BY_ID,
     );
   });
 
   test("mealLogs: date, then slot, then id", () => {
-    const early = { ...mealLog(A, "2026-08-03"), slot: "breakfast" as const };
-
-    inOrder("mealLogs", [early, mealLog(B, "2026-08-24")], [A, B]);
+    inOrder("mealLogs", [mealLog(HI, "2026-08-03"), mealLog(LO, "2026-08-24")], AGAINST_ID);
     inOrder(
       "mealLogs",
-      [early, { ...mealLog(B, "2026-08-03"), slot: "lunch" as const }],
-      [A, B],
+      [
+        { ...mealLog(HI, "2026-08-03"), slot: "breakfast" as const },
+        { ...mealLog(LO, "2026-08-03"), slot: "lunch" as const },
+      ],
+      AGAINST_ID,
     );
-    inOrder(
-      "mealLogs",
-      [early, { ...mealLog(B, "2026-08-03"), slot: "breakfast" as const }],
-      [A, B],
-    );
+    inOrder("mealLogs", [mealLog(LO, "2026-08-03"), mealLog(HI, "2026-08-03")], BY_ID);
   });
 
   test("workoutLogs: date, then id", () => {
-    inOrder("workoutLogs", [workoutLog(A, "2026-08-03"), workoutLog(B, "2026-08-24")], [A, B]);
-    inOrder("workoutLogs", [workoutLog(A, "2026-08-03"), workoutLog(B, "2026-08-03")], [A, B]);
+    inOrder(
+      "workoutLogs",
+      [workoutLog(HI, "2026-08-03"), workoutLog(LO, "2026-08-24")],
+      AGAINST_ID,
+    );
+    inOrder(
+      "workoutLogs",
+      [workoutLog(LO, "2026-08-03"), workoutLog(HI, "2026-08-03")],
+      BY_ID,
+    );
   });
 
   test("weightLogs: date, then id", () => {
-    inOrder("weightLogs", [weightLog(A, "2026-08-03"), weightLog(B, "2026-08-24")], [A, B]);
-    inOrder("weightLogs", [weightLog(A, "2026-08-03"), weightLog(B, "2026-08-03")], [A, B]);
+    inOrder(
+      "weightLogs",
+      [weightLog(HI, "2026-08-03"), weightLog(LO, "2026-08-24")],
+      AGAINST_ID,
+    );
+    inOrder("weightLogs", [weightLog(LO, "2026-08-03"), weightLog(HI, "2026-08-03")], BY_ID);
   });
 });
