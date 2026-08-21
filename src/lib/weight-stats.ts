@@ -243,6 +243,11 @@ function onPace(kgPerWeek: number, goalPaceKgPerWeek: number): boolean {
  * downwards, so a gaining goal fills its percentage the same way. `lostKg`
  * keeps the cut's vocabulary because that is what P5 asks for; the view is what
  * decides the word above it.
+ *
+ * @returns the figures, or `null` when there are no readings. `lostKg` is
+ *   NEGATIVE for a user who has gained since starting — stated here as well as
+ *   on the field, because a caller reading only the signature is exactly the
+ *   caller who would render "−1.2 kg" under a label saying "Lost".
  */
 export function weightStats({
   readings,
