@@ -524,6 +524,22 @@ describe("what the week comes to", () => {
     expect(totalFor("Average").textContent).toContain("7 days");
   });
 
+  test("the divisor is joined in words, not in punctuation", () => {
+    grid();
+
+    // The dot separates the two figures for the eye. A screen reader announces
+    // it as "dot", which is noise in the one place this block is being explicit
+    // — so it is hidden and the join is said instead.
+    // Both decorative glyphs in the item — SlashMeta's leading "/" and this
+    // separator — are hidden, so the dot is looked up by its own text.
+    const hidden = [...totalFor("Average").querySelectorAll('[aria-hidden="true"]')].map(
+      (node) => node.textContent?.trim(),
+    );
+
+    expect(hidden).toContain("·");
+    expect(totalFor("Average").textContent).toContain("over 7 days");
+  });
+
   test("a swap moves the day and the average on the tap, not on the reload", async () => {
     // Held open, like § "editing a cell"'s optimistic test: the useOptimistic
     // value only stands while the action is in flight, and in a test there is

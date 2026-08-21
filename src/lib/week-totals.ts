@@ -102,7 +102,7 @@ export function weekTotals<M extends MacroBearing>(
   return {
     days,
     plannedDays: counted.length,
-    average: counted.length === 0 ? null : mean(counted, counted.length),
+    average: counted.length === 0 ? null : mean(counted),
   };
 }
 
@@ -116,6 +116,11 @@ export function weekTotals<M extends MacroBearing>(
  * sum of one-decimal figures never does, and 33.33333333333333 g of protein is
  * a precision the numbers going in never had.
  *
+ * The divisor is taken from the list rather than passed in. The only correct
+ * value is the length of what is being averaged, and a signature that let the
+ * two arguments disagree would answer a plausible wrong number rather than
+ * throw — which is the whole failure mode this module is gated against.
+ *
  * ## kcal goes to a whole number, and the grams do not
  *
  * The two are stored differently and should read differently. Grams are
@@ -125,7 +130,8 @@ export function weekTotals<M extends MacroBearing>(
  * much where it explains why its decimal option "never fires on it", and 0.6 of
  * a calorie is noise dressed as precision either way.
  */
-function mean(days: readonly DayFigures[], divisor: number): MacroTotals {
+function mean(days: readonly DayFigures[]): MacroTotals {
+  const divisor = days.length;
   const summed = totalMacros(days.map((day) => day.totals));
 
   return {

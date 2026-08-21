@@ -93,7 +93,14 @@ export function WeekTotals({ figures }: { figures: WeekFigures }) {
       ),
       meta: (
         <>
-          {figure(figures.average.proteinG)} g<span className="sr-only"> protein</span> ·{" "}
+          {figure(figures.average.proteinG)} g<span className="sr-only"> protein</span>
+          {/* The middle dot is a separator for the eye and punctuation to a
+              screen reader, which reads it aloud as "dot" — noise in the one
+              place the block is trying to be explicit. Hidden, and the join it
+              stands for said in words instead. `SlashMeta` hides its own "/"
+              for the same reason. */}
+          <span aria-hidden="true"> · </span>
+          <span className="sr-only"> over </span>
           {figures.plannedDays} {figures.plannedDays === 1 ? "day" : "days"}
         </>
       ),
