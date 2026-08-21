@@ -93,6 +93,12 @@ export default async function WeightPage() {
       // the whole of each is what the reference line is.
       startWeightKg={history.startWeightKg}
       targetWeightKg={history.targetWeightKg}
+      // FUEL-36's goal pace, on the same footing as the two above and for the
+      // same reason: it is this user's configuration, not the app's. The
+      // trailing rate is measured against it, so a figure written into a
+      // component would judge a visitor's demo history against the owner's
+      // program.
+      goalPaceKgPerWeek={history.goalPaceKgPerWeek}
     />
   );
 }

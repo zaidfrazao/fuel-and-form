@@ -65,12 +65,14 @@ const ROW: WeightLog = {
  * owner's real metrics out of a public repository. */
 const START_KG = 84.2;
 const TARGET_KG = 76;
+const GOAL_PACE = 0.5;
 
 const history = (entries: WeightLog[] = [ROW]): WeighInHistory => ({
   today: TODAY,
   entries,
   startWeightKg: START_KG,
   targetWeightKg: TARGET_KG,
+  goalPaceKgPerWeek: GOAL_PACE,
 });
 
 beforeEach(() => {
@@ -131,5 +133,32 @@ describe("the route", () => {
     render(await WeightPage());
 
     expect(screen.getByLabelText("Date").getAttribute("max")).toBe(TODAY);
+  });
+
+  test("gives the screen the profile's goal pace rather than a figure of its own", async () => {
+    // FUEL-36. The pace is the only thing on this route the trailing rate is
+    // judged against, and P7 gives the demo persona its own — so a constant
+    // anywhere below here would grade a visitor's history against the owner's
+    // program. Asserted through the rendered comparison because the pass-through
+    // is the whole of what this route does with it.
+    //
+    // Two rows, because one weigh-in is not a rate and a screen with nothing to
+    // compare would print no goal to check the pass-through against.
+    loadWeighIns.mockResolvedValue(
+      history([
+        ROW,
+        {
+          ...ROW,
+          id: "b2f1c0de-0000-4000-8000-000000000002",
+          date: "2026-08-06",
+          weightKg: 80.8,
+          note: null,
+        },
+      ]),
+    );
+
+    render(await WeightPage());
+
+    expect(screen.getByText(/goal 0.50 kg\/wk/)).toBeTruthy();
   });
 });

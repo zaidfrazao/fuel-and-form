@@ -80,6 +80,17 @@ describe.skipIf(!configured)("weigh-ins, scoped", () => {
     expect(typeof history?.entries[0]?.weightKg).toBe("number");
   });
 
+  it("hands back the goal pace as a number, not a numeric string", async () => {
+    // The same `numeric` trap one column across, and FUEL-36 is why it now
+    // matters: the trailing rate is compared against this figure in hundredths.
+    // A string would make `Math.round(pace * 100)` produce NaN, and NaN fails
+    // every comparison silently — the verdict would simply never be "on pace",
+    // on a screen where that is the one thing the colour is for.
+    const history = await loadWeighIns(fixture.alice.userId, new Date());
+
+    expect(typeof history?.goalPaceKgPerWeek).toBe("number");
+  });
+
   it("records a new weigh-in against its date", async () => {
     await recordWeighIn(fixture.alice.userId, {
       date: "2026-03-09",
