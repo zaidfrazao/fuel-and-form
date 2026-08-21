@@ -48,9 +48,9 @@ import { parseNote } from "./session-entry";
  * range while every real reading lands inside it.
  *
  * Wide enough that no one is ever refused: the range covers a small child and
- * the heaviest human on record, and the PRD's user starts at 84.2kg heading for
- * 75. A bound that could plausibly refuse a real weigh-in would be a bound that
- * loses data, which is worse than the typo it prevents.
+ * the heaviest human on record, and the PRD's persona starts at 84.2kg heading
+ * for 76. A bound that could plausibly refuse a real weigh-in would be a bound
+ * that loses data, which is worse than the typo it prevents.
  */
 export const MIN_KG = 20;
 export const MAX_KG = 400;

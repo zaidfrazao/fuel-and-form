@@ -1,0 +1,128 @@
+import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+
+import type { WeighInHistory } from "@/lib/db/queries/weight";
+import type { WeightLog } from "@/lib/db/schema";
+
+/**
+ * The `/weight` route — the wire between the fetch and the screen.
+ *
+ * How the screen LOOKS is weigh-ins.test.tsx's, against a fixture. What is left
+ * here is the part only the route does: it refuses a caller with no session, it
+ * reads the clock once, and it narrows the payload before anything crosses to
+ * the browser.
+ *
+ * The narrowing is the case worth the file, and it is a slightly different case
+ * from `/training`'s. There is no several-hundred-word protocol to leave behind
+ * — a weigh-in row is small — but it carries an `id`, and an id is exactly what
+ * this feature must not hand the client. The date is the address (see
+ * `queries/weight.ts`), so an id in the payload would be an identifier the
+ * browser could hold and send back and have ignored. That, and `user_id`, which
+ * Testing Strategy § 1.5 is about. Neither would look wrong in a diff, and both
+ * are the sort of thing a later `...entry` spread would quietly reintroduce.
+ */
+
+const { redirect, getSession, loadWeighIns } = vi.hoisted(() => ({
+  redirect: vi.fn((path: string) => {
+    // The real `redirect` throws, which is what terminates rendering of the
+    // segment. A mock that merely recorded the call would let execution run on
+    // into `loadWeighIns` with no session — the exact bug this test exists to
+    // catch would pass.
+    throw new Error(`NEXT_REDIRECT:${path}`);
+  }),
+  getSession: vi.fn(),
+  loadWeighIns: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({ redirect }));
+vi.mock("@/lib/auth/session", () => ({ getSession }));
+vi.mock("@/lib/db/queries/weight", () => ({ loadWeighIns }));
+// The screen is a client component importing a "use server" module, which
+// cannot be imported under jsdom. Same reason `/training`'s test mocks its
+// actions.
+vi.mock("@/app/actions/weight", () => ({
+  saveWeighIn: vi.fn(),
+  deleteWeighIn: vi.fn(),
+}));
+
+const { default: WeightPage } = await import("./page");
+
+const SESSION = { userId: "11111111-2222-3333-4444-555555555555", kind: "owner" as const };
+const TODAY = "2026-08-20";
+
+/** A row carrying everything the table really holds, so "none of it crosses" is
+ * assertable rather than merely visible. */
+const ROW: WeightLog = {
+  id: "b2f1c0de-0000-4000-8000-000000000001",
+  userId: SESSION.userId,
+  date: "2026-08-13",
+  weightKg: 80.1,
+  note: "before breakfast",
+  createdAt: new Date("2026-08-13T05:30:00Z"),
+};
+
+const history = (entries: WeightLog[] = [ROW]): WeighInHistory => ({
+  today: TODAY,
+  entries,
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  getSession.mockResolvedValue(SESSION);
+  loadWeighIns.mockResolvedValue(history());
+});
+
+describe("the route", () => {
+  test("sends a caller with no session to the login screen", async () => {
+    getSession.mockResolvedValue(undefined);
+
+    await expect(WeightPage()).rejects.toThrow("NEXT_REDIRECT:/login");
+
+    // The check is in front of the data, not beside it: nothing is fetched for
+    // a request that has no user to fetch it for.
+    expect(loadWeighIns).not.toHaveBeenCalled();
+  });
+
+  test("fetches for the session's own user, with one reading of the clock", async () => {
+    await WeightPage();
+
+    expect(loadWeighIns).toHaveBeenCalledOnce();
+    expect(loadWeighIns.mock.calls[0]?.[0]).toBe(SESSION.userId);
+    expect(loadWeighIns.mock.calls[0]?.[1]).toBeInstanceOf(Date);
+  });
+
+  test("renders an empty state rather than inventing a profile", async () => {
+    // No profile row: no timezone, so no "today" to default the form to. §
+    // Tone of Voice asks an empty state to describe what will appear.
+    loadWeighIns.mockResolvedValue(undefined);
+
+    render(await WeightPage());
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("No weigh-ins yet");
+    expect(screen.queryByLabelText("Weight")).toBeNull();
+  });
+
+  test("keeps the row's id, owner and created_at out of the payload", async () => {
+    const { container } = render(await WeightPage());
+    const markup = container.innerHTML;
+
+    // The id first: the date is the address, so an id here would be an
+    // identifier the client could hold and nothing would honour.
+    expect(markup).not.toContain(ROW.id);
+    expect(markup).not.toContain(SESSION.userId);
+    expect(markup).not.toContain("2026-08-13T05:30");
+
+    // What SHOULD cross, so the assertions above cannot pass by rendering
+    // nothing at all.
+    expect(screen.getByRole("button", { name: /80.1 kg/ })).toBeTruthy();
+    expect(screen.getByText(/before breakfast/)).toBeTruthy();
+  });
+
+  test("gives the screen today from the profile's zone, not the browser's", async () => {
+    // The date input's ceiling is the user's today. It arrives as data from the
+    // query layer; nothing under this route reads a clock of its own.
+    render(await WeightPage());
+
+    expect(screen.getByLabelText("Date").getAttribute("max")).toBe(TODAY);
+  });
+});

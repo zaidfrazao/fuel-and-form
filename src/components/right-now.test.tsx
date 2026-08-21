@@ -1845,6 +1845,44 @@ describe("a slot that is already swapped", () => {
   });
 });
 
+/* -------------------------------------------------------------------------- */
+/* The way to the other screens                                               */
+/* -------------------------------------------------------------------------- */
+
+describe("the links at the foot", () => {
+  test("reaches every screen `/` cannot show, without a tab bar", () => {
+    // PRD § P1's first criterion and § Navigation both say `/` "never requires
+    // navigation to be useful", so these are text links below the day rather
+    // than the guide's pill — which does not exist. They are asserted as a set
+    // because a screen with no way in is unreachable: `/weight` (FUEL-34) has
+    // no card here at all, since a weigh-in is not part of a day's plan.
+    renderNow(active(0));
+
+    const links = screen.getAllByRole("link").map((link) => [
+      link.textContent,
+      link.getAttribute("href"),
+    ]);
+
+    expect(links).toEqual(
+      expect.arrayContaining([
+        ["Weekly plan", "/plan"],
+        ["Training", "/training"],
+        ["Weight", "/weight"],
+        ["Slot times", "/settings"],
+      ]),
+    );
+  });
+
+  test("is absent from the finished page", () => {
+    // § Materials frames day-complete as a closed page with crop marks at its
+    // corners, and its acceptance criterion says no tab bar. A navigation
+    // affordance is exactly what that criterion is about.
+    renderNow({ ...BASE, state: "day-complete" });
+
+    expect(screen.queryByRole("link", { name: "Weight" })).toBeNull();
+  });
+});
+
 describe("a slot resolved from the template", () => {
   test("carries no tag, no note and no Revert", () => {
     // The other half of "overridden cells are visually marked": an unmarked

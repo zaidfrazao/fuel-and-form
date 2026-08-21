@@ -197,6 +197,27 @@ is_allowed() {
 
 readonly ALLOW_KG="84.2 76"
 readonly ALLOW_CM="172"
+
+# FUEL-34's weigh-in fixtures, kept apart from ALLOW_KG on purpose.
+#
+# The note above on `weight_logs.weightKg` says a 12-week series is "an
+# open-ended set of values that no allowlist can track", and excludes the FIELD
+# form for that reason. What it did not anticipate is the same series rendered
+# as PROSE: `/weight` prints "79.3 kg" on the screen, so its tests assert that
+# string, and the body-weight pattern matches it exactly as designed.
+#
+# These are the values those fixtures and doc comments use. Every one is
+# invented and none is the owner's — the fixtures file states the same rule
+# ("Body metrics in tests are fixtures, never data"). They are a separate
+# constant rather than more entries in ALLOW_KG because the two sets mean
+# different things and only one of them belongs in a profile: PROFILE_FIELD_ALLOW
+# below takes ALLOW_KG alone, so any of these assigned to a profile column is
+# still a finding — as the line this sentence used to name was, correctly, when
+# it spelled the assignment out.
+#
+# Keep this list short. Every value on it is a value the history scan will also
+# wave through, so a new fixture should reuse one of these before adding another.
+readonly ALLOW_KG_FIXTURE="77.4 79.3 80.1 80.4 80.8 88.2"
 readonly ALLOW_KCAL="1780"
 readonly ALLOW_PROTEIN="148"
 readonly ALLOW_CARB="185"
@@ -221,7 +242,7 @@ readonly PATTERN_REGEX=(
 )
 
 readonly PATTERN_ALLOW=(
-  "$ALLOW_KG"
+  "$ALLOW_KG $ALLOW_KG_FIXTURE"
   "$ALLOW_CM"
   "$ALLOW_KCAL"
   "$ALLOW_PROTEIN"

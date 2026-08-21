@@ -1080,6 +1080,20 @@ export function RightNow({
       >
         Training
       </Link>
+      {/*
+       * The weigh-in history and the form that writes it — FUEL-34. Same
+       * register and the same argument as the two beside it, with one addition
+       * that is this screen's alone: `/` shows the day, and a weigh-in is not
+       * part of a day's plan. It has no slot, no window and no card here, so
+       * this link is not a shortcut to something already on screen — it is the
+       * only way to a screen `/` cannot show.
+       */}
+      <Link
+        href="/weight"
+        className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
+      >
+        Weight
+      </Link>
       <Link
         href="/settings"
         className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
