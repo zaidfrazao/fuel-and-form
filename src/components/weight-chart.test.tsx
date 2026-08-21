@@ -257,6 +257,112 @@ describe("the reference lines", () => {
   });
 
   /**
+   * The maintenance case, and a real defect until FUEL-35 was looked at in a
+   * browser: start and target are the same number from the day the goal is met
+   * onwards, so the two labels sat on one baseline and overprinted into an
+   * unreadable smear. The rules still both draw — coincident hairlines are the
+   * same pixels as one — and it is only the words that merge.
+   */
+  test("references on the same weight are labelled once, not twice over", () => {
+    render(
+      <WeightChart
+        entries={[
+          { date: "2026-08-10", weightKg: 76 },
+          { date: "2026-08-17", weightKg: 76 },
+        ]}
+        today={TODAY}
+        startWeightKg={76}
+        targetWeightKg={76}
+      />,
+    );
+
+    expect(screen.getByText("Start · Target 76").tagName.toLowerCase()).toBe("text");
+    expect(screen.queryByText("Target 76")).toBeNull();
+    expect(screen.queryByText("Start 76")).toBeNull();
+  });
+
+  /**
+   * Close but not equal. Closeness here is a distance in PIXELS rather than in
+   * kilograms — two figures a fifth of a kilogram apart are far apart on a
+   * fortnight's chart and touching on a decade's, because the domain is what
+   * decides the scale. Hence the wide fixture: it is the only way the two
+   * labels collide while naming different numbers.
+   *
+   * Both figures have to survive the merge. Collapsing them to one number the
+   * way the equal case does would state something false.
+   */
+  test("references too close to label separately keep both figures", () => {
+    render(
+      <WeightChart
+        entries={[
+          { date: "2016-08-17", weightKg: 120 },
+          { date: "2026-08-17", weightKg: 70 },
+        ]}
+        today={TODAY}
+        startWeightKg={84.2}
+        targetWeightKg={84}
+      />,
+    );
+
+    expect(screen.getByText("Start 84.2 · Target 84").tagName.toLowerCase()).toBe(
+      "text",
+    );
+  });
+
+  /**
+   * Both rules are drawn whether or not their labels merged. The line is the
+   * data; the label is only how it is named.
+   */
+  test("both rules are drawn even when one label names them", () => {
+    const { container } = render(
+      <WeightChart
+        entries={[{ date: "2026-08-17", weightKg: 76 }]}
+        today={TODAY}
+        startWeightKg={76}
+        targetWeightKg={76}
+      />,
+    );
+
+    const dashed = [...container.querySelectorAll("line")].filter(
+      (line) => line.getAttribute("stroke-dasharray") !== null,
+    );
+
+    expect(dashed).toHaveLength(2);
+  });
+
+  /**
+   * A reference sitting on the top of the domain is at the plate's own ceiling,
+   * and a label lifted above it is clipped by the viewBox — the `<svg>` clips at
+   * its bounds, so half a word vanishes with nothing to say it did. The label
+   * flips below the rule instead.
+   *
+   * The fixture is ordinary rather than contrived: the starting weight is the
+   * heaviest figure on the chart and already a multiple of the gridline step,
+   * which is most of the first fortnight of a program.
+   */
+  test("a label with no room above its rule is drawn below it", () => {
+    const { container } = render(
+      <WeightChart
+        entries={[
+          { date: "2026-08-10", weightKg: 79 },
+          { date: "2026-08-17", weightKg: 78 },
+        ]}
+        today={TODAY}
+        startWeightKg={80}
+        targetWeightKg={76}
+      />,
+    );
+
+    const start = [...container.querySelectorAll("text")].find((node) =>
+      node.textContent?.startsWith("Start"),
+    );
+
+    // Below its own rule, and inside the box either way — which is the claim
+    // that actually matters, since a negative baseline is the clipped case.
+    expect(Number(start?.getAttribute("y"))).toBeGreaterThan(0);
+  });
+
+  /**
    * Never a literal 64. P5 recalibrates the target every 5kg, and P7 gives the
    * demo persona different body metrics — a figure written into the component
    * would draw the owner's goal across a visitor's chart.

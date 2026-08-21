@@ -63,6 +63,70 @@ const LATEST_RING = 2;
 const LABEL_LIFT = 4;
 
 /**
+ * Below the line instead, when there is no room above.
+ *
+ * A reference that lands on the top of the domain sits at the plate's own
+ * ceiling, and a label lifted above it would be clipped by the viewBox — the
+ * `<svg>` element clips at its bounds, so half a word simply vanishes with
+ * nothing to say it did. The case is ordinary: it happens whenever the starting
+ * weight is both the heaviest figure on the chart and already a multiple of the
+ * gridline step, which is most of the first fortnight of a program.
+ */
+const LABEL_DROP = 11;
+const LABEL_HEADROOM = 12;
+
+/**
+ * How close two reference labels may sit before they are merged into one.
+ *
+ * Roughly the Micro line-height in viewBox units. Below it the two labels
+ * overprint into an unreadable smear, and the case that produces it is not
+ * exotic: start and target are the same number for the whole of a maintenance
+ * phase, which is to say from the day the goal is met onwards.
+ *
+ * The LINES are left alone and both still drawn. Two coincident hairlines are
+ * the same pixels as one, and where the references are merely close rather than
+ * equal, two rules a millimetre apart is the truth. It is only the words that
+ * cannot overlap.
+ */
+const LABEL_MIN_GAP = 14;
+
+/** A reference's label text and the line it belongs to, collisions resolved. */
+function referenceLabels(
+  start: ChartPlot["start"],
+  target: ChartPlot["target"],
+): { key: string; y: number; text: string }[] {
+  const startText = `Start ${figure(start.weightKg)}`;
+  const targetText = `Target ${figure(target.weightKg)}`;
+
+  if (Math.abs(start.y - target.y) >= LABEL_MIN_GAP) {
+    return [
+      { key: "start", y: start.y, text: startText },
+      { key: "target", y: target.y, text: targetText },
+    ];
+  }
+
+  return [
+    {
+      key: "both",
+      // The higher of the two, so the merged label clears both rules.
+      y: Math.min(start.y, target.y),
+      text:
+        start.weightKg === target.weightKg
+          ? // One number, said once. "Start 76 · Target 76" spends a whole line
+            // repeating a figure to say the two references are the same, which
+            // naming them together already says.
+            `Start · Target ${figure(start.weightKg)}`
+          : `${startText} · ${targetText}`,
+    },
+  ];
+}
+
+/** The baseline a label sits on, flipped below its rule when the top is close. */
+function labelBaseline(y: number): number {
+  return y < LABEL_HEADROOM ? y + LABEL_DROP : y - LABEL_LIFT;
+}
+
+/**
  * The sentence a screen reader hears instead of the picture.
  *
  * Reports what is DRAWN and stops there. The change from the starting weight is
@@ -128,9 +192,6 @@ export function WeightChart({
 
   const { domain, gridlines, latest, path, points, start, target } = plot;
 
-  const label = (rule: { weightKg: number }, name: string) =>
-    `${name} ${figure(rule.weightKg)}`;
-
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       <svg
@@ -185,31 +246,37 @@ export function WeightChart({
             forbids. The band between them is the whole journey, which is a
             thing worth being able to see. */}
         {[
-          { rule: start, name: "Start" },
-          { rule: target, name: "Target" },
+          { rule: start, name: "start" },
+          { rule: target, name: "target" },
         ].map(({ rule, name }) => (
-          <g key={name}>
-            <line
-              x1={0}
-              x2={VIEW_WIDTH}
-              y1={rule.y}
-              y2={rule.y}
-              stroke="var(--text-tertiary)"
-              strokeWidth={1}
-              strokeDasharray="3 3"
-              vectorEffect="non-scaling-stroke"
-            />
-            <text
-              x={8}
-              y={rule.y - LABEL_LIFT}
-              // 10.5px Micro. § Accessibility permits it here on its own terms:
-              // the figure it names sits at 22px in the hero above, and the
-              // exact number is in the table below either way.
-              className="text-micro uppercase fill-text-secondary"
-            >
-              {label(rule, name)}
-            </text>
-          </g>
+          <line
+            key={name}
+            x1={0}
+            x2={VIEW_WIDTH}
+            y1={rule.y}
+            y2={rule.y}
+            stroke="var(--text-tertiary)"
+            strokeWidth={1}
+            strokeDasharray="3 3"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+
+        {/* Drawn after both rules and separately from them, because a label may
+            belong to one line, or — when the two references coincide — to both.
+            See `referenceLabels`. */}
+        {referenceLabels(start, target).map(({ key, y, text }) => (
+          <text
+            key={key}
+            x={8}
+            y={labelBaseline(y)}
+            // 10.5px Micro. § Accessibility permits it here on its own terms:
+            // the figure it names sits at 22px in the hero above, and the exact
+            // number is in the table below either way.
+            className="text-micro uppercase fill-text-secondary"
+          >
+            {text}
+          </text>
         ))}
 
         {/* The trend. `fill="none"` is the criterion — no area fill, and there

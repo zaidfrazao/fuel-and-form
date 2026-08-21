@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 
+import { MAX_KG, MIN_KG } from "./weigh-in";
 import {
   type ChartPlot,
   chartGeometry,
@@ -274,6 +275,32 @@ describe("the vertical domain", () => {
     ];
 
     expect(plotOf(decade).gridlines.length).toBeLessThanOrEqual(8);
+  });
+
+  /**
+   * The widest chart that can exist, taken from the parser rather than invented:
+   * `lib/weigh-in.ts` accepts a reading anywhere between `MIN_KG` and `MAX_KG`,
+   * so a history holding both ends is a history the app will genuinely store.
+   *
+   * It is past the point where any step in the list divides the range into four,
+   * which is the one case the coarsest-step fallback exists for. Bounded here
+   * rather than left to the constants so that widening the parser's range — the
+   * plausible future change — fails in this file rather than by drawing a chart
+   * ruled with a hundred lines.
+   */
+  test("the widest history the app accepts still draws a legible plate", () => {
+    const extremes: Reading[] = [
+      { date: "2026-08-10", weightKg: MIN_KG },
+      { date: "2026-08-17", weightKg: MAX_KG },
+    ];
+
+    const { domain, gridlines, points } = plotOf(extremes);
+
+    expect(domain.lowKg).toBeLessThanOrEqual(MIN_KG);
+    expect(domain.highKg).toBeGreaterThanOrEqual(MAX_KG);
+    expect(gridlines.length).toBeLessThanOrEqual(12);
+
+    for (const point of points) expect(Number.isFinite(point.y)).toBe(true);
   });
 });
 
