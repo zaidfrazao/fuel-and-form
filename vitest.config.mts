@@ -71,6 +71,7 @@ export default defineConfig({
         "src/lib/slot-times.ts",
         "src/lib/template-plan.ts",
         "src/lib/walk.ts",
+        "src/lib/weigh-in.ts",
         "src/lib/week-grid.ts",
         "src/lib/week-totals.ts",
       ],
@@ -217,6 +218,17 @@ export default defineConfig({
         // throw, and none would look wrong in a diff.
         "src/lib/week-grid.ts": FULLY_COVERED,
         "src/lib/week-totals.ts": FULLY_COVERED,
+        // FUEL-34, and the same reasoning as session-entry.ts and slot-times.ts:
+        // every branch in it is a refusal reachable by anyone who can POST to
+        // the weigh-in action. What puts it here rather than in the ungated
+        // majority is what a missed branch COSTS. A refused status throws in
+        // Postgres and is therefore visible; a weight that gets past this file
+        // is stored, and `numeric(5, 2)` takes 774 as readily as 77.4. P5 calls
+        // this "the single number the whole program is judged on" — FUEL-35
+        // draws a chart from it and FUEL-36 a trailing rate — so one unmeasured
+        // branch is a point on that chart with nothing on either screen to say
+        // it is the wrong one.
+        "src/lib/weigh-in.ts": FULLY_COVERED,
       },
     },
   },

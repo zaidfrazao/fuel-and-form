@@ -98,8 +98,16 @@ export type SessionEntry = {
  * Trimmed, and whitespace alone becomes `null`. A note of three spaces is not a
  * note, and storing it would put an empty line on the screen that nothing
  * explains and no control obviously removes.
+ *
+ * Exported for the reason `parseDuration` below is: the weigh-in carries an
+ * optional note too (FUEL-34), against a different column with identical
+ * semantics, and `lib/weigh-in.ts` parses it through this function rather than
+ * restating the bound. A second copy of `trim`, `""` -> `null` and the
+ * 500-character cap is a second thing to get wrong in exactly the way this file
+ * exists to prevent, and the failure would be silent — a note quietly cleared
+ * looks the same as one that was never written.
  */
-function noteOf(value: unknown): string | null | undefined {
+export function parseNote(value: unknown): string | null | undefined {
   if (value === null || value === undefined) return null;
 
   if (typeof value !== "string") return undefined;
@@ -114,9 +122,9 @@ function noteOf(value: unknown): string | null | undefined {
 /**
  * The duration as it will be stored, or `undefined` for one that will not be.
  *
- * The same three-state answer as `noteOf`, and the same reason for it.
+ * The same three-state answer as `parseNote`, and the same reason for it.
  *
- * Exported, unlike `noteOf`, because the daily walk records a duration and no
+ * Exported, as `parseNote` is, because the daily walk records a duration and no
  * note (FUEL-29) — `lib/walk.ts` parses its one untrusted field through this
  * function rather than restating the bound. Same column, same limit, and a
  * second copy of `Number.isInteger(...) && n > 0 && n <= MAX_DURATION_MIN` is a
@@ -156,7 +164,7 @@ export function parseSessionEntry(input: {
 }): SessionEntry | null {
   if (!isSessionStatus(input.status)) return null;
 
-  const note = noteOf(input.note);
+  const note = parseNote(input.note);
   const durationMin = parseDuration(input.durationMin);
 
   if (note === undefined || durationMin === undefined) return null;
