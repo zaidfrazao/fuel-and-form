@@ -69,7 +69,23 @@ export type WeighInRow = {
  * user has moved on — `training.tsx` and `right-now.tsx` both do this.
  */
 type Attempt =
-  | { kind: "log"; date: CalendarDate; weight: string; note: string }
+  | {
+      kind: "log";
+      date: CalendarDate;
+      /** What was TYPED, which is what the action is sent — see `act`. */
+      weight: string;
+      /**
+       * The same reading parsed, which is what the optimistic row draws.
+       *
+       * Carried rather than re-derived, so the type says what `log` has already
+       * established: an attempt only exists once the weight parsed. Without it
+       * the reducer would need a fallback for a number it can never be given,
+       * and an unreachable fallback that renders "0 kg" is worse than no
+       * fallback at all.
+       */
+      weightKg: number;
+      note: string;
+    }
   | { kind: "delete"; date: CalendarDate };
 
 /** § Tone of Voice: name what happened. Never "Something went wrong". */
@@ -135,13 +151,13 @@ export function WeighIns({
    */
   const [rows, apply] = useOptimistic(
     entries,
-    (current: readonly WeighInRow[], next: Attempt & { weightKg?: number }) => {
+    (current: readonly WeighInRow[], next: Attempt) => {
       const without = current.filter((row) => row.date !== next.date);
 
       if (next.kind === "delete") return without;
 
       return [
-        { date: next.date, weightKg: next.weightKg ?? 0, note: next.note.trim() || null },
+        { date: next.date, weightKg: next.weightKg, note: next.note.trim() || null },
         ...without,
         // Newest first, matching `loadWeighIns`. Re-sorted rather than
         // prepended, because a weigh-in logged for a past date belongs where
@@ -167,14 +183,10 @@ export function WeighIns({
     setFailure(null);
 
     startTransition(async () => {
-      apply(
-        attempt.kind === "delete"
-          ? attempt
-          : // Already known to parse — `log` checks before calling — so the
-            // optimistic row shows the number that will be stored, rounded, and
-            // not the string that was typed.
-            { ...attempt, weightKg: parseWeightKg(attempt.weight) },
-      );
+      // The attempt already carries the parsed reading, so the optimistic row
+      // shows the number that will be STORED — rounded to the column's two
+      // decimals — rather than the string that was typed.
+      apply(attempt);
 
       const result =
         attempt.kind === "delete"
@@ -203,21 +215,27 @@ export function WeighIns({
    * way past it is a forged request, which the action refuses on its own.
    */
   const log = () => {
+    // Parsed once, and the results carried rather than re-derived: the checks
+    // below and the optimistic row must agree about what this reading is.
+    const weightKg = parseWeightKg(weight);
     const checked = {
       date: parseWeighInDate(date, today)
         ? undefined
         : "Pick today or a past date — a weigh-in can’t be in the future.",
       weight:
-        parseWeightKg(weight) === undefined
+        weightKg === undefined
           ? `Enter a weight in kilograms, between ${MIN_KG} and ${MAX_KG}.`
           : undefined,
     };
 
     setProblem(checked);
 
-    if (checked.date || checked.weight) return;
+    // `weightKg === undefined` rather than a second look at `checked.weight`,
+    // so the narrowing the attempt below depends on is the one TypeScript can
+    // see. The two conditions are the same condition.
+    if (checked.date || weightKg === undefined) return;
 
-    act({ kind: "log", date, weight, note });
+    act({ kind: "log", date, weight, weightKg, note });
 
     // The form goes back to being addressed at today, which is what it is for
     // most of the time. The number is cleared with it: leaving 77.4 in the box
