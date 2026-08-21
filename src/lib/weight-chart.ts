@@ -238,21 +238,32 @@ export function chartGeometry(
   // mutates in place. Sorting the caller's rows would reorder the history list
   // rendered beneath this chart, from a function that is supposed to be pure.
   //
-  // Three-way rather than the shorter `a.date < b.date ? -1 : 1`, which returns
-  // 1 for two equal dates and so tells the engine to SWAP them — the opposite of
-  // the stable order `sort` would otherwise give. `weight_logs` is unique on
-  // `(user_id, date)` and the screen's optimistic reducer drops any row sharing
-  // a date before it prepends, so a tie should not reach here; the point is that
-  // when one does, which reading counts as `latest` is decided by this line
-  // rather than by the engine's sort implementation.
+  // ## Two-way, and the three-way version was tried and removed
   //
-  // Compared with `<` and `>` rather than `localeCompare`, which reads the
-  // runtime's collation. These are `YYYY-MM-DD` strings, where byte order IS
-  // chronological order, and `format.ts` records at length why this app does not
-  // let a locale decide anything it can decide itself.
-  const ordered = [...readings].sort((a, b) =>
-    a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
-  );
+  // This comparator returns 1 rather than 0 for two equal dates, which is a
+  // technical breach of the contract: it says "a after b" where it means "no
+  // preference". An external review flagged it, and the three-way form was
+  // written — then removed, because it cannot be observed. V8's sort only moves
+  // an element while the comparator returns a NEGATIVE number, so a tie stops
+  // the move either way and the original order survives; measured across arrays
+  // of 2 to 12 all-tied elements, the two forms produce identical output.
+  //
+  // So the third branch was unreachable in effect: no test could distinguish it,
+  // and the one written to try passed against BOTH forms — a test that cannot
+  // fail, propping up a branch the 100% gate would then have to be satisfied
+  // with vacuously. This file removes unreachable branches rather than keeping
+  // them (weigh-in.ts and weigh-ins.tsx each lost one the same way), so it is
+  // gone and this note is what remains of it.
+  //
+  // The invariant that makes the whole question academic: `weight_logs` is
+  // unique on `(user_id, date)` and the screen's optimistic reducer drops any
+  // row sharing a date before it prepends, so a tie does not reach here at all.
+  //
+  // Compared with `<` rather than `localeCompare`, which reads the runtime's
+  // collation. These are `YYYY-MM-DD` strings, where byte order IS chronological
+  // order, and `format.ts` records why this app does not let a locale decide
+  // anything it can decide itself.
+  const ordered = [...readings].sort((a, b) => (a.date < b.date ? -1 : 1));
 
   const first = ordered[0];
   const last = ordered[ordered.length - 1];
