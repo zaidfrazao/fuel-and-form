@@ -95,8 +95,17 @@ function referenceLabels(
   start: ChartPlot["start"],
   target: ChartPlot["target"],
 ): { key: string; y: number; text: string }[] {
-  const startText = `Start ${figure(start.weightKg)}`;
-  const targetText = `Target ${figure(target.weightKg)}`;
+  // Compared as DISPLAYED rather than as stored, and the gap between the two is
+  // real: `weight_logs.weight_kg` is `numeric(5, 2)` while `figure` shows one
+  // decimal, so a start of 76.04 against a target of 76.01 is two different
+  // numbers that both print as "76". Testing the raw floats there would take the
+  // branch below that spells both out, and produce "Start 76 · Target 76" — a
+  // whole line spent printing one figure twice to say the two are different.
+  const startShown = figure(start.weightKg);
+  const targetShown = figure(target.weightKg);
+
+  const startText = `Start ${startShown}`;
+  const targetText = `Target ${targetShown}`;
 
   if (Math.abs(start.y - target.y) >= LABEL_MIN_GAP) {
     return [
@@ -111,11 +120,11 @@ function referenceLabels(
       // The higher of the two, so the merged label clears both rules.
       y: Math.min(start.y, target.y),
       text:
-        start.weightKg === target.weightKg
+        startShown === targetShown
           ? // One number, said once. "Start 76 · Target 76" spends a whole line
             // repeating a figure to say the two references are the same, which
             // naming them together already says.
-            `Start · Target ${figure(start.weightKg)}`
+            `Start · Target ${startShown}`
           : `${startText} · ${targetText}`,
     },
   ];
@@ -142,6 +151,12 @@ function summarise(plot: ChartPlot, today: CalendarDate): string {
   const { latest, points, start, target } = plot;
 
   const change = latest.weightKg - start.weightKg;
+  // Rounded before it is judged, for `referenceLabels`' reason one sentence
+  // over: the column holds two decimals and `figure` prints one, so a reading
+  // 40 grams from the starting weight is a non-zero `change` that formats as
+  // "0" — and the sentence would read "Down 0 kg from the starting weight",
+  // which is the exact wording the branch below exists to prevent.
+  const changeShown = figure(Math.abs(change));
   const first = points[0];
 
   return [
@@ -153,9 +168,9 @@ function summarise(plot: ChartPlot, today: CalendarDate): string {
     ` Started at ${figure(start.weightKg)} kg, target ${figure(target.weightKg)} kg.`,
     // A true zero is a real outcome — a reading back at the starting weight —
     // and "up 0 kg" would be a sentence about a direction that did not happen.
-    change === 0
+    changeShown === figure(0)
       ? " Level with the starting weight."
-      : ` ${change < 0 ? "Down" : "Up"} ${figure(Math.abs(change))} kg from the starting weight.`,
+      : ` ${change < 0 ? "Down" : "Up"} ${changeShown} kg from the starting weight.`,
   ].join("");
 }
 
@@ -270,6 +285,16 @@ export function WeightChart({
             key={key}
             x={8}
             y={labelBaseline(y)}
+            /*
+             * Hidden from the accessibility tree, like every other word drawn
+             * inside a graphic in this app. `role="img"` on the `<svg>` is
+             * supposed to prune its descendants, but dot-grid.tsx records that
+             * Chrome lists them anyway — and day-ruler.tsx hit the same thing
+             * with its 06 · 12 · 18 · 22 scale. Without this, a screen reader
+             * reads "Start 84.2" and "Target 76" a second time, after a summary
+             * that has already said both in a sentence.
+             */
+            aria-hidden
             // 10.5px Micro. § Accessibility permits it here on its own terms:
             // the figure it names sits at 22px in the hero above, and the exact
             // number is in the table below either way.
@@ -325,9 +350,13 @@ export function WeightChart({
             ends of a chart with one point in the middle. */}
         {points.length > 1 && points[0] && (
           <>
+            {/* `aria-hidden` for the reason the reference labels carry it: the
+                summary already says "Mon 1 Jun to Mon 17 Aug", and a browser
+                that fails to prune these would read the span twice. */}
             <text
               x={0}
               y={VIEW_HEIGHT - 4}
+              aria-hidden
               className="text-micro uppercase fill-text-tertiary"
             >
               {entryLabel(points[0].date, today)}
@@ -336,6 +365,7 @@ export function WeightChart({
               x={VIEW_WIDTH}
               y={VIEW_HEIGHT - 4}
               textAnchor="end"
+              aria-hidden
               className="text-micro uppercase fill-text-tertiary"
             >
               {entryLabel(latest.date, today)}

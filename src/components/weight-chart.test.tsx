@@ -110,6 +110,22 @@ describe("the accessible summary", () => {
     expect(summary).not.toMatch(/Up 0|Down 0/);
   });
 
+  /**
+   * The same rounding trap as the merged reference label, on the sentence that
+   * is read aloud. A reading 40 grams from the starting weight is a non-zero
+   * change that formats as "0", so testing the raw float would produce "Down
+   * 0 kg from the starting weight" — the exact wording the branch exists to
+   * prevent.
+   */
+  test("a change too small to display is described as level, not as zero", () => {
+    draw([{ date: "2026-08-17", weightKg: START_KG - 0.04 }]);
+
+    const summary = screen.getByRole("img").getAttribute("aria-label") ?? "";
+
+    expect(summary).toContain("Level with the starting weight");
+    expect(summary).not.toMatch(/Down 0|Up 0/);
+  });
+
   /** "1 weigh-ins" reads as a bug in a sentence that is going to be read aloud. */
   test("a single reading is described in the singular", () => {
     draw([{ date: "2026-08-17", weightKg: 80.1 }]);
@@ -117,6 +133,23 @@ describe("the accessible summary", () => {
     expect(screen.getByRole("img").getAttribute("aria-label")).toContain(
       "Weight trend, 1 weigh-in.",
     );
+  });
+
+  /**
+   * Every word drawn inside the graphic is hidden from the accessibility tree.
+   * `role="img"` is supposed to prune its descendants, but dot-grid.tsx records
+   * that Chrome lists them anyway and day-ruler.tsx hit the same thing with its
+   * scale — so without this a screen reader reads "Start 84.2", "Target 76" and
+   * both dates a second time, after a summary that has already said all four.
+   */
+  test("no word drawn inside the graphic is read a second time", () => {
+    const { container } = draw();
+
+    const exposed = [...container.querySelectorAll("text")].filter(
+      (node) => !node.closest("[aria-hidden]"),
+    );
+
+    expect(exposed).toHaveLength(0);
   });
 });
 
@@ -279,6 +312,26 @@ describe("the reference lines", () => {
     expect(screen.getByText("Start · Target 76").tagName.toLowerCase()).toBe("text");
     expect(screen.queryByText("Target 76")).toBeNull();
     expect(screen.queryByText("Start 76")).toBeNull();
+  });
+
+  /**
+   * The column stores two decimals and `figure` prints one, so 76.04 and 76.01
+   * are different numbers that both display as "76". Comparing the raw floats
+   * would spell both out and render "Start 76 · Target 76" — a whole line spent
+   * printing one figure twice in order to say the two are different.
+   */
+  test("references that merely display the same are labelled once", () => {
+    render(
+      <WeightChart
+        entries={[{ date: "2026-08-17", weightKg: 76 }]}
+        today={TODAY}
+        startWeightKg={76.04}
+        targetWeightKg={76.01}
+      />,
+    );
+
+    expect(screen.getByText("Start · Target 76").tagName.toLowerCase()).toBe("text");
+    expect(screen.queryByText("Start 76 · Target 76")).toBeNull();
   });
 
   /**

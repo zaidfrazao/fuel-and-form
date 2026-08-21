@@ -135,11 +135,21 @@ const BOTTOM = PLOT_HEIGHT - INSET;
  *
  * Round numbers only, so the horizontal structure lands somewhere a person
  * would have put it. The list is climbed until one of them divides the range
- * into at most `MAX_INTERVALS`, which is what keeps a two-week history and a
+ * into at most `PREFERRED_MAX_INTERVALS`, which is what keeps a two-week history and a
  * two-year one carrying a similar amount of furniture.
  */
 const STEPS_KG = [0.5, 1, 2, 5, 10, 20, 50] as const;
-const MAX_INTERVALS = 4;
+
+/**
+ * How many intervals the range is PREFERRED to divide into — not a guarantee.
+ *
+ * Once the range outruns the coarsest step the fallback below takes over and the
+ * count rises: the widest history this app can hold rules the plate nine times
+ * rather than five. That is the right trade — more gridlines beats a step the
+ * axis cannot be read against — but the name would otherwise promise a ceiling
+ * this does not enforce.
+ */
+const PREFERRED_MAX_INTERVALS = 4;
 
 /**
  * The step used when no other divides the range finely enough — beyond 200kg of
@@ -185,7 +195,7 @@ function niceDomain(values: readonly number[]): {
   const highest = Math.max(...values);
 
   const step =
-    STEPS_KG.find((candidate) => (highest - lowest) / candidate <= MAX_INTERVALS) ??
+    STEPS_KG.find((candidate) => (highest - lowest) / candidate <= PREFERRED_MAX_INTERVALS) ??
     COARSEST_STEP_KG;
 
   let lowKg = round(Math.floor(lowest / step) * step);
@@ -227,7 +237,22 @@ export function chartGeometry(
   // Copied before sorting: the screen's array is React state, and `sort`
   // mutates in place. Sorting the caller's rows would reorder the history list
   // rendered beneath this chart, from a function that is supposed to be pure.
-  const ordered = [...readings].sort((a, b) => (a.date < b.date ? -1 : 1));
+  //
+  // Three-way rather than the shorter `a.date < b.date ? -1 : 1`, which returns
+  // 1 for two equal dates and so tells the engine to SWAP them — the opposite of
+  // the stable order `sort` would otherwise give. `weight_logs` is unique on
+  // `(user_id, date)` and the screen's optimistic reducer drops any row sharing
+  // a date before it prepends, so a tie should not reach here; the point is that
+  // when one does, which reading counts as `latest` is decided by this line
+  // rather than by the engine's sort implementation.
+  //
+  // Compared with `<` and `>` rather than `localeCompare`, which reads the
+  // runtime's collation. These are `YYYY-MM-DD` strings, where byte order IS
+  // chronological order, and `format.ts` records at length why this app does not
+  // let a locale decide anything it can decide itself.
+  const ordered = [...readings].sort((a, b) =>
+    a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
+  );
 
   const first = ordered[0];
   const last = ordered[ordered.length - 1];

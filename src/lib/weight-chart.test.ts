@@ -435,6 +435,29 @@ describe("the drawing surface", () => {
   });
 });
 
+describe("two readings on one date", () => {
+  /**
+   * The schema forbids this — `weight_logs` is unique on `(user_id, date)`, and
+   * the screen's optimistic reducer drops any row sharing a date before it
+   * prepends — so this is a contract test rather than a scenario.
+   *
+   * What it pins is that the ANSWER is decided by the comparator rather than by
+   * the engine's sort implementation. The shorter `a.date < b.date ? -1 : 1`
+   * returns 1 for a tie, which tells a stable sort to swap the pair, so which of
+   * two same-day readings counted as `latest` would depend on V8 rather than on
+   * this module. dot-grid.tsx pins its own duplicate case for the same reason.
+   */
+  test("keep the order they were given, so `latest` is not the engine's choice", () => {
+    const tied: Reading[] = [
+      { date: "2026-08-17", weightKg: 80.1 },
+      { date: "2026-08-17", weightKg: 79.4 },
+    ];
+
+    expect(chartGeometry(tied, REFERENCES)?.latest.weightKg).toBe(79.4);
+    expect(chartGeometry([...tied].reverse(), REFERENCES)?.latest.weightKg).toBe(80.1);
+  });
+});
+
 describe("the caller's rows", () => {
   /**
    * The readings are the screen's `useOptimistic` state. Sorting them in place
