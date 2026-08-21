@@ -44,12 +44,29 @@ const ENTRIES: WeighInRow[] = [
 const START_KG = 84.2;
 const TARGET_KG = 76;
 
+/** `profiles.goal_pace_kg_per_week`, and the middle of the band it implies. */
+const GOAL_PACE = 0.5;
+
+/**
+ * Three weekly readings falling exactly half a kilogram each.
+ *
+ * `ENTRIES` above falls three quarters of a kilogram a week, which is off pace
+ * against the same goal — so the two fixtures cover both verdicts without
+ * either of them having to move the configured pace to get there.
+ */
+const ON_PACE_ENTRIES: WeighInRow[] = [
+  { date: "2026-08-20", weightKg: 80.1, note: null },
+  { date: "2026-08-13", weightKg: 80.6, note: null },
+  { date: "2026-08-06", weightKg: 81.1, note: null },
+];
+
 const view = (entries: WeighInRow[] = ENTRIES) => (
   <WeighIns
     today={TODAY}
     entries={entries}
     startWeightKg={START_KG}
     targetWeightKg={TARGET_KG}
+    goalPaceKgPerWeek={GOAL_PACE}
   />
 );
 
@@ -454,5 +471,97 @@ describe("the empty state", () => {
     render(view([{ date: "2025-08-14", weightKg: 88.2, note: null }]));
 
     expect(screen.getByRole("button", { name: /88.2 kg/ }).textContent).toContain("2025");
+  });
+});
+
+describe("progress and the trailing rate", () => {
+  /**
+   * The progress grid.
+   *
+   * By element rather than by role: `KeyValueGrid` renders a description list,
+   * and a `dt` takes no accessible name — `getByRole("term", { name })` is a
+   * query that can only ever return nothing. `macro-grid.test.tsx` reaches for
+   * its grid the same way, and the scope is what matters here: the chart above
+   * carries a data table naming the same weights, so an unscoped query would
+   * find the caption's figures as readily as the grid's.
+   */
+  const grid = (container: HTMLElement) => within(container.querySelector("dl")!);
+
+  test("reports kg lost, kg remaining, and the percentage of the journey", () => {
+    const { container } = render(view());
+    const dl = grid(container);
+
+    // 84.2 → 79.3, against a journey of 8.2 to the target.
+    expect(dl.getByText("4.9 kg")).toBeTruthy();
+    expect(dl.getByText(/from 84.2 kg/)).toBeTruthy();
+    expect(dl.getByText("3.3 kg")).toBeTruthy();
+    expect(dl.getByText(/to 76 kg/)).toBeTruthy();
+    expect(dl.getByText("60%")).toBeTruthy();
+    expect(dl.getByText(/of 8.2 kg/)).toBeTruthy();
+  });
+
+  test("puts an on-pace rate in the success ink AND says so in words", () => {
+    const { container } = render(view(ON_PACE_ENTRIES));
+    const dl = grid(container);
+
+    // § Color Palette gives `success` exactly one job on this screen: "goal-pace
+    // rate".
+    expect(dl.getByText("−0.50 kg/wk").className).toContain("text-success");
+
+    // § Accessibility: never colour alone. The two assertions belong in one test
+    // because the failure that matters is them drifting apart — a green figure
+    // whose words stopped agreeing is invisible to the reader who needs the
+    // words, and each half would still pass a test of its own.
+    expect(dl.getByText(/on pace · goal 0.50 kg\/wk/)).toBeTruthy();
+  });
+
+  test("leaves a rate outside the band in the ordinary ink, never in red", () => {
+    // `ENTRIES` falls faster than the goal, which is off pace too — the pace is
+    // what separates a cut from a crash. § The Governing Principle is why it is
+    // not an error colour in either direction: divergence is data, not guilt.
+    const { container } = render(view());
+    const dl = grid(container);
+
+    const rate = dl.getByText("−0.75 kg/wk");
+
+    expect(rate.className).not.toContain("text-success");
+    expect(rate.className).not.toContain("text-error");
+
+    // The goal is still named, so the comparison can be checked; the verdict
+    // simply is not claimed.
+    expect(dl.getByText(/goal 0.50 kg\/wk/).textContent).not.toContain("on pace");
+  });
+
+  test("has no rate to give until a second weigh-in lands", () => {
+    // P5's single-data-point state, in figures rather than in geometry. One
+    // reading is a distance travelled but not a speed, and § Tone of Voice asks
+    // the absence to say what will fill it.
+    const { container } = render(view([{ date: "2026-08-20", weightKg: 79.3, note: null }]));
+    const dl = grid(container);
+
+    expect(dl.getByText("—")).toBeTruthy();
+    expect(dl.getByText(/a second weigh-in starts this/)).toBeTruthy();
+    expect(dl.getByText("4.9 kg")).toBeTruthy();
+  });
+
+  test("moves the figures with the optimistic row, before the server answers", async () => {
+    const user = userEvent.setup();
+    const pending = deferred<{ ok: boolean }>();
+
+    saveWeighIn.mockReturnValue(pending.promise);
+
+    const { container } = render(view());
+
+    await user.type(weightBox(), "79.1");
+    await user.click(screen.getByRole("button", { name: "Log weigh-in" }));
+
+    // The form defaults to today, which already holds a reading, so this
+    // corrects it: 84.2 → 79.1 is 5.1 of the journey. § Feedback — the UI
+    // reflecting the new state IS the confirmation — and figures that waited for
+    // the round trip would sit beside a chart that had already moved.
+    expect(await grid(container).findByText("5.1 kg")).toBeTruthy();
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(saveWeighIn).toHaveBeenCalledOnce());
   });
 });

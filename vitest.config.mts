@@ -73,6 +73,7 @@ export default defineConfig({
         "src/lib/walk.ts",
         "src/lib/weigh-in.ts",
         "src/lib/weight-chart.ts",
+        "src/lib/weight-stats.ts",
         "src/lib/week-grid.ts",
         "src/lib/week-totals.ts",
       ],
@@ -222,6 +223,20 @@ export default defineConfig({
         // state; there is a chart with nothing on it, on a screen where a
         // person cannot tell that apart from having logged nothing.
         "src/lib/weight-chart.ts": FULLY_COVERED,
+        // FUEL-36, and the chart's argument taken one step further. The chart
+        // DRAWS a claim about someone's own history; this file STATES one, and
+        // it is the only place in the app that says whether the program is
+        // working — `adherence.ts` refuses to grade at all, and the difference
+        // is that P5 asks for the rate "against the configured goal pace",
+        // which is a comparison and therefore a verdict.
+        //
+        // Both ways the verdict fails are silent. A band a hundredth too wide
+        // colours a miss green; one a hundredth too narrow leaves a hit in
+        // grey; a sign the wrong way round reports a gain as a loss. Every one
+        // of them is a number a person will believe, on the figure P5 calls
+        // "the single number the whole program is judged on", and none of them
+        // throws or looks wrong in a diff.
+        "src/lib/weight-stats.ts": FULLY_COVERED,
         // FUEL-28, and template-plan.ts's argument one table across. It decides
         // which of thirty-five cells is empty, and an empty cell is not
         // cosmetic here: it is what the 45° hatch marks, what a tap fills, and

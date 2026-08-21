@@ -75,6 +75,17 @@ export type WeighInHistory = {
    */
   startWeightKg: number;
   targetWeightKg: number;
+  /**
+   * `profiles.goal_pace_kg_per_week` — the figure FUEL-36's trailing rate is
+   * judged against, and the first read of this column anywhere in the app.
+   *
+   * Here rather than written into `weight-stats.ts` for the reason the two
+   * above are carried: the pace is per-user configuration, P5 recalibrates on
+   * it every 5kg, and P7's demo persona cuts at its own rate. A constant in a
+   * module would be the owner's own program shown to a visitor — and a band
+   * that never moved when the profile did.
+   */
+  goalPaceKgPerWeek: number;
 };
 
 /**
@@ -113,6 +124,7 @@ export async function loadWeighIns(
     entries,
     startWeightKg: profile.startWeightKg,
     targetWeightKg: profile.targetWeightKg,
+    goalPaceKgPerWeek: profile.goalPaceKgPerWeek,
   };
 }
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { startTransition, useOptimistic, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { KeyValueGrid, type KeyValueItem } from "@/components/kv-grid";
 import { Sheet } from "@/components/ui/sheet";
 import { WeightChart } from "@/components/weight-chart";
 import { deleteWeighIn, saveWeighIn } from "@/app/actions/weight";
@@ -12,6 +13,7 @@ import { figure } from "@/lib/format";
 import { entryLabel } from "@/lib/now-display";
 import { MAX_NOTE_LENGTH } from "@/lib/session-entry";
 import { MAX_KG, MIN_KG, parseWeighInDate, parseWeightKg } from "@/lib/weigh-in";
+import { type WeightStats, weightStats } from "@/lib/weight-stats";
 
 /**
  * `/weight` — the weigh-in history and the form that writes it. FUEL-34, P5.
@@ -99,11 +101,114 @@ function kilograms(weightKg: number): string {
   return `${figure(weightKg)} kg`;
 }
 
+/**
+ * `0.50 kg/wk`. Two decimals, and `figure` deliberately not used.
+ *
+ * `figure` caps at one decimal, which is right for a weight — no scale reads
+ * finer — and wrong for this. `goal_pace_kg_per_week` is `numeric(4, 2)` and
+ * the band FUEL-36 judges against is five hundredths wide, so a rate shown to
+ * one decimal would round 0.45 and 0.54 onto the same figure while the verdict
+ * printed beside it told them apart. A reader cannot check a comparison whose
+ * operands have been rounded past the point that decides it.
+ *
+ * Always two, including the trailing zero: these are read as a column against
+ * the goal directly beneath, and `0.5` beside `0.50` invites the eye to compare
+ * digits that are not in the same place.
+ */
+function perWeek(kgPerWeek: number): string {
+  return `${kgPerWeek.toFixed(2)} kg/wk`;
+}
+
+/**
+ * The trailing rate with the Brand Guide's sign in front of it.
+ *
+ * U+2212 MINUS SIGN, per `format.ts` — and not `signed()` itself, which is
+ * built for a delta from a target and formats through `figure`. The `+` on a
+ * gain is kept, because this IS a delta: a rate of change with a direction, and
+ * a week that went up is the one week a reader must not misread as a small
+ * loss. A flat week carries no sign at all, for `signed()`'s reason.
+ */
+function ratePerWeek(kgPerWeek: number): string {
+  const magnitude = perWeek(Math.abs(kgPerWeek));
+
+  if (kgPerWeek === 0) return magnitude;
+
+  return kgPerWeek > 0 ? `+${magnitude}` : `−${magnitude}`;
+}
+
+/**
+ * The progress grid's four pairs — Brand Guide § Key/Value Grid.
+ *
+ * ## The rate is the only coloured figure on the screen
+ *
+ * § Color Palette gives `success` to the "goal-pace rate", and this is that
+ * rate. Off pace stays in `text-primary` and is never `error`: § The Governing
+ * Principle is that divergence is data rather than guilt, and P5's target moves
+ * every 5kg anyway, so a week outside the band is information rather than a
+ * failure. Losing FASTER than the goal is outside it too — the pace is what
+ * separates a cut from a crash — which is a second reason the off-pace
+ * treatment cannot be a warning colour.
+ *
+ * § Accessibility's "never colour alone" is what puts the words "on pace" in
+ * the metadata line. The green is the second signal, not the only one, and the
+ * line still names the goal either way so the comparison can be checked by
+ * anyone who cannot see the difference.
+ */
+function progressItems(
+  stats: WeightStats,
+  {
+    startWeightKg,
+    targetWeightKg,
+    goalPaceKgPerWeek,
+  }: { startWeightKg: number; targetWeightKg: number; goalPaceKgPerWeek: number },
+): KeyValueItem[] {
+  const { lostKg, remainingKg, journeyKg, percentToTarget, rate } = stats;
+  const goal = `goal ${perWeek(goalPaceKgPerWeek)}`;
+
+  return [
+    {
+      // The label moves rather than the figure. `weight-stats.ts` leaves a gain
+      // as a negative loss because "0.0 kg" under "Lost" would be untrue, and
+      // "−1.2 kg" under it is a double negative the reader has to unpick.
+      label: lostKg < 0 ? "Gained" : "Lost",
+      value: kilograms(Math.abs(lostKg)),
+      meta: `from ${kilograms(startWeightKg)}`,
+    },
+    {
+      label: "Remaining",
+      value: kilograms(remainingKg),
+      meta: `to ${kilograms(targetWeightKg)}`,
+    },
+    {
+      label: "To target",
+      // Null only when the start and the target are the same weight, which is a
+      // profile with no journey in it rather than a program at 0%.
+      value: percentToTarget === null ? "—" : `${percentToTarget}%`,
+      meta: `of ${kilograms(journeyKg)}`,
+    },
+    {
+      label: "Rate",
+      value: rate ? (
+        <span className={rate.onPace ? "text-success" : undefined}>
+          {ratePerWeek(rate.kgPerWeek)}
+        </span>
+      ) : (
+        "—"
+      ),
+      // § Tone of Voice asks an empty state to describe what will make the
+      // thing appear. A goal printed beside no rate at all would be half a
+      // comparison.
+      meta: rate ? (rate.onPace ? `on pace · ${goal}` : goal) : "a second weigh-in starts this",
+    },
+  ];
+}
+
 export function WeighIns({
   today,
   entries,
   startWeightKg,
   targetWeightKg,
+  goalPaceKgPerWeek,
 }: {
   /** Today in the user's own zone — the form's default and its ceiling. */
   today: CalendarDate;
@@ -121,6 +226,15 @@ export function WeighIns({
    */
   startWeightKg: number;
   targetWeightKg: number;
+  /**
+   * `profiles.goal_pace_kg_per_week` — what FUEL-36's trailing rate is read
+   * against, and the only thing on this screen that produces a verdict.
+   *
+   * From the profile for the same reason the two above are: P5 recalibrates on
+   * it every 5kg and P7's persona cuts at its own rate, so a band written here
+   * would judge a visitor's history against the owner's program.
+   */
+  goalPaceKgPerWeek: number;
 }) {
   const [date, setDate] = useState<CalendarDate>(today);
   // Strings, not numbers: the boxes have an empty state and `null` is not a
@@ -172,11 +286,30 @@ export function WeighIns({
    * The most recent reading — the figure the screen leads with.
    *
    * `rows[0]` because the list is newest first, and read into a name rather
-   * than indexed twice so the empty case is stated once. FUEL-36 puts the
-   * progress figures beside this; until then the number and its date are the
-   * whole hero.
+   * than indexed twice so the empty case is stated once. The number and its
+   * date are the hero; FUEL-36's progress figures sit further down, beneath the
+   * chart they are the arithmetic of.
    */
   const latest = rows[0];
+
+  /*
+   * The progress figures and the trailing rate — FUEL-36.
+   *
+   * Over `rows` rather than `entries`, on the chart's reasoning one line of
+   * argument further: these are the OPTIMISTIC rows, so a logged weigh-in moves
+   * the percentage and the rate at the same moment it appears in the list and
+   * on the line. Figures that waited for the round trip would sit beside a
+   * chart that had already moved, which reads as one of them being broken.
+   *
+   * `null` for an empty history, so the section below is gated by the same
+   * answer that produced it rather than by a second count of the same rows.
+   */
+  const stats = weightStats({
+    readings: rows,
+    startWeightKg,
+    targetWeightKg,
+    goalPaceKgPerWeek,
+  });
 
   const act = (attempt: Attempt) => {
     setFailure(null);
@@ -429,6 +562,27 @@ export function WeighIns({
         startWeightKg={startWeightKg}
         targetWeightKg={targetWeightKg}
       />
+
+      {/*
+       * The figures the chart is a picture of — FUEL-36, PRD § P5.
+       *
+       * Under the chart rather than under the headline, for the reason the
+       * chart itself is under the form: § Touch Targets keeps the screen's one
+       * primary action within thumb reach, and a grid pushed between the
+       * heading and "Log a weigh-in" would move it down by two more rows. It
+       * also puts the numbers next to the graphic that explains them — the
+       * trend line above IS the rate below, and a reader who wants to check one
+       * against the other should not have to scroll between them.
+       */}
+      {stats && (
+        <section className="flex flex-col gap-[14px]">
+          <h2 className="text-micro uppercase text-text-secondary">Progress</h2>
+
+          <KeyValueGrid
+            items={progressItems(stats, { startWeightKg, targetWeightKg, goalPaceKgPerWeek })}
+          />
+        </section>
+      )}
 
       {latest && (
         <section className="flex flex-col gap-[14px]">
