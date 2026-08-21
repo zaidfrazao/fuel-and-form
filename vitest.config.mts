@@ -60,6 +60,7 @@ export default defineConfig({
         "src/lib/cursor.ts",
         "src/lib/date.ts",
         "src/lib/day-summary.ts",
+        "src/lib/export.ts",
         "src/lib/log-intent.ts",
         "src/lib/macros.ts",
         "src/lib/repeat.ts",
@@ -222,6 +223,14 @@ export default defineConfig({
         // DISCARDS SILENTLY. There is no crash, no console error and no empty
         // state; there is a chart with nothing on it, on a screen where a
         // person cannot tell that apart from having logged nothing.
+        // FUEL-37. This is the file that decides what LEAVES the account, and
+        // every way it can be wrong produces a VALID FILE: a table missing, a
+        // row that kept its `user_id`, an array in whatever order Postgres
+        // returned. Each one downloads, opens, parses and looks exactly like a
+        // backup — and is found out at a restore, which is the one moment there
+        // is nothing to fall back on. P6 calls this the answer to "don't lose
+        // my history", so an unmeasured branch here is a promise nobody checked.
+        "src/lib/export.ts": FULLY_COVERED,
         "src/lib/weight-chart.ts": FULLY_COVERED,
         // FUEL-36, and the chart's argument taken one step further. The chart
         // DRAWS a claim about someone's own history; this file STATES one, and

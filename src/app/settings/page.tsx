@@ -99,6 +99,43 @@ export default async function SettingsPage() {
           meal there affects that date only.
         </p>
       </section>
+
+      {/*
+       * The export — FUEL-37, P6.
+       *
+       * A plain anchor rather than a `next/link`, and that is the point. `Link`
+       * intercepts the click and navigates the router, which for a response
+       * carrying `Content-Disposition: attachment` is the wrong verb entirely:
+       * there is no page to navigate to. A bare `<a>` lets the browser do what
+       * it already knows how to do with an attachment, on every platform, with
+       * no JavaScript involved.
+       *
+       * `download` is deliberately NOT set. The attribute would let the browser
+       * name the file from the URL's last segment — "export" — while the server
+       * is already naming it `fuel-form-<date>.json` in the header. The header
+       * wins in every current browser, but two sources for one filename is one
+       * more than can be right, and the server's is the one with the user's own
+       * date in it.
+       *
+       * Inside the profile gate, because the route answers 404 without one: no
+       * timezone, so no date to name a file with. A link that reliably fails is
+       * worse than no link.
+       */}
+      {schedule && (
+        <section className="flex flex-col gap-2 border-t border-border pt-5">
+          <a
+            href="/api/export"
+            className="text-body text-text-primary underline decoration-text-tertiary underline-offset-4"
+          >
+            Export everything
+          </a>
+          <p className="text-slash text-text-secondary">
+            One dated JSON file holding every weigh-in, session, meal log and
+            swap, plus the plan they refer to. Your backup, and the file your
+            check-in reads.
+          </p>
+        </section>
+      )}
     </main>
   );
 }

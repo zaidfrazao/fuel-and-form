@@ -333,6 +333,90 @@ persists.
 runs against the real tables. Treat a failure there as a release blocker, and
 check the run said **passed** rather than **skipped** before trusting it.
 
+## Export
+
+`GET /api/export` returns the whole account as one JSON file, named
+`fuel-form-<date>.json`. The link is on `/settings`. It is a **route handler**
+rather than a Server Action so the browser's own download mechanism does the
+work — no JavaScript, no `Blob`, and the same behaviour on iOS Safari as on
+desktop Chrome. The server names the file, because the only correct date is
+today in the *user's* timezone and a client would read the browser's clock.
+
+The response carries `Cache-Control: no-store`. It is one person's entire
+history returned on the strength of a cookie, from an app behind a CDN.
+
+### What is in it
+
+Every table the account owns — not just the logs. P6 calls this the backup
+against "don't lose my history", and logs alone cannot restore an account:
+every `meal_log` names a `meal_id`, and a file holding the log without the meal
+restores a uuid pointing at nothing.
+
+```jsonc
+{
+  "schemaVersion": 1,
+  "exportedAt": "2026-08-21T09:30:00.000Z",
+  "account": { "id": "…", "kind": "owner", "displayName": "…", "timezone": "Europe/London" },
+  "profile":  { "heightCm": …, "startWeightKg": …, "targetKcal": …, "slotTimes": {…}, … },
+
+  "meals":                   [ { "id", "name", "slotType", "kcal", "proteinG", "fatG", "carbG", "method", "notes", "isArchived" } ],
+  "mealIngredients":         [ { "id", "mealId", "name", "grams", "nonScaleMeasure", "category", "sortOrder" } ],
+  "planTemplateEntries":     [ { "id", "dayOfWeek", "slot", "mealId", "sortOrder" } ],
+  "dayPlanOverrides":        [ { "id", "date", "slot", "mealId", "createdAt" } ],
+  "mealLogs":                [ { "id", "date", "slot", "mealId", "status", "note", "loggedAt" } ],
+
+  "workouts":                [ { "id", "name", "type", "description", "rotationGroup", "rotationIndex" } ],
+  "workoutExercises":        [ { "id", "workoutId", "name", "prescription", "sortOrder", "notes" } ],
+  "trainingTemplateEntries": [ { "id", "dayOfWeek", "workoutId", "rotationGroup", "sortOrder" } ],
+  "workoutLogs":             [ { "id", "date", "workoutId", "status", "note", "durationMin", "loggedAt" } ],
+
+  "weightLogs":              [ { "id", "date", "weightKg", "note", "createdAt" } ]
+}
+```
+
+Dates are `YYYY-MM-DD` in the account's timezone. Instants — `createdAt`,
+`loggedAt`, `exportedAt` — are ISO 8601 in UTC. `profile` is an object rather
+than an array because `profiles` holds exactly one row per user.
+
+### What is not in it, and why
+
+**`user_id`.** The same value on all eleven tables, and `account.id` already
+says it once. A second copy invites an importer to trust the row over the
+account the file came from, which is the one disagreement that could restore a
+person's data into somebody else's id.
+
+**The `users` row.** Its columns belong to the session layer — `expires_at` is
+the demo reaper's — so four chosen fields cross as `account` instead.
+
+**Ids are kept.** `/weight` strips ids from the payload it sends the browser and
+argues why; that argument is about a screen's payload. This is a backup, and
+`meal_logs.meal_id → meals.id` is the whole reason it can be restored.
+
+### What `schemaVersion` promises
+
+That a reader of version 1 keeps working. A later change may **add** a key or a
+field. Renaming one, removing one, or changing what one means is a new version.
+The field is first in the document so a reader can learn which version it holds
+without parsing the rest.
+
+### Two guarantees worth relying on
+
+**It is deterministic.** Every array is totally ordered — by the row's natural
+key, with `id` as the final tie-break — so two exports of unchanged data are
+byte-identical and `diff` between last week's backup and this week's shows only
+what actually changed.
+
+**It is scoped to the caller.** All eleven reads go through `scope()`, so a demo
+session exports demo data and nothing else. Asserted in
+`tests/integration/export.test.ts`, which is Testing Strategy § 1.4 case 3.
+
+### Adding a table
+
+`src/lib/export.test.ts` enumerates every table `schema.ts` exports and fails
+when one is neither in the document nor on a named exclusion list. So a new
+table forces a decision at the commit that adds it, rather than being missed
+until someone tries to restore from a backup that quietly stopped being one.
+
 ## Documentation
 
 - [`docs/PRD.md`](docs/PRD.md) — product requirements
