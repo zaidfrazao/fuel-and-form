@@ -158,6 +158,26 @@ describe("the average", () => {
     expect(average?.proteinG).toBe(43.3);
   });
 
+  test("keeps calories whole, which is how every other screen prints them", () => {
+    // 2,050 kcal over four days is 512.5, and half a calorie is a precision the
+    // integer column never had — `format.ts` says its decimal option "never
+    // fires on" kcal, and a mean is the one place that could make that untrue.
+    // Caught in a browser rather than in jsdom: "1,543.6" is only wrong to look
+    // at.
+    const { average } = figures([
+      day(MON, [planned("breakfast", OATS)]),
+      day(TUE, [planned("breakfast", OATS)]),
+      day(WED, [planned("breakfast", SALAD)]),
+      day("2026-03-12", [planned("breakfast", CHILLI)]),
+    ]);
+
+    expect(average?.kcal).toBe(513);
+    // The grams keep their decimal — `numeric(6, 1)` can hold it and a meal can
+    // genuinely be it. The two units are rounded differently on purpose.
+    expect(average?.proteinG).toBe(30);
+    expect(average?.fatG).toBe(16.3);
+  });
+
   test("is nothing at all when no day has a plan", () => {
     // A week before the program starts. `null` rather than zero: there is no
     // mean of nothing, and 0 kcal would read as a week planned to starve.
