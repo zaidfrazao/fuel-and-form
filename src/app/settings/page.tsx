@@ -131,8 +131,29 @@ export default async function SettingsPage() {
           </a>
           <p className="text-slash text-text-secondary">
             One dated JSON file holding every weigh-in, session, meal log and
-            swap, plus the plan they refer to. Your backup, and the file your
-            check-in reads.
+            swap, plus the plan they refer to. Your backup.
+          </p>
+          {/*
+           * The weekly CSV — FUEL-38, the other half of P6.
+           *
+           * A `Link` and not an `<a>`, unlike the line above it, because this
+           * one genuinely navigates: the week has to be chosen before there is
+           * a file to download, and `/plan` is where that already happens. The
+           * download itself is an anchor on that screen.
+           *
+           * Named here at all because this is the page a person comes to
+           * looking for "export", and an export that exists but is mentioned
+           * nowhere they would look is one they will not find.
+           */}
+          <p className="text-slash text-text-secondary">
+            For a check-in, one week as a spreadsheet:{" "}
+            <Link
+              href="/plan"
+              className="underline decoration-text-tertiary underline-offset-4"
+            >
+              open the weekly plan
+            </Link>{" "}
+            and download the week you are looking at.
           </p>
         </section>
       )}

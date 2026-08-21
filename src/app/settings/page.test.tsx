@@ -64,11 +64,26 @@ describe("the export link", () => {
   });
 
   test("says what the file is for", async () => {
-    // § Tone of Voice: describe the thing rather than sell it. The sentence
-    // names both audiences P6 has — the backup, and the check-in.
+    // § Tone of Voice: describe the thing rather than sell it.
+    //
+    // The sentence used to name both of P6's audiences at once — "your backup,
+    // and the file your check-in reads". FUEL-38 made that untrue: the check-in
+    // is the weekly CSV now, and this file is the backup alone.
     render(await SettingsPage());
 
-    expect(screen.getByText(/Your backup, and the file your check-in reads/)).toBeTruthy();
+    expect(screen.getByText(/Your backup\./)).toBeTruthy();
+  });
+
+  test("sends a check-in to the weekly plan, where the week is chosen", async () => {
+    // The CSV has no link of its own here, because it has no file of its own
+    // until a week is picked — and `/plan` is the screen that picks one. What
+    // this page owes is a signpost: it is where someone looking for "export"
+    // arrives.
+    render(await SettingsPage());
+
+    const link = screen.getByRole("link", { name: "open the weekly plan" });
+
+    expect(link.getAttribute("href")).toBe("/plan");
   });
 
   test("is absent for an account with no profile", async () => {
