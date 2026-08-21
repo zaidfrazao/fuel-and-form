@@ -100,6 +100,34 @@ const DAY_LABEL = new Intl.DateTimeFormat("en-GB", {
 });
 
 /**
+ * `Thu 14 Aug`, and the year too when it is not this one.
+ *
+ * `dayLabel` alone is what `/training`'s lists use, and there it is unambiguous
+ * because the window is six weeks. The weigh-in history has no window — the
+ * first reading may predate the program by years, since `lib/weigh-in.ts`
+ * deliberately sets no lower bound on a weigh-in's date — so two rows could
+ * otherwise read `Thu 14 Aug` and mean different Augusts.
+ *
+ * The year appears only when it differs, on `weekLabel`'s rule: the parts that
+ * repeat are the parts to drop.
+ *
+ * Here rather than inside `weigh-ins.tsx`, where FUEL-34 first wrote it, because
+ * FUEL-35's chart labels the same dates on its axis and in its data table. Two
+ * copies of a disambiguation rule is two chances for the chart's axis to read a
+ * date differently from the row it plots — and `format.ts` records being
+ * extracted from `day-complete.tsx` for exactly this reason.
+ *
+ * Compared as strings rather than through `parseCalendarDate`, which cannot be
+ * wrong about a timezone: both are `YYYY-MM-DD`, so the first four characters
+ * are the year by construction.
+ */
+export function entryLabel(date: CalendarDate, today: CalendarDate): string {
+  const label = dayLabel(date);
+
+  return date.slice(0, 4) === today.slice(0, 4) ? label : `${label} ${date.slice(0, 4)}`;
+}
+
+/**
  * The seven days a week header names — `10 – 16 Aug 2026`.
  *
  * The range is built from its two ends rather than formatted as one thing,

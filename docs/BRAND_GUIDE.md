@@ -104,7 +104,7 @@ All values are **light / dark** pairs, with contrast measured against that mode'
 | `ink` | `#1C1917` | `#F5F3F0` | 17.5:1 / 16.4:1 | Primary buttons, active tab, ink tiles, the trend line |
 | `ink-fg` | `#FFFFFF` | `#1C1917` | — | Text on an ink fill |
 | `canvas` | `#FFFFFF` | `#0C0B0A` | — | Where nearly everything sits |
-| `surface` | `#F4F1EC` | `#17150F` | — | Stone tiles only — the one fill permitted outside sheets |
+| `surface` | `#F4F1EC` | `#17150F` | — | Stone tiles, and the chart's plot area — see § Data Display. Nothing else outside sheets |
 | `raised` | `#FFFFFF` | `#1F1C19` | — | Sheets |
 | `border` | `#E5E1DB` | `#2A2724` | — | Hairlines, separators, hatch strokes |
 | `text-primary` | `#1C1917` | `#F5F3F0` | 17.5:1 / 16.4:1 | Titles, values, meal names |
@@ -188,6 +188,30 @@ Rows on the canvas, separated by hairlines. No card, no fill, no outer rule. 54p
 ### Tiles
 
 Flat, radius 14, either `ink` or `surface`. Layout: name at top (15px/600), a single line motif centred, `/ ` metadata at the bottom. Selection is a 1.5px `accent` inset ring, never a fill. Used in the meal picker and on meal detail.
+
+### Data Display — the Chart
+
+One chart exists in this system: the weight trend on `/weight`. It is not a signature graphic — § Rule 4's two devices are the day ruler and the dot grid — but § Accessibility's obligations attach to what a graphic *is* rather than to which two are on the list, so it carries a summary and a data table like they do.
+
+| Element | Rendering |
+|---|---|
+| Plot area | `surface` fill, radius 14 — the second and last permitted use of the token |
+| Trend line | 2px `ink`, round caps, no fill beneath it |
+| Latest reading | A 4px `accent` disc with a 2px `canvas` ring. The only marker on the chart |
+| Gridlines | 1px `border`, horizontal only, at round kilogram values. Unlabelled |
+| Target and start | 1px `text-tertiary`, 3/3 dashed, labelled in 10.5px Micro `text-secondary` |
+| Date axis | The two ends only, 10.5px Micro `text-tertiary`, beneath the plot area |
+| Draw-in | 400ms, once per mount. Dropped under `prefers-reduced-motion` |
+
+**Why the plot area gets a fill.** It is the one thing in this system that must be read *against* something. A trend line on the bare canvas has no extent, so a reading near the top and one near the bottom carry no meaning until an edge says where the top and the bottom were. Everywhere else, hairlines and space do that work and a fill would be decoration.
+
+**Start and target share a stroke and differ by their labels.** Telling them apart by ink would need a second accent, which § Deliberately Absent forbids, and § Accessibility's "never colour alone" would rule out doing it with colour regardless. The band between the two lines is the whole journey, which is worth being able to see at a glance.
+
+**No vertical gridline, ever.** Time is continuous and a weigh-in is a moment in it, so a vertical rule would draw an edge the data does not have.
+
+**The empty state draws nothing at all.** § UI Copy Examples already writes it — "No weigh-ins yet. Your first entry starts the chart" — and the sentence says the chart does not exist yet. An empty ruled plate would contradict the copy sitting directly above it.
+
+Added in FUEL-35 and not in `BRAND_GUIDE.html`, which predates the chart. Recorded here rather than left to the component, on § The Dot Grid's precedent: a divergence that is written down is a decision, and one that is not is an accident waiting to be re-litigated.
 
 ### Sheets
 
@@ -343,5 +367,6 @@ Two components are bespoke and worth building first, since every screen depends 
 
 - **Created:** 2026-08-10
 - **v2:** accent changed from amber `#E8833A` to umber, collapsing the fill/ink token split; cards replaced by hairline-separated content on canvas.
-- **v3.1 (current):** the dot grid gains a Partial dot (FUEL-27) and its unrecorded day is named as such rather than as "no session". An addition to § The Dot Grid only; the HTML mock is unchanged and remains the source of truth for everything else.
+- **v3.2 (current):** § Data Display added for the weight trend chart (FUEL-35), and `surface` gains its second permitted use — the chart's plot area — in § Color Palette. Both are additions the HTML mock predates; it remains the source of truth for everything else.
+- **v3.1:** the dot grid gains a Partial dot (FUEL-27) and its unrecorded day is named as such rather than as "no session". An addition to § The Dot Grid only; the HTML mock is unchanged and remains the source of truth for everything else.
 - **v3:** display scale raised to 76px for a 7× ratio against 10.5px micro labels; accent restricted to meaning "now" only, with actions moving to ink; day ruler and dot grid introduced as signature graphics; flat line motifs, hatching, crop marks and slash metadata added as the material language. Flat discipline retained — no gradients, no textures, no shadows outside sheets.

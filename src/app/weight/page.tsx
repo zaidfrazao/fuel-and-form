@@ -85,6 +85,14 @@ export default async function WeightPage() {
   }
 
   return (
-    <WeighIns today={history.today} entries={history.entries.map(narrow)} />
+    <WeighIns
+      today={history.today}
+      entries={history.entries.map(narrow)}
+      // The two figures FUEL-35's chart rules against. They are body metrics
+      // rather than logs, so unlike `narrow` above there is nothing to strip:
+      // the whole of each is what the reference line is.
+      startWeightKg={history.startWeightKg}
+      targetWeightKg={history.targetWeightKg}
+    />
   );
 }

@@ -4,6 +4,7 @@ import type { Meal, MealSlot, Workout } from "@/lib/db/schema";
 import { positionInSpan } from "@/components/day-ruler";
 import {
   dayLabel,
+  entryLabel,
   itemLabel,
   itemName,
   rulerSlots,
@@ -217,6 +218,50 @@ describe("dayLabel", () => {
   test("refuses a date that is not one", () => {
     // Loudly, rather than rendering "Invalid Date" into the corner of a screen.
     expect(() => dayLabel("2026-02-30")).toThrow(/No such date/);
+  });
+});
+
+/**
+ * `dayLabel` with the year restored when it is needed — FUEL-34's history list
+ * and FUEL-35's chart, which label the same dates and must agree about them.
+ *
+ * The rule is `weekLabel`'s: the parts that repeat are the parts to drop. What
+ * makes it load-bearing here rather than cosmetic is that the weigh-in history
+ * has NO window — `lib/weigh-in.ts` sets no lower bound on a weigh-in's date on
+ * purpose, because the first reading is the starting weight and may predate the
+ * program by years.
+ */
+describe("entryLabel", () => {
+  const TODAY = "2026-08-20";
+
+  test("drops the year within the current one", () => {
+    expect(entryLabel("2026-08-10", TODAY)).toBe("Mon 10 Aug");
+  });
+
+  test("keeps the year on a date from another one", () => {
+    expect(entryLabel("2024-08-12", TODAY)).toBe("Mon 12 Aug 2024");
+  });
+
+  /**
+   * The case the whole function exists for: two readings a year apart that
+   * would otherwise both read "Mon 18 Aug", in a list with no window to
+   * disambiguate them.
+   */
+  test("tells two same-day readings from different years apart", () => {
+    expect(entryLabel("2025-08-18", TODAY)).not.toBe(entryLabel("2026-08-17", TODAY));
+  });
+
+  /**
+   * The year is compared as a string on both sides, so a `today` in a different
+   * year from the reading disambiguates in the other direction too — a
+   * December weigh-in reviewed in January is still labelled with its own year.
+   */
+  test("compares against the year given, not the runtime's", () => {
+    expect(entryLabel("2026-12-31", "2027-01-02")).toBe("Thu 31 Dec 2026");
+  });
+
+  test("refuses a date that is not one", () => {
+    expect(() => entryLabel("2026-02-30", TODAY)).toThrow(/No such date/);
   });
 });
 
