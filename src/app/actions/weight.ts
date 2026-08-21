@@ -108,11 +108,17 @@ export async function saveWeighIn(input: {
 /**
  * Deletes the weigh-in on a date — FUEL-34's "delete any past entry".
  *
- * The date is parsed before anything is fetched, on `plan.ts`'s reasoning: the
- * catch would turn a throw into `{ ok: false }` anyway, but only after a round
- * trip, and a refusal that costs a query is a refusal that can be used to make
- * the database work. A future date is refused here as it is on the way in,
- * which costs nothing and keeps one definition of a date this app will accept.
+ * The timezone is fetched BEFORE the date is parsed, which is the opposite of
+ * `plan.ts` and worth saying why. That module parses first so a malformed date
+ * is refused without a round trip; here the refusal itself needs a round trip,
+ * because "not in the future" is a question about the user's own midnight and
+ * that lives in `profiles.timezone`. Parsing the shape first and the future
+ * second would split one refusal across two places to save a query that an
+ * authenticated caller has already paid for on every other path.
+ *
+ * A future date is refused here exactly as it is on the way in, so there is one
+ * definition of a date this app will accept rather than a stricter one for
+ * writing and a looser one for deleting.
  *
  * Deleting a weigh-in that is already gone is `ok`, not a failure. The screen
  * offers no delete control for a date with no row, so reaching that state means

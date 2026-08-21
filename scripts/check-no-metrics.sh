@@ -242,6 +242,10 @@ readonly PATTERN_REGEX=(
 )
 
 readonly PATTERN_ALLOW=(
+  # The tradeoff, stated where it is made: these values are waved through by the
+  # TREE scan and the HISTORY scan alike, in prose position. They are plausible
+  # human weights, so a real figure that happened to equal one would pass. See
+  # ALLOW_KG_FIXTURE above — profile-field assignments are unaffected.
   "$ALLOW_KG $ALLOW_KG_FIXTURE"
   "$ALLOW_CM"
   "$ALLOW_KCAL"

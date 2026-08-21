@@ -41,6 +41,16 @@ describe("the scale reading", () => {
     expect(parseWeightKg(" 77,4 ")).toBe(77.4);
   });
 
+  it("reads a single-separator grouping as a decimal, because that is the only reading a scale has", () => {
+    // `77,400` is seventy-seven thousand four hundred under one convention.
+    // Not in this field: that is not a weight and 77.4 is, so it is read as a
+    // decimal rather than refused. Pinned because it is a decision — the
+    // pattern permits it, and refusing it would land on someone who typed a
+    // comma meaning a decimal point.
+    expect(parseWeightKg("77,400")).toBe(77.4);
+    expect(parseWeightKg("77.400")).toBe(77.4);
+  });
+
   it("refuses a string carrying both separators rather than guessing", () => {
     // '1,234.5' is English thousands; '1.234,5' is the same number in German.
     // Nothing in the string says which, and a guess is wrong half the time.

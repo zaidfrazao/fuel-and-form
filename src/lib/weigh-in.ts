@@ -72,13 +72,22 @@ export type WeighIn = {
  * them, along with signs — a negative weigh-in is not a reading — before any
  * arithmetic happens.
  *
- * **At most one** is what refuses a thousands separator, and it is the reason
- * there is no separate check for one. `1,234.5` is 1234.5 in English and
+ * **At most one** is what refuses a MIXED thousands separator, and it is the
+ * reason there is no separate check for one. `1,234.5` is 1234.5 in English and
  * `1.234,5` is the same number in German; nothing in either string says which
  * convention was being followed, so a parser that interpreted them would be
  * wrong half the time. Both carry two separators, so both fail here — and an
  * explicit `includes(",") && includes(".")` guard in front of this would be a
  * branch no input could ever reach, which a mutation test duly found.
+ *
+ * What this does NOT refuse, and deliberately: a single-separator grouping like
+ * `77,400`, which is read as 77.4. The string is ambiguous in general — it is
+ * seventy-seven thousand four hundred under one convention — but not in this
+ * one field, because `77,400` kg is not a weight and 77.4 kg is. Reading it the
+ * other way would mean refusing the value rather than storing it, and the
+ * refusal would land on someone who typed a comma and meant a decimal point.
+ * `weigh-in.test.ts` pins the reading so it stays a decision rather than an
+ * accident.
  *
  * A leading digit is required, so `.5` is refused. It is out of range anyway;
  * refusing it here means the range check never has to explain itself for a
