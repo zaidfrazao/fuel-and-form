@@ -490,3 +490,84 @@ describe("repeat and revert", () => {
     );
   });
 });
+
+/**
+ * The daily totals and the weekly average — FUEL-33.
+ *
+ * The arithmetic is `lib/week-totals.test.ts`'s. What is asserted here is the
+ * part only a rendered screen decides: that the figures are wired to the
+ * OPTIMISTIC week rather than the props, so a swap moves them on the tap; that
+ * a day with no plan reads as absent rather than as zero; and that the block
+ * adds no second umber mark — which the count in § "the one umber mark" above
+ * already enforces, from the other side.
+ */
+describe("what the week comes to", () => {
+  /** The item for one label. `dt` takes no accessible name, so this is by text. */
+  const totalFor = (label: string) =>
+    screen.getByText(label, { selector: "dt" }).parentElement as HTMLElement;
+
+  test("every day carries its own kcal and protein", () => {
+    grid();
+
+    // Chilli for dinner, every day: 700 kcal and 45 g, seven times.
+    expect(totalFor("Mon 9 Mar").textContent).toContain("700 kcal");
+    expect(totalFor("Mon 9 Mar").textContent).toContain("45 g");
+    expect(totalFor("Sun 15 Mar").textContent).toContain("700 kcal");
+  });
+
+  test("and the week states its average, and what it averaged over", () => {
+    grid();
+
+    // The divisor is shown rather than implied — a figure the reader can check
+    // is the difference between an average and an assertion.
+    expect(totalFor("Average").textContent).toContain("700 kcal");
+    expect(totalFor("Average").textContent).toContain("7 days");
+  });
+
+  test("a swap moves the day and the average on the tap, not on the reload", async () => {
+    // Held open, like § "editing a cell"'s optimistic test: the useOptimistic
+    // value only stands while the action is in flight, and in a test there is
+    // no revalidation behind it to hand back the same answer.
+    let release: () => void = () => {};
+    swapOnDate.mockReturnValue(
+      new Promise((resolve) => {
+        release = () => resolve({ ok: true });
+      }),
+    );
+
+    grid();
+    const user = userEvent.setup();
+
+    await user.click(cell(/Tue 10 Mar dinner: Chilli con Carne/));
+    await user.click(screen.getByRole("button", { name: /Chickpea Curry/ }));
+    await user.click(screen.getByRole("button", { name: "Swap" }));
+
+    // Curry is 560, so Tuesday drops 140 kcal and the week's mean drops 20.
+    // Awaited, not read synchronously: the optimistic value lands inside a
+    // transition, and a `getBy` here passes uninstrumented and flakes under
+    // coverage — the same race `findCell` exists for.
+    expect(await screen.findByText("560 kcal")).toBeTruthy();
+    expect(totalFor("Tue 10 Mar").textContent).toContain("560 kcal");
+    expect(totalFor("Average").textContent).toContain("680 kcal");
+
+    release();
+  });
+
+  test("a day with nothing planned reads as absent, not as zero", () => {
+    // § Materials, in figures rather than in a hatch: 0 kcal is a claim about
+    // the day, and the true state of an unplanned one is that there is none.
+    grid(template.map((day) => (day.date === "2026-03-15" ? { ...day, meals: [] } : day)));
+
+    expect(totalFor("Sun 15 Mar").textContent).toContain("—");
+    expect(totalFor("Sun 15 Mar").textContent).not.toContain("0 kcal");
+    // And it leaves the average alone rather than dragging it toward zero.
+    expect(totalFor("Average").textContent).toContain("700 kcal");
+    expect(totalFor("Average").textContent).toContain("6 days");
+  });
+
+  test("a week before the program starts averages nothing at all", () => {
+    grid(WEEK.map((date) => ({ date, meals: [] })));
+
+    expect(screen.queryByText("Average", { selector: "dt" })).toBeNull();
+  });
+});

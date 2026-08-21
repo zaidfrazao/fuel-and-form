@@ -5,12 +5,14 @@ import { type CSSProperties, startTransition, useOptimistic, useState } from "re
 import { repeatFromDate, revertOnDate, swapOnDate } from "@/app/actions/plan";
 import { SwapSheet, type SwappableMeal } from "@/components/swap-sheet";
 import { Button } from "@/components/ui/button";
+import { WeekTotals } from "@/components/week-totals";
 import { addDays, type CalendarDate } from "@/lib/date";
 import type { MealSlot } from "@/lib/db/schema";
 import type { MacroTarget } from "@/lib/macros";
 import { dayLabel, slotLabel } from "@/lib/now-display";
 import { SLOT_ORDER } from "@/lib/resolve-plan";
 import { type GridCell, type PlannedDay, weekGrid } from "@/lib/week-grid";
+import { weekTotals } from "@/lib/week-totals";
 
 /**
  * The weekly grid — PRD § P2's "7-day × slot table showing the resolved plan",
@@ -471,6 +473,13 @@ export function WeekGrid({
           </tbody>
         </table>
       </div>
+
+      {/* Totalled from `week` rather than from `days`, so the figures carry the
+          pending swap the cells above are already showing. Passing the props
+          through to the server and totalling there would print the week as it
+          was until revalidation lands — a stale number under a changed grid,
+          which is the one thing this block must never be. */}
+      <WeekTotals figures={weekTotals(week)} />
 
       {editing && (
         <SwapSheet

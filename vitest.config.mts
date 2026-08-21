@@ -72,6 +72,7 @@ export default defineConfig({
         "src/lib/template-plan.ts",
         "src/lib/walk.ts",
         "src/lib/week-grid.ts",
+        "src/lib/week-totals.ts",
       ],
       thresholds: {
         "src/lib/db/scope.ts": FULLY_COVERED,
@@ -215,6 +216,7 @@ export default defineConfig({
         // an ordinary one, the one umber marker on the wrong day. None of them
         // throw, and none would look wrong in a diff.
         "src/lib/week-grid.ts": FULLY_COVERED,
+        "src/lib/week-totals.ts": FULLY_COVERED,
       },
     },
   },
