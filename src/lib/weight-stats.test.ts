@@ -126,7 +126,13 @@ describe("progress", () => {
   test("never returns a negative zero", () => {
     // `−0` renders as "−0", which reads as a shortfall on a program that is
     // exactly level. `macros.ts` carries the same clause for the same reason.
-    const result = stats([{ date: "2026-08-17", weightKg: START_KG }]);
+    //
+    // Twenty grams ABOVE the starting weight, not on it. A reading sitting
+    // exactly on the start computes `a − a`, which is `+0` in IEEE 754 — so
+    // that fixture passes whether the clause is there or not, and pins nothing.
+    // This one rounds a real negative to zero, which is where `−0` is actually
+    // made. FUEL-10 lost a whole release to the first version of this test.
+    const result = stats([{ date: "2026-08-17", weightKg: 88.22 }]);
 
     expect(Object.is(result?.lostKg, 0)).toBe(true);
   });
@@ -321,6 +327,20 @@ describe("the verdict", () => {
     const gaining = rateOf(fortnight(-0.7));
 
     expect(Object.is(flat.kgPerWeek, 0)).toBe(true);
+    // Ten grams across three weeks is a real loss that rounds to nothing at two
+    // decimals — the rate's own `−0`, and the one a reader would see with a
+    // sign in front of it. A fortnight does not do it: 0.01 across 14 days
+    // lands on −0.005000000000002558, and the residue past the fifth decimal is
+    // enough to round it to −0.01 instead.
+    expect(
+      Object.is(
+        rateOf([
+          { date: "2026-08-17", weightKg: 84 },
+          { date: "2026-07-27", weightKg: 84.01 },
+        ]).kgPerWeek,
+        0,
+      ),
+    ).toBe(true);
     expect(flat.onPace).toBe(false);
 
     expect(gaining.kgPerWeek).toBe(0.35);

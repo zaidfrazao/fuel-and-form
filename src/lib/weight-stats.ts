@@ -46,13 +46,22 @@ import type { Reading } from "./weight-chart";
  * single point it is zero.
  *
  * That is the whole of P5's "handles fewer than four weeks without dividing by
- * zero", and it is a length check rather than an epsilon because
- * `weight_logs` is unique on `(user_id, date)`: two readings can never share an
- * x, so the denominator is zero if and only if the window holds one point. The
- * `variance === 0` guard below is still written, because that invariant belongs
- * to the DATABASE and this function's parameter is a plain array — a caller
- * holding two rows for one date is a bug, and returning "no rate" is a better
- * answer to it than `Infinity`.
+ * zero", and it is ONE guard on the denominator rather than a count of the
+ * readings. This file was first written with both — `points.length < 2` in
+ * front, `variance === 0` behind it — and mutation testing showed the length
+ * check could be removed without a single test noticing, because a lone reading
+ * arrives at the second guard with a variance of exactly zero and leaves by it.
+ * Two guards where one fires is one branch the coverage gate would have called
+ * covered while nothing constrained it, which is the trap this project's memory
+ * of FUEL-10 and FUEL-17 is about; the redundant one is gone.
+ *
+ * The guard that stayed is the wider one. Zero variance means every reading in
+ * the window falls on one date — trivially so for a single reading, and
+ * otherwise only for a list holding two rows for one day, which
+ * `weight_logs`'s unique index on `(user_id, date)` makes impossible. That case
+ * is kept anyway, because the invariant belongs to the DATABASE while this
+ * function's parameter is a plain array, and "no rate" is a better answer to a
+ * hand-built list than `Infinity`.
  *
  * A second division by zero the criterion does not name sits in the percentage:
  * `start === target` is a legal profile — someone at maintenance — and dividing
@@ -172,10 +181,6 @@ function trailingRate(
       y: reading.weightKg,
     }));
 
-  // One reading in four weeks is not a trend, and the module doc explains why
-  // this is also the divide-by-zero guard that P5 asks for.
-  if (points.length < 2) return null;
-
   const meanX = mean(points.map((point) => point.x));
   const meanY = mean(points.map((point) => point.y));
 
@@ -187,8 +192,11 @@ function trailingRate(
     variance += (point.x - meanX) ** 2;
   }
 
-  // Unreachable from the database — see the module doc — and written anyway,
-  // because the parameter is an array and `Infinity` is the alternative.
+  // No spread in the dates, so there is no slope through them — the ONE guard
+  // this needs, covering both ways it happens. See the module doc: a leading
+  // `points.length < 2` was written here first and removed as unobservable,
+  // because a single reading reaches this line with a variance of exactly zero
+  // and leaves by it.
   if (variance === 0) return null;
 
   const kgPerWeek = round((covariance / variance) * DAYS_PER_WEEK, 2);
