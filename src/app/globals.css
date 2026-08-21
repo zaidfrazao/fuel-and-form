@@ -230,3 +230,74 @@
     @apply font-sans;
   }
 }
+
+/* Brand Guide § Animation & Motion — the chart draw-in (FUEL-35).
+ *
+ * "Slow 400ms (chart and ruler draw-in, once per mount)", easing
+ * `cubic-bezier(0.32, 0.72, 0, 1)`, and § Accessibility: "prefers-reduced-motion
+ * drops the chart and ruler draw-in".
+ *
+ * Here rather than in `weight-chart.tsx` because a media query cannot be written
+ * as a Tailwind arbitrary value on an element, and because the suppression below
+ * has to be a rule a browser applies rather than a branch a component takes.
+ * Reading the signal in JavaScript — `matchMedia`, the way `theme-provider.tsx`
+ * reads the colour scheme — would make the chart a client component that renders
+ * differently before and after hydration, which for an animation means it plays
+ * once regardless on the way past.
+ *
+ * Two classes, one 400ms budget: the line draws for the whole of it and the
+ * latest reading's mark fades in over the last 150ms, so the umber dot lands as
+ * the line reaches it rather than sitting at the end of a line that has not
+ * arrived. Nothing here animates on a value that merely updated — § Animation's
+ * "does not" list — because an SVG element that React re-renders in place keeps
+ * running neither animation twice.
+ *
+ * `stroke-dashoffset` rather than a clip or a width transition: with
+ * `pathLength="1"` on the polyline, the dash units are the line's own normalised
+ * length, so one dash of 1 covers it exactly and no measurement of the path is
+ * needed at any point. See weight-chart.tsx. */
+@keyframes weight-chart-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes weight-chart-mark {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.weight-chart-trend {
+  stroke-dasharray: 1;
+  animation: weight-chart-draw 400ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.weight-chart-latest {
+  animation: weight-chart-mark 150ms ease-out 250ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Dropped, not shortened. The guide's word is "drops", and a 1ms draw-in is
+     still a draw-in to a vestibular system — the point is that nothing moves.
+     `stroke-dasharray` is reset with it: leaving the dash on a line whose
+     animation no longer runs would leave the trend permanently half-drawn, and
+     `both` on the mark would hold it at its `from` opacity of 0, hiding the one
+     mark the chart has. Suppressing an animation must not remove the thing it
+     was animating. */
+  .weight-chart-trend {
+    stroke-dasharray: none;
+    animation: none;
+  }
+
+  .weight-chart-latest {
+    opacity: 1;
+    animation: none;
+  }
+}

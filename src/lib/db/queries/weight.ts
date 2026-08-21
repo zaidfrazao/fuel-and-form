@@ -58,6 +58,23 @@ export type WeighInHistory = {
   today: CalendarDate;
   /** Every weigh-in, most recent first. */
   entries: WeightLog[];
+  /**
+   * `profiles.start_weight_kg` and `profiles.target_weight_kg` — FUEL-35's two
+   * reference lines.
+   *
+   * Carried on the history rather than fetched by the chart, because the profile
+   * row is already in hand: `loadWeighIns` selects it for the timezone two lines
+   * up, so these are two fields off a row that has been read rather than a
+   * second round trip on Neon's HTTP driver.
+   *
+   * They are also what the chart must never assume. P5 recalibrates the target
+   * every 5kg and P7 gives the demo persona different body metrics entirely, so
+   * a figure written into a component would be wrong twice over — and the
+   * owner's own numbers are among the ones § Security keeps out of a public
+   * repository.
+   */
+  startWeightKg: number;
+  targetWeightKg: number;
 };
 
 /**
@@ -91,7 +108,12 @@ export async function loadWeighIns(
     orderBy: desc(schema.weightLogs.date),
   });
 
-  return { today: todayIn(profile.timezone, now), entries };
+  return {
+    today: todayIn(profile.timezone, now),
+    entries,
+    startWeightKg: profile.startWeightKg,
+    targetWeightKg: profile.targetWeightKg,
+  };
 }
 
 /**

@@ -40,8 +40,17 @@ const ENTRIES: WeighInRow[] = [
   { date: "2026-08-06", weightKg: 80.8, note: null },
 ];
 
+/** Invented figures, per Testing Strategy § 1.5 — never the owner's real ones. */
+const START_KG = 84.2;
+const TARGET_KG = 76;
+
 const view = (entries: WeighInRow[] = ENTRIES) => (
-  <WeighIns today={TODAY} entries={entries} />
+  <WeighIns
+    today={TODAY}
+    entries={entries}
+    startWeightKg={START_KG}
+    targetWeightKg={TARGET_KG}
+  />
 );
 
 /**

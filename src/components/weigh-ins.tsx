@@ -5,10 +5,11 @@ import { startTransition, useOptimistic, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
+import { WeightChart } from "@/components/weight-chart";
 import { deleteWeighIn, saveWeighIn } from "@/app/actions/weight";
 import type { CalendarDate } from "@/lib/date";
 import { figure } from "@/lib/format";
-import { dayLabel } from "@/lib/now-display";
+import { entryLabel } from "@/lib/now-display";
 import { MAX_NOTE_LENGTH } from "@/lib/session-entry";
 import { MAX_KG, MIN_KG, parseWeighInDate, parseWeightKg } from "@/lib/weigh-in";
 
@@ -93,22 +94,6 @@ function banner(failure: Attempt): string {
   return failure.kind === "delete" ? "Couldn’t delete that." : "Couldn’t log that.";
 }
 
-/**
- * `Thu 14 Aug`, and the year too when it is not this one.
- *
- * `dayLabel` alone is what `/training`'s lists use, and there it is unambiguous
- * because the window is six weeks. This list has no window — the first weigh-in
- * may predate the program by years — so two rows could otherwise read `Thu 14
- * Aug` and mean different Augusts. The year appears only when it differs, on
- * `weekLabel`'s rule in `now-display.ts`: the parts that repeat are the parts to
- * drop.
- */
-function entryLabel(date: CalendarDate, today: CalendarDate): string {
-  const label = dayLabel(date);
-
-  return date.slice(0, 4) === today.slice(0, 4) ? label : `${label} ${date.slice(0, 4)}`;
-}
-
 /** `77.4 kg`. One decimal, which is every bathroom scale there is. */
 function kilograms(weightKg: number): string {
   return `${figure(weightKg)} kg`;
@@ -117,11 +102,25 @@ function kilograms(weightKg: number): string {
 export function WeighIns({
   today,
   entries,
+  startWeightKg,
+  targetWeightKg,
 }: {
   /** Today in the user's own zone — the form's default and its ceiling. */
   today: CalendarDate;
   /** Every weigh-in, newest first, from `loadWeighIns`. */
   entries: readonly WeighInRow[];
+  /**
+   * `profiles.start_weight_kg` and `profiles.target_weight_kg` — the chart's two
+   * reference lines, and FUEL-35's "target line and starting weight both
+   * visible".
+   *
+   * Carried down from the profile rather than written here as figures. P7 gives
+   * the demo persona different body metrics, so a literal target would draw the
+   * owner's goal across a visitor's chart — and the owner's goal is one of the
+   * numbers § Security keeps out of a public repository.
+   */
+  startWeightKg: number;
+  targetWeightKg: number;
 }) {
   const [date, setDate] = useState<CalendarDate>(today);
   // Strings, not numbers: the boxes have an empty state and `null` is not a
@@ -409,6 +408,27 @@ export function WeighIns({
           Log weigh-in
         </Button>
       </section>
+
+      {/*
+       * The trend, above the list it is a picture of — the arrangement
+       * `/training` uses for its dot grid and `recent-sessions` beneath it, and
+       * for the same reason: the graphic answers "how is it going" at a glance
+       * and the rows answer "what exactly happened".
+       *
+       * Below the form rather than above it, so a ~176px graphic never pushes
+       * the screen's one primary action out of thumb reach — § Touch Targets.
+       *
+       * `rows`, not `entries`: these are the optimistic rows, so a logged
+       * weigh-in moves the line at the same moment it appears in the list.
+       * `WeightChart` renders nothing at all when there are none, which is why
+       * this needs no gate of its own.
+       */}
+      <WeightChart
+        entries={rows}
+        today={today}
+        startWeightKg={startWeightKg}
+        targetWeightKg={targetWeightKg}
+      />
 
       {latest && (
         <section className="flex flex-col gap-[14px]">

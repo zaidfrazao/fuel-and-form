@@ -61,9 +61,16 @@ const ROW: WeightLog = {
   createdAt: new Date("2026-08-13T05:30:00Z"),
 };
 
+/** The persona's own figures, invented — Testing Strategy § 1.5 keeps the
+ * owner's real metrics out of a public repository. */
+const START_KG = 84.2;
+const TARGET_KG = 76;
+
 const history = (entries: WeightLog[] = [ROW]): WeighInHistory => ({
   today: TODAY,
   entries,
+  startWeightKg: START_KG,
+  targetWeightKg: TARGET_KG,
 });
 
 beforeEach(() => {

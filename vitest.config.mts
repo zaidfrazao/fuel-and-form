@@ -72,6 +72,7 @@ export default defineConfig({
         "src/lib/template-plan.ts",
         "src/lib/walk.ts",
         "src/lib/weigh-in.ts",
+        "src/lib/weight-chart.ts",
         "src/lib/week-grid.ts",
         "src/lib/week-totals.ts",
       ],
@@ -207,6 +208,20 @@ export default defineConfig({
         // anywhere that can take it back. Neither throws and neither looks
         // wrong on the screen that caused it.
         "src/lib/walk.ts": FULLY_COVERED,
+        // FUEL-35, and gated on macros.ts's argument rather than on a refusal:
+        // every way this can be wrong DRAWS something. A domain that stopped
+        // including the target is a chart quietly missing a line nobody counts;
+        // a reversed sort is a loss drawn as a gain, on the screen P5 calls
+        // "the single number the whole program is judged on".
+        //
+        // Its three division-by-zero cases are the specific reason the number
+        // is 100 rather than "covered". One reading, a history that never
+        // moves, and a flat history sitting exactly on its target are all
+        // ordinary data, and each puts NaN into a coordinate — which SVG
+        // DISCARDS SILENTLY. There is no crash, no console error and no empty
+        // state; there is a chart with nothing on it, on a screen where a
+        // person cannot tell that apart from having logged nothing.
+        "src/lib/weight-chart.ts": FULLY_COVERED,
         // FUEL-28, and template-plan.ts's argument one table across. It decides
         // which of thirty-five cells is empty, and an empty cell is not
         // cosmetic here: it is what the 45° hatch marks, what a tap fills, and
