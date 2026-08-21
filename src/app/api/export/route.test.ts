@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { ExportPayload } from "@/lib/db/queries/export";
 import type { Profile } from "@/lib/db/schema";
@@ -177,5 +177,64 @@ describe("the response", () => {
 
     expect(document.schemaVersion).toBe(1);
     expect(document.account.id).toBe(USER_ID);
+  });
+});
+
+describe("when the read fails", () => {
+  /**
+   * Silenced, not ignored. The route logs the failure on purpose — that is the
+   * assertion in the second test — and a real `console.error` here would print
+   * a stack into the suite's output on every run, which is how genuine errors
+   * stop being noticed.
+   */
+  let logged: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    logged.mockRestore();
+  });
+
+  test("answers 500 without a body that could be mistaken for a backup", async () => {
+    // A download link makes this worse than an ordinary 500: the browser saves
+    // whatever comes back under the name in the header, so a framework error
+    // page would land on disk as `fuel-form-<date>.json` full of HTML. The
+    // failure must therefore be a short body and, above all, no
+    // `Content-Disposition`.
+    const failure = new Error("neon: connection refused");
+
+    loadExport.mockRejectedValue(failure);
+
+    const response = await GET();
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get("Content-Disposition")).toBeNull();
+    expect(await response.text()).toBe("Export failed");
+  });
+
+  test("names the failure in the log and nowhere else", async () => {
+    // The shape every Server Action here uses: the detail goes to whoever runs
+    // the app, and the caller is told only that it failed. A database error
+    // reaching the response body is an internals leak on a public URL.
+    const failure = new Error("neon: password authentication failed for user");
+
+    loadExport.mockRejectedValue(failure);
+
+    const body = await (await GET()).text();
+
+    expect(logged).toHaveBeenCalledWith("Could not build the export.", failure);
+    expect(body).not.toContain("password");
+    expect(body).not.toContain("neon");
+  });
+
+  test("still sends a signed-out caller to the login screen", async () => {
+    // `redirect()` works by throwing, so a `try` that enclosed it would swallow
+    // the redirect and answer 500 to every signed-out visitor. This is the test
+    // that would fail if someone ever moved it inside.
+    getSession.mockResolvedValue(undefined);
+
+    await expect(GET()).rejects.toThrow("NEXT_REDIRECT:/login");
   });
 });

@@ -84,32 +84,52 @@ export async function GET(): Promise<Response> {
 
   if (!session) redirect("/login");
 
-  // The clock is read ONCE, here, and handed to both readers of it — so the
-  // date naming the file and the instant stamped inside it are the same moment
-  // rather than two moments a query apart. Nothing below this line reads a
-  // clock, which is what the arrangement is for.
-  const now = new Date();
-  const payload = await loadExport(session.userId, now);
+  try {
+    // The clock is read ONCE, here, and handed to both readers of it — so the
+    // date naming the file and the instant stamped inside it are the same
+    // moment rather than two moments a query apart. Nothing below this line
+    // reads a clock, which is what the arrangement is for.
+    const now = new Date();
+    const payload = await loadExport(session.userId, now);
 
-  if (!payload) return new Response("Not found", { status: 404 });
+    if (!payload) return new Response("Not found", { status: 404 });
 
-  const document = buildExport({
-    account: payload.account,
-    exportedAt: now,
-    tables: payload.tables,
-  });
+    const document = buildExport({
+      account: payload.account,
+      exportedAt: now,
+      tables: payload.tables,
+    });
 
-  // Two-space indent: this file is something a person opens, and P6's second
-  // reader is a nutrition assistant rather than a program. The cost is bytes on
-  // a document measured in tens of kilobytes.
-  const body = JSON.stringify(document, null, 2);
+    // Two-space indent: this file is something a person opens, and P6's second
+    // reader is a nutrition assistant rather than a program. The cost is bytes
+    // on a document measured in tens of kilobytes.
+    const body = JSON.stringify(document, null, 2);
 
-  return new Response(body, {
-    status: 200,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${exportFilename(payload.today)}"`,
-      "Cache-Control": "no-store",
-    },
-  });
+    return new Response(body, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${exportFilename(payload.today)}"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error) {
+    // The shape every Server Action in this app already uses: name the failure
+    // for whoever runs it, and tell the caller only that it failed.
+    //
+    // It matters more here than in an action, because of what a FAILED download
+    // looks like. Without this, an unreachable database surfaces as the
+    // framework's own 500 page — which the browser will happily save, under the
+    // name in the header, as a file called `fuel-form-<date>.json` containing
+    // HTML. A backup that is silently an error page is worse than no backup,
+    // and the person who needs it will not find out until a restore.
+    //
+    // `redirect()` deliberately sits OUTSIDE this block. It works by throwing,
+    // so catching it here would swallow the sign-in redirect and answer 500 to
+    // every signed-out visitor. Keeping it above the `try` is why this needs no
+    // rethrow helper and no import from Next's internals.
+    console.error("Could not build the export.", error);
+
+    return new Response("Export failed", { status: 500 });
+  }
 }
