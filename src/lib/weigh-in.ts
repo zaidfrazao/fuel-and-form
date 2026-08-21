@@ -63,14 +63,22 @@ export type WeighIn = {
 };
 
 /**
- * Four digits, an optional separator, and digits — nothing else.
+ * Digits, at most one separator, and digits — nothing else.
  *
  * A pattern rather than `Number(value)` because `Number` is far too willing:
- * `Number("")` and `Number(" ")` are both 0, `Number("0x4d")` is 77, `Number
- * ("1e2")` is 100, and each of those is a string a probe can send and a number
- * this file would then have to argue about. The pattern refuses all of them,
- * along with signs — a negative weigh-in is not a reading — before any
+ * `Number("")` and `Number(" ")` are both 0, `Number("0x4d")` is 77,
+ * `Number("1e2")` is 100, and each of those is a string a probe can send and a
+ * number this file would then have to argue about. The pattern refuses all of
+ * them, along with signs — a negative weigh-in is not a reading — before any
  * arithmetic happens.
+ *
+ * **At most one** is what refuses a thousands separator, and it is the reason
+ * there is no separate check for one. `1,234.5` is 1234.5 in English and
+ * `1.234,5` is the same number in German; nothing in either string says which
+ * convention was being followed, so a parser that interpreted them would be
+ * wrong half the time. Both carry two separators, so both fail here — and an
+ * explicit `includes(",") && includes(".")` guard in front of this would be a
+ * branch no input could ever reach, which a mutation test duly found.
  *
  * A leading digit is required, so `.5` is refused. It is out of range anyway;
  * refusing it here means the range check never has to explain itself for a
@@ -90,11 +98,8 @@ const DECIMAL = /^\d+(?:[.,]\d+)?$/;
  * one of them would make the app unusable on a phone with the wrong locale
  * while looking like a validation bug.
  *
- * A string carrying BOTH is refused rather than interpreted. `1,234.5` is a
- * thousands separator in English and `1.234,5` is the same number in German,
- * and there is no way to tell from the string alone which convention a person
- * was following. Guessing is how 1234.5 kg gets stored, and the guess would be
- * wrong exactly half the time.
+ * A string carrying BOTH is refused rather than interpreted — see `DECIMAL`,
+ * which permits at most one and is where that refusal lives.
  *
  * ## Rounded here, not by Postgres
  *
@@ -112,10 +117,6 @@ export function parseWeightKg(value: unknown): number | undefined {
   if (typeof value !== "string") return undefined;
 
   const trimmed = value.trim();
-
-  // Before the pattern, which accepts a single separator of either kind and so
-  // cannot tell `1,234.5` apart from a reading on its own.
-  if (trimmed.includes(",") && trimmed.includes(".")) return undefined;
 
   if (!DECIMAL.test(trimmed)) return undefined;
 
