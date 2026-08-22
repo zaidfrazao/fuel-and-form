@@ -66,6 +66,22 @@ describe.skipIf(!configured)("the weekly export, scoped", () => {
     return { csv: buildWeekCsv(payload.input), monday: payload.monday };
   }
 
+  /**
+   * The rows of one section, without its name or its header.
+   *
+   * Needed because two of the assertions below are about a SECTION rather than
+   * about the file: the fixture's dates are the week's own dates, so "the
+   * file does not contain 2026-03-02" is false for a file whose preamble names
+   * the week starting on it. What a leak would look like is an extra ROW.
+   */
+  function section(csv: string, name: string): string[] {
+    const all = csv.split("\r\n");
+    const rest = all.slice(all.indexOf(name) + 2);
+    const end = rest.indexOf("");
+
+    return end === -1 ? rest : rest.slice(0, end);
+  }
+
   it("gives a demo session its own week, in all three sections", async () => {
     // The positive half, and what stops the isolation assertions below from
     // passing against a file that had quietly stopped working.
@@ -88,7 +104,14 @@ describe.skipIf(!configured)("the weekly export, scoped", () => {
     expect(csv).not.toContain(fixture.alice.userId);
     expect(csv).not.toContain(fixture.alice.mealId);
     expect(csv).not.toContain(fixture.alice.workoutId);
-    expect(csv).not.toContain(fixture.alice.weighInDate);
+
+    // Alice's weigh-in is asserted as a ROW rather than as a string, because
+    // her fixture date is this week's Monday — it is in the preamble of every
+    // file for this week, including Bob's own. One row, on Bob's own date, is
+    // what "none of the owner's rows" means here.
+    expect(section(csv, "weight").map((row) => row.split(",")[0])).toEqual([
+      fixture.bob.weighInDate,
+    ]);
   });
 
   it("gives the owner their own week, not the demo session's", async () => {
@@ -123,15 +146,23 @@ describe.skipIf(!configured)("the weekly export, scoped", () => {
     expect(thursday.csv).toBe(monday.csv);
   });
 
-  it("excludes a week's neighbours", async () => {
-    // The narrowed reads, from the outside: the fixture's rows are all in the
-    // week of the 2nd, so the week after it is three empty sections. A read
-    // that forgot its date range would put them here.
+  it("shows a neighbouring week's plan without its logs", async () => {
+    // The narrowed reads, from the outside — and the line between what is
+    // narrowed and what is not. The template RECURS, so the week after the
+    // fixture's still plans Bob's porridge on its Monday; the logs, the
+    // override and the weigh-in are dated, so none of them belongs here.
+    //
+    // A read that forgot its date range would fill `actual` and `status` in
+    // with the week before's answers, which is the failure that would be
+    // hardest to see in a file that otherwise looks right.
     const { csv } = await csvFor(fixture.bob.userId, "2026-03-09");
 
     expect(csv).toContain("week,2026-03-09");
-    expect(csv).not.toContain("Bob's porridge");
-    expect(csv).not.toContain(fixture.bob.weighInDate);
+    expect(section(csv, "weight")).toEqual([]);
+    expect(section(csv, "meals")).toEqual([
+      "2026-03-09,breakfast,Bob's porridge,,,,420,24,12,55,",
+    ]);
+    expect(section(csv, "training")).toEqual(["2026-03-09,Bob's circuit,circuit,yes,,,"]);
   });
 
   it("chooses the current week in the user's own zone", async () => {

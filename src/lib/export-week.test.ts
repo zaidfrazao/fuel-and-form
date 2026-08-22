@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import type { Meal, MealLog, WeightLog, Workout, WorkoutLog } from "./db/schema";
 import { buildWeekCsv, type WeekExportInput, weekExportFilename } from "./export-week";
 import type { ResolvedDay, ResolvedMeal } from "./resolve-plan";
-import type { TrainingDay, TrainingSession } from "./resolve-training";
+import type { TrainingSession } from "./resolve-training";
 
 /**
  * The weekly CSV — FUEL-38, PRD § P6.
