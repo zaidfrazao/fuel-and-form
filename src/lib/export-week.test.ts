@@ -451,6 +451,20 @@ describe("a slot logged more than once", () => {
       ),
     ).toEqual(["2026-08-17,breakfast,,,Chicken rice bowl,eaten,610,48,18,62,"]);
   });
+
+  test("breaks a tied instant on the id whichever order the rows arrive in", () => {
+    // The same two rows, swapped. A comparator that answered "the second one"
+    // rather than "the higher id" passes the case above and fails this one,
+    // and the file it produces would depend on the order Postgres returned.
+    const at = new Date("2026-08-17T08:00:00.000Z");
+
+    expect(
+      twice(
+        { id: "cccccccc-0000-4000-8000-00000000000b", loggedAt: at },
+        { id: "cccccccc-0000-4000-8000-00000000000a", loggedAt: at },
+      ),
+    ).toEqual(["2026-08-17,breakfast,,,Oats and whey,eaten,430,32,9,58,"]);
+  });
 });
 
 describe("the training section", () => {
@@ -511,6 +525,58 @@ describe("the training section", () => {
     expect(section(csv, "training").map((row) => row.split(",")[1])).toEqual([
       "Daily walk",
       "Push A",
+    ]);
+  });
+
+  test("sorts an unnamed session first rather than dropping it", () => {
+    // Two unscheduled logs, one naming a workout the library no longer holds.
+    // The comparator has to cope with a missing name, and the row has to stay:
+    // the log is a fact whether or not the thing it names still exists.
+    const csv = buildWeekCsv(
+      input({
+        workoutLogs: [
+          workoutLog({ date: MONDAY, workoutId: PUSH.id }),
+          workoutLog({
+            id: "dddddddd-0000-4000-8000-000000000002",
+            date: MONDAY,
+            workoutId: "gone",
+          }),
+        ],
+      }),
+    );
+
+    expect(section(csv, "training")).toEqual([
+      "2026-08-17,,,no,done,,",
+      "2026-08-17,Push A,strength,no,done,,",
+    ]);
+  });
+
+  test("breaks a tie between two sessions of the same name on the id", () => {
+    // Two workouts may honestly share a name — `lib/export.ts` makes the same
+    // point about meals. Without the second comparator the order would be
+    // whatever Postgres returned, and the file would stop being reproducible.
+    const twin: Workout = { ...PUSH, id: "bbbbbbbb-0000-4000-8000-00000000000a" };
+
+    const csv = buildWeekCsv(
+      input({
+        workouts: [twin, PUSH],
+        workoutLogs: [
+          workoutLog({ date: MONDAY, workoutId: PUSH.id, durationMin: 40 }),
+          workoutLog({
+            id: "dddddddd-0000-4000-8000-000000000002",
+            date: MONDAY,
+            workoutId: twin.id,
+            durationMin: 55,
+          }),
+        ],
+      }),
+    );
+
+    // Ordered by id in byte order, where a digit sorts before a letter — so
+    // `...0001` comes first and the 40-minute row leads.
+    expect(section(csv, "training")).toEqual([
+      "2026-08-17,Push A,strength,no,done,40,",
+      "2026-08-17,Push A,strength,no,done,55,",
     ]);
   });
 

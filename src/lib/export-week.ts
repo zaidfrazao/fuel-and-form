@@ -304,16 +304,23 @@ function trainingRows(
 
     const unplanned = dayLogs
       .filter((log) => !planned.has(log.workoutId))
-      .map((log) => ({ log, workout: library.get(log.workoutId) }))
+      .map((log) => {
+        const workout = library.get(log.workoutId);
+
+        // Resolved once here rather than in the comparator and again in the
+        // row. A log naming a workout the library no longer holds — which a
+        // composite foreign key makes unreachable, so this is defensive — must
+        // sort under the same name it prints under, and this is the only place
+        // that decides what that name is.
+        return { log, name: workout?.name ?? "", type: workout?.type ?? "" };
+      })
       .sort(
-        (a, b) =>
-          compare(a.workout?.name ?? "", b.workout?.name ?? "") ||
-          compare(a.log.workoutId, b.log.workoutId),
+        (a, b) => compare(a.name, b.name) || compare(a.log.workoutId, b.log.workoutId),
       )
-      .map(({ log, workout }) => [
+      .map(({ log, name, type }) => [
         date,
-        workout?.name ?? "",
-        workout?.type ?? "",
+        name,
+        type,
         "no",
         log.status,
         cell(log.durationMin),
