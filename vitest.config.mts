@@ -57,10 +57,12 @@ export default defineConfig({
         "src/lib/auth/token.ts",
         "src/lib/auth/compare.ts",
         "src/lib/auth/cookies.ts",
+        "src/lib/csv.ts",
         "src/lib/cursor.ts",
         "src/lib/date.ts",
         "src/lib/day-summary.ts",
         "src/lib/export.ts",
+        "src/lib/export-week.ts",
         "src/lib/log-intent.ts",
         "src/lib/macros.ts",
         "src/lib/repeat.ts",
@@ -76,6 +78,7 @@ export default defineConfig({
         "src/lib/weight-chart.ts",
         "src/lib/weight-stats.ts",
         "src/lib/week-grid.ts",
+        "src/lib/week-param.ts",
         "src/lib/week-totals.ts",
       ],
       thresholds: {
@@ -231,6 +234,27 @@ export default defineConfig({
         // is nothing to fall back on. P6 calls this the answer to "don't lose
         // my history", so an unmeasured branch here is a promise nobody checked.
         "src/lib/export.ts": FULLY_COVERED,
+        // FUEL-38, and the same argument for the other file P6 hands out — one
+        // week, for a reader who never logs in and has nothing to check it
+        // against. A column that reports the plan where it promised what was
+        // eaten still opens, still sums, and still looks like a week.
+        //
+        // `csv.ts` is here for a different reason, and a weaker gate would be
+        // worse than none: escaping is four lines whose input space is not four
+        // lines wide, so 100% is reached by a single field containing a comma
+        // while a quote, a newline and a trailing space are all still wrong.
+        // The number is a floor under a suite that has to choose its cases by
+        // input class — see the head of `csv.test.ts`. A misquoted field does
+        // not throw; it shifts one row by one column, days later, on someone
+        // else's machine.
+        "src/lib/export-week.ts": FULLY_COVERED,
+        "src/lib/csv.ts": FULLY_COVERED,
+        // FUEL-38. Small, and gated because of WHERE it sits: `?week=` is the
+        // one input `/plan` and `/api/export/week` both take from a stranger,
+        // and the whole contract is "never throws". A regression is not a wrong
+        // week — it is a 500 on an edited URL, or a file whose seven days are
+        // not the seven the link was clicked on.
+        "src/lib/week-param.ts": FULLY_COVERED,
         "src/lib/weight-chart.ts": FULLY_COVERED,
         // FUEL-36, and the chart's argument taken one step further. The chart
         // DRAWS a claim about someone's own history; this file STATES one, and
