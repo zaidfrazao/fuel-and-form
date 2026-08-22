@@ -335,6 +335,14 @@ check the run said **passed** rather than **skipped** before trusting it.
 
 ## Export
 
+Two files, because P6 has two readers. **JSON** is the backup — the whole
+account, in one file, against "don't lose my history". **CSV** is the check-in —
+one week, in the shape a nutrition assistant opens in a spreadsheet. Neither is
+a rendering of the other: the JSON carries ids so it can be restored, the CSV
+carries names so it can be read.
+
+### The account, as JSON
+
 `GET /api/export` returns the whole account as one JSON file, named
 `fuel-form-<date>.json`. The link is on `/settings`. It is a **route handler**
 rather than a Server Action so the browser's own download mechanism does the
@@ -345,7 +353,7 @@ today in the *user's* timezone and a client would read the browser's clock.
 The response carries `Cache-Control: no-store`. It is one person's entire
 history returned on the strength of a cookie, from an app behind a CDN.
 
-### What is in it
+#### What is in it
 
 Every table the account owns — not just the logs. P6 calls this the backup
 against "don't lose my history", and logs alone cannot restore an account:
@@ -378,7 +386,7 @@ Dates are `YYYY-MM-DD` in the account's timezone. Instants — `createdAt`,
 `loggedAt`, `exportedAt` — are ISO 8601 in UTC. `profile` is an object rather
 than an array because `profiles` holds exactly one row per user.
 
-### What is not in it, and why
+#### What is not in it, and why
 
 **`user_id`.** The same value on all eleven tables, and `account.id` already
 says it once. A second copy invites an importer to trust the row over the
@@ -392,14 +400,14 @@ the demo reaper's — so four chosen fields cross as `account` instead.
 argues why; that argument is about a screen's payload. This is a backup, and
 `meal_logs.meal_id → meals.id` is the whole reason it can be restored.
 
-### What `schemaVersion` promises
+#### What `schemaVersion` promises
 
 That a reader of version 1 keeps working. A later change may **add** a key or a
 field. Renaming one, removing one, or changing what one means is a new version.
 The field is first in the document so a reader can learn which version it holds
 without parsing the rest.
 
-### Two guarantees worth relying on
+#### Two guarantees worth relying on
 
 **It is deterministic.** Every array is totally ordered — by the row's natural
 key, with `id` as the final tie-break — so two exports of unchanged data are
@@ -410,12 +418,112 @@ what actually changed.
 session exports demo data and nothing else. Asserted in
 `tests/integration/export.test.ts`, which is Testing Strategy § 1.4 case 3.
 
-### Adding a table
+#### Adding a table
 
 `src/lib/export.test.ts` enumerates every table `schema.ts` exports and fails
 when one is neither in the document nor on a named exclusion list. So a new
 table forces a decision at the commit that adds it, rather than being missed
 until someone tries to restore from a backup that quietly stopped being one.
+
+### The week, as CSV
+
+`GET /api/export/week?week=YYYY-MM-DD` returns one week, named
+`fuel-form-week-<monday>.csv`. The link is on `/plan`, beside the prev/next
+week navigation — the week is chosen there, so the export has no picker and no
+screen of its own. `?week=` takes any date in the wanted week and snaps to its
+Monday; a value it cannot read is the current week rather than an error, since
+a query parameter is an input a stranger controls.
+
+Dated by the week's **Monday**, not by the day of the download: a backup's
+question is "when was this taken", a check-in's is "which week is this". Two
+downloads of one week overwrite rather than accumulate.
+
+#### The shape
+
+A four-line preamble, then three sections separated by blank lines. The file is
+deliberately ragged — three tables, three different column counts, which P6
+allows as "one section or file each" and every spreadsheet imports.
+
+```csv
+week,2026-08-17
+dates,2026-08-17,2026-08-23
+timezone,Europe/London
+exported_at,2026-08-21T09:30:00.000Z
+
+weight
+date,weight_kg,note
+2026-08-17,80.4,
+2026-08-19,80.1,"lighter, after a long walk"
+
+training
+date,session,type,scheduled,status,duration_min,note
+2026-08-17,Push A,strength,yes,done,52,
+2026-08-17,Daily walk,walk,yes,,,
+
+meals
+date,slot,planned,swapped_with,actual,status,kcal,protein_g,fat_g,carb_g,note
+2026-08-17,breakfast,Oats and whey,,Oats and whey,eaten,430,32,9,58,
+2026-08-17,lunch,Chicken rice bowl,Beef and potato,Beef and potato,eaten,640,45,22,60,
+```
+
+The preamble carries the timezone because a column of bare dates is not
+readable without one — `2026-08-17` is a day only in some zone.
+
+#### The columns that need explaining
+
+**`planned`, `swapped_with`, `actual`** are P6's three, one each. `planned` is
+what the weekly template names for that weekday and slot — the recurring
+intent. `swapped_with` is the one-off override, blank when the slot was never
+swapped. `actual` is the meal the log names, blank when the slot was never
+logged.
+
+They usually agree. They come apart in the case worth reporting: a slot logged
+and only afterwards swapped, where `actual` is what was eaten and
+`swapped_with` is what the plan says now.
+
+**The four macro columns** describe the meal in `actual` when there is one, and
+otherwise the meal that stood. So a summed column is intake *as recorded*, and
+a row with a blank `status` is intake that was planned and never confirmed —
+**filter on `status = eaten`** to separate them.
+
+**`scheduled`** in the training section is `yes` or `no`. A session can be
+logged on a date the template no longer covers, because the template is edited
+for future weeks while a past week resolves against it as it is today. Those
+rows are kept and marked rather than dropped. A blank `status` means the
+session was never logged, which is a different fact from `skipped`.
+
+**Empty sections are written**, headers and all. A header with no rows says
+"nothing was recorded that week"; a missing section is indistinguishable from a
+broken export by the person opening the file.
+
+#### Two things the file does deliberately
+
+**Fields that could be formulas are prefixed with `'`.** A note beginning `=`,
+`+`, `-` or `@` would otherwise be evaluated by the spreadsheet that opens it.
+This is the one file in the app whose contents are opened by another program,
+on someone else's machine, and the notes in it are free text. The cost is that
+a note legitimately starting with a minus sign shows its prefix in the formula
+bar; no generated column can begin with a guarded character.
+
+**There is no byte-order mark.** The response declares `charset=utf-8`. A BOM
+is a workaround for a reader that ignores that, and is itself three stray
+characters glued to the first cell for every reader that does not.
+
+#### The same two guarantees
+
+**Deterministic.** Row order comes from the data's own keys — the week's dates,
+then slot order, then the template's order for sessions — never from a row id
+or from whatever order Postgres returned. Two exports of an unchanged week are
+byte-identical.
+
+**Scoped to the caller.** All seven reads go through `scope()`, asserted in
+`tests/integration/week-export.test.ts` — Testing Strategy § 1.4 case 3, the
+same criterion as the JSON export's, on a different set of statements.
+
+One summary the CSV makes that the JSON does not: where a slot holds more than
+one log — `meal_logs` has no unique constraint, and `alreadyLogged` is what
+normally prevents it — the check-in reports the most recent one. Every row is
+still in the JSON backup.
 
 ## Documentation
 

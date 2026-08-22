@@ -209,6 +209,55 @@ describe("which week", () => {
   });
 });
 
+describe("the CSV link", () => {
+  /** FUEL-38's half of P6, on the screen where a week is already chosen. */
+  const download = () =>
+    screen.getByRole("link", { name: "Download 9 – 15 Mar 2026 as CSV" });
+
+  test("carries the week being shown, explicitly", async () => {
+    // Written into the href even for the current week, so the link says which
+    // seven days it will produce rather than depending on the server resolving
+    // "now" to the same week the grid is showing. The two clocks are in
+    // different zones and the week can turn over between them.
+    await show();
+
+    expect(download().getAttribute("href")).toBe("/api/export/week?week=2026-03-09");
+  });
+
+  test("follows the week the grid moves to", async () => {
+    loadWeek.mockResolvedValue(week({ monday: "2026-03-16" }));
+    await show({ week: "2026-03-16" });
+
+    expect(
+      screen.getByRole("link", { name: "Download 16 – 22 Mar 2026 as CSV" }).getAttribute("href"),
+    ).toBe("/api/export/week?week=2026-03-16");
+  });
+
+  test("is a plain anchor, so the browser downloads rather than navigates", async () => {
+    // A `Link` would intercept the click and route it, which for a response
+    // carrying `Content-Disposition: attachment` is the wrong verb entirely —
+    // there is no page to navigate to. `/settings` makes the same call for the
+    // JSON export.
+    //
+    // No `download` attribute either: it would name the file from the URL's
+    // last segment — "week" — while the server is already naming it
+    // `fuel-form-week-<monday>.csv` in the header.
+    await show();
+
+    expect(download().hasAttribute("download")).toBe(false);
+  });
+
+  test("names the week rather than saying \"this week\"", async () => {
+    // The visible label is read after a navigation that changed which week
+    // "this" refers to, and a control whose name depends on unspoken context is
+    // one a screen-reader user has to go and check.
+    await show();
+
+    expect(download().textContent).toBe("Download this week (CSV)");
+    expect(download().getAttribute("aria-label")).toBe("Download 9 – 15 Mar 2026 as CSV");
+  });
+});
+
 describe("the payload", () => {
   test("drops the columns the browser has no business holding", async () => {
     const { container } = await show();

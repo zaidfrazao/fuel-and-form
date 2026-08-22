@@ -4,10 +4,11 @@ import { redirect } from "next/navigation";
 
 import { WeekGrid } from "@/components/week-grid";
 import { getSession } from "@/lib/auth/session";
-import { addDays, type CalendarDate, parseCalendarDate, startOfWeek } from "@/lib/date";
+import { addDays, type CalendarDate, startOfWeek } from "@/lib/date";
 import { loadWeek } from "@/lib/db/queries/week";
 import type { Meal } from "@/lib/db/schema";
 import { weekLabel } from "@/lib/now-display";
+import { requestedWeek } from "@/lib/week-param";
 
 /**
  * `/plan` — the weekly grid. PRD § P2, and FUEL-28.
@@ -33,16 +34,23 @@ import { weekLabel } from "@/lib/now-display";
  *
  * ## A bad `?week=` renders this week rather than failing
  *
- * `parseCalendarDate` throws on a malformed date, and this is a query parameter
- * — the one input on the screen that a stranger fully controls. `parseCursor`
- * makes the same call for the same reason: the honest answer to a value we do
- * not recognise is the answer to no value at all, and a throw would turn an
- * edited URL into a 500.
+ * `requestedWeek` decides that, and states why. It lives in `lib/week-param.ts`
+ * rather than here because FUEL-38's `/api/export/week` reads the same
+ * parameter: the screen and the file it downloads have to agree about which
+ * seven days a URL names, and one function is how that is guaranteed.
  *
- * The date is not otherwise constrained. Any date names a real week, including
- * ones before the program started or years out — `resolveSlot` answers `null`
- * for a date before `program_start_date`, so those render as seven empty
- * columns, which is true.
+ * ## The CSV link is an `<a>`, and it carries the week being shown
+ *
+ * P6's weekly export, FUEL-38. It is here rather than on a screen of its own
+ * because the week is already chosen — by the prev/next links above it — and a
+ * second picker somewhere else would be a second thing to keep in step with
+ * this one. A plain anchor rather than a `<Link>`, for `/settings`' reason: the
+ * response carries `Content-Disposition: attachment`, so there is no page to
+ * navigate to and the browser's own download is the right mechanism.
+ *
+ * The `week` is written into the href explicitly, including on the current
+ * week, so the link says which seven days it will produce rather than
+ * depending on the server resolving "now" to the same week the grid is showing.
  *
  * ## The auth check is here rather than in a layout
  *
@@ -60,25 +68,6 @@ export const metadata: Metadata = {
 };
 
 /**
- * The week a query parameter asks for, or `null` for the current one.
- *
- * Never throws. A repeated parameter arrives as an array and is refused rather
- * than having one of its values picked — a URL that says two different things
- * has not asked a question this screen can answer.
- */
-function requestedWeek(value: string | string[] | undefined): CalendarDate | null {
-  if (typeof value !== "string") return null;
-
-  try {
-    parseCalendarDate(value);
-
-    return value;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Prev, next and "This week" — § Buttons' Text variant, which is what a
  * tertiary navigation control is.
  *
@@ -93,7 +82,7 @@ function WeekNav({ monday }: { monday: CalendarDate }) {
   const next = addDays(monday, 7);
 
   return (
-    <nav aria-label="Week" className="flex items-center justify-between gap-3">
+    <nav aria-label="Week" className="flex w-full items-center justify-between gap-3">
       <Link
         href={`/plan?week=${previous}`}
         aria-label={`Previous week, ${weekLabel(previous)}`}
@@ -120,6 +109,30 @@ function WeekNav({ monday }: { monday: CalendarDate }) {
         <span aria-hidden="true">Next &rsaquo;</span>
       </Link>
     </nav>
+  );
+}
+
+/**
+ * The week being shown, as a file — P6's check-in export.
+ *
+ * The accessible name names the WEEK rather than saying "download this week",
+ * because the visible label is read after a navigation that changed which week
+ * "this" refers to, and a control whose name depends on unspoken context is one
+ * a screen-reader user has to go and check.
+ *
+ * Outside the `<nav>` above deliberately: downloading a file is not moving
+ * between weeks, and putting it in the landmark would offer it as a third
+ * destination to anyone navigating by landmark.
+ */
+function WeekDownload({ monday }: { monday: CalendarDate }) {
+  return (
+    <a
+      href={`/api/export/week?week=${monday}`}
+      aria-label={`Download ${weekLabel(monday)} as CSV`}
+      className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
+    >
+      Download this week (CSV)
+    </a>
   );
 }
 
@@ -209,7 +222,10 @@ export default async function PlanPage({
         </p>
       </header>
 
-      <WeekNav monday={plan.monday} />
+      <div className="flex flex-col items-center gap-2">
+        <WeekNav monday={plan.monday} />
+        <WeekDownload monday={plan.monday} />
+      </div>
 
       {/* No meals: nothing can be planned, and the grid would open a picker with
           nothing in it. § Tone of Voice again — describe what will appear. */}
