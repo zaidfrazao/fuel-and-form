@@ -290,6 +290,48 @@ session lives two hours, so a row the limit still cares about cannot yet have
 expired — the reaper that deletes expired demo users is the only cleanup there
 is, and it removes the column with the row it describes.
 
+#### The reaper
+
+`GET /api/cron/reap-demos`, scheduled from `vercel.json`. It deletes `users`
+rows where `kind = 'demo'` and `expires_at <= now`; everything beneath them —
+profile, library, plan, logs, history — goes with them by cascade, so no table
+is enumerated anywhere and a table added by a later task is cleaned up the day
+it exists.
+
+The owner is excluded **twice**, by `kind` and by the expiry comparison. Their
+`expires_at` is null and `null <= now` is null rather than true, so either
+predicate alone would already spare them. Both are written because they fail
+differently, and this is the statement that would delete the owner's entire
+history if it were wrong.
+
+It deletes in batches of 200 accounts, each its own statement, taking rows with
+`for update skip locked`. That makes it idempotent (a second run finds nothing),
+safe to run concurrently (two runs take disjoint batches instead of queueing),
+and durable against a timeout (a run that is cut off has still committed every
+batch it finished). A run that reaches its batch ceiling answers
+`{"complete": false}` and the next run continues.
+
+Access is `CRON_SECRET`, compared in constant time — the route's path is
+published in `vercel.json` in this public repository, so the token is the whole
+of the difference between the scheduler and a stranger. A wrong token is a
+silent 401; an **unset** `CRON_SECRET` throws, because a deployment turning its
+own scheduler away every day would otherwise look exactly like a probe.
+
+The schedule is **daily** (`0 4 * * *`, ±59 minutes). That is a platform
+constraint rather than a preference: Vercel Hobby accounts are limited to cron
+expressions running at most once a day, and a sub-daily expression fails at
+deploy time. So an expired session's rows can survive up to about twenty-five
+hours. Harmless in both directions that matter — `resolveSession` refuses an
+expired row on sight, so a lingering account is unreachable by anyone; and the
+concurrency cap counts only sessions whose expiry is still in the future, so a
+backlog cannot lock new visitors out. On Pro, `0 * * * *`.
+
+Run it by hand against a local server with:
+
+```bash
+curl -i -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/cron/reap-demos
+```
+
 ### Migrations
 
 ```bash

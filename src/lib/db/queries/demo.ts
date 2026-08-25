@@ -250,3 +250,161 @@ export async function provisionDemoUser(ipHash: string, now: Date): Promise<Prov
 
   return { ok: true, userId };
 }
+
+/**
+ * How much one run of the reaper may delete, and why there is a limit at all.
+ *
+ * The obvious reaper is one unbounded `delete from users`. What makes that the
+ * wrong shape is arithmetic rather than taste: the concurrency cap bounds LIVE
+ * sessions at a hundred, not sessions per day. An expired row stops counting
+ * towards `DEMO_LIMITS.concurrent` the moment it expires, so provisioning
+ * continues all day and a busy day's steady state is roughly a hundred accounts
+ * turning over every two hours — call it a thousand accounts, each with about
+ * two hundred rows cascading beneath it.
+ *
+ * Two hundred thousand rows is not a large delete for Postgres. It is, however,
+ * a single statement inside a serverless function with a hard duration ceiling,
+ * and its failure mode is the bad one: the job times out, the transaction rolls
+ * back, NOTHING is deleted, and the next run has strictly more to do than this
+ * one. That repeats daily, forever, and the only symptom is the row growth the
+ * job was added to prevent.
+ *
+ * Batches make progress durable. Each batch is its own statement and commits on
+ * its own, so a run that is cut off has still deleted everything it got through.
+ *
+ * `maxBatches` bounds the work of a single invocation rather than the work
+ * overall — a run that hits it returns `complete: false`, which the route
+ * reports, and the next run continues from where it stopped.
+ */
+export type ReapLimits = {
+  /** Expired accounts removed per statement. */
+  batchSize: number;
+  /** Statements per invocation, after which the run reports itself unfinished. */
+  maxBatches: number;
+};
+
+/**
+ * What one scheduled run is allowed to do.
+ *
+ * Two hundred accounts per batch is roughly forty thousand cascaded rows — a
+ * statement measured in tens of milliseconds — and twenty batches is four
+ * thousand accounts, comfortably more than a day of provisioning at the
+ * concurrency cap. So the ceiling exists to bound a pathological run, not the
+ * ordinary one, and `complete: false` should never be seen in practice.
+ *
+ * Constants rather than environment variables, for the reason `DEMO_LIMITS`
+ * states: an env var here is a third thing to configure per deployment whose
+ * failure mode is a job that quietly does less than it should.
+ */
+export const REAP_LIMITS: ReapLimits = {
+  batchSize: 200,
+  maxBatches: 20,
+};
+
+/** What a run of the reaper did. */
+export type Reaping = {
+  /** Expired demo accounts deleted. Their rows went with them, by cascade. */
+  deleted: number;
+  /** False when `maxBatches` was reached with expired accounts still to delete. */
+  complete: boolean;
+};
+
+/**
+ * Deletes expired demo accounts and everything beneath them — FUEL-42, § P7.
+ *
+ * The other end of the lifecycle `provisionDemoUser` starts, which is why it
+ * lives in this file rather than one of its own: the two functions are the only
+ * things in the app that create and destroy an identity, and the arguments for
+ * how one behaves are mostly arguments about the other.
+ *
+ * ## One statement per batch, and no join
+ *
+ * Deleting a user deletes their profile, library, plan, logs and history,
+ * because every user-owned table's `user_id` cascades — see `ownerId` in
+ * schema.ts. Nothing here has to enumerate those tables, which is what stops a
+ * table added by a later task from being quietly missed by the cleanup.
+ *
+ * The history tables (`meal_logs`, `day_plan_overrides`, `workout_logs`) hold
+ * `no action` foreign keys to `meals` and `workouts`, so they refuse to be
+ * orphaned. That is deliberate and schema.ts explains it: `no action` is checked
+ * at END of statement, and this delete removes the logs and the meals they name
+ * in that one statement, so the check finds nothing dangling. `restrict` would
+ * abort the reaper instead. `tests/integration/reap.test.ts` holds that line
+ * against a real Postgres, so the claim is measured rather than remembered.
+ *
+ * ## Why the owner is excluded twice
+ *
+ * `kind = 'demo'` AND `expires_at <= $now`. Either predicate alone would already
+ * spare the owner — their `expires_at` is null, and `null <= now` is null rather
+ * than true, so they can never match a comparison. Both are written because they
+ * fail differently: the first survives a future demo row with no expiry, the
+ * second survives an owner row that somehow acquired one. This is the statement
+ * that deletes the owner's entire history if it is wrong, and it is worth two
+ * predicates and a test for each.
+ *
+ * ## `<=` rather than `<`
+ *
+ * resolve.ts refuses a session when `expiresAt.getTime() <= now`. Matching it
+ * exactly means the set of rows this deletes IS the set of sessions already
+ * being refused — no instant in which a usable session is reaped, and none in
+ * which a dead one is preserved. FUEL-42's testing note says `<`; the difference
+ * is a millisecond, and this is the direction that cannot delete a live session.
+ *
+ * ## Safe to run concurrently
+ *
+ * Idempotent first: rerunning deletes nothing, because the rows are gone. There
+ * is no state anywhere but the rows themselves, so there is nothing to
+ * double-count or half-apply.
+ *
+ * Concurrency is then a question of contention rather than correctness. Two
+ * plain deletes racing are already CORRECT under read committed — the second
+ * blocks on the first's row locks, re-reads after it commits, finds the rows
+ * gone and deletes zero — but they spend the whole statement queued behind each
+ * other. `for update skip locked` in the subquery makes each run take a batch
+ * nobody else holds, so two invocations (the scheduler retrying, or a manual run
+ * during a scheduled one) do disjoint work instead of waiting. The guarantee
+ * moves from "does not corrupt" to "does not even wait".
+ *
+ * ## Nothing here catches
+ *
+ * An unreachable database throws, the route logs it and answers 500, and the
+ * next run does this run's work as well. A catch here would have to invent a
+ * count for a run that did not happen.
+ */
+export async function reapExpiredDemos(
+  now: Date,
+  limits: ReapLimits = REAP_LIMITS,
+): Promise<Reaping> {
+  const expired = now.toISOString();
+
+  let deleted = 0;
+
+  for (let batch = 0; batch < limits.maxBatches; batch += 1) {
+    // Written as one statement rather than through the query builder, which has
+    // no way to express `for update skip locked` inside a subquery — and that
+    // clause is the whole of the concurrency argument above. Every value is a
+    // bound parameter.
+    const removed = await getDb().execute<{ id: string }>(sql`
+      delete from ${schema.users}
+      where "id" in (
+        select "id" from ${schema.users}
+        where "kind" = 'demo'
+          and "expires_at" <= ${expired}::timestamptz
+        limit ${limits.batchSize}
+        for update skip locked
+      )
+      returning "id"
+    `);
+
+    deleted += removed.rows.length;
+
+    // A short batch means the query found fewer expired accounts than it was
+    // allowed to take, so there are none left — for this run. Another run
+    // holding rows under `skip locked` would also produce a short batch here,
+    // and reporting `complete` in that case is honest: those rows are being
+    // deleted, by someone else, right now.
+    if (removed.rows.length < limits.batchSize) return { deleted, complete: true };
+  }
+
+  return { deleted, complete: false };
+}
