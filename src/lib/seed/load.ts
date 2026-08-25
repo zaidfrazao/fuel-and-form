@@ -41,6 +41,26 @@ export type LoadedSeed = {
   meals: ReadonlyMap<SeedKey, string>;
   /** Seed key → the generated `workouts.id`. */
   workouts: ReadonlyMap<SeedKey, string>;
+
+  /**
+   * The rows as written, for a caller that has to resolve against them.
+   *
+   * The key → id maps above answer "which uuid is the chilli"; this answers
+   * "what does this user's week look like", which is what the demo's history
+   * generator (FUEL-41) needs in order to run the app's own resolvers over the
+   * library it has just written. Reconstructing these from the seed arrays and
+   * the maps would be a second, weaker copy of what the insert already returned
+   * — and `sortOrder`, which resolution's tie-breaks read, is defaulted here
+   * rather than stated in the seed files, so the copy would have to guess it.
+   *
+   * Returned rather than re-selected: `insert ... returning` already has them.
+   */
+  rows: Readonly<{
+    meals: schema.Meal[];
+    workouts: schema.Workout[];
+    planTemplate: schema.PlanTemplateEntry[];
+    trainingTemplate: schema.TrainingTemplateEntry[];
+  }>;
   /**
    * Rows written, per table, for a caller that wants to report what it did.
    *
@@ -169,7 +189,7 @@ export async function loadSeedLibraries(s: Scope): Promise<LoadedSeed> {
 
   /* ---- The weekly template -------------------------------------------- */
 
-  await s.insert(
+  const planTemplateRows = await s.insert(
     schema.planTemplateEntries,
     seedPlanTemplate.map((entry) => ({
       dayOfWeek: entry.dayOfWeek,
@@ -179,7 +199,7 @@ export async function loadSeedLibraries(s: Scope): Promise<LoadedSeed> {
     })),
   );
 
-  await s.insert(
+  const trainingTemplateRows = await s.insert(
     schema.trainingTemplateEntries,
     seedTrainingTemplate.map((entry) => ({
       dayOfWeek: entry.dayOfWeek,
@@ -194,6 +214,12 @@ export async function loadSeedLibraries(s: Scope): Promise<LoadedSeed> {
   return {
     meals,
     workouts,
+    rows: {
+      meals: mealRows,
+      workouts: workoutRows,
+      planTemplate: planTemplateRows,
+      trainingTemplate: trainingTemplateRows,
+    },
     counts: {
       meals: mealRows.length,
       meal_ingredients: ingredients.length,

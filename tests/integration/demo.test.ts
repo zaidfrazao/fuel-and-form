@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { todayIn } from "@/lib/date";
 import { getDb } from "@/lib/db";
 import { provisionDemoUser } from "@/lib/db/queries/demo";
 import * as schema from "@/lib/db/schema";
@@ -167,6 +168,15 @@ describe.skipIf(!configured)("provisioning a demo account", () => {
         schema.workoutExercises,
         schema.planTemplateEntries,
         schema.trainingTemplateEntries,
+
+        // FUEL-41. The library above is what the account CAN do; these four are
+        // what it has already done, and they are the difference between a
+        // twelve-week account and one that renders "No weigh-ins yet" on the
+        // screen a portfolio visitor is most likely to open.
+        schema.weightLogs,
+        schema.workoutLogs,
+        schema.mealLogs,
+        schema.dayPlanOverrides,
       ]) {
         expect(await owned.select(table)).not.toHaveLength(0);
       }
@@ -181,6 +191,140 @@ describe.skipIf(!configured)("provisioning a demo account", () => {
       const profile = await scope(userId, getDb()).selectOne(schema.profiles);
 
       expect(new Date(`${profile?.programStartDate}T00:00:00Z`).getUTCDay()).toBe(1);
+    });
+  });
+
+  /**
+   * FUEL-41 — the history, against a real Postgres.
+   *
+   * `src/lib/seed/history.test.ts` proves the generator produces the right
+   * ROWS, exhaustively and without credentials. It cannot prove the only two
+   * things left, because both are claims about the database: that the rows
+   * survive their constraints, and that they are reachable through the scope.
+   *
+   * The constraints are not a formality here. Three unique indexes and four
+   * composite foreign keys stand between this history and a provision that
+   * throws — and a generator bug of that kind does not produce a slightly odd
+   * demo, it produces a "Try the demo" button that fails for every visitor.
+   */
+  describe("the history it seeds", () => {
+    it("writes about twelve weeks of weigh-ins, trending down", async () => {
+      const userId = await provisioned();
+
+      const weighIns = await scope(userId, getDb()).select(schema.weightLogs);
+      const byDate = [...weighIns].sort((a, b) => (a.date < b.date ? -1 : 1));
+
+      expect(weighIns.length).toBeGreaterThan(7 * 5);
+
+      const first = byDate.at(0)!;
+      const last = byDate.at(-1)!;
+
+      expect(last.weightKg).toBeLessThan(first.weightKg);
+
+      // The numeric column round-trips: a `numeric` read back as a string
+      // would compare as text, and "79.1" < "84.2" is true for the wrong
+      // reason. Asserting the type is what makes the comparison above mean
+      // what it says.
+      expect(typeof last.weightKg).toBe("number");
+    });
+
+    it("logs sessions across all three outcomes", async () => {
+      const userId = await provisioned();
+
+      const logs = await scope(userId, getDb()).select(schema.workoutLogs);
+      const statuses = new Set(logs.map((log) => log.status));
+
+      expect(logs.length).toBeGreaterThan(7 * 5);
+      expect([...statuses].sort()).toEqual(["done", "partial", "skipped"]);
+    });
+
+    it("leaves a swap whose planned and actual meals differ", async () => {
+      // The demo's only sighting of FUEL-39's planned / actual / swapped-with
+      // columns. If the override and the meal log ever name the same meal, the
+      // export still renders — it just has nothing to show, which is a failure
+      // no other assertion here would catch.
+      const userId = await provisioned();
+      const owned = scope(userId, getDb());
+
+      const overrides = await owned.select(schema.dayPlanOverrides);
+
+      expect(overrides.length).toBeGreaterThan(0);
+
+      const template = await owned.select(schema.planTemplateEntries);
+      const logs = await owned.select(schema.mealLogs);
+
+      for (const override of overrides) {
+        const day = new Date(`${override.date}T00:00:00Z`).getUTCDay();
+
+        const planned = template.find(
+          (entry) => entry.dayOfWeek === day && entry.slot === override.slot,
+        );
+
+        expect(planned).toBeDefined();
+        expect(override.mealId).not.toBe(planned!.mealId);
+
+        const logged = logs.find(
+          (log) => log.date === override.date && log.slot === override.slot,
+        );
+
+        expect(logged?.mealId).toBe(override.mealId);
+      }
+    });
+
+    it("stops before today, leaving the visitor something to do", async () => {
+      // The other half of the "fully writable" promise: a demo whose every
+      // action is already taken demonstrates nothing. Read from the database
+      // rather than from the generator, so a caller that passed the wrong
+      // `today` — the server's rather than the persona's — is caught here.
+      const userId = await provisioned();
+      const owned = scope(userId, getDb());
+
+      const today = todayIn("Europe/London", new Date());
+
+      for (const table of [schema.weightLogs, schema.workoutLogs, schema.mealLogs]) {
+        const rows = await owned.select(table);
+
+        expect(rows.every((row) => row.date < today)).toBe(true);
+      }
+    });
+
+    it("keeps every logged row pointing at this account's own library", async () => {
+      // The composite foreign keys already refuse a row naming another user's
+      // meal, so this cannot be violated without the insert failing. What it
+      // guards is subtler and unenforced: a log naming a meal that exists but
+      // is not in THIS user's library would be impossible, while a log naming a
+      // workout the template never schedules is merely wrong.
+      const userId = await provisioned();
+      const owned = scope(userId, getDb());
+
+      const mealIds = new Set((await owned.select(schema.meals)).map((row) => row.id));
+      const workoutIds = new Set((await owned.select(schema.workouts)).map((row) => row.id));
+
+      for (const log of await owned.select(schema.mealLogs)) {
+        expect(mealIds.has(log.mealId)).toBe(true);
+      }
+
+      for (const log of await owned.select(schema.workoutLogs)) {
+        expect(workoutIds.has(log.workoutId)).toBe(true);
+      }
+    });
+
+    it("provisions two accounts with independent history", async () => {
+      // Same generator, same dates, different accounts. The rows are equivalent
+      // by design, so the thing worth checking is that no row is SHARED — the
+      // ids must differ, or one visitor's swap would move another's dinner.
+      const first = await provisioned(CLIENT);
+      const second = await provisioned(OTHER_CLIENT);
+
+      const mine = await scope(first, getDb()).select(schema.weightLogs);
+      const theirs = await scope(second, getDb()).select(schema.weightLogs);
+
+      expect(mine).not.toHaveLength(0);
+      expect(mine).toHaveLength(theirs.length);
+
+      const ids = new Set(theirs.map((row) => row.id));
+
+      for (const row of mine) expect(ids.has(row.id)).toBe(false);
     });
   });
 
@@ -243,19 +387,33 @@ describe.skipIf(!configured)("provisioning a demo account", () => {
 
       if (!meal) throw new Error("The provisioned account has no meals to swap to.");
 
-      await owned.insert(schema.weightLogs, { date: "2026-08-24", weightKg: 80.8 });
+      // Counted before and after rather than asserted as one and one. Since
+      // FUEL-41 the account arrives with twelve weeks of history in these two
+      // tables, so an absolute count would be asserting how much history was
+      // seeded — which is history.test.ts's job — instead of whether a write
+      // lands. A delta says the thing this test is named for.
+      const weighInsBefore = (await owned.select(schema.weightLogs)).length;
+      const swapsBefore = (await owned.select(schema.dayPlanOverrides)).length;
+
+      // Today, which the generator deliberately leaves unlogged so the visitor
+      // has something to do. Both tables are unique on the date, so a write here
+      // would fail outright if the history had run up to today after all — which
+      // makes this an assertion about that boundary as well as about the write.
+      const today = todayIn("Europe/London", new Date());
+
+      await owned.insert(schema.weightLogs, { date: today, weightKg: 80.8 });
 
       await owned.upsert(
         schema.dayPlanOverrides,
-        { date: "2026-08-24", slot: "dinner", mealId: meal.id },
+        { date: today, slot: "dinner", mealId: meal.id },
         {
           target: [schema.dayPlanOverrides.date, schema.dayPlanOverrides.slot],
           set: { mealId: meal.id },
         },
       );
 
-      expect(await owned.select(schema.weightLogs)).toHaveLength(1);
-      expect(await owned.select(schema.dayPlanOverrides)).toHaveLength(1);
+      expect(await owned.select(schema.weightLogs)).toHaveLength(weighInsBefore + 1);
+      expect(await owned.select(schema.dayPlanOverrides)).toHaveLength(swapsBefore + 1);
     });
   });
 

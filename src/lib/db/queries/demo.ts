@@ -2,6 +2,7 @@ import "server-only";
 
 import { eq, sql } from "drizzle-orm";
 
+import { todayIn } from "@/lib/date";
 import {
   decideProvisioning,
   DEMO_LIMITS,
@@ -9,6 +10,7 @@ import {
   rateLimitWindowStart,
   type Refusal,
 } from "@/lib/demo";
+import { demoHistory } from "@/lib/seed/history";
 import { loadSeedLibraries } from "@/lib/seed/load";
 import { DEMO_DISPLAY_NAME, demoProfile } from "@/lib/seed/persona";
 
@@ -193,8 +195,35 @@ export async function provisionDemoUser(ipHash: string, now: Date): Promise<Prov
     // second way to write these rows.
     const owned = scope(user.id, tx);
 
-    await owned.insert(schema.profiles, demoProfile(now));
-    await loadSeedLibraries(owned);
+    const profile = demoProfile(now);
+
+    await owned.insert(schema.profiles, profile);
+
+    const seeded = await loadSeedLibraries(owned);
+
+    // FUEL-41. The library is what the demo CAN do; this is what Sam has
+    // already done, and without it the weight chart — the screen a portfolio
+    // visitor is most likely to open — renders its empty state on an account
+    // that is supposed to be twelve weeks old.
+    //
+    // Generated from the rows just written, so every id below came out of this
+    // transaction and belongs to this user. That is not a convention: the
+    // composite foreign keys on all four tables mean an id from anywhere else
+    // fails the insert rather than writing a cross-tenant row.
+    const history = demoHistory({
+      profile,
+      today: todayIn(profile.timezone, now),
+      ...seeded.rows,
+    });
+
+    // Overrides before meal logs, because a swapped day's log names the meal the
+    // override put there and the two should not be able to disagree about the
+    // order they were decided in. Nothing enforces this — both tables reference
+    // `meals`, not each other — but the export reads them together.
+    await owned.insert(schema.weightLogs, history.weightLogs);
+    await owned.insert(schema.dayPlanOverrides, history.dayPlanOverrides);
+    await owned.insert(schema.mealLogs, history.mealLogs);
+    await owned.insert(schema.workoutLogs, history.workoutLogs);
 
     return user.id;
   });

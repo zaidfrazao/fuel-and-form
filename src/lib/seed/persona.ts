@@ -31,10 +31,17 @@ import type { ScopedInsert } from "@/lib/db/scope";
  * ## What this file is deliberately NOT
  *
  * The persona's HISTORY — roughly twelve weeks of weigh-ins and logged sessions
- * — is FUEL-41, and it belongs beside this profile when it lands. FUEL-40 is
- * the account existing and being usable; FUEL-41 is it looking lived-in. Until
- * then a fresh demo has a populated "Right Now", plan and training view, and a
- * weight chart with nothing on it yet.
+ * — is `history.ts` (FUEL-41), which sits beside this file and reads the
+ * figures below rather than restating them. This file is the account existing
+ * and being usable; that one is it looking lived-in.
+ *
+ * The division is worth keeping. Everything here is CONFIGURATION, and it is
+ * the half `check-no-metrics.sh` polices by field name: a number assigned to a
+ * profile column here has to be Sam's or the scan fails. Nothing there is a
+ * committed figure at all — the whole series is derived from `startWeightKg`
+ * and `goalPaceKgPerWeek` below, which is what keeps a twelve-week weigh-in
+ * history off a public repository without an allowlist long enough to defeat
+ * the purpose of having one.
  */
 
 /** The name on the demo account. Shown in the app; identifies nothing. */
@@ -46,10 +53,11 @@ export const DEMO_TIMEZONE = "Europe/London";
 /**
  * How many weeks of program the persona is into when a demo is provisioned.
  *
- * The window FUEL-41 will fill with history, chosen here because
- * `program_start_date` is what anchors it — P7 asks for "roughly 12 weeks of
- * generated weigh-in and training history", and a start date that disagreed
- * with the history would put weigh-ins before the program they belong to.
+ * The window `history.ts` fills, chosen here because `program_start_date` is
+ * what anchors it — P7 asks for "roughly 12 weeks of generated weigh-in and
+ * training history", and a start date that disagreed with the history would put
+ * weigh-ins before the program they belong to. The generator takes the start
+ * date from the profile rather than recomputing it, so the two cannot drift.
  */
 export const DEMO_PROGRAM_WEEKS = 12;
 
