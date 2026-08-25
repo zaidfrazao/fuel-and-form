@@ -166,8 +166,9 @@ necessarily happens before there is an identity to scope by. They are listed
 file by file rather than as a directory, so a new file added beside them does
 not inherit the exemption.
 
-> No GitHub Actions workflow runs the test suite yet; Vercel only builds. Run
-> `npm run test:coverage` before merging anything that touches this layer.
+> No GitHub Actions workflow runs the test suite yet — the only workflow is
+> `check-metrics`, and Vercel builds. Run `npm run test:coverage` before merging
+> anything that touches this layer.
 
 ## Auth
 
@@ -672,6 +673,68 @@ one log — `meal_logs` has no unique constraint, and `alreadyLogged` is what
 normally prevents it — the check-in reports the most recent one. Every row is
 still in the JSON backup.
 
+## Deploy
+
+From a clean clone to a running deployment. Everything here assumes the Neon
+integration from [Setup](#setup) — that is what puts `DATABASE_URL` and
+`DATABASE_URL_UNPOOLED` into the project under the names this code expects.
+
+```bash
+npm install
+vercel link                 # connect the clone to a Vercel project
+vercel integration add neon # provisions the database, sets both connection strings
+```
+
+Then the three secrets Neon does not provide. Generate two of them; choose the
+third:
+
+```bash
+openssl rand -base64 32     # SESSION_SECRET
+openssl rand -base64 32     # CRON_SECRET — a separate value, not a copy
+```
+
+```bash
+vercel env add SESSION_SECRET production
+vercel env add OWNER_PASSWORD production
+vercel env add CRON_SECRET   production
+```
+
+Repeat for `preview` and `development` if you want the preview deployments to
+work. `DATABASE_URL_TEST` is the one variable that must **not** go into Vercel —
+it belongs to the integration suite, which truncates tables.
+
+Apply the schema before the first request, not after:
+
+```bash
+vercel env pull .env.local  # brings the deployed connection strings down
+npm run db:migrate          # runs on the direct endpoint, against the deployed database
+```
+
+Then deploy, and seed through the app or with `npm run db:seed` (see
+[Seeding](#seeding)) — a deployment with no owner account will render the login
+gate and reject every password, because there is nothing to log in to yet.
+
+```bash
+vercel deploy --prod
+```
+
+### Two things that bite on a first deploy
+
+**`CRON_SECRET` must exist before the first scheduled run, not merely before you
+next think about it.** `vercel.json` schedules `/api/cron/reap-demos` daily at
+04:00 UTC, and that route *throws* when the variable is absent rather than
+answering 401 — deliberately, so a job that has never once run cannot be
+mistaken for a job being probed. Set it with the other two, not later. See
+[the reaper](#the-reaper).
+
+**`DATABASE_URL` is the live database in every environment.** The Neon
+integration sets one value and keeps it in sync across Production, Preview and
+Development, so a preview deployment, a local `vercel env pull`, and production
+all point at the same Postgres. There is no staging database unless you make
+one. A migration is a production migration; a row you insert while poking at a
+preview URL is a production row. The `test` Neon branch is the only database
+that is genuinely separate, and only the integration suite uses it.
+
 ## Documentation
 
 - [`docs/PRD.md`](docs/PRD.md) — product requirements
@@ -699,3 +762,79 @@ with:
 ```bash
 openssl rand -base64 32
 ```
+
+## Repository hygiene
+
+This repository is public and the app holds one real person's body metrics. The
+PRD's rule is absolute — *"No personal metrics in git history, ever"* (§ P7) —
+and `scripts/check-no-metrics.sh` is what enforces it.
+
+```bash
+npm run check:metrics        # tree + history + published refs + structure
+npm run check:metrics:tree   # tree and structure only, no network
+```
+
+It runs five checks: the working tree, this clone's history, **the refs the host
+publishes that this clone does not have**, that no `.env` but the template is
+tracked, and that `scripts/seed-local.ts` stays ignored and untracked. No
+directory is exempt — least of all `docs/`, which is where the leak actually
+happened. `.githooks/pre-commit` runs the tree-only subset on every commit, and
+`.github/workflows/check-metrics.yml` runs the full scan on every push and pull
+request — with `fetch-depth: 0`, without which the checkout would be shallow and
+the history check would fail rather than pass on a history it never read.
+
+Exit codes carry the distinction that matters: `1` is a finding you must fix,
+`3` is the published-refs residue below and nothing else. CI fails on the first
+and warns on the second.
+
+The script matches the *shape* of a body metric and passes only values known to
+belong to Sam Rivera, the fictional demo persona. It is an allowlist rather than
+a list of the owner's figures for the obvious reason: a denylist committed to a
+public repository would publish the very numbers it exists to protect.
+
+### Where this repository actually stands
+
+Checked 2026-08-25, by running the scan and reading the output rather than
+trusting the exit code:
+
+| Check | Result |
+| --- | --- |
+| Working tree | clean |
+| This clone's history | clean |
+| Refs GitHub publishes | **not clean — see below** |
+| Tracked `.env` files | none but `.env.example` |
+| `scripts/seed-local.ts` | ignored, never tracked |
+
+**The history rewrite did not reach GitHub's pull-request refs.** On 2026-08-19
+`git filter-repo` and a force-push removed the pre-FUEL-14 figures from every
+branch, which is why a fresh clone is clean. GitHub creates `refs/pull/N/head`
+when a pull request is opened and keeps it for the life of the repository: a
+force-push does not touch it, merging does not delete it, and closing the PR
+does not either. 22 of the 42 PR refs here — numbers 1 to 22, the ones predating
+the fix — still serve the original values, readable at each PR's "Files changed"
+tab and by anyone who fetches `refs/pull/*`.
+
+This is a **known and accepted state**, not an oversight. Closing it needs
+either GitHub Support purging the stale refs or the repository deleted and
+recreated, and recreating it would destroy the pull-request history that is part
+of what this repository is for. The exposure is a fictional-persona-sized set of
+body measurements, not a credential, and no secret was ever committed.
+
+It is reported on every full run so that it stays *accepted* rather than
+*forgotten*. That is also why the scan looks at the host at all: a green result
+against local refs proves the clone is clean, which is a different and much
+weaker claim than the one § P7 makes.
+
+### The figures in `docs/`
+
+`docs/PRD.md` and `docs/BRAND_GUIDE.md` are full of heights, weights and macro
+targets, and they are all Sam Rivera's. FUEL-14 substituted them throughout on
+2026-08-16, and the PRD says so at the head of the section that carries them.
+
+They are left in place deliberately. The alternative — stripping the figures out
+of the product documentation — would make both documents worse at their job for
+no gain, because an invented person's measurements are not private. They are on
+the scan's allowlist by value, individually, and they are checked in every
+directory. `docs/` is **not** whitelisted, and must not be: exempting the path
+where the leak originally happened would convert a real exposure into a green
+check.

@@ -70,6 +70,7 @@
 #   ./scripts/check-no-metrics.sh --show-values # print matches unredacted (local only)
 #
 # Exit: 0 clean · 1 findings · 2 usage or environment error
+#       3 published-refs residue only — see the note by the exit itself
 #
 set -euo pipefail
 
@@ -832,4 +833,26 @@ printf 'FAIL —%s\n' "$FAILED_CHECKS"
 printf '\nDo not silence this by exempting a path. If a finding is a fictional\n'
 printf 'figure, add it to the matching ALLOW_* list in this script. If it is\n'
 printf 'real, remove it.\n'
+
+# Exit 3 when the ONLY thing wrong is the published-refs residue described in
+# the header — the pre-2026-08-19 values that GitHub still serves from
+# refs/pull/*, which no commit in this repository can remove.
+#
+# The distinction exists so CI can gate. Without it the workflow would be red on
+# every run from the day it was added, for a state nobody can fix from here, and
+# a permanently red check teaches everyone to ignore it — which would cost more
+# than the check is worth on the day a real regression lands.
+#
+# It is deliberately narrow. "published-refs(skipped)" and
+# "published-refs(unreachable)" do NOT qualify: those mean the host was not
+# read, and an unread host is a failure like any other. Only a scan that ran,
+# looked, and found nothing but the known residue exits 3.
+if [ "$FAILED_CHECKS" = " published-refs" ]; then
+  printf '\nExit 3: the published-refs residue only — the accepted state, and not\n'
+  printf 'fixable from this repository. Nothing in the tree or this history is\n'
+  printf 'dirty. Compare the values above against the header before treating this\n'
+  printf 'as the expected result.\n'
+  exit 3
+fi
+
 exit 1
