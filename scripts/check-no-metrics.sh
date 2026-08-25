@@ -797,6 +797,15 @@ check_local_seed_ignored() {
 
 validate_patterns
 
+# Clear the borrowed namespace before check 2 reads history, not merely before
+# check 3 fills it. The trap covers a normal exit and an interrupt, but nothing
+# can run on SIGKILL — and a ref left behind by a killed run is a ref that
+# `git log -p --all` counts as this clone's own history, so the next run would
+# report the host's commits as local ones. That is a false RED rather than a
+# false green, and it self-heals on the run after, but "the scan told me my
+# history was dirty and then it wasn't" is a bad half-hour for whoever hits it.
+drop_published_ns
+
 printf 'check-no-metrics'
 [ "$TREE_ONLY" -eq 1 ] && printf ' (--tree-only)'
 printf '\n'
