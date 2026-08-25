@@ -372,14 +372,16 @@ restores a uuid pointing at nothing.
   "planTemplateEntries":     [ { "id", "dayOfWeek", "slot", "mealId", "sortOrder" } ],
   "dayPlanOverrides":        [ { "id", "date", "slot", "mealId", "createdAt" } ],
   "mealLogs":                [ { "id", "date", "slot", "mealId", "status", "note", "loggedAt" } ],
-  "planVsActual":            [ { "date", "slot", "plannedMealId", "swappedWithMealId", "actualMealId", "status", "note" } ],
 
   "workouts":                [ { "id", "name", "type", "description", "rotationGroup", "rotationIndex" } ],
   "workoutExercises":        [ { "id", "workoutId", "name", "prescription", "sortOrder", "notes" } ],
   "trainingTemplateEntries": [ { "id", "dayOfWeek", "workoutId", "rotationGroup", "sortOrder" } ],
   "workoutLogs":             [ { "id", "date", "workoutId", "status", "note", "durationMin", "loggedAt" } ],
 
-  "weightLogs":              [ { "id", "date", "weightKg", "note", "createdAt" } ]
+  "weightLogs":              [ { "id", "date", "weightKg", "note", "createdAt" } ],
+
+  "derived": { "plannedIs": "template-as-of-export",
+               "planVsActual": [ { "date", "slot", "plannedMealId", "swappedWithMealId", "actualMealId", "status", "note" } ] }
 }
 ```
 
@@ -387,10 +389,14 @@ Dates are `YYYY-MM-DD` in the account's timezone. Instants — `createdAt`,
 `loggedAt`, `exportedAt` — are ISO 8601 in UTC. `profile` is an object rather
 than an array because `profiles` holds exactly one row per user.
 
-#### `planVsActual`, the one derived key
+#### `derived`, the one key that is not rows
 
 Every other key is rows. This one is a reading of them: for each slot, what the
 **template** planned, what a **swap** put there, and what was **logged**.
+
+It is nested and written **last** so it cannot be mistaken for restorable state.
+**A restore should skip `derived` entirely** — that is a rule you can follow
+without knowing what is inside it, today or after anything else is added.
 
 ```jsonc
 { "date": "2026-08-17", "slot": "lunch",
@@ -419,10 +425,15 @@ the account has no end date, so covering every date since `program_start_date`
 would assert an intent for every day between then and now.
 
 **It is not history.** `plannedMealId` resolves against the template as it
-stands **today**, because the app keeps no record of template edits. Re-export
-an old week after editing the template and its `planned` changes. The rows above
-are facts; this section is a present-tense reading of them, and a restore should
-ignore it entirely. The same caveat applies to the CSV's `planned` column.
+stands **today**, because `plan_template_entries` carries no timestamps and the
+app keeps no record of template edits. Re-export an old week after editing the
+template and its `planned` changes.
+
+That is why `derived.plannedIs` is in the file rather than only in this README:
+a reader who keeps the string can tell two exports of the same date apart
+instead of assuming the earlier one was wrong. The rows above are facts; this is
+a present-tense reading of them. The same caveat applies to the CSV's `planned`
+column, which has nowhere to say so.
 
 #### What is not in it, and why
 

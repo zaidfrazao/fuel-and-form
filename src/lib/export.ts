@@ -83,7 +83,7 @@ import { type Plan, resolveDay, templateDay } from "./resolve-plan";
  *
  * ## One derived section, and the argument against it
  *
- * `planVsActual` is the exception to everything above: it is the only key in
+ * `derived` is the exception to everything above: it is the only key in
  * the file that is not rows. FUEL-39 and PRD § Success Metrics ask that
  * "planned-versus-actual [be] computable for every day", measured as "export
  * contains both columns for 100% of logged days". The weekly CSV answers that
@@ -104,6 +104,22 @@ import { type Plan, resolveDay, templateDay } from "./resolve-plan";
  * `plan-vs-actual.ts` — the same module the CSV renders, so the two artefacts
  * cannot come to disagree.
  *
+ * Two things follow from conceding the objection rather than dismissing it, and
+ * both are structural rather than prose, because a caveat only a README carries
+ * reaches nobody holding the file:
+ *
+ *   - the section is NESTED under `derived` and written LAST, so it is not a
+ *     peer of the tables and "ignore `derived`" is a rule a restorer can follow
+ *     without knowing what is in it;
+ *   - `derived.plannedIs` states in the file what `planned` is an answer to,
+ *     so a reader can tell two exports of the same date apart rather than
+ *     assuming the earlier one was wrong.
+ *
+ * If a second interpretation is ever wanted — day macro rollups, adherence,
+ * the same triple for training — it goes behind that key or into its own
+ * artefact. Never beside the tables. That is the line this concedes once and
+ * does not concede again.
+ *
  * ## Which dates the section covers
  *
  * Those carrying a `meal_log` or a `day_plan_override`, and no others. "Logged
@@ -120,6 +136,9 @@ import { type Plan, resolveDay, templateDay } from "./resolve-plan";
 
 /** Bumped only when a field is renamed, removed, or changed in meaning. */
 export const SCHEMA_VERSION = 1;
+
+/** The value of `derived.plannedIs`. See `PlannedSemantics`. */
+const PLANNED_SEMANTICS = "template-as-of-export";
 
 /** The filename stem. `fuel-form-2026-08-10.json`, per P6's own example. */
 export const FILENAME_STEM = "fuel-form";
@@ -177,6 +196,21 @@ export type ExportedProfile = Omit<Profile, "userId">;
  * `null` means "nothing to report" and never "the same as the column beside
  * it": an unswapped slot has no swap, and an unlogged one nothing eaten.
  */
+/**
+ * What `plannedMealId` is an answer to.
+ *
+ * A literal, in the file, rather than a caveat in the README — because the
+ * caveat is not a footnote, it is the field's MEANING. `plan_template_entries`
+ * carries no timestamps (checked, not assumed), so the app cannot know what the
+ * template said last March; `planned` for a past date is therefore the template
+ * as it stands at the moment of export, and editing the template changes it.
+ *
+ * A reader that stores this string alongside the rows can tell two exports of
+ * the same date apart. One that ignores it is no worse off than if the field
+ * did not exist. Prose in a README reaches neither.
+ */
+export type PlannedSemantics = "template-as-of-export";
+
 export type PlanVsActualRow = {
   date: CalendarDate;
   slot: MealSlot;
@@ -188,6 +222,27 @@ export type PlanVsActualRow = {
   actualMealId: string | null;
   status: MealLog["status"] | null;
   note: string | null;
+};
+
+/**
+ * Everything in the file that is a reading rather than a row.
+ *
+ * One container, and the reason it exists rather than the section sitting at
+ * the top level beside the tables: a key that is a peer of `mealLogs` reads as
+ * a peer of `mealLogs`. Nested, it cannot be mistaken for restorable state by a
+ * reader who never got as far as the README, and "ignore `derived`" is a rule a
+ * restorer can follow without knowing what is inside it — today or after
+ * anything else is ever added here.
+ *
+ * It is also the boundary. A backup that has grown one interpretation grows
+ * others — day macro rollups, adherence percentages, the same triple for
+ * training — until it is a report bundle. Anything of that kind belongs behind
+ * this key or in its own artefact, and never beside the tables.
+ */
+export type ExportDerived = {
+  /** What `plannedMealId` means. See `PlannedSemantics`. */
+  plannedIs: PlannedSemantics;
+  planVsActual: PlanVsActualRow[];
 };
 
 export type ExportDocument = {
@@ -203,13 +258,13 @@ export type ExportDocument = {
     createdAt: Instant;
   })[];
   mealLogs: (Omit<MealLog, "userId" | "loggedAt"> & { loggedAt: Instant })[];
-  /** Derived, not rows — the one key in the file that is not a table. */
-  planVsActual: PlanVsActualRow[];
   workouts: Exported<Workout>[];
   workoutExercises: Exported<WorkoutExercise>[];
   trainingTemplateEntries: Exported<TrainingTemplateEntry>[];
   workoutLogs: (Omit<WorkoutLog, "userId" | "loggedAt"> & { loggedAt: Instant })[];
   weightLogs: (Omit<WeightLog, "userId" | "createdAt"> & { createdAt: Instant })[];
+  /** Readings, not rows. Last in the file, and the only key a restore skips. */
+  derived: ExportDerived;
 };
 
 /**
@@ -424,10 +479,6 @@ export function buildExport({
       (a, b) => text(a.date, b.date) || text(a.slot, b.slot) || text(a.id, b.id),
     ),
 
-    // After the three tables it is derived from, so a reader meets the rows
-    // before the reading of them.
-    planVsActual: planVsActual(tables),
-
     workouts: ordered(
       tables.workouts.map(withoutUser),
       (a, b) => text(a.name, b.name) || text(a.id, b.id),
@@ -458,6 +509,14 @@ export function buildExport({
       })),
       (a, b) => text(a.date, b.date) || text(a.id, b.id),
     ),
+
+    // Last in the object and therefore last in the file, for the reason
+    // `schemaVersion` is first: position is the cheapest signal a format has.
+    // Every row comes before every reading of one.
+    derived: {
+      plannedIs: PLANNED_SEMANTICS,
+      planVsActual: planVsActual(tables),
+    },
   };
 }
 

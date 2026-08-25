@@ -696,7 +696,7 @@ describe("plan versus actual", () => {
    * fields carry, and that adding it left the backup unable to fail.
    */
   const rowsOn = (date: string) =>
-    build().planVsActual.filter((row) => row.date === date);
+    build().derived.planVsActual.filter((row) => row.date === date);
 
   test("answers all three for a date that was planned, swapped and logged", () => {
     // The fixture's one date: breakfast from the template, lunch swapped,
@@ -744,7 +744,7 @@ describe("plan versus actual", () => {
     });
 
     const logged = new Set(document.mealLogs.map((row) => row.date));
-    const compared = new Set(document.planVsActual.map((row) => row.date));
+    const compared = new Set(document.derived.planVsActual.map((row) => row.date));
 
     for (const date of logged) expect(compared).toContain(date);
   });
@@ -754,7 +754,7 @@ describe("plan versus actual", () => {
     // followed. A section keyed only on logs would drop it.
     const document = build({ ...TABLES, mealLogs: [] });
 
-    expect(document.planVsActual.map((row) => row.date)).toContain("2026-08-10");
+    expect(document.derived.planVsActual.map((row) => row.date)).toContain("2026-08-10");
   });
 
   test("says nothing about a date that has neither a log nor a swap", () => {
@@ -762,16 +762,38 @@ describe("plan versus actual", () => {
     // has no end date, so covering every date since program_start_date would
     // assert an intent for every day between June and now — a backup that
     // invents history.
-    const dates = new Set(build().planVsActual.map((row) => row.date));
+    const dates = new Set(build().derived.planVsActual.map((row) => row.date));
 
     expect(dates).toEqual(new Set(["2026-08-10"]));
+  });
+
+  test("is nested under `derived` and written last, never beside the tables", () => {
+    // Structural, because the caveat is structural. A key that is a peer of
+    // `mealLogs` reads as a peer of `mealLogs`; nested and last, "ignore
+    // `derived`" is a rule a restorer can follow without knowing what is in it.
+    // Position is the cheapest signal a format has, and it is the one a reader
+    // who never reached the README still receives.
+    const keys = Object.keys(build());
+
+    expect(keys).not.toContain("planVsActual");
+    expect(keys.at(-1)).toBe("derived");
+  });
+
+  test("says in the file what `planned` is an answer to", () => {
+    // `plan_template_entries` carries no timestamps, so the app cannot know
+    // what the template said last March: `planned` for a past date is the
+    // template as it stands at export time, and editing the template changes
+    // it. A reader that keeps this string can tell two exports of the same date
+    // apart instead of assuming the earlier one was wrong. Prose in a README
+    // reaches nobody holding the file.
+    expect(build().derived.plannedIs).toBe("template-as-of-export");
   });
 
   test("is empty, and still present, for an account with nothing in it", () => {
     // An empty array rather than an absent key, for the reason every other
     // table here keeps one: "nothing was logged" must not read as "this file
     // predates the section".
-    expect(build(EMPTY).planVsActual).toEqual([]);
+    expect(build(EMPTY).derived.planVsActual).toEqual([]);
   });
 
   test("names meals by id, and every id is in the file's own library", () => {
@@ -781,7 +803,7 @@ describe("plan versus actual", () => {
     const document = build();
     const known = new Set(document.meals.map((row) => row.id));
 
-    const named = document.planVsActual.flatMap((row) =>
+    const named = document.derived.planVsActual.flatMap((row) =>
       [row.plannedMealId, row.swappedWithMealId, row.actualMealId].filter(
         (id) => id !== null,
       ),
@@ -802,7 +824,7 @@ describe("plan versus actual", () => {
       mealLogs: [mealLog("ffffffff-0000-4000-8000-000000000001", "2026-05-04")],
     });
 
-    expect(document.planVsActual).toEqual([
+    expect(document.derived.planVsActual).toEqual([
       {
         date: "2026-05-04",
         slot: "dinner",
@@ -827,7 +849,7 @@ describe("plan versus actual", () => {
       ],
     });
 
-    expect(scrambled.planVsActual.map((row) => `${row.date} ${row.slot}`)).toEqual([
+    expect(scrambled.derived.planVsActual.map((row) => `${row.date} ${row.slot}`)).toEqual([
       "2026-06-03 dinner",
       "2026-08-10 breakfast",
       "2026-08-10 lunch",
@@ -852,7 +874,7 @@ describe("plan versus actual", () => {
 
     expect(document.planTemplateEntries).toHaveLength(1);
     expect(document.dayPlanOverrides).toHaveLength(1);
-    expect(document.planVsActual).toEqual([
+    expect(document.derived.planVsActual).toEqual([
       {
         date: "2026-08-10",
         slot: "dinner",
@@ -966,7 +988,7 @@ describe("the two exports agree", () => {
 
     // The fixture has to actually exercise the disagreement, or this test
     // passes on a week where every column happens to hold the same meal.
-    const swapped = document.planVsActual.find((row) => row.date === MONDAY);
+    const swapped = document.derived.planVsActual.find((row) => row.date === MONDAY);
 
     expect(swapped).toMatchObject({
       slot: "breakfast",
@@ -977,7 +999,7 @@ describe("the two exports agree", () => {
 
     expect(fromCsv.size).toBeGreaterThan(0);
 
-    for (const row of document.planVsActual) {
+    for (const row of document.derived.planVsActual) {
       expect(fromCsv.get(`${row.date}|${row.slot}`)).toEqual([
         name(row.plannedMealId),
         name(row.swappedWithMealId),

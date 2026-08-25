@@ -88,9 +88,9 @@ describe.skipIf(!configured)("the export, scoped", () => {
     // § Success Metrics wants planned-versus-actual for 100% of logged days,
     // and the fixture has both a log and a swap. An empty section against a
     // real database would mean the resolution found no plan to compare to.
-    expect(document.planVsActual.length).toBeGreaterThan(0);
+    expect(document.derived.planVsActual.length).toBeGreaterThan(0);
 
-    const compared = new Set(document.planVsActual.map((row) => row.date));
+    const compared = new Set(document.derived.planVsActual.map((row) => row.date));
 
     for (const log of document.mealLogs) {
       expect(compared, `${log.date} was logged but not compared`).toContain(log.date);
