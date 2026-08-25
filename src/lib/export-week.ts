@@ -2,7 +2,8 @@ import { csvTable } from "./csv";
 import { addDays, type CalendarDate } from "./date";
 import { FILENAME_STEM } from "./export";
 import type { Meal, MealLog, WeightLog, Workout, WorkoutLog } from "./db/schema";
-import { type ResolvedDay, type ResolvedMeal, SLOT_ORDER } from "./resolve-plan";
+import { compareDay, stood } from "./plan-vs-actual";
+import type { ResolvedDay, ResolvedMeal } from "./resolve-plan";
 import type { TrainingDay } from "./resolve-training";
 
 /**
@@ -50,21 +51,17 @@ import type { TrainingDay } from "./resolve-training";
  * ## The three meal columns
  *
  * P6's "meal export distinguishes planned, actual, and swapped-with for every
- * slot", one column each and each with a single meaning:
+ * slot", one column each. `plan-vs-actual.ts` decides what the three mean and
+ * argues the decision; this module renders its answer as cells and adds the
+ * macros. The rule lives there rather than here because FUEL-39 gave the JSON
+ * export the same three values, and one rule rendered twice cannot drift the
+ * way two implementations of it would — a `planned` column meaning one thing in
+ * the CSV and another in the JSON would disagree exactly on the swapped days,
+ * which are the days anyone would look at.
  *
- *   - `planned` — what the weekly TEMPLATE names for that weekday and slot.
- *     The recurring intent, before the week began.
- *   - `swapped_with` — the `day_plan_overrides` meal, blank when the slot was
- *     never swapped. That table's own schema comment already anticipates this
- *     column: it is history rather than configuration, so it outlives the meal
- *     it names.
- *   - `actual` — the meal the `meal_log` names, blank when the slot was never
- *     logged.
- *
- * The three usually agree, because `actions/log.ts` re-resolves the plan on the
- * server and takes the meal id from its own answer. They come apart in exactly
- * the case worth reporting: a slot logged and only afterwards swapped, where
- * `actual` is what was eaten and `swapped_with` is what the plan says now.
+ * `day_plan_overrides`' own schema comment already anticipates the
+ * `swapped_with` column: it is history rather than configuration, so it
+ * outlives the meal it names.
  *
  * The four macro columns describe the meal in `actual` when there is one, and
  * otherwise the meal that stood. So a summed column is intake as recorded, and
@@ -85,14 +82,12 @@ import type { TrainingDay } from "./resolve-training";
  *
  * ## A slot reports its most recent log, not all of them
  *
- * `meal_logs` has no unique constraint — `actions/log.ts` says so, and guards
- * with `alreadyLogged` — so a double tap or a retry after a lost response can
- * leave two rows for one slot. This takes the later of them, by instant then by
- * id, which is `latestLog`'s rule in `log-intent.ts` and the one undo already
- * works by: the most recent decision is the decision. The superseded row is not
- * lost, it is in the JSON export.
+ * `meal_logs` has no unique constraint, so a double tap or a retry after a lost
+ * response can leave two rows for one slot. `plan-vs-actual.ts` takes the later
+ * of them and states why.
  *
- * `workout_logs` needs no such rule. It is unique on `(user_id, date,
+ * `workout_logs` needs no such rule, which is why the training section still
+ * finds its log with a plain `find`. It is unique on `(user_id, date,
  * workout_id)` precisely so a correction updates the row it corrects, so there
  * is only ever one to find.
  *
@@ -203,33 +198,6 @@ function byDate<T extends { date: CalendarDate }>(
 /** Indexes anything the file has to name by its id. */
 function byId<T extends { id: string }>(rows: readonly T[]): Map<string, T> {
   return new Map(rows.map((row) => [row.id, row]));
-}
-
-/**
- * The later of two logs, by instant then by id.
- *
- * `latestLog` in `log-intent.ts` makes the same call for the same reason, and
- * states it: `logged_at` defaults to `now()`, so two rows written in the same
- * statement can share an instant, and without the id the answer would depend on
- * which row was scanned first.
- */
-function later<T extends { loggedAt: Date; id: string }>(a: T, b: T): T {
-  const at = a.loggedAt.getTime();
-  const bt = b.loggedAt.getTime();
-
-  if (at === bt) return a.id > b.id ? a : b;
-
-  return at > bt ? a : b;
-}
-
-/** The one log that speaks for a slot — see the module comment. */
-function slotLog(logs: readonly MealLog[], slot: string): MealLog | undefined {
-  return logs
-    .filter((log) => log.slot === slot)
-    .reduce<MealLog | undefined>(
-      (latest, log) => (latest ? later(latest, log) : log),
-      undefined,
-    );
 }
 
 /** A date's meals from a resolved week, indexed by slot. */
@@ -353,45 +321,32 @@ function mealRows(
   const logsByDate = byDate(input.mealLogs);
   const library = byId(input.meals);
 
-  return dates.flatMap((date) => {
-    const stood = resolved.get(date) ?? [];
-    const planned = template.get(date) ?? [];
-    const dayLogs = logsByDate.get(date) ?? [];
-
-    return SLOT_ORDER.flatMap((slot) => {
-      const onTheDay = stood.find((meal) => meal.slot === slot);
-      const fromTemplate = planned.find((meal) => meal.slot === slot);
-      const log = slotLog(dayLogs, slot);
-
-      // Nothing planned it, nothing swapped it, nothing logged it. A row of
-      // eleven empty cells would say the slot exists, which for a plan that
-      // does not use it is not true.
-      if (!onTheDay && !fromTemplate && !log) return [];
-
-      const swapped = onTheDay?.source === "override" ? onTheDay.meal : undefined;
-      const actual = log ? library.get(log.mealId) : undefined;
-
+  return dates.flatMap((date) =>
+    compareDay({
+      templateMeals: template.get(date) ?? [],
+      resolvedMeals: resolved.get(date) ?? [],
+      logs: logsByDate.get(date) ?? [],
+      meals: library,
+    }).map((comparison) => {
       // What the macros describe: what was eaten if anything was, else what
       // stood for the slot. See the module comment.
-      const counted = actual ?? onTheDay?.meal;
+      const counted = comparison.actual ?? stood(comparison);
 
       return [
-        [
-          date,
-          slot,
-          fromTemplate?.meal.name ?? "",
-          swapped?.name ?? "",
-          actual?.name ?? "",
-          log?.status ?? "",
-          cell(counted?.kcal),
-          cell(counted?.proteinG),
-          cell(counted?.fatG),
-          cell(counted?.carbG),
-          log?.note ?? "",
-        ],
+        date,
+        comparison.slot,
+        comparison.planned?.name ?? "",
+        comparison.swappedWith?.name ?? "",
+        comparison.actual?.name ?? "",
+        comparison.status ?? "",
+        cell(counted?.kcal),
+        cell(counted?.proteinG),
+        cell(counted?.fatG),
+        cell(counted?.carbG),
+        comparison.note ?? "",
       ];
-    });
-  });
+    }),
+  );
 }
 
 /**
