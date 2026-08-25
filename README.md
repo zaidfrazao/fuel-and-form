@@ -378,13 +378,62 @@ restores a uuid pointing at nothing.
   "trainingTemplateEntries": [ { "id", "dayOfWeek", "workoutId", "rotationGroup", "sortOrder" } ],
   "workoutLogs":             [ { "id", "date", "workoutId", "status", "note", "durationMin", "loggedAt" } ],
 
-  "weightLogs":              [ { "id", "date", "weightKg", "note", "createdAt" } ]
+  "weightLogs":              [ { "id", "date", "weightKg", "note", "createdAt" } ],
+
+  "derived": { "plannedIs": "template-as-of-export",
+               "planVsActual": [ { "date", "slot", "plannedMealId", "swappedWithMealId", "actualMealId", "status", "note" } ] }
 }
 ```
 
 Dates are `YYYY-MM-DD` in the account's timezone. Instants — `createdAt`,
 `loggedAt`, `exportedAt` — are ISO 8601 in UTC. `profile` is an object rather
 than an array because `profiles` holds exactly one row per user.
+
+#### `derived`, the one key that is not rows
+
+Every other key is rows. This one is a reading of them: for each slot, what the
+**template** planned, what a **swap** put there, and what was **logged**.
+
+It is nested and written **last** so it cannot be mistaken for restorable state.
+**A restore should skip `derived` entirely** — that is a rule you can follow
+without knowing what is inside it, today or after anything else is added.
+
+```jsonc
+{ "date": "2026-08-17", "slot": "lunch",
+  "plannedMealId":     "…chicken",   // plan_template_entries, overrides ignored
+  "swappedWithMealId": "…beef",      // day_plan_overrides, null if not swapped
+  "actualMealId":      "…chicken",   // meal_logs, null if not logged
+  "status": "eaten", "note": null }
+```
+
+That row is the case the section exists for: the lunch was logged, and only
+afterwards swapped. `null` always means *nothing to report* — never *the same as
+the column beside it* — so an unswapped slot has no swap and an unlogged one
+nothing eaten.
+
+Meals are named by **id**, resolved against this file's own `meals` array. The
+CSV carries names because nothing downstream of it will resolve a uuid; a reader
+of this file has the library. Both artefacts get the three values from
+`src/lib/plan-vs-actual.ts`, so they cannot come to disagree about what
+"planned" means.
+
+**Which dates.** Those carrying a meal log or a swap, and no others. PRD
+§ Success Metrics asks that planned-versus-actual be computable for 100% of
+logged days, and the weekly CSV only reaches the seven days you ask it for.
+Dates with neither are left out deliberately: the template recurs forever and
+the account has no end date, so covering every date since `program_start_date`
+would assert an intent for every day between then and now.
+
+**It is not history.** `plannedMealId` resolves against the template as it
+stands **today**, because `plan_template_entries` carries no timestamps and the
+app keeps no record of template edits. Re-export an old week after editing the
+template and its `planned` changes.
+
+That is why `derived.plannedIs` is in the file rather than only in this README:
+a reader who keeps the string can tell two exports of the same date apart
+instead of assuming the earlier one was wrong. The rows above are facts; this is
+a present-tense reading of them. The same caveat applies to the CSV's `planned`
+column, which has nowhere to say so.
 
 #### What is not in it, and why
 
@@ -480,6 +529,10 @@ logged.
 They usually agree. They come apart in the case worth reporting: a slot logged
 and only afterwards swapped, where `actual` is what was eaten and
 `swapped_with` is what the plan says now.
+
+The three come from `src/lib/plan-vs-actual.ts`, which is also where the JSON's
+`planVsActual` gets them. One rule rendered twice, rather than two derivations
+that would disagree on exactly the swapped days.
 
 **The four macro columns** describe the meal in `actual` when there is one, and
 otherwise the meal that stood. So a summed column is intake *as recorded*, and

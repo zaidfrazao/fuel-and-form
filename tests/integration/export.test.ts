@@ -82,6 +82,19 @@ describe.skipIf(!configured)("the export, scoped", () => {
     ] as const) {
       expect(document[key].length, `${key} should not be empty`).toBeGreaterThan(0);
     }
+
+    // Not a table — the derived section — so it is asserted apart from the
+    // loop. It is here at all because its claim is about coverage: PRD
+    // § Success Metrics wants planned-versus-actual for 100% of logged days,
+    // and the fixture has both a log and a swap. An empty section against a
+    // real database would mean the resolution found no plan to compare to.
+    expect(document.derived.planVsActual.length).toBeGreaterThan(0);
+
+    const compared = new Set(document.derived.planVsActual.map((row) => row.date));
+
+    for (const log of document.mealLogs) {
+      expect(compared, `${log.date} was logged but not compared`).toContain(log.date);
+    }
   });
 
   it("gives a demo session none of the owner's rows", async () => {

@@ -16,12 +16,15 @@ import type {
   WorkoutLog,
   WeightLog,
 } from "./db/schema";
+import { startOfWeek } from "./date";
 import {
   buildExport,
   type ExportTables,
   exportFilename,
   SCHEMA_VERSION,
 } from "./export";
+import { buildWeekCsv } from "./export-week";
+import { type Plan, resolveWeek, templateDay } from "./resolve-plan";
 
 /**
  * The export document — FUEL-37, PRD § P6.
@@ -678,5 +681,330 @@ describe("every tie-break", () => {
       AGAINST_ID,
     );
     inOrder("weightLogs", [weightLog(LO, "2026-08-03"), weightLog(HI, "2026-08-03")], BY_ID);
+  });
+});
+
+describe("plan versus actual", () => {
+  /**
+   * PRD § Success Metrics: "planned-versus-actual computable for every day",
+   * measured as "export contains both columns for 100% of logged days". The
+   * weekly CSV answers that inside the seven days it covers; this section is
+   * what answers it for the days outside them.
+   *
+   * The comparison itself is `plan-vs-actual.test.ts`. What is asserted here is
+   * the part that belongs to the document: which dates it covers, what the
+   * fields carry, and that adding it left the backup unable to fail.
+   */
+  const rowsOn = (date: string) =>
+    build().derived.planVsActual.filter((row) => row.date === date);
+
+  test("answers all three for a date that was planned, swapped and logged", () => {
+    // The fixture's one date: breakfast from the template, lunch swapped,
+    // dinner logged. Three slots, three different shapes of answer.
+    expect(rowsOn("2026-08-10")).toEqual([
+      {
+        date: "2026-08-10",
+        slot: "breakfast",
+        plannedMealId: MEAL_ID,
+        swappedWithMealId: null,
+        actualMealId: null,
+        status: null,
+        note: null,
+      },
+      {
+        date: "2026-08-10",
+        slot: "lunch",
+        plannedMealId: null,
+        swappedWithMealId: MEAL_ID,
+        actualMealId: null,
+        status: null,
+        note: null,
+      },
+      {
+        date: "2026-08-10",
+        slot: "dinner",
+        plannedMealId: null,
+        swappedWithMealId: null,
+        actualMealId: MEAL_ID,
+        status: "eaten",
+        note: null,
+      },
+    ]);
+  });
+
+  test("covers a logged day no weekly export would reach", () => {
+    // The whole reason the section is in this file. The CSV is one week; a day
+    // logged in June is in no week anyone downloads at a check-in in August.
+    const document = build({
+      ...TABLES,
+      mealLogs: [
+        mealLog("ffffffff-0000-4000-8000-000000000001", "2026-06-03"),
+        mealLog("ffffffff-0000-4000-8000-000000000002", "2026-08-10"),
+      ],
+    });
+
+    const logged = new Set(document.mealLogs.map((row) => row.date));
+    const compared = new Set(document.derived.planVsActual.map((row) => row.date));
+
+    for (const date of logged) expect(compared).toContain(date);
+  });
+
+  test("covers a swapped day nothing was eaten on", () => {
+    // The same gap read from the other side: the plan changed and no log
+    // followed. A section keyed only on logs would drop it.
+    const document = build({ ...TABLES, mealLogs: [] });
+
+    expect(document.derived.planVsActual.map((row) => row.date)).toContain("2026-08-10");
+  });
+
+  test("says nothing about a date that has neither a log nor a swap", () => {
+    // The load-bearing omission. The template recurs forever and the account
+    // has no end date, so covering every date since program_start_date would
+    // assert an intent for every day between June and now — a backup that
+    // invents history.
+    const dates = new Set(build().derived.planVsActual.map((row) => row.date));
+
+    expect(dates).toEqual(new Set(["2026-08-10"]));
+  });
+
+  test("is nested under `derived` and written last, never beside the tables", () => {
+    // Structural, because the caveat is structural. A key that is a peer of
+    // `mealLogs` reads as a peer of `mealLogs`; nested and last, "ignore
+    // `derived`" is a rule a restorer can follow without knowing what is in it.
+    // Position is the cheapest signal a format has, and it is the one a reader
+    // who never reached the README still receives.
+    const keys = Object.keys(build());
+
+    expect(keys).not.toContain("planVsActual");
+    expect(keys.at(-1)).toBe("derived");
+  });
+
+  test("says in the file what `planned` is an answer to", () => {
+    // `plan_template_entries` carries no timestamps, so the app cannot know
+    // what the template said last March: `planned` for a past date is the
+    // template as it stands at export time, and editing the template changes
+    // it. A reader that keeps this string can tell two exports of the same date
+    // apart instead of assuming the earlier one was wrong. Prose in a README
+    // reaches nobody holding the file.
+    expect(build().derived.plannedIs).toBe("template-as-of-export");
+  });
+
+  test("is empty, and still present, for an account with nothing in it", () => {
+    // An empty array rather than an absent key, for the reason every other
+    // table here keeps one: "nothing was logged" must not read as "this file
+    // predates the section".
+    expect(build(EMPTY).derived.planVsActual).toEqual([]);
+  });
+
+  test("names meals by id, and every id is in the file's own library", () => {
+    // Ids rather than names, the rule the rest of the document keeps: a copied
+    // meals.name goes stale the moment a meal is renamed, and this file's
+    // reader has the library to resolve against.
+    const document = build();
+    const known = new Set(document.meals.map((row) => row.id));
+
+    const named = document.derived.planVsActual.flatMap((row) =>
+      [row.plannedMealId, row.swappedWithMealId, row.actualMealId].filter(
+        (id) => id !== null,
+      ),
+    );
+
+    expect(named).not.toHaveLength(0);
+    for (const id of named) expect(known).toContain(id);
+  });
+
+  test("reports a day logged before the program started", () => {
+    // Nothing is planned before program_start_date, so the template resolves to
+    // nothing and the log stands alone. The row is still emitted: it is
+    // recorded history, and dropping it would lose a logged day from the one
+    // section that claims to cover all of them.
+    const document = build({
+      ...TABLES,
+      dayPlanOverrides: [],
+      mealLogs: [mealLog("ffffffff-0000-4000-8000-000000000001", "2026-05-04")],
+    });
+
+    expect(document.derived.planVsActual).toEqual([
+      {
+        date: "2026-05-04",
+        slot: "dinner",
+        plannedMealId: null,
+        swappedWithMealId: null,
+        actualMealId: MEAL_ID,
+        status: "eaten",
+        note: null,
+      },
+    ]);
+  });
+
+  test("orders by date and then by slot, whatever order the rows arrive in", () => {
+    // Ordered by construction rather than by a comparator — the dates are
+    // sorted and the slots come from the enum — which is what keeps two
+    // exports of unchanged data byte-identical.
+    const scrambled = build({
+      ...TABLES,
+      mealLogs: [
+        mealLog("ffffffff-0000-4000-8000-000000000002", "2026-08-17"),
+        mealLog("ffffffff-0000-4000-8000-000000000001", "2026-06-03"),
+      ],
+    });
+
+    expect(scrambled.derived.planVsActual.map((row) => `${row.date} ${row.slot}`)).toEqual([
+      "2026-06-03 dinner",
+      "2026-08-10 breakfast",
+      "2026-08-10 lunch",
+      "2026-08-17 breakfast",
+      "2026-08-17 dinner",
+    ]);
+  });
+
+  test("still builds a backup when the plan names a meal the file does not carry", () => {
+    // resolve-plan's hydrate THROWS on a plan naming a meal it was not given,
+    // which is right for a screen and wrong here. This is the file you reach
+    // for when something has already gone wrong, and refusing to produce one
+    // because a derived convenience could not be computed would lose the rows
+    // as well as the reading of them.
+    const orphaned = () => build({ ...TABLES, meals: [] });
+
+    expect(orphaned).not.toThrow();
+
+    // The template entry and the override are still in the document above, so
+    // the dangling reference is visible rather than reported as "never planned".
+    const document = orphaned();
+
+    expect(document.planTemplateEntries).toHaveLength(1);
+    expect(document.dayPlanOverrides).toHaveLength(1);
+    expect(document.derived.planVsActual).toEqual([
+      {
+        date: "2026-08-10",
+        slot: "dinner",
+        plannedMealId: null,
+        swappedWithMealId: null,
+        actualMealId: null,
+        status: "eaten",
+        note: null,
+      },
+    ]);
+  });
+
+  test("leaves the tables it is derived from untouched", () => {
+    // buildExport's standing promise. This section resolves a plan out of three
+    // of them, and resolution sorts template entries to break ties.
+    const template = [templateEntry("dddddddd-0000-4000-8000-000000000001", 1)];
+    const tables = { ...TABLES, planTemplateEntries: template };
+
+    buildExport({ account: ACCOUNT, exportedAt: EXPORTED_AT, tables });
+
+    expect(tables.planTemplateEntries).toBe(template);
+    expect(template).toHaveLength(1);
+  });
+});
+
+describe("the two exports agree", () => {
+  /**
+   * The assertion that pays for `plan-vs-actual.ts` existing.
+   *
+   * Before FUEL-39 the triple lived privately inside the CSV builder. Deriving
+   * it a second time for the JSON would have produced two implementations that
+   * do not fail together: a `planned` meaning "what the template says" in one
+   * file and "what stood after the swap" in the other disagrees only on the
+   * swapped days, which are the days the whole feature exists for. Both now
+   * render one module's answer, and this is what holds them to it.
+   *
+   * The fixture is the case where all three genuinely differ — a slot logged,
+   * and only afterwards swapped.
+   */
+  const BEEF_ID = "aaaaaaaa-0000-4000-8000-00000000000b";
+  const MONDAY = "2026-08-10";
+
+  const tables: ExportTables = {
+    ...TABLES,
+    meals: [meal(MEAL_ID, "Overnight oats"), meal(BEEF_ID, "Beef and potato")],
+    planTemplateEntries: [templateEntry("dddddddd-0000-4000-8000-000000000001", 1)],
+    dayPlanOverrides: [
+      {
+        ...override("eeeeeeee-0000-4000-8000-000000000001", MONDAY),
+        slot: "breakfast",
+        mealId: BEEF_ID,
+      },
+    ],
+    mealLogs: [
+      {
+        ...mealLog("ffffffff-0000-4000-8000-000000000001", MONDAY),
+        slot: "breakfast",
+        mealId: MEAL_ID,
+      },
+    ],
+  };
+
+  const plan: Plan = {
+    programStartDate: profile.programStartDate,
+    template: [...tables.planTemplateEntries],
+    overrides: [...tables.dayPlanOverrides],
+    meals: [...tables.meals],
+  };
+
+  /** The meals section of the CSV, as `date|slot -> [planned, swapped, actual]`. */
+  const csvTriples = () => {
+    const days = resolveWeek(plan, MONDAY);
+
+    const csv = buildWeekCsv({
+      monday: startOfWeek(MONDAY),
+      timezone: ACCOUNT.timezone,
+      exportedAt: EXPORTED_AT,
+      days,
+      templateDays: days.map((day) => ({
+        date: day.date,
+        meals: templateDay(plan, day.date),
+      })),
+      trainingDays: [],
+      mealLogs: tables.mealLogs,
+      workoutLogs: [],
+      weightLogs: [],
+      meals: tables.meals,
+      workouts: [],
+    });
+
+    const lines = csv.split("\n");
+    const header = lines.indexOf("date,slot,planned,swapped_with,actual,status,kcal,protein_g,fat_g,carb_g,note");
+
+    // Naive split: no fixture name here contains a comma, and `csv.test.ts`
+    // owns quoting. What is being read is the column ORDER, not the escaping.
+    return new Map(
+      lines
+        .slice(header + 1)
+        .filter((line) => line !== "")
+        .map((line) => line.split(","))
+        .map((cells) => [`${cells[0]}|${cells[1]}`, cells.slice(2, 5)]),
+    );
+  };
+
+  test("name the same planned, swapped-with and actual meals", () => {
+    const document = buildExport({ account: ACCOUNT, exportedAt: EXPORTED_AT, tables });
+    const names = new Map(document.meals.map((row) => [row.id, row.name]));
+    const name = (id: string | null) => (id === null ? "" : (names.get(id) ?? ""));
+
+    const fromCsv = csvTriples();
+
+    // The fixture has to actually exercise the disagreement, or this test
+    // passes on a week where every column happens to hold the same meal.
+    const swapped = document.derived.planVsActual.find((row) => row.date === MONDAY);
+
+    expect(swapped).toMatchObject({
+      slot: "breakfast",
+      plannedMealId: MEAL_ID,
+      swappedWithMealId: BEEF_ID,
+      actualMealId: MEAL_ID,
+    });
+
+    expect(fromCsv.size).toBeGreaterThan(0);
+
+    for (const row of document.derived.planVsActual) {
+      expect(fromCsv.get(`${row.date}|${row.slot}`)).toEqual([
+        name(row.plannedMealId),
+        name(row.swappedWithMealId),
+        name(row.actualMealId),
+      ]);
+    }
   });
 });
