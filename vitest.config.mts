@@ -82,6 +82,7 @@ export default defineConfig({
         "src/lib/week-grid.ts",
         "src/lib/week-param.ts",
         "src/lib/week-totals.ts",
+        "src/lib/seed/history.ts",
       ],
       thresholds: {
         "src/lib/db/scope.ts": FULLY_COVERED,
@@ -172,6 +173,21 @@ export default defineConfig({
         // secret — for the same reason auth/token.ts is: it takes its clock and
         // its secret as arguments.
         "src/lib/demo.ts": FULLY_COVERED,
+        // FUEL-41, and gated for a reason none of the others share: nothing it
+        // produces is ever checked by a human. A demo is provisioned, rendered
+        // and thrown away within two hours, so every way this file can be
+        // subtly wrong — a status band that never yields `partial`, a weigh-in
+        // series whose trailing rate misses the on-pace band, a swap that
+        // resolves to the meal it swapped away from — reaches a portfolio
+        // visitor and nobody else. There is no screen anyone revisits and no
+        // user who would report it.
+        //
+        // The first draft proved the point. One missing `>>> 0` made every
+        // variation negative, which is below every threshold in the file at
+        // once: the persona skipped two thirds of her workouts and never
+        // swapped a meal. Nothing threw, nothing looked wrong in the diff, and
+        // the tests that now catch it are the ones this gate insists exist.
+        "src/lib/seed/history.ts": FULLY_COVERED,
         // § 1.3. The totals are what P4 puts in front of a swap, so an
         // unmeasured branch here is a number the user is asked to trust that
         // nothing checked. The rounding and the untracked skip are both single
