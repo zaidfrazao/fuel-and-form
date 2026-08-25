@@ -63,6 +63,33 @@ vi.mock("@/lib/seed/load", async (importOriginal) => {
   };
 });
 
+/**
+ * A switch for generating NO history, so the empty-batch guard can be asserted.
+ *
+ * Passthrough by default, exactly as the seed-load mock above is — every other
+ * test in this file runs the real generator against the real seed library.
+ *
+ * The case matters because Postgres has no statement for inserting no rows: an
+ * unguarded empty batch throws before a statement is built, rolls back the
+ * transaction, and refuses the demo. The shipped seed library cannot produce an
+ * empty batch, which is precisely why the guard needs a test that does — the
+ * property lives in `plan.ts`'s template, and a later edit there would take it
+ * away with nothing to notice.
+ */
+const generating = vi.hoisted(() => ({ empty: false }));
+
+vi.mock("@/lib/seed/history", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/seed/history")>();
+
+  return {
+    ...actual,
+    demoHistory: (input: Parameters<typeof actual.demoHistory>[0]) =>
+      generating.empty
+        ? { weightLogs: [], dayPlanOverrides: [], mealLogs: [], workoutLogs: [] }
+        : actual.demoHistory(input),
+  };
+});
+
 /** See the note in scope.test.ts: resolved through the helper, not process.env. */
 const configured = Boolean(testDatabaseUrl());
 
@@ -101,6 +128,7 @@ async function seedDemoRows(
 describe.skipIf(!configured)("provisioning a demo account", () => {
   beforeEach(async () => {
     seeding.fail = false;
+    generating.empty = false;
     await truncateAll(getDb());
   });
 
@@ -307,6 +335,21 @@ describe.skipIf(!configured)("provisioning a demo account", () => {
       for (const log of await owned.select(schema.workoutLogs)) {
         expect(workoutIds.has(log.workoutId)).toBe(true);
       }
+    });
+
+    it("still provisions when the generator returns nothing at all", async () => {
+      // The empty-batch guard. Without it this throws before a statement is
+      // built, the transaction rolls back, and every visitor gets a failed
+      // demo rather than one with a thin history.
+      generating.empty = true;
+
+      const userId = await provisioned();
+      const owned = scope(userId, getDb());
+
+      // The account and its library are intact — only the history is absent.
+      expect(await owned.selectOne(schema.profiles)).toBeDefined();
+      expect(await owned.select(schema.meals)).not.toHaveLength(0);
+      expect(await owned.select(schema.weightLogs)).toHaveLength(0);
     });
 
     it("provisions two accounts with independent history", async () => {

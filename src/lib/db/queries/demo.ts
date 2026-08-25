@@ -220,10 +220,28 @@ export async function provisionDemoUser(ipHash: string, now: Date): Promise<Prov
     // override put there and the two should not be able to disagree about the
     // order they were decided in. Nothing enforces this — both tables reference
     // `meals`, not each other — but the export reads them together.
-    await owned.insert(schema.weightLogs, history.weightLogs);
-    await owned.insert(schema.dayPlanOverrides, history.dayPlanOverrides);
-    await owned.insert(schema.mealLogs, history.mealLogs);
-    await owned.insert(schema.workoutLogs, history.workoutLogs);
+    //
+    // Each guarded on being non-empty, exactly as `loadSeedLibraries` guards its
+    // ingredients and exercises. Postgres has no statement for inserting no
+    // rows — `scope.upsert` says so where it refuses one outright — and
+    // Drizzle throws "values() must be called with at least one value" before a
+    // statement is even built. That throw would roll back the transaction and
+    // turn "Try the demo" into an error for EVERY visitor, not a degraded one.
+    //
+    // None of the four can be empty for the shipped seed library, and
+    // history.test.ts holds that line across all seven weekdays. But the
+    // generator can return an empty batch — two of its own tests make it do so,
+    // with a one-recipe slot and with a program only days old — so the property
+    // this depends on lives in the seed data, not in the type. That is exactly
+    // the kind of guarantee that a later edit to `plan.ts` breaks silently.
+    for (const [table, rows] of [
+      [schema.weightLogs, history.weightLogs],
+      [schema.dayPlanOverrides, history.dayPlanOverrides],
+      [schema.mealLogs, history.mealLogs],
+      [schema.workoutLogs, history.workoutLogs],
+    ] as const) {
+      if (rows.length > 0) await owned.insert(table, rows);
+    }
 
     return user.id;
   });
