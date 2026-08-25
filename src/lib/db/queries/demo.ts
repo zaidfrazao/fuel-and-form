@@ -4,8 +4,8 @@ import { eq, sql } from "drizzle-orm";
 
 import {
   decideProvisioning,
+  DEMO_LIMITS,
   demoExpiry,
-  type ProvisioningCounts,
   rateLimitWindowStart,
   type Refusal,
 } from "@/lib/demo";
@@ -51,12 +51,14 @@ import { scope } from "../scope";
 export type Provisioning = { ok: true; userId: string } | { ok: false; refusal: Refusal };
 
 /**
- * Both counts the limits need, in one round trip.
+ * Why a provision was refused, worked out AFTER the fact.
  *
- * A single aggregate over `users` rather than two `count()` queries: the demo
- * is a visitor's first sixty seconds and this is on the way to their first
- * paint, so a second HTTP round trip to Neon buys nothing. `filter` is what
- * lets one scan answer two questions.
+ * The limits are enforced by the INSERT itself (see `provisionDemoUser`), which
+ * answers only "yes" or "no". This is what turns a "no" into a sentence, and it
+ * runs ONLY on the refusal path — the happy path never pays for it.
+ *
+ * A single aggregate over `users` rather than two queries: `filter` lets one
+ * scan answer both questions, and this is already the slow path.
  *
  * The instants are bound as ISO strings rather than `Date` objects. Inside a
  * raw fragment there is no column mapper to convert them, and Postgres infers
@@ -64,10 +66,9 @@ export type Provisioning = { ok: true; userId: string } | { ok: false; refusal: 
  * driver cannot be relied on to produce.
  *
  * `count(*)` is `bigint`, which the driver returns as a string; `mapWith(Number)`
- * is what stops `"3" >= 3` from being compared as text. A session count large
- * enough to lose precision as a JS number is not a state this app can reach.
+ * is what stops `"3" >= 3` from being compared as text.
  */
-async function countAgainstLimits(ipHash: string, now: Date): Promise<ProvisioningCounts> {
+async function refusalFor(ipHash: string, now: Date): Promise<Refusal> {
   const windowStart = rateLimitWindowStart(now.getTime()).toISOString();
 
   const [counts] = await getDb()
@@ -85,32 +86,60 @@ async function countAgainstLimits(ipHash: string, now: Date): Promise<Provisioni
     .from(schema.users)
     .where(eq(schema.users.kind, "demo"));
 
-  // An aggregate with no GROUP BY returns exactly one row, even over no rows at
-  // all — so this is unreachable rather than merely unlikely. It is here
-  // because `noUncheckedIndexedAccess` requires an answer, and the honest one
-  // names the impossibility rather than asserting it away with `!`.
-  if (!counts) throw new Error("Counting demo sessions returned no row.");
+  const decision = counts
+    ? decideProvisioning(counts, DEMO_LIMITS)
+    : ({ allowed: false, refusal: "at-capacity" } as const);
 
-  return counts;
+  // Refused by the database, but allowed by a count taken a moment later —
+  // the rows that blocked it have since expired or aged out of the window.
+  // Rare, and it must still be a refusal, because the insert really did not
+  // happen. "At capacity" is the honest answer: something site-wide stopped
+  // it, and it is not the visitor's own allowance.
+  return decision.allowed ? "at-capacity" : decision.refusal;
 }
 
 /**
  * Creates a demo account, seeds it, and returns its id.
  *
- * ## The counts are read outside the transaction
+ * ## The limits are in the INSERT, not in front of it
  *
- * So two provisions arriving together can both pass a cap only one of them
- * should have, and the site can end up one or two sessions over its ceiling.
- * That is accepted rather than overlooked. Making the cap exact means a
- * serialisable transaction or an advisory lock on every single provision — a
- * round trip and a contention point, on the app's most public endpoint, to
- * defend a soft limit whose entire consequence is a hundred and one live demo
- * sessions instead of a hundred.
+ * The obvious shape — count, decide, then insert — is a time-of-check /
+ * time-of-use race, and a worse one than it first appears. The window is not
+ * "a moment": it is a full network round trip to Neon, during which every
+ * concurrently executing invocation reads the same pre-insert counts. Vercel
+ * runs many invocations at once, so a burst arriving while the site sits one
+ * session under its ceiling does not overshoot by one — every request in the
+ * burst passes the same check and the ceiling is missed by the width of the
+ * burst.
  *
- * The overshoot is bounded by how many provisions can race inside one round
- * trip, and the next request reads the higher count and refuses. What the limit
- * is actually for — a crawler in a loop — is unaffected either way, because a
- * loop is sequential and sees each of its own rows.
+ * So the check moved INTO the statement that writes. The insert supplies its
+ * own rows only if both counts are still under their limits at the moment
+ * Postgres executes it, and returns nothing otherwise. That collapses the
+ * window from a round trip to the execution of one statement.
+ *
+ * ## What this does and does not guarantee
+ *
+ * It does NOT make the ceiling exact, and it must not be described as if it
+ * did. Under READ COMMITTED two such statements running at the same instant
+ * each take their own snapshot, so neither subquery sees the other's uncommitted
+ * row. A small overshoot is still reachable.
+ *
+ * What it buys is proportion: the race is now as wide as one statement rather
+ * than as wide as a round trip, so the overshoot is bounded by genuine
+ * simultaneity instead of by how many requests arrive during a network hop.
+ *
+ * An exact ceiling needs SERIALIZABLE or an advisory lock, which puts a
+ * serialisation point on the app's most public endpoint and needs retry
+ * handling for serialisation failures. That is not bought here, deliberately:
+ * the limit exists to prevent unbounded growth, every row it admits expires
+ * within two hours, and a handful over a soft ceiling costs nothing that a
+ * lock on every provision would not cost more of.
+ *
+ * ## Ordering
+ *
+ * The conditional insert is the FIRST statement in the transaction, so a
+ * refusal has written nothing and there is nothing to roll back. Everything
+ * after it is scoped.
  *
  * ## Nothing here catches
  *
@@ -121,24 +150,42 @@ async function countAgainstLimits(ipHash: string, now: Date): Promise<Provisioni
  * that is not a refusal.
  */
 export async function provisionDemoUser(ipHash: string, now: Date): Promise<Provisioning> {
-  const decision = decideProvisioning(await countAgainstLimits(ipHash, now));
-
-  if (!decision.allowed) return { ok: false, refusal: decision.refusal };
+  const windowStart = rateLimitWindowStart(now.getTime()).toISOString();
+  const expiresAt = demoExpiry(now.getTime()).toISOString();
 
   const userId = await getPool().transaction(async (tx) => {
-    const [user] = await tx
-      .insert(schema.users)
-      .values({
-        kind: "demo",
-        displayName: DEMO_DISPLAY_NAME,
-        // The row's own deadline, and the authoritative one — resolve.ts checks
-        // it on every request precisely so a cookie cannot outlive it.
-        expiresAt: demoExpiry(now.getTime()),
-        ipHash,
-      })
-      .returning({ id: schema.users.id });
+    // Written as one statement rather than assembled by the query builder,
+    // because the builder has no way to express "insert these values only if
+    // these aggregates hold" — and that conjunction IS the limit. Every value
+    // is a bound parameter; the two thresholds come from DEMO_LIMITS, so the
+    // numbers still have exactly one definition.
+    const inserted = await tx.execute<{ id: string }>(sql`
+      insert into ${schema.users} ("kind", "display_name", "expires_at", "ip_hash")
+      select
+        'demo'::user_kind,
+        ${DEMO_DISPLAY_NAME},
+        ${expiresAt}::timestamptz,
+        ${ipHash}
+      where (
+          select count(*) from ${schema.users}
+          where "kind" = 'demo'
+            and "ip_hash" = ${ipHash}
+            and "created_at" > ${windowStart}::timestamptz
+        ) < ${DEMO_LIMITS.client.max}
+        and (
+          select count(*) from ${schema.users}
+          where "kind" = 'demo'
+            and "expires_at" > ${now.toISOString()}::timestamptz
+        ) < ${DEMO_LIMITS.concurrent}
+      returning "id"
+    `);
 
-    if (!user) throw new Error("Provisioning a demo account returned no user row.");
+    const user = inserted.rows.at(0);
+
+    // No row means the WHERE was false: a limit refused it. Nothing has been
+    // written, so the transaction commits empty and the caller works out which
+    // limit it was.
+    if (!user) return undefined;
 
     // From here down the scope owns every statement. `loadSeedLibraries` never
     // learns whose scope it was handed, which is the same arrangement the
@@ -151,6 +198,8 @@ export async function provisionDemoUser(ipHash: string, now: Date): Promise<Prov
 
     return user.id;
   });
+
+  if (!userId) return { ok: false, refusal: await refusalFor(ipHash, now) };
 
   return { ok: true, userId };
 }
