@@ -61,6 +61,7 @@ export default defineConfig({
         "src/lib/cursor.ts",
         "src/lib/date.ts",
         "src/lib/day-summary.ts",
+        "src/lib/demo.ts",
         "src/lib/export.ts",
         "src/lib/export-week.ts",
         "src/lib/log-intent.ts",
@@ -154,6 +155,23 @@ export default defineConfig({
         // one it will. None of them throw, and the summary is the last thing
         // the day says.
         "src/lib/day-summary.ts": FULLY_COVERED,
+        // FUEL-40, and the widest blast radius of any refusal in this list.
+        // Every other gated boundary decides what ONE authenticated person
+        // writes; this one decides whether a stranger who has proved nothing
+        // gets an account and the two hundred rows underneath it. The whole
+        // file is that decision, so an unmeasured branch is not a wrong screen
+        // — it is a limit that does not fire, on the app's most public
+        // endpoint, discovered when the database is full.
+        //
+        // Two of its branches are off-by-one boundaries whose failure is
+        // invisible: `>` for `>=` hands out one extra session per window
+        // forever, and a reversed rate-limit window matches nothing at all, so
+        // every count comes back zero and the limit is simply off. Neither
+        // throws, neither looks wrong in a diff, and neither shows up on any
+        // screen. Coverable here at all — with no request, no database and no
+        // secret — for the same reason auth/token.ts is: it takes its clock and
+        // its secret as arguments.
+        "src/lib/demo.ts": FULLY_COVERED,
         // § 1.3. The totals are what P4 puts in front of a swap, so an
         // unmeasured branch here is a number the user is asked to trust that
         // nothing checked. The rounding and the untracked skip are both single

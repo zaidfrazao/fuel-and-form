@@ -19,8 +19,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const logIn = vi.fn();
+const startDemo = vi.fn();
 
 vi.mock("./actions", () => ({ logIn: (...args: unknown[]) => logIn(...args) }));
+vi.mock("@/app/actions/demo", () => ({
+  startDemo: (...args: unknown[]) => startDemo(...args),
+}));
 
 // Imported after the mock is registered — `vi.mock` is hoisted, but the intent
 // is clearer written in this order.
@@ -28,8 +32,10 @@ const { default: LoginPage } = await import("./page");
 
 beforeEach(() => {
   logIn.mockReset();
+  startDemo.mockReset();
   // The shape useActionState expects: the new state, or undefined for success.
   logIn.mockResolvedValue(undefined);
+  startDemo.mockResolvedValue(undefined);
 });
 
 describe("the login screen", () => {
@@ -47,15 +53,71 @@ describe("the login screen", () => {
     expect(screen.getByLabelText("Password").getAttribute("type")).toBe("password");
   });
 
-  it("offers the demo entry point", () => {
+  it("offers the demo entry point, live", () => {
     render(<LoginPage />);
 
-    // P7's "Try the demo requires no credentials". Present now, wired up in
-    // FUEL-40 — and disabled until then rather than live-looking and inert.
+    // P7's "Try the demo requires no credentials", wired up in FUEL-40. It was
+    // deliberately disabled until then; a live-looking button that does nothing
+    // is the one thing worse than an absent one, and so is the reverse — this
+    // asserts it is not still disabled after being connected.
     const demo = screen.getByRole("button", { name: "Try the demo" });
 
     expect(demo).toBeDefined();
-    expect((demo as HTMLButtonElement).disabled).toBe(true);
+    expect((demo as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("submits the demo as a POST rather than following a link", () => {
+    render(<LoginPage />);
+
+    // P7: "a POST behind a user action, so crawlers cannot mass-create
+    // sessions". A crawler follows an anchor and does not submit a form, so
+    // this is the difference between a demo endpoint and an open one.
+    const demo = screen.getByRole("button", { name: "Try the demo" });
+
+    expect((demo as HTMLButtonElement).type).toBe("submit");
+    expect(screen.queryByRole("link", { name: "Try the demo" })).toBeNull();
+  });
+
+  it("keeps the password out of the demo's form", async () => {
+    render(<LoginPage />);
+
+    // The reason the demo is a form of its own. Sharing one would submit the
+    // password — typed or autofilled — to the provisioning endpoint on every
+    // click, with nothing on screen to show for it.
+    const demo = screen.getByRole("button", { name: "Try the demo" });
+    const password = screen.getByLabelText("Password");
+
+    expect((demo as HTMLButtonElement).form).not.toBe(
+      (password as HTMLInputElement).form,
+    );
+    expect((demo as HTMLButtonElement).form?.querySelector("#password")).toBeNull();
+  });
+
+  it("announces a refused demo rather than only colouring it", async () => {
+    // Brand Guide § Feedback, and the same claim the password refusal makes:
+    // the message has to reach a screen reader, not just the screen.
+    startDemo.mockResolvedValue({ error: "The demo is at capacity right now." });
+
+    render(<LoginPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Try the demo" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toBe(
+        "The demo is at capacity right now.",
+      );
+    });
+  });
+
+  it("says what the demo is before anyone clicks it", () => {
+    render(<LoginPage />);
+
+    // § Tone of Voice: describe what will happen rather than nudge. The
+    // isolation promise is the one thing a portfolio visitor cannot verify for
+    // themselves, so the screen says it.
+    expect(
+      screen.getByText(/temporary account with sample data/i),
+    ).toBeDefined();
   });
 
   it("sends the password to the server rather than judging it here", async () => {

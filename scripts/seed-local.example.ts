@@ -26,7 +26,7 @@ import { loadSeedLibraries } from "@/lib/seed/load";
  * Everything that is NOT a body metric lives in `src/lib/seed/` and is
  * committed: the recipes, the workouts, and the weekly template that says which
  * dinner falls on which day. Those are food, exercises and routine, not personal
- * data, and keeping them in git is what lets FUEL-41's demo provisioner build a
+ * data, and keeping them in git is what lets FUEL-40's demo provisioner build a
  * populated demo account out of the same arrays. The gitignored half is only the
  * two blocks below.
  *

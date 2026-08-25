@@ -150,7 +150,7 @@ describe.skipIf(!configured)("loading the seed libraries", () => {
 
   it("keeps two seeded users' libraries entirely separate", async () => {
     // The seed is the first thing that writes a realistic volume of rows, and
-    // FUEL-41 will run it per demo visit. Two users loading the SAME library is
+    // FUEL-40 runs it per demo visit. Two users loading the SAME library is
     // the case where a missing `user_id` filter would be invisible: the rows
     // look right because they are meant to be identical.
     const [alice, bob] = await Promise.all([seedFreshUser("demo"), seedFreshUser("demo")]);
