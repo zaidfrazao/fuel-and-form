@@ -57,11 +57,13 @@ export default defineConfig({
         "src/lib/auth/token.ts",
         "src/lib/auth/compare.ts",
         "src/lib/auth/cookies.ts",
+        "src/lib/cron.ts",
         "src/lib/csv.ts",
         "src/lib/cursor.ts",
         "src/lib/date.ts",
         "src/lib/day-summary.ts",
         "src/lib/demo.ts",
+        "src/lib/demo-banner.ts",
         "src/lib/export.ts",
         "src/lib/export-week.ts",
         "src/lib/log-intent.ts",
@@ -110,6 +112,24 @@ export default defineConfig({
         // auth/cookies.ts is — a property only a real browser exercises is one
         // no test can hold still.
         "src/lib/cursor.ts": FULLY_COVERED,
+        // FUEL-42. `vercel.json` publishes the reaper's path in a public
+        // repository, so this comparison is the whole of the difference between
+        // Vercel's scheduler and anyone who read it — in front of the one route
+        // in the app that DELETES rows. Every branch in it is a rejection, and
+        // an unmeasured rejection is a way past the gate that nobody looked at.
+        // The empty-secret branch matters most: it is the one that turns a
+        // misconfigured deployment into an open endpoint rather than a closed
+        // one, and nothing about it is visible from outside.
+        "src/lib/cron.ts": FULLY_COVERED,
+        // FUEL-42, and here for auth/cookies.ts's reason plus one of its own.
+        // The cookie flags are properties only a real browser exercises, and a
+        // lost `path` is a dismiss button that appears not to work. The one of
+        // its own is `isBannerDismissed`, which is read from the ROOT layout on
+        // a value a stranger controls: a branch that throws there is a 500 on
+        // every screen in the app rather than on one of them. The copy is
+        // covered here too, because § UI Copy gives it word for word and voice
+        // erodes one friendly edit at a time.
+        "src/lib/demo-banner.ts": FULLY_COVERED,
         // § 1.1. date.ts is here because it is where resolve-plan.ts keeps its
         // date arithmetic — a gate on the resolver that let its own calendar
         // maths go unmeasured would cover the easy half of the risk the PRD

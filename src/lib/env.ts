@@ -60,6 +60,27 @@ export function ownerPassword(): string {
 }
 
 /**
+ * The bearer token Vercel's scheduler proves itself with — FUEL-42, § P7.
+ *
+ * `requireEnv` rather than a default, and the throw is the point. The route it
+ * guards deletes rows and its path is published in `vercel.json` in a public
+ * repository, so the alternatives to throwing are both worse than a 500:
+ *
+ *   - An empty default authorises `Authorization: Bearer `, which is an open
+ *     delete endpoint that looks closed from every angle including this file.
+ *   - Answering 401 when the variable is absent makes a job that has NEVER run
+ *     indistinguishable from a job being probed. Nothing would report it, and
+ *     the symptom — demo rows accumulating — is the thing this job exists to
+ *     prevent, arriving weeks later with no obvious cause.
+ *
+ * Throwing puts the cause in the platform's log the first time the scheduler
+ * fires, which is the only moment anyone is looking.
+ */
+export function cronSecret(): string {
+  return requireEnv("CRON_SECRET");
+}
+
+/**
  * The key the session cookies are signed with.
  *
  * Read fresh on every call rather than captured at module scope, so rotating it

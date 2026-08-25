@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 
+import { DemoBanner } from "@/components/demo-banner";
 import { ThemeProvider } from "@/components/theme-provider";
 
 import "./globals.css";
@@ -30,7 +31,25 @@ export default function RootLayout({
     // without this React would discard the correction and flash the wrong mode.
     <html lang="en" suppressHydrationWarning>
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          {/*
+           * P7's "persistent" banner — every screen, which is what makes the
+           * layout the right place for it and the five pages the wrong one.
+           * Renders nothing at all unless the session is a demo, so the owner's
+           * app is untouched: see components/demo-banner.tsx.
+           *
+           * ABOVE `children` and in normal flow rather than fixed, so it pushes
+           * the page down instead of covering it. The pages are `min-h-dvh`, so
+           * on a demo session `/` gains the banner's height in scroll — the one
+           * cost of this placement, paid only by demo visitors, and reclaimable
+           * by the dismiss button. Fixing it to the bottom of the viewport would
+           * put it over `/`'s action bar, which is worse: that bar is the thumb
+           * target the whole screen is arranged around.
+           */}
+          <DemoBanner />
+
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
