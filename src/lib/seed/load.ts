@@ -11,7 +11,8 @@ import { seedWorkouts } from "./workouts";
  *
  * The whole of this file is deliberately user-agnostic: it takes a `Scope` and
  * never learns whose it is. That is what lets the owner's gitignored script
- * (FUEL-15) and the demo provisioner (FUEL-41) load the same library into
+ * (FUEL-15) and the demo provisioner (FUEL-40, src/lib/db/queries/demo.ts)
+ * load the same library into
  * different users without a second copy of this logic — the arrangement
  * types.ts:24-31 describes, now with something on the other end of it.
  *

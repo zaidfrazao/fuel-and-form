@@ -2,7 +2,7 @@
 
 A personal fitness & nutrition tracker: meal planning with swaps, workout scheduling, and weekly check-in exports.
 
-Built for one user — the owner — with read-only demo sessions so the app can be shown to strangers without exposing real data.
+Built for one user — the owner — with ephemeral, fully writable demo sessions so the app can be shown to strangers without exposing real data.
 
 ## Stack
 
@@ -244,6 +244,52 @@ value is parsed by `src/lib/cursor.ts`, which returns `null` for anything
 malformed rather than throwing — `/` is the one screen that must always render,
 and a cookie a stranger controls must not be able to 500 it.
 
+### Demo sessions
+
+"Try the demo" on the login screen provisions a fresh account per click: a
+`users` row of kind `demo`, the persona's profile, and the whole seeded library
+beneath it — created in **one transaction**, because a user row whose library
+never landed renders "No plan yet" and is a stranger's first impression of the
+app. It is fully writable, and every statement under it goes through `scope()`,
+so nothing it does can reach the owner or another visitor.
+
+Each session carries `users.expires_at`, two hours out and matched to the
+cookie's own lifetime. The row is the authoritative deadline — a cookie that
+outlives it is refused (see the rejection ladder above).
+
+It is a **POST**, behind a form, not a link. A GET would be followed by every
+crawler, preview fetcher and link-unfurler that ever saw the page, each one
+provisioning an account nobody asked for.
+
+Two limits bound it, both counted in Postgres because a serverless runtime
+gives each invocation its own memory and an in-process counter would count
+nothing:
+
+| Limit | What it stops |
+| --- | --- |
+| 3 per client per 10 minutes | one visitor consuming the whole site's budget |
+| 100 live sessions at once | unbounded growth |
+
+The cap is deliberately **soft**: the counts are read outside the transaction
+that writes, so simultaneous provisions can overshoot it by one or two. Making
+it exact costs a lock on the app's most public endpoint to defend a limit whose
+entire consequence is one extra row, and a crawler — which is what the limit is
+for — is sequential and sees each of its own rows anyway.
+
+#### `users.ip_hash`
+
+The per-client limit needs something to count per client, and that column is it.
+It holds an **HMAC of the address under `SESSION_SECRET`**, never an address: a
+bare hash of an IPv4 address is reversible by anyone willing to hash four
+billion values, and the key is neither in this repository nor in the database.
+Because the key differs per deployment, the same visitor cannot be lined up
+across two of them either.
+
+It needs no retention policy of its own. The rate-limit window is minutes and a
+session lives two hours, so a row the limit still cares about cannot yet have
+expired — the reaper that deletes expired demo users is the only cleanup there
+is, and it removes the column with the row it describes.
+
 ### Migrations
 
 ```bash
@@ -279,9 +325,15 @@ seed is split in two:
 | `scripts/seed-local.ts` | height, weights, macro targets, weigh-ins | **no** |
 
 The committed half is plan *shape*, which is what the PRD says the demo shares
-with the owner — so FUEL-41's demo provisioner loads the same arrays through the
-same `loadSeedLibraries()` rather than keeping a second copy. Only the profile
-row and the weigh-in history are personal.
+with the owner — so the demo provisioner loads the same arrays through the same
+`loadSeedLibraries()` rather than keeping a second copy. Only the profile row
+and the weigh-in history are personal.
+
+The demo persona's own profile is the one exception, and it lives in
+`src/lib/seed/persona.ts`, committed. Every figure in it belongs to Sam Rivera,
+who is invented, published in the PRD, and on the allowlist
+`scripts/check-no-metrics.sh` checks every metric-shaped value against. That
+file may hold Sam's numbers and nobody else's.
 
 `scripts/seed-local.example.ts` is the committed template. Every figure in it
 belongs to Sam Rivera, the fictional demo persona (PRD § Target Users) — if you

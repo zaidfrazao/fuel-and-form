@@ -113,9 +113,25 @@ const noRawDatabaseHandles = {
 // keys exist only to be excluded, so flagging them as unused reports the idiom
 // working. ESLint's own option for this is off by default; everything else the
 // rule catches stays caught.
+//
+// `argsIgnorePattern` is the same idea one signature along, and it is
+// `useActionState` that forces it. That hook calls an action as
+// `(previousState, formData)`, so an action ignoring BOTH — `startDemo` in
+// src/app/actions/demo.ts takes nothing from the form, because provisioning a
+// demo has no fields — must still declare them to be callable. The underscore
+// prefix is already the convention here (`_previous` in src/app/login/actions.ts,
+// which the default `args: "after-used"` happens not to flag only because the
+// argument AFTER it is used). Naming the convention makes the two consistent
+// rather than leaving one of them warning.
+//
+// Narrow on purpose: only a parameter deliberately marked as ignored is
+// exempt. An ordinary unused argument is still reported.
 const unusedVars = {
   rules: {
-    "@typescript-eslint/no-unused-vars": ["warn", { ignoreRestSiblings: true }],
+    "@typescript-eslint/no-unused-vars": [
+      "warn",
+      { ignoreRestSiblings: true, argsIgnorePattern: "^_" },
+    ],
   },
 };
 

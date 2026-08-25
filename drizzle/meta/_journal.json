@@ -29,6 +29,13 @@
       "when": 1787211993945,
       "tag": "0003_purple_zodiak",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787660584736,
+      "tag": "0004_short_white_tiger",
+      "breakpoints": true
     }
   ]
 }

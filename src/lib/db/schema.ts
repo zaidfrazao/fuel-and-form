@@ -209,6 +209,36 @@ export const users = pgTable(
      * expiry" are different states rather than the same one.
      */
     expiresAt: instant("expires_at"),
+
+    /**
+     * Which client provisioned this demo session — a keyed hash, never an
+     * address. Null for the owner, who was not provisioned by anyone.
+     *
+     * P7 asks that demo provisioning be "rate-limited, so crawlers cannot mass-
+     * create sessions". A limit needs something to count per client, and on
+     * Vercel's runtime an in-process counter counts nothing: each invocation has
+     * its own memory, so a crawler spread across instances is never seen twice.
+     * Postgres is the only shared state, which is why the counter is a column.
+     *
+     * ## Why the hash, and why it is keyed
+     *
+     * This repository is public and P7's whole subject is what does not end up
+     * in it. A raw address is a fact about a person; `hashClientIp` in
+     * src/lib/demo.ts reduces it to an HMAC under `SESSION_SECRET`, so the
+     * column cannot be read back without the secret and cannot be lined up
+     * against the same visitor on another deployment. What is stored is
+     * provenance — "these rows came from one client" — and nothing else.
+     *
+     * ## Why it needs no cleanup of its own
+     *
+     * The rate-limit window is minutes; a demo session lives two hours. A row
+     * still inside its window therefore cannot yet have expired, so the reaper
+     * (FUEL-42) never deletes a row the limit still needs, and deletes every row
+     * it no longer does. That is one retention rule doing two jobs. A separate
+     * table would have needed a second, and a second rule is a second thing to
+     * get wrong — for a column that dies with the session it describes.
+     */
+    ipHash: text("ip_hash"),
   },
   (t) => [
     // The reaper's only query: expired demo sessions. Partial, so the owner row
@@ -225,6 +255,17 @@ export const users = pgTable(
     // no error anywhere. Partial, so it constrains owners only and leaves demo
     // rows, of which there are deliberately many, alone.
     uniqueIndex("users_single_owner_key").on(t.kind).where(sql`"kind" = 'owner'`),
+
+    // FUEL-40's rate limit reads exactly this: how many sessions one client has
+    // provisioned recently. Partial on demo rows, so the owner — the one row
+    // with a null `ip_hash`, and the one row never counted — stays out of it.
+    //
+    // `(ip_hash, created_at)` in that order because the query is an equality on
+    // the first and a range on the second, which is the order a btree can serve
+    // from a single scan. The reverse would have to filter.
+    index("users_demo_ip_hash_idx")
+      .on(t.ipHash, t.createdAt)
+      .where(sql`"kind" = 'demo'`),
   ],
 );
 
