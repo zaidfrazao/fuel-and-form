@@ -65,6 +65,7 @@ export default defineConfig({
         "src/lib/export-week.ts",
         "src/lib/log-intent.ts",
         "src/lib/macros.ts",
+        "src/lib/plan-vs-actual.ts",
         "src/lib/repeat.ts",
         "src/lib/resolve-plan.ts",
         "src/lib/resolve-now.ts",
@@ -248,6 +249,19 @@ export default defineConfig({
         // not throw; it shifts one row by one column, days later, on someone
         // else's machine.
         "src/lib/export-week.ts": FULLY_COVERED,
+        // FUEL-39, and the reason both export files are here, now held in one
+        // place: this module decides what "planned" MEANS, and both artefacts
+        // render its answer. Every way it can be wrong is a valid file — the
+        // resolved meal printed in all three columns, a swap reported on a day
+        // nothing was swapped, the superseded half of a double-tap winning.
+        //
+        // What makes the gate worth more than the two it serves is that a
+        // mistake here is now made twice, in a CSV read by someone who never
+        // logs in and in a JSON backup nobody reads until they need it. PRD
+        // § Risks puts this distinction forward as the mitigation for macro
+        // totals drifting from reality; a distinction that quietly stops
+        // distinguishing takes the mitigation with it.
+        "src/lib/plan-vs-actual.ts": FULLY_COVERED,
         "src/lib/csv.ts": FULLY_COVERED,
         // FUEL-38. Small, and gated because of WHERE it sits: `?week=` is the
         // one input `/plan` and `/api/export/week` both take from a stranger,
