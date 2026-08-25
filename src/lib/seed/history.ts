@@ -391,20 +391,37 @@ const MEAL_SKIP_RATE: Readonly<Record<MealSlot, number>> = {
 /* -------------------------------------------------------------------------- */
 
 /**
- * How many days back the recent swaps sit, and which slot they touch.
+ * Which slot the recent swaps touch, and how they are placed.
  *
- * Three candidates rather than one because the slot has to be a slot the
- * template actually fills on that weekday, and a weekend dinner is deliberately
- * empty in `plan.ts` — an override there would invent a plan that never
- * existed. Whichever of these fall on a weekday become swaps; at least one
- * always does, whatever weekday the demo is provisioned on, and
- * history.test.ts checks all seven rather than trusting the arithmetic.
- *
- * Dinner because it is the slot a person actually swaps, and the slot P2's
+ * Dinner, because it is the slot a person actually swaps and the one P2's
  * weekly grid opens on.
+ *
+ * ## Counted back through filled days, not by fixed offsets
+ *
+ * The first version named fixed offsets — two, five and nine days back. That is
+ * wrong in a way only the running app shows: those offsets land on the weekend
+ * often enough, and the template leaves the weekend's dinner flex, so a Tuesday
+ * provision produced exactly one swap and put it on the Thursday BEFORE last.
+ * `/plan` opens on the current week, so the visitor arrived on a grid with no
+ * swap marker anywhere on it and had to page backwards to find the feature the
+ * swap exists to demonstrate.
+ *
+ * So the dates are chosen by walking back from yesterday and keeping only days
+ * the template actually fills, then spacing the swaps through that list. The
+ * most recent one is then the last filled dinner before today — inside the
+ * current week on six weekdays out of seven. On a Monday it cannot be: the week
+ * is one day old and that day is today, which is deliberately left unlogged.
  */
-const SWAP_DAYS_BACK = [2, 5, 9] as const;
 const SWAP_SLOT: MealSlot = "dinner";
+
+/**
+ * Which of the recent filled days get swapped, by position in the walk back.
+ *
+ * Spaced rather than consecutive. Taking the first three would put three swaps
+ * inside five days, which reads less like a person cooking something else and
+ * more like a plan nobody follows.
+ */
+const SWAP_POSITIONS = [0, 2, 5] as const;
 
 /** Used only if a profile leaves the swapped slot's time unset — `slot_times`
  *  is `Partial`, so the key is genuinely optional and this is genuinely reachable. */
@@ -520,16 +537,36 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
   // the real ones.
   const overrides: DayPlanOverride[] = [];
 
-  for (const daysBack of SWAP_DAYS_BACK) {
-    const date = addDays(today, -daysBack);
+  // The days behind today that the template actually fills, most recent first.
+  // A weekend dinner is not one of them — the template leaves it flex, and an
+  // override there would invent a plan that never existed.
+  // Carrying the planned meal out of the walk rather than looking it up again
+  // below: a second `templateSlot` call would be nullable again, and the guard
+  // for it would be a branch nothing could ever take.
+  const swappable: { date: CalendarDate; plannedMealId: string }[] = [];
+
+  for (let back = 1; back <= MEAL_LOG_WEEKS * 7; back += 1) {
+    const date = addDays(today, -back);
+
+    if (daysBetween(programStart, date) < 0) break;
+
     const planned = templateSlot(plan, date, SWAP_SLOT);
 
-    // A weekend, whose dinner the template leaves flex. Not an error — there is
-    // simply nothing there to swap away from.
-    if (!planned) continue;
+    if (planned) swappable.push({ date, plannedMealId: planned.meal.id });
+  }
 
-    const alternatives = slotMeals.filter((mealId) => mealId !== planned.meal.id);
-    const swappedIn = pick(alternatives, variation(daysBack, SALT.swapPick));
+  for (const position of SWAP_POSITIONS) {
+    const candidate = swappable[position];
+
+    // Fewer filled days behind today than positions asked for — a demo
+    // provisioned in the program's first week, which the seeded persona never
+    // is, but this module takes its dates as arguments.
+    if (!candidate) continue;
+
+    const { date, plannedMealId } = candidate;
+
+    const alternatives = slotMeals.filter((mealId) => mealId !== plannedMealId);
+    const swappedIn = pick(alternatives, variation(position, SALT.swapPick));
 
     // A library with only one meal in this slot, which the seeded one is not.
     if (!swappedIn) continue;
@@ -614,8 +651,13 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
             ? null
             : duration.from +
               Math.floor(variation(day, SALT.workoutDuration) * duration.spread),
-        note:
-          noteRoll < NOTE_RATE ? (pick(WORKOUT_NOTES, noteRoll / NOTE_RATE) ?? null) : null,
+        // Rescaled by the rate it just passed, so the argument is back in
+        // [0, 1) and `pick` is in range — which is why this asserts rather than
+        // falling back. A `?? null` here would be a branch no test could reach,
+        // and the gate on this file exists so that an unreachable branch is
+        // something someone has to notice. `WORKOUT_NOTES` is non-empty; the
+        // swap's `pick` above is the one that can genuinely come back empty.
+        note: noteRoll < NOTE_RATE ? pick(WORKOUT_NOTES, noteRoll / NOTE_RATE)! : null,
         loggedAt: loggedAt(date, wallMinutes),
       });
     });

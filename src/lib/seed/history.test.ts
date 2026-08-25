@@ -567,6 +567,30 @@ describe("meal history", () => {
 });
 
 describe("swaps", () => {
+  /**
+   * On the week the visitor actually lands on, wherever possible.
+   *
+   * `/plan` opens on the current week, so a swap sitting in an earlier one is a
+   * feature the visitor has to go looking for. The exception is a Monday
+   * provision, where the current week is one day old and that day is today —
+   * which the history deliberately leaves alone. Stated as an exception rather
+   * than loosened away, so the six days it does hold on stay held.
+   */
+  it.each(eachWeekday)("puts a swap in the week the visitor lands on, %s", (date) => {
+    const input = provisionedOn(date);
+    const { dayPlanOverrides } = demoHistory(input);
+
+    const monday = addDays(input.today, -((dayOfWeek(input.today) + 6) % 7));
+    const thisWeek = dayPlanOverrides.filter((row) => row.date >= monday);
+
+    if (dayOfWeek(input.today) === 1) {
+      expect(thisWeek).toHaveLength(0);
+      return;
+    }
+
+    expect(thisWeek.length).toBeGreaterThan(0);
+  });
+
   it.each(eachWeekday)("leaves at least one recent swap, %s", (date) => {
     const input = provisionedOn(date);
     const { dayPlanOverrides } = demoHistory(input);
@@ -629,6 +653,34 @@ describe("swaps", () => {
     const keys = dayPlanOverrides.map((row) => `${row.date}:${row.slot}`);
 
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  /**
+   * A program days rather than weeks old.
+   *
+   * The seeded persona is never in this state — `demoProgramStart` puts it
+   * twelve weeks back — but the generator takes its dates as arguments, and the
+   * two guards this exercises are the difference between a short program and a
+   * walk that runs off the start of the program into dates nothing schedules.
+   */
+  it("stops at the program start and asks for no more swaps than exist", () => {
+    const input = provisionedOn("2026-08-28");
+    const programStart = addDays(input.today, -4);
+
+    const history = demoHistory({
+      ...input,
+      profile: { ...input.profile, programStartDate: programStart },
+    });
+
+    for (const row of everyDatedRow(history)) {
+      expect(row >= programStart).toBe(true);
+    }
+
+    // Four filled days behind today, and the third swap position asks for a
+    // sixth. It goes unfilled rather than wrapping round to one already taken,
+    // which the unique index on (date, slot) would refuse.
+    expect(history.dayPlanOverrides.length).toBeGreaterThan(0);
+    expect(history.dayPlanOverrides.length).toBeLessThan(3);
   });
 
   it("swaps nothing when the library has no alternative in the slot", () => {
