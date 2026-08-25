@@ -1,0 +1,46 @@
+# Repository hygiene, per PRD § P7: "No personal metrics in git history, ever."
+#
+# Runs scripts/check-no-metrics.sh on every push and pull request. The script is
+# the specification; this file only arranges for it to run somewhere a human
+# will see the result.
+name: check-metrics
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The scan reads git history and nothing else. No database, no secrets, and
+# nothing it prints is unredacted — findings are masked by default precisely
+# because logs on a public repository are themselves public.
+permissions:
+  contents: read
+
+jobs:
+  check-metrics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # REQUIRED. The default is depth 1, and a shallow clone has no history
+          # to scan. The script detects this and fails rather than reporting a
+          # clean history it never read — so without this line the job does not
+          # silently pass, it simply cannot run.
+          fetch-depth: 0
+
+      - name: Scan tree, history and published refs
+        run: |
+          set +e
+          ./scripts/check-no-metrics.sh
+          status=$?
+          set -e
+          case "$status" in
+            0) echo "::notice::clean" ;;
+            # The pre-2026-08-19 values GitHub still serves from refs/pull/*.
+            # Known, accepted, and not removable by any commit here — see the
+            # script's header. Surfaced on every run so it stays accepted
+            # rather than forgotten, but it does not fail the build, because a
+            # permanently red check is one nobody reads.
+            3) echo "::warning::published-refs residue only — the accepted state (see README, Repository hygiene)" ;;
+            *) exit "$status" ;;
+          esac

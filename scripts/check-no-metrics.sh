@@ -40,19 +40,37 @@
 #
 # EXPECTED RESULT ON THIS REPOSITORY TODAY
 #
-# The default (full) run FAILS, and that is correct rather than a bug. FUEL-14
-# replaced the owner's figures in the working tree with Sam's, but the old
-# values remain reachable in already-published git history. Rewriting those
-# commits is FUEL-43's job. Until it lands, `--tree-only` is clean and the full
-# scan is red — which is the honest report, and the reason this script scans
-# `git log -p` at all: a clean checkout is not evidence of a clean repository.
+# Checks 1, 2, 4 and 5 pass. Check 3 does not, and that is the honest report
+# rather than a bug.
+#
+# The history this script was written to condemn has been rewritten. FUEL-14
+# replaced the owner's figures in the working tree with Sam's, and on 2026-08-19
+# `git filter-repo` plus a force-push removed the originals from every branch.
+# A fresh clone is clean, and checks 1 and 2 say so.
+#
+# What a force-push does not touch is the host's own refs. GitHub creates
+# `refs/pull/N/head` when a pull request is opened and keeps it for the life of
+# the repository: rewriting a branch does not rewrite those, closing or merging
+# the PR does not delete them, and they remain fetchable by anyone. On this
+# repository they still carry the pre-FUEL-14 figures.
+#
+# That is a deliberate, accepted state — the owner chose force-push-only on
+# 2026-08-19 knowing this — and check 3 exists to keep it accepted rather than
+# forgotten. It is the reason this script does not simply print PASS: a green
+# scan against local refs is not evidence of a clean repository, only of a clean
+# clone, and the difference is the whole point of the exercise.
+#
+# Closing the gap needs GitHub Support to purge the stale refs, or the
+# repository deleted and recreated. Neither is something this script can do.
 #
 # Usage:
-#   ./scripts/check-no-metrics.sh               # full scan: tree + history + structure
+#   ./scripts/check-no-metrics.sh               # full scan: tree + history + published refs
 #   ./scripts/check-no-metrics.sh --tree-only   # working tree + structure only (pre-commit)
+#   ./scripts/check-no-metrics.sh --no-remote   # skip the published-refs check (offline)
 #   ./scripts/check-no-metrics.sh --show-values # print matches unredacted (local only)
 #
 # Exit: 0 clean · 1 findings · 2 usage or environment error
+#       3 published-refs residue only — see the note by the exit itself
 #
 set -euo pipefail
 
@@ -64,6 +82,7 @@ readonly SELF="${0##*/}"
 
 TREE_ONLY=0
 SHOW_VALUES=0
+NO_REMOTE=0
 
 usage() {
   sed -n '2,/^set -euo/p' "$0" | sed 's/^# \{0,1\}//; $d'
@@ -72,6 +91,11 @@ usage() {
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --tree-only) TREE_ONLY=1 ;;
+    # Opt out of the published-refs check when there is deliberately no network
+    # (an offline machine, an air-gapped CI). It still SKIPs loudly and still
+    # fails the run — see scan_published_refs — because "I could not look" and
+    # "I looked and it was clean" must never print the same result.
+    --no-remote) NO_REMOTE=1 ;;
     # Findings are redacted by default because CI logs on a public repository
     # are themselves public: a check that prints the leaked value into a build
     # log has moved the leak rather than reported it.
@@ -101,6 +125,38 @@ cd "$(git rev-parse --show-toplevel)"
 
 FINDINGS=0
 FAILED_CHECKS=""
+
+# Temp files holding real metrics, removed on any exit. A registry rather than a
+# `trap` per check: bash keeps one handler per signal, so the second check to
+# call `trap` would silently disarm the first one's cleanup and leave a dump of
+# the owner's figures in TMPDIR.
+CLEANUP_FILES=""
+
+# The ref namespace check 3 borrows to hold the host's refs while it reads them.
+# Defined here, above the trap that calls it, so an early exit cannot fire a
+# handler that does not exist yet.
+readonly PUBLISHED_NS="refs/remotes/check-no-metrics"
+
+# Delete every ref under that namespace. The fetched objects stay in the object
+# store until the next gc, but with no ref pointing at them they are unreachable
+# — which matters, because otherwise check 2's `git log -p --all` would pick up
+# the host's refs on the next run and report them as this clone's own history.
+drop_published_ns() {
+  local ref
+  while IFS= read -r ref; do
+    [ -z "$ref" ] && continue
+    git update-ref -d "$ref" 2>/dev/null || true
+  done < <(git for-each-ref --format='%(refname)' "$PUBLISHED_NS" 2>/dev/null || true)
+}
+
+cleanup() {
+  local f
+  for f in $CLEANUP_FILES; do
+    rm -f "$f"
+  done
+  drop_published_ns
+}
+trap cleanup EXIT INT TERM
 
 fail_check() {
   FINDINGS=1
@@ -368,7 +424,7 @@ tree_files_no_tests() {
 }
 
 scan_tree() {
-  printf '\n[1/4] working tree — tracked and untracked files, no directory exempt\n'
+  printf '\n[1/5] working tree — tracked and untracked files, no directory exempt\n'
 
   local files_all files_notest
   files_all="$(tree_files)"
@@ -441,7 +497,7 @@ scan_tree() {
 # ---------------------------------------------------------------------------
 
 scan_history() {
-  printf '\n[2/4] git history — every patch on every ref\n'
+  printf '\n[2/5] git history — every patch on every ref\n'
 
   # A shallow clone has no history to scan, so scanning one and reporting
   # "clean" would be a false pass. Actions' default checkout is depth 1.
@@ -460,8 +516,7 @@ scan_history() {
   local dump
   dump="$(mktemp "${TMPDIR:-/tmp}/check-no-metrics.XXXXXX")"
   chmod 600 "$dump"
-  # shellcheck disable=SC2064
-  trap "rm -f '$dump'" EXIT INT TERM
+  CLEANUP_FILES="$CLEANUP_FILES $dump"
   git log -p --all --no-color >"$dump" 2>/dev/null || true
 
   if [ ! -s "$dump" ]; then
@@ -520,7 +575,164 @@ scan_history() {
 }
 
 # ---------------------------------------------------------------------------
-# Check 3 — no .env file is tracked
+# Check 3 — refs the host publishes that this clone does not have
+#
+# Checks 1 and 2 answer "what is in my copy". This one answers the question that
+# actually matters for a public repository: what can a stranger read?
+#
+# Those are not the same question, and on this repository they have not had the
+# same answer since 2026-08-19. A `git filter-repo` rewrite plus a force-push
+# removed the pre-FUEL-14 figures from every branch — so check 2, which walks
+# `git log -p --all` over LOCAL refs, went green and has been green since.
+#
+# GitHub kept serving the originals anyway. It creates `refs/pull/N/head` when a
+# pull request is opened and never deletes it: not on force-push, not on merge,
+# not on close. Those refs are outside `refs/heads/*`, so a rewrite cannot reach
+# them and a normal `git fetch` never downloads them — which is precisely why
+# check 2 could not see them and reported a clean history regardless.
+#
+# A check whose result depends on which refs happen to be local is a check that
+# fails open. This script already refuses that twice (the shallow-clone guard
+# and the empty-dump guard, both below and above); this is the same defect in
+# its third disguise, and it is the one that was actually live.
+#
+# So: enumerate the host's refs, fetch the ones this clone cannot already reach,
+# and run the same patterns over the patches unique to them. Findings are
+# redacted exactly as everywhere else — a public CI log must not carry the value
+# this check exists to report.
+# ---------------------------------------------------------------------------
+
+scan_published_refs() {
+  printf '\n[3/5] published refs — what the host serves that a clone does not\n'
+
+  if [ "$NO_REMOTE" -eq 1 ]; then
+    printf '  SKIPPED (--no-remote): the host was not contacted.\n'
+    printf '  This counts as a failure, not a pass. The whole point of this check\n'
+    printf '  is that a clean local clone proves nothing about the published\n'
+    printf '  repository, so "I did not look" cannot be allowed to print PASS.\n'
+    fail_check "published-refs(skipped)"
+    return
+  fi
+
+  local remote
+  remote="$(git remote | grep -Fxq origin && printf 'origin' || git remote | head -1)"
+
+  if [ -z "$remote" ]; then
+    printf '  no git remote configured — nothing is published from here.\n'
+    printf '  clean by construction\n'
+    return
+  fi
+
+  # The refs this clone can already reach, captured BEFORE the fetch. Everything
+  # below is expressed as "reachable from the host, but not from these", so the
+  # list has to be taken while it is still true.
+  local local_refs
+  local_refs="$(git for-each-ref --format='%(refname)' |
+    grep -v "^$PUBLISHED_NS/" || true)"
+
+  # Start from a clean namespace: a previous interrupted run could otherwise
+  # leave refs behind and have them counted as local.
+  drop_published_ns
+
+  # Pull requests and branches both. A branch is normally already local, and
+  # `--not` will drop it; including it costs nothing and covers the case of a
+  # branch that was pushed and never fetched back.
+  if ! git fetch --no-tags --quiet "$remote" \
+    "+refs/pull/*/head:$PUBLISHED_NS/pull/*" \
+    "+refs/heads/*:$PUBLISHED_NS/heads/*" 2>/dev/null; then
+    printf '  ERROR: could not fetch from "%s".\n' "$remote"
+    printf '  Refusing to report a clean repository that was never read. If this\n'
+    printf '  machine is deliberately offline, pass --no-remote — it fails too,\n'
+    printf '  but it says so rather than implying the host was checked.\n'
+    fail_check "published-refs(unreachable)"
+    return
+  fi
+
+  local published_refs
+  published_refs="$(git for-each-ref --format='%(refname)' "$PUBLISHED_NS" || true)"
+
+  if [ -z "$published_refs" ]; then
+    printf '  the host publishes no refs beyond this clone\n'
+    printf '  clean\n'
+    return
+  fi
+
+  local dump
+  dump="$(mktemp "${TMPDIR:-/tmp}/check-no-metrics-pub.XXXXXX")"
+  chmod 600 "$dump"
+  CLEANUP_FILES="$CLEANUP_FILES $dump"
+
+  # Patches unique to the host: everything reachable from its refs, minus
+  # everything reachable from ours. On a repository whose history has never been
+  # rewritten this is empty and the check is nearly free.
+  # shellcheck disable=SC2086
+  git log -p --no-color $published_refs --not $local_refs >"$dump" 2>/dev/null || true
+
+  if [ ! -s "$dump" ]; then
+    printf '  %s serves nothing this clone cannot already reach\n' "$remote"
+    printf '  clean\n'
+    return
+  fi
+
+  local i name regex allow linefilter line match count hits=0
+  local -a offenders=()
+
+  for i in "${!PATTERN_REGEX[@]}"; do
+    name="${PATTERN_NAMES[$i]}"
+    regex="${PATTERN_REGEX[$i]}"
+    allow="${PATTERN_ALLOW[$i]}"
+    linefilter="${PATTERN_LINEFILTER[$i]}"
+
+    while read -r count match; do
+      [ -z "$match" ] && continue
+      printf '  %-18s %-22s %s occurrence(s)\n' \
+        "$name" "$(redact_match "$match")" "$count"
+      offenders+=("$match")
+      hits=$((hits + 1))
+    done < <(
+      while IFS= read -r line; do
+        offending_matches_in_line "$line" "$regex" "$allow" "$linefilter"
+      done < <(grep -hE "$regex" "$dump" 2>/dev/null || true) |
+        sort | uniq -c | sort -rn
+    )
+  done
+
+  if [ "$hits" -eq 0 ]; then
+    printf '  clean — nothing metric-shaped in what %s serves and we do not have\n' \
+      "$remote"
+    return
+  fi
+
+  # Name the refs, not just the commits. "refs/pull/14/head" tells the owner
+  # which pull request page still renders the value; a bare sha does not.
+  printf '\n  Reachable from these published refs:\n'
+  {
+    for match in "${offenders[@]}"; do
+      local ref sha
+      while IFS= read -r ref; do
+        [ -z "$ref" ] && continue
+        sha="$(git log --format='%h' -1 -S"$match" "$ref" --not $local_refs 2>/dev/null || true)"
+        [ -n "$sha" ] && printf '%s\n' "${ref#"$PUBLISHED_NS/"}"
+      done <<<"$published_refs"
+    done
+  } | sort -u -V | sed 's|^|    refs/|'
+
+  printf '\n  %d distinct value(s) served by %s and absent from this clone.\n' \
+    "$hits" "$remote"
+  printf '  A force-push does not reach refs/pull/*; they outlive the branch, the\n'
+  printf '  merge and the pull request. Removing them needs the host — GitHub\n'
+  printf '  Support can purge stale refs — or the repository recreated.\n'
+  printf '\n'
+  printf '  On THIS repository a known set of pre-2026-08-19 values is expected\n'
+  printf '  here and has been accepted deliberately — see the header. That is not\n'
+  printf '  a licence to wave the check through: anything outside that set is new,\n'
+  printf '  and this output cannot tell you which you are looking at. Compare\n'
+  printf '  against the header before dismissing a finding.\n'
+  fail_check "published-refs"
+}
+
+# ---------------------------------------------------------------------------
+# Check 4 — no .env file is tracked
 #
 # .env.example is the deliberate exception, kept in the index by the
 # `!.env.example` negation in .gitignore: it is the template the setup docs
@@ -528,7 +740,7 @@ scan_history() {
 # ---------------------------------------------------------------------------
 
 check_env_files() {
-  printf '\n[3/4] .env files — none tracked except the template\n'
+  printf '\n[4/5] .env files — none tracked except the template\n'
 
   local tracked
   tracked="$(git ls-files | grep -E '(^|/)\.env' | grep -vE '(^|/)\.env\.example$' || true)"
@@ -546,7 +758,7 @@ check_env_files() {
 }
 
 # ---------------------------------------------------------------------------
-# Check 4 — the local seed script stays out of the index
+# Check 5 — the local seed script stays out of the index
 #
 # The counterpart to skipping ignored files in check 1. scripts/seed-local.ts
 # is where the owner's real profile and weigh-in history live, so the guarantee
@@ -556,7 +768,7 @@ check_env_files() {
 readonly LOCAL_SEED="scripts/seed-local.ts"
 
 check_local_seed_ignored() {
-  printf '\n[4/4] %s — ignored and never tracked\n' "$LOCAL_SEED"
+  printf '\n[5/5] %s — ignored and never tracked\n' "$LOCAL_SEED"
 
   local ok=1
 
@@ -585,6 +797,15 @@ check_local_seed_ignored() {
 
 validate_patterns
 
+# Clear the borrowed namespace before check 2 reads history, not merely before
+# check 3 fills it. The trap covers a normal exit and an interrupt, but nothing
+# can run on SIGKILL — and a ref left behind by a killed run is a ref that
+# `git log -p --all` counts as this clone's own history, so the next run would
+# report the host's commits as local ones. That is a false RED rather than a
+# false green, and it self-heals on the run after, but "the scan told me my
+# history was dirty and then it wasn't" is a bad half-hour for whoever hits it.
+drop_published_ns
+
 printf 'check-no-metrics'
 [ "$TREE_ONLY" -eq 1 ] && printf ' (--tree-only)'
 printf '\n'
@@ -593,11 +814,15 @@ hr
 scan_tree
 
 if [ "$TREE_ONLY" -eq 1 ]; then
-  printf '\n[2/4] git history — SKIPPED (--tree-only)\n'
+  printf '\n[2/5] git history — SKIPPED (--tree-only)\n'
   printf '  A commit cannot fix history, so the hook does not gate on it.\n'
+  printf '  Run without --tree-only before publishing.\n'
+  printf '\n[3/5] published refs — SKIPPED (--tree-only)\n'
+  printf '  Needs the network, and a commit cannot fix the host either.\n'
   printf '  Run without --tree-only before publishing.\n'
 else
   scan_history
+  scan_published_refs
 fi
 
 check_env_files
@@ -617,4 +842,26 @@ printf 'FAIL —%s\n' "$FAILED_CHECKS"
 printf '\nDo not silence this by exempting a path. If a finding is a fictional\n'
 printf 'figure, add it to the matching ALLOW_* list in this script. If it is\n'
 printf 'real, remove it.\n'
+
+# Exit 3 when the ONLY thing wrong is the published-refs residue described in
+# the header — the pre-2026-08-19 values that GitHub still serves from
+# refs/pull/*, which no commit in this repository can remove.
+#
+# The distinction exists so CI can gate. Without it the workflow would be red on
+# every run from the day it was added, for a state nobody can fix from here, and
+# a permanently red check teaches everyone to ignore it — which would cost more
+# than the check is worth on the day a real regression lands.
+#
+# It is deliberately narrow. "published-refs(skipped)" and
+# "published-refs(unreachable)" do NOT qualify: those mean the host was not
+# read, and an unread host is a failure like any other. Only a scan that ran,
+# looked, and found nothing but the known residue exits 3.
+if [ "$FAILED_CHECKS" = " published-refs" ]; then
+  printf '\nExit 3: the published-refs residue only — the accepted state, and not\n'
+  printf 'fixable from this repository. Nothing in the tree or this history is\n'
+  printf 'dirty. Compare the values above against the header before treating this\n'
+  printf 'as the expected result.\n'
+  exit 3
+fi
+
 exit 1
