@@ -680,7 +680,12 @@ still in the JSON backup.
 
 ## Configuration
 
-Secrets are never committed. The owner password, session secret, and database URL live in `.env.local` locally and in Vercel's environment variables in production.
+Secrets are never committed. The owner password, session secret, cron secret, and database URL live in `.env.local` locally and in Vercel's environment variables in production.
+
+`CRON_SECRET` is the one that must be set in Vercel **before** the first
+scheduled run rather than whenever convenient: `/api/cron/reap-demos` throws
+without it, deliberately, so that a job which has never run cannot be mistaken
+for a job being probed. See [the reaper](#the-reaper).
 
 Define each one in **both** places. `vercel env pull` overwrites `.env.local`
 with the variables Vercel knows about, so a secret that only ever existed on one
@@ -688,7 +693,8 @@ machine is gone after the next pull — and shows up later as a missing-variable
 error, a long way from the cause. `.env.example` lists every variable the app
 reads.
 
-Generate the session secret with:
+Generate the session secret — and the cron secret, which is a separate value —
+with:
 
 ```bash
 openssl rand -base64 32
