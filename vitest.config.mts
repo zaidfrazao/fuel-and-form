@@ -75,6 +75,7 @@ export default defineConfig({
         "src/lib/resolve-training.ts",
         "src/lib/rotation.ts",
         "src/lib/session-entry.ts",
+        "src/lib/shopping-list.ts",
         "src/lib/slot-times.ts",
         "src/lib/template-plan.ts",
         "src/lib/walk.ts",
@@ -349,6 +350,18 @@ export default defineConfig({
         // throw, and none would look wrong in a diff.
         "src/lib/week-grid.ts": FULLY_COVERED,
         "src/lib/week-totals.ts": FULLY_COVERED,
+        // FUEL-44. The one file in the app that COLLAPSES data rather than
+        // presenting it: seventy-odd ingredient rows become a couple of dozen
+        // lines, and every way the collapse can be wrong prints a plausible
+        // line with nothing beside it to disagree. A dropped occurrence halves
+        // a quantity, a merged pair of distinct spices loses one of them
+        // outright, and a total that quietly skips the rows with no weight
+        // reads exactly like a complete figure.
+        //
+        // None of those throw and none look wrong in a diff. They are found in
+        // the kitchen on Thursday, which is the one place this app exists to
+        // stop being a problem.
+        "src/lib/shopping-list.ts": FULLY_COVERED,
         // FUEL-34, and the same reasoning as session-entry.ts and slot-times.ts:
         // every branch in it is a refusal reachable by anyone who can POST to
         // the weigh-in action. What puts it here rather than in the ungated
