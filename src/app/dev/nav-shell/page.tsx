@@ -13,14 +13,18 @@ import { ThemeToggle } from "@/components/theme-toggle";
  * bar. `nav-shell.test.tsx` takes the accessibility contract and leaves those
  * here, the same division `dot-grid` uses.
  *
- * The last section is the load-bearing one. It is not a picture of the
- * arrangement FUEL-58 has to build; it is that arrangement, at 375×667, with a
- * real scroll container and a real `sticky bottom-0` bar copied from
- * `right-now.tsx`. Scroll it to the bottom: the bar stops where `<main>` ends
- * and the shell begins.
+ * The last section WAS the load-bearing one, and is now the only part of this
+ * page that history has overtaken. It is the arrangement FUEL-58 had to build,
+ * at 375×667, with a real scroll container and a real `sticky bottom-0` bar
+ * copied from `right-now.tsx` — and FUEL-58 built it, so the real `/` is now
+ * the honest specimen for that claim. It measured 0px overlap there too.
  *
- * Not a product screen. Delete it once the shell is mounted and the mount is
- * itself the specimen, as with /dev/tokens and /dev/day-ruler.
+ * Not a product screen, and FUEL-58 considered deleting it as this header
+ * asked. Kept, for the reason /dev/tokens and /dev/day-ruler were kept: the
+ * mounted shell shows ONE route state at a time, and the grid above shows all
+ * eight side by side — including `/dev/nav-shell` itself lighting nothing,
+ * which is the case that proves a route outside the hierarchy resolves to null
+ * rather than to a neighbour. No mounted screen can show that.
  */
 export const metadata: Metadata = {
   title: "Navigation shell",

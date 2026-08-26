@@ -27,7 +27,7 @@ function Block({ className }: { className: string }) {
 
 export default function Loading() {
   return (
-    <main className="mx-auto flex w-full flex-1 max-w-[640px] flex-col px-[22px] pt-[22px] md:px-7">
+    <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col px-[22px] pt-[22px] md:px-7">
       <p className="sr-only" role="status">
         Loading today&rsquo;s plan.
       </p>

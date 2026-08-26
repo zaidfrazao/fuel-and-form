@@ -365,7 +365,7 @@ export function Training({
       (duration === "" ? null : Number(duration)) !== entry.durationMin);
 
   return (
-    <main className="mx-auto flex w-full flex-1 max-w-[640px] flex-col px-[22px] pt-[22px] md:px-7">
+    <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col px-[22px] pt-[22px] md:px-7">
       <div className="flex flex-col gap-7">
         <DateNav date={date} today={today} />
 

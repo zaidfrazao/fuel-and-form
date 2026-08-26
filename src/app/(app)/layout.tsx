@@ -70,6 +70,20 @@ import { NavShellMount } from "@/components/nav-shell-mount";
  * has no room to stick — it would scroll away with the page. `self-start` gives
  * it its natural height back, and `top-0` then holds it while a long screen
  * moves past.
+ *
+ * ## The pages carry `min-w-0`, and it is not decoration
+ *
+ * Making `<main>` a flex item gave it `min-width: auto`, which refuses to
+ * shrink below the intrinsic width of its content. `/plan`'s week grid is a
+ * 1023px table, so at 1024px — the exact width the sidebar appears at — main
+ * stayed 1024px wide beside a 220px sidebar and pushed 248px off the right of
+ * the screen. Measured, not guessed: 1024 → 776 with `min-w-0`, which is the
+ * space actually left.
+ *
+ * The grid was never the problem; it already scrolls inside its own
+ * `overflow-x-auto` box, and does so again once main can shrink to contain it.
+ * Anything that removes `min-w-0` as redundant re-breaks `/plan` at exactly one
+ * breakpoint and nowhere else.
  */
 export default function AppLayout({
   children,

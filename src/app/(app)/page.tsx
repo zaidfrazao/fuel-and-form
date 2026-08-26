@@ -54,7 +54,7 @@ export default async function Home() {
   // will appear rather than nudge.
   if (!today) {
     return (
-      <main className="mx-auto flex w-full flex-1 max-w-[640px] flex-col justify-center gap-2 px-[22px] md:px-7">
+      <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col justify-center gap-2 px-[22px] md:px-7">
         <h1 className="text-title text-text-primary">No plan yet</h1>
         <p className="text-body text-text-secondary">
           Today&rsquo;s meals and sessions appear here once a profile and a weekly plan

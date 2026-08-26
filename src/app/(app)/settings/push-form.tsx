@@ -204,7 +204,13 @@ async function currentState(): Promise<State> {
  */
 function register(): Promise<ServiceWorkerRegistration> {
   return navigator.serviceWorker.register(
-    new URL("../../lib/service-worker.js", import.meta.url),
+    // Three levels, not two: this file sits at `app/(app)/settings/`, and the
+    // route group counts as a directory on disk even though it contributes
+    // nothing to the URL. FUEL-58 moved it and this path broke — SILENTLY as
+    // far as `tsc`, `eslint` and the unit suite are concerned, because it is
+    // resolved by the bundler and not by the module graph. `next build` is the
+    // only thing in the toolchain that fails on it.
+    new URL("../../../lib/service-worker.js", import.meta.url),
     { scope: "/", updateViaCache: "none" },
   );
 }

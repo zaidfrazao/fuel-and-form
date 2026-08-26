@@ -37,7 +37,7 @@ export default async function SettingsPage() {
   const schedule = await loadSchedule(session.userId);
 
   return (
-    <main className="mx-auto flex w-full flex-1 max-w-[640px] flex-col gap-7 px-[22px] py-8 md:px-7">
+    <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col gap-7 px-[22px] py-8 md:px-7">
       <header className="flex flex-col gap-2">
         <Link href="/" className="text-label text-text-secondary underline decoration-text-tertiary underline-offset-4">
           Right Now
