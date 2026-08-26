@@ -253,6 +253,8 @@ Added in FUEL-35 and not in `BRAND_GUIDE.html`, which predates the chart. Record
 
 **Day-complete carries no shell, and the carve-out has a source.** `BRAND_GUIDE.html`'s caption for that screen reads "No tab bar, no score, no praise", and § Document History holds the mock as the source of truth for everything this file does not override. This file does not override it: crop marks close the day, and the one screen in the app that is a finished page should not carry chrome implying there is more to do on it. `right-now.test.tsx` already asserts both halves — no `navigation` role in the summary, and no foot links — so the carve-out is enforced, not merely intended.
 
+Name its cost, because the table otherwise hides it: with the shell carved out and no link of its own, day-complete is the one screen in the app with no way off it. That is defensible for the last screen of the day, which is over, and it is the state the app is in least often. But it is a dead end by decision rather than by oversight, and whoever builds the shell should re-open it deliberately if it ever stops feeling like one.
+
 The attribution around it is wrong everywhere it appears, which is worth fixing before the shell is built. The comments and one test call this "the acceptance criterion"; PRD § P1 has no such criterion, and a search for one comes back empty. The rule is the caption. Anyone reconciling this screen against the PRD is reading the wrong document and will conclude the rule does not exist.
 
 ## Materials
