@@ -3,8 +3,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { WeekGrid } from "@/components/week-grid";
+import { WeekNav } from "@/components/week-nav";
 import { getSession } from "@/lib/auth/session";
-import { addDays, type CalendarDate, startOfWeek } from "@/lib/date";
+import { type CalendarDate, startOfWeek } from "@/lib/date";
 import { loadWeek } from "@/lib/db/queries/week";
 import type { Meal } from "@/lib/db/schema";
 import { weekLabel } from "@/lib/now-display";
@@ -66,51 +67,6 @@ export const metadata: Metadata = {
   title: "Weekly plan · Fuel & Form",
   robots: { index: false, follow: false },
 };
-
-/**
- * Prev, next and "This week" — § Buttons' Text variant, which is what a
- * tertiary navigation control is.
- *
- * `<Link>`s rather than buttons, so the week is a real destination: back works,
- * the URL can be shared, and Next prefetches the neighbouring weeks. The
- * chevrons are decorative — the accessible name is the week each one leads to,
- * because "previous" alone tells a screen-reader user nothing about where they
- * would land.
- */
-function WeekNav({ monday }: { monday: CalendarDate }) {
-  const previous = addDays(monday, -7);
-  const next = addDays(monday, 7);
-
-  return (
-    <nav aria-label="Week" className="flex w-full items-center justify-between gap-3">
-      <Link
-        href={`/plan?week=${previous}`}
-        aria-label={`Previous week, ${weekLabel(previous)}`}
-        className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
-      >
-        <span aria-hidden="true">&lsaquo; Prev</span>
-      </Link>
-
-      {/*
-       * The week's own name, between the two controls that move it. Live,
-       * because the label changes on navigation while focus stays on the link
-       * that moved it — without this a screen-reader user would hear nothing
-       * about where they had arrived.
-       */}
-      <p aria-live="polite" className="text-body tabular-nums text-text-primary">
-        {weekLabel(monday)}
-      </p>
-
-      <Link
-        href={`/plan?week=${next}`}
-        aria-label={`Next week, ${weekLabel(next)}`}
-        className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
-      >
-        <span aria-hidden="true">Next &rsaquo;</span>
-      </Link>
-    </nav>
-  );
-}
 
 /**
  * The week being shown, as a file — P6's check-in export.
@@ -223,7 +179,7 @@ export default async function PlanPage({
       </header>
 
       <div className="flex flex-col items-center gap-2">
-        <WeekNav monday={plan.monday} />
+        <WeekNav monday={plan.monday} basePath="/plan" />
         <WeekDownload monday={plan.monday} />
       </div>
 
@@ -279,12 +235,26 @@ export default async function PlanPage({
         </p>
       )}
 
-      <Link
-        href="/plan/template"
-        className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
-      >
-        Edit the weekly template
-      </Link>
+      <div className="flex flex-col gap-2">
+        {/*
+         * Carries the week being shown, so the list is for the seven days on
+         * screen rather than for whichever week the server resolves "now" to.
+         * The download link above takes the same care, and for the same reason.
+         */}
+        <Link
+          href={`/shopping?week=${plan.monday}`}
+          className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
+        >
+          Shopping list for this week
+        </Link>
+
+        <Link
+          href="/plan/template"
+          className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
+        >
+          Edit the weekly template
+        </Link>
+      </div>
     </main>
   );
 }
