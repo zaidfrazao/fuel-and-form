@@ -103,6 +103,26 @@ describe("resolveActive", () => {
     expect(resolveActive("/weight/2026-08-26")).toBeNull();
   });
 
+  /*
+   * The table is a `Map`, so it has no prototype to inherit from.
+   *
+   * Written as an object literal, `ROUTES["toString"]` returns a FUNCTION —
+   * `?? null` does not catch it, and `resolveActive` hands back something that
+   * is not a `DestinationId` while its signature says it cannot. No caller
+   * reaches it, since every pathname starts with a slash and no inherited key
+   * does, so this is the test standing in for a bug that has no other way to
+   * announce itself.
+   */
+  test.each([
+    "toString",
+    "constructor",
+    "valueOf",
+    "hasOwnProperty",
+    "__proto__",
+  ])("%s is not a destination, despite Object.prototype", (key) => {
+    expect(resolveActive(key)).toBeNull();
+  });
+
   test("ignores a trailing slash", () => {
     expect(resolveActive("/plan/")).toBe("plan");
     expect(resolveActive("/shopping/")).toBe("plan");

@@ -57,16 +57,24 @@ export const DESTINATIONS: readonly Destination[] = [
  * of it — "one is what you see instead of the app, the others are specimens of
  * it" — and they do not carry the shell at all. They resolve to `null` by virtue
  * of not being here, which is the same answer with less to maintain.
+ *
+ * A `Map` rather than an object literal, which is not a style preference. An
+ * object literal inherits `Object.prototype`, so `ROUTES["toString"]` returns a
+ * FUNCTION and `?? null` does not catch it — `resolveActive` would return
+ * something that is not a `DestinationId` while claiming in its signature that
+ * it cannot. Nothing reaches that today, because every caller passes a pathname
+ * and every inherited key lacks the leading slash. It is still a signature that
+ * lies, and a `Map` has no prototype chain to inherit from.
  */
-const ROUTES: Readonly<Record<string, DestinationId>> = {
-  "/": "now",
-  "/plan": "plan",
-  "/training": "training",
-  "/weight": "weight",
-  "/plan/template": "plan",
-  "/shopping": "plan",
-  "/settings": "now",
-};
+const ROUTES = new Map<string, DestinationId>([
+  ["/", "now"],
+  ["/plan", "plan"],
+  ["/training", "training"],
+  ["/weight", "weight"],
+  ["/plan/template", "plan"],
+  ["/shopping", "plan"],
+  ["/settings", "now"],
+]);
 
 /**
  * Strip a trailing slash, so `/plan/` and `/plan` are the same route.
@@ -101,5 +109,5 @@ function normalise(pathname: string): string {
  * both addressed by week.
  */
 export function resolveActive(pathname: string): DestinationId | null {
-  return ROUTES[normalise(pathname)] ?? null;
+  return ROUTES.get(normalise(pathname)) ?? null;
 }
