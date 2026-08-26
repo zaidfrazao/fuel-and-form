@@ -98,7 +98,16 @@ self.addEventListener("notificationclick", (event) => {
         if ("focus" in client) {
           // Navigate first, then focus. The other order shows the page they left
           // and then moves it under them, which reads as the app jumping.
-          return client.navigate ? client.navigate(url).then((c) => c.focus()) : client.focus();
+          //
+          // `navigate()` resolves with the client, or with NULL if it was
+          // discarded while navigating — a tab the OS reclaimed under memory
+          // pressure, which is exactly the state a phone is in when a
+          // notification wakes it. Falling back to the original client means the
+          // tap still focuses something instead of throwing inside `waitUntil`,
+          // where the failure would be a notification that visibly does nothing.
+          if (!client.navigate) return client.focus();
+
+          return client.navigate(url).then((navigated) => (navigated ?? client).focus());
         }
       }
 

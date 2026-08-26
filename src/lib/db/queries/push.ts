@@ -88,12 +88,34 @@ export type WalkOwed = {
  * the index removed — grow a duplicate that delivers a second notification for
  * the same day.
  *
- * `lastNotifiedOn` is deliberately reset to null on conflict. Re-subscribing is
- * an act by somebody sitting in front of the app, and the keys may well have
- * changed underneath a stable endpoint; treating it as a fresh subscription
- * means the evening it happens is one the phone is still reached on. The cost of
- * being wrong is one extra notification on one day, against a phone silently
- * skipped on the day its owner turned the feature back on.
+ * The keys ARE overwritten, because they can rotate underneath a stable
+ * endpoint, and a row holding last week's `p256dh` is one every send will fail
+ * to encrypt for — with no status on the failure, so it looks like the network.
+ *
+ * ## `last_notified_on` is deliberately LEFT ALONE
+ *
+ * The first draft reset it to null here, reasoning that re-subscribing is an act
+ * by somebody sitting in front of the app and the evening it happens should be
+ * one the phone is still reached on. That is wrong, and it breaks P9's "one
+ * notification per day maximum" through a door ordinary use opens.
+ *
+ * `pushManager.subscribe()` returns the SAME endpoint for a browser and
+ * application server key, so this upsert lands on an existing row whenever a
+ * subscription is made twice without being deleted in between — a second tab, a
+ * page reloaded mid-flow, or permission revoked in site settings and granted
+ * again, which leaves the row in place while `getSubscription()` reports none.
+ * That last one is precisely the flow this task asks to be checked by hand.
+ * Resetting the date there means a phone already notified at seven is notified
+ * again at eight, which is the one outcome the criterion names.
+ *
+ * Leaving it is also the honest reading of the column: it records that a
+ * notification REACHED this browser today, and re-subscribing does not unsend
+ * it. Turning the control off and on again does clear the cap — but that deletes
+ * the row and inserts a new one, which is a different statement and a deliberate
+ * act rather than a side effect of one.
+ *
+ * `tests/integration/push.test.ts` holds this against a real Postgres, because
+ * `ON CONFLICT` is a statement and no mock can answer for it.
  */
 export async function saveSubscription(
   userId: string,
@@ -104,11 +126,7 @@ export async function saveSubscription(
     [subscription],
     {
       target: [schema.pushSubscriptions.endpoint],
-      set: {
-        p256dh: subscription.p256dh,
-        auth: subscription.auth,
-        lastNotifiedOn: null,
-      },
+      set: { p256dh: subscription.p256dh, auth: subscription.auth },
     },
   );
 }
