@@ -124,18 +124,39 @@ export type ShoppingLine = {
   /** Summed over the rows that carry a weight; null when none of them did. */
   grams: number | null;
   /**
-   * Whether some contributing rows had no weight, so `grams` is a floor.
+   * Whether some contributing row had no weight.
    *
    * A real case in the seeded library, not a hypothetical: butter appears once
    * with grams and once without. Printing the bare sum would understate the
    * shop by an unknown amount while looking exactly like a complete figure —
    * the failure mode this whole file is gated against. The flag lets the screen
    * say "20g +" and be believed.
+   *
+   * Read it WITH `grams` rather than alone, because the pair carries three
+   * distinct states and only one of them is the interesting one:
+   *
+   *   grams: 20,   partial: false  -> a complete weight
+   *   grams: 20,   partial: true   -> at least 20g; the rest is unweighed
+   *   grams: null, partial: true   -> no weight at all, measures only
+   *
+   * The flag stays true in that last state deliberately. "Some row had no
+   * weight" is a property of the rows, and a flag that silently flipped false
+   * once ALL of them lacked one would be false in the case where the total is
+   * least complete — a worse invariant to hand a renderer than a redundant
+   * true, which it can simply not read when `grams` is null.
    */
   gramsPartial: boolean;
   /** Distinct non-scale measures, in the order the week first asks for them. */
   measures: readonly ShoppingMeasure[];
-  /** How many planned meal-occurrences contributed to this line. */
+  /**
+   * How many ingredient ROWS contributed to this line.
+   *
+   * Rows, not planned occurrences. The two coincide for every recipe in the
+   * seeded library, because none of them names one ingredient twice — but a
+   * recipe that did would contribute two rows from a single dinner, and a
+   * comment claiming "occurrences" would then be quietly wrong in exactly the
+   * place someone would be reading it to find out why a number looked high.
+   */
   times: number;
 };
 
