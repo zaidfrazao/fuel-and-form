@@ -29,14 +29,14 @@ import { scope } from "../scope";
  *    rules out five sixths of the day for the price of the profile row that
  *    was fetched to find the zone.
  * 4. The date is before `program_start_date`, or the template trains no walk on
- *    this weekday. Two small indexed reads.
+ *    this weekday. Two small indexed reads, issued together.
  * 5. A `workout_logs` row exists for one of today's walks. One more.
  *
- * So an evening request costs three statements and every other request costs
- * one. `loadTraining` would have answered stages 4 and 5 in one call and is
- * deliberately not used: it fetches every workout, every exercise row and a
- * multi-week adherence window, which is a page's worth of work to decide
- * whether one sentence is shown above it.
+ * So an evening request costs four statements over three round trips, and every
+ * other request costs one. `loadTraining` would have answered stages 4 and 5 in
+ * one call and is deliberately not used: it fetches every workout, every
+ * exercise row and a multi-week adherence window, which is a page's worth of
+ * work to decide whether one sentence is shown above it.
  *
  * ## Why the template is consulted at all
  *
@@ -119,24 +119,30 @@ export async function loadWalkReminder(
  * an account that has not been seeded — or the template does not put one on this
  * weekday.
  *
- * The two reads are sequential rather than parallel because the second is
- * pointless without the first: a user with no walk workout has no walk entry
- * either, and that is the case where the whole feature is silent.
+ * The two reads are issued together rather than one after the other, and that
+ * is a deliberate reversal of the obvious order. Sequentially, the second is
+ * skippable — a user with no walk workout has no walk entry either — which
+ * saves a statement in the one case where this feature is silent anyway: an
+ * account that has never been seeded. In parallel it costs that account one
+ * wasted read of a small indexed table, and saves everyone else a network
+ * round trip inside a layout that blocks the page shell. On a connection where
+ * a round trip is tens of milliseconds, the trade is not close.
  */
 async function walkWorkoutIdsFor(
   s: ReturnType<typeof scope>,
   date: CalendarDate,
 ): Promise<string[]> {
-  const walks = await s.select(schema.workouts, eq(schema.workouts.type, WALK_TYPE));
+  const [walks, entries] = await Promise.all([
+    s.select(schema.workouts, eq(schema.workouts.type, WALK_TYPE)),
+    s.select(
+      schema.trainingTemplateEntries,
+      eq(schema.trainingTemplateEntries.dayOfWeek, dayOfWeek(date)),
+    ),
+  ]);
 
   if (walks.length === 0) return [];
 
   const ids = new Set(walks.map((walk) => walk.id));
-
-  const entries = await s.select(
-    schema.trainingTemplateEntries,
-    eq(schema.trainingTemplateEntries.dayOfWeek, dayOfWeek(date)),
-  );
 
   // `workoutId` is null on a row that names a rotation group instead, and a
   // rotation group is never the walk — the seed gives the walk a fixed workout
