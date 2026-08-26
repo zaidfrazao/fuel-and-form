@@ -219,10 +219,41 @@ Added in FUEL-35 and not in `BRAND_GUIDE.html`, which predates the chart. Record
 
 ### Navigation
 
-- **Mobile:** a centred pill — 1px `border`, 4px padding. Inactive items are 46×40px icon-only with an `aria-label`; the active item is an `ink` pill showing icon plus text label.
+**The four:** **Now** `/` · **Plan** `/plan` · **Training** `/training` · **Weight** `/weight`.
+
+- **Mobile:** a centred pill — 1px `border`, 4px padding. Inactive items are 46×40px icon-only with an `aria-label`; the active item is an `ink` pill showing icon plus text label. The `aria-label` is the label, so the four names above are the only names these destinations have anywhere.
 - **Desktop:** the same four as a left sidebar at ≥1024px.
 - **Depth:** two levels maximum. Anything deeper is a sheet.
-- **`/` never requires navigation to be useful.** The PRD's first acceptance criterion.
+- **Presence:** every authenticated route carries the shell, with one carve-out — the day-complete state of `/`, below. `/login` and `/dev/*` are outside it entirely.
+- **`/` never requires navigation to be useful.** PRD § P1, which now carries the one reading of what that means. This section defers to it rather than restating it.
+
+#### The routes
+
+| Route | Destination | Level | Parent | In the shell |
+|---|---|---|---|---|
+| `/` | Now | 1 | — | Yes |
+| `/plan` | Plan | 1 | — | Yes |
+| `/training` | Training | 1 | — | Yes |
+| `/weight` | Weight | 1 | — | Yes |
+| `/plan/template` | Weekly template | 2 | `/plan` | No |
+| `/shopping` | Shopping list | 2 | `/plan` | No |
+| `/settings` | Settings | 2 | `/` | No |
+
+`/login` and `/dev/*` sit outside this hierarchy rather than at level 1 of it: one is what you see instead of the app, the others are specimens of it. Nothing in the table is deeper than level 2, so nothing here is owed a sheet.
+
+**Why these four.** A slot is earned by how often you come back to a screen, not by how much the screen matters. The four are the day, the week, the session and the weigh-in — the four things done on a cadence. Settings is configuration: set once, revisited rarely, and a permanent slot for it would be four-fifths wasted. Weight has the strongest claim of the five, and it is worth saying why: every other destination is a longer look at something `/` has already shown you, while a weigh-in has no slot, no window and no card on `/` at all. It is the one screen the day cannot reach past.
+
+**Where Settings went.** To the foot of `/`, in the register it already occupies there — a text link below everything the screen is for. Two taps from anywhere: the Now pill, then the link. Not a fifth pill, because the pill is four wide and a rule that bends the first time it is applied was never a rule. Not a header control either, which would be one tap but would oblige the shell to own a header, and all seven screens would have to give up their own to it — a large change to the app's surface bought for a single low-traffic destination. On desktop the sidebar has a foot, and Settings sits there under a rule.
+
+**`/shopping` keeps a flat URL against its level.** The list is addressed by week through `?week=`, not nested inside a week, so `/plan/shopping` would assert a containment the data does not have. The shell reads this table, not the URL. Recorded rather than quietly tolerated, on § Data Display's precedent: a divergence that is written down is a decision, and one that is not is an accident waiting to be re-litigated.
+
+**`/plan/template` has one parent and it is `/plan`,** matching its URL. The template is what recurs each week before any swaps, which is plan content — § Terminology reserves "Plan" for exactly that. Settings keeps its link to it, and the sentence there explaining which table it writes is worth keeping where it is, but a link is not a parent.
+
+**Parent links and cross-links.** A screen has one parent link and it goes up — the one in the table, and the only one that may be rendered as an up-link. A cross-link goes sideways between two level-1 destinations: the weigh-in list to Training, the training screen to Plan. Cross-links are allowed, carry no hierarchy, and must never be styled as an up-link, because a second thing that looks like a way back is a second parent in everything but name.
+
+**Day-complete carries no shell, and the carve-out has a source.** `BRAND_GUIDE.html`'s caption for that screen reads "No tab bar, no score, no praise", and § Document History holds the mock as the source of truth for everything this file does not override. This file does not override it: crop marks close the day, and the one screen in the app that is a finished page should not carry chrome implying there is more to do on it. `right-now.test.tsx` already asserts both halves — no `navigation` role in the summary, and no foot links — so the carve-out is enforced, not merely intended.
+
+The attribution around it is wrong everywhere it appears, which is worth fixing before the shell is built. The comments and one test call this "the acceptance criterion"; PRD § P1 has no such criterion, and a search for one comes back empty. The rule is the caption. Anyone reconciling this screen against the PRD is reading the wrong document and will conclude the rule does not exist.
 
 ## Materials
 
@@ -367,6 +398,7 @@ Two components are bespoke and worth building first, since every screen depends 
 
 - **Created:** 2026-08-10
 - **v2:** accent changed from amber `#E8833A` to umber, collapsing the fill/ink token split; cards replaced by hairline-separated content on canvas.
-- **v3.2 (current):** § Data Display added for the weight trend chart (FUEL-35), and `surface` gains its second permitted use — the chart's plot area — in § Color Palette. Both are additions the HTML mock predates; it remains the source of truth for everything else.
+- **v3.3 (current):** § Navigation names the four top-level destinations (FUEL-56) and gains a route table giving every authenticated route one level and one parent. Settings gives up its slot for a link at the foot of `/`; `/shopping` and `/plan/template` are both placed under `/plan`. The reading of the PRD's "no navigation" criterion moves to the PRD, where § Navigation now points instead of arguing, and day-complete's absent tab bar is re-sourced to the mock caption that actually requires it. A section that had specified a shell without naming its contents; the HTML mock predates the shell entirely and remains the source of truth for everything else.
+- **v3.2:** § Data Display added for the weight trend chart (FUEL-35), and `surface` gains its second permitted use — the chart's plot area — in § Color Palette. Both are additions the HTML mock predates; it remains the source of truth for everything else.
 - **v3.1:** the dot grid gains a Partial dot (FUEL-27) and its unrecorded day is named as such rather than as "no session". An addition to § The Dot Grid only; the HTML mock is unchanged and remains the source of truth for everything else.
 - **v3:** display scale raised to 76px for a 7× ratio against 10.5px micro labels; accent restricted to meaning "now" only, with actions moving to ink; day ruler and dot grid introduced as signature graphics; flat line motifs, hatching, crop marks and slash metadata added as the material language. Flat discipline retained — no gradients, no textures, no shadows outside sheets.
