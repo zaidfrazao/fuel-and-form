@@ -73,7 +73,7 @@ export default async function ShoppingPage({
   // state to describe what will appear rather than nudge.
   if (!list) {
     return (
-      <main className="mx-auto flex min-h-dvh w-full max-w-[640px] flex-col justify-center gap-2 px-[22px] md:px-7">
+      <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col justify-center gap-2 px-[22px] md:px-7">
         <h1 className="text-title text-text-primary">No shopping list yet</h1>
         <p className="text-body text-text-secondary">
           The week’s ingredients appear here once a profile and a weekly template
@@ -92,7 +92,7 @@ export default async function ShoppingPage({
   return (
     // 640px, not 1024px — § Spacing: "max content width: 640px single-column;
     // 1024px for the week grid". This is a single column of rows, not a grid.
-    <main className="mx-auto flex min-h-dvh w-full max-w-[640px] flex-col gap-7 px-[22px] py-8 md:px-7">
+    <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col gap-7 px-[22px] py-8 md:px-7">
       <header className="flex flex-col gap-2">
         <Link
           href={`/plan?week=${list.monday}`}

@@ -918,7 +918,7 @@ describe("day-complete", () => {
     expect(screen.getByText("0")).toBeDefined();
   });
 
-  test("marks the four corners, and carries no tab bar", () => {
+  test("marks the four corners, and renders no landmark of its own", () => {
     const { container } = summary();
 
     // § Materials: crop marks at the four corners of this screen "and nowhere
@@ -927,8 +927,14 @@ describe("day-complete", () => {
       [...container.querySelectorAll("[data-crop]")].map((mark) => mark.getAttribute("data-crop")),
     ).toEqual(["tl", "tr", "bl", "br"]);
 
-    // The summary owns the screen. Nothing renders navigation chrome yet, so
-    // this is the assertion that fails on the day something tries to.
+    // The summary renders no landmark of its own. Narrowed deliberately in
+    // FUEL-58, because the claim it used to make is no longer true of the
+    // SCREEN: § Navigation's shell now renders on day-complete like everywhere
+    // else, mounted in `app/(app)/layout.tsx`. This component is rendered here
+    // without that layout, so an assertion phrased as "day-complete carries no
+    // tab bar" would have gone on passing while the rule it named was reversed
+    // — measuring the absence of something that was never in scope. What it
+    // measures now is the thing this file can actually see.
     expect(screen.queryByRole("navigation")).toBeNull();
   });
 
@@ -1056,14 +1062,20 @@ describe("the actions", () => {
     expect(bar?.className).toContain("bg-background");
   });
 
-  test("carries the safe-area inset itself", () => {
-    // A bar pinned to `bottom: 0` sits below any padding its parent has, so the
-    // inset only clears the home indicator from inside the pinned element.
+  test("no longer carries the safe-area inset, which the shell owns", () => {
+    // Inverted in FUEL-58, and worth keeping as an assertion rather than
+    // deleting. The inset used to be here because a bar pinned to `bottom: 0`
+    // sits below any padding its parent has. That stopped being the right place
+    // for it when § Navigation's shell went in below this column: the shell is
+    // the last thing on the screen and the only thing with the home indicator
+    // beneath it, so a bar keeping its own inset would clear an indicator two
+    // elements away and leave a visible gap — the doubled inset this test now
+    // exists to catch.
     const { container } = renderNow(active(0));
 
     const bar = container.querySelector('[data-variant="default"]')?.parentElement;
 
-    expect(bar?.className).toContain("safe-area-inset-bottom");
+    expect(bar?.className).not.toContain("safe-area-inset-bottom");
   });
 });
 
@@ -1849,37 +1861,46 @@ describe("a slot that is already swapped", () => {
 /* The way to the other screens                                               */
 /* -------------------------------------------------------------------------- */
 
-describe("the links at the foot", () => {
-  test("reaches every screen `/` cannot show, without a tab bar", () => {
-    // PRD § P1's first criterion and § Navigation both say `/` "never requires
-    // navigation to be useful", so these are text links below the day rather
-    // than the guide's pill — which does not exist. They are asserted as a set
-    // because a screen with no way in is unreachable: `/weight` (FUEL-34) has
-    // no card here at all, since a weigh-in is not part of a day's plan.
+describe("the link at the foot", () => {
+  test("is Settings, and nothing else", () => {
+    // It was four links until FUEL-58 — `/plan`, `/training` and `/weight`
+    // beside this one — because there was no other way to reach those screens.
+    // § Navigation's shell carries all four destinations on every authenticated
+    // screen now, so the peers are a second, worse copy of it and are gone.
+    //
+    // Asserted as the WHOLE set rather than with three `queryByRole` absences,
+    // so a link added back here has to come through this test. `/settings` is
+    // the one that stays: it is not one of the four, does not go in the pill,
+    // and § Navigation puts it exactly here — "To the foot of `/`... Two taps
+    // from anywhere: the Now pill, then the link."
     renderNow(active(0));
 
-    const links = screen.getAllByRole("link").map((link) => [
-      link.textContent,
-      link.getAttribute("href"),
-    ]);
+    expect(
+      screen.getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")]),
+    ).toEqual([["Slot times", "/settings"]]);
+  });
 
-    expect(links).toEqual(
-      expect.arrayContaining([
-        ["Weekly plan", "/plan"],
-        ["Training", "/training"],
-        ["Weight", "/weight"],
-        ["Slot times", "/settings"],
-      ]),
+  test("is on the finished page too, which it did not used to be", () => {
+    // The half of FUEL-58 that is a real behaviour change rather than a
+    // deletion. Once the day is logged, day-complete IS `/` — so a finished
+    // page without this link makes § Navigation's "two taps from anywhere"
+    // false every evening, and leaves the phone no route to `/settings` at all
+    // (the sidebar's Settings link is ≥1024px only).
+    renderNow({ ...BASE, state: "day-complete" });
+
+    expect(screen.getByRole("link", { name: "Slot times" }).getAttribute("href")).toBe(
+      "/settings",
     );
   });
 
-  test("is absent from the finished page", () => {
-    // § Materials frames day-complete as a closed page with crop marks at its
-    // corners, and its acceptance criterion says no tab bar. A navigation
-    // affordance is exactly what that criterion is about.
-    renderNow({ ...BASE, state: "day-complete" });
+  test("no longer duplicates the shell's four destinations", () => {
+    // The three that left, named individually, so this fails loudly if one is
+    // reintroduced on the argument that `/` "needs a way to reach it".
+    renderNow(active(0));
 
-    expect(screen.queryByRole("link", { name: "Weight" })).toBeNull();
+    for (const name of ["Weekly plan", "Training", "Weight"]) {
+      expect(screen.queryByRole("link", { name })).toBeNull();
+    }
   });
 });
 

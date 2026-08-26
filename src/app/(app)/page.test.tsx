@@ -40,7 +40,7 @@ vi.mock("@/app/actions/log", () => ({ logItem: vi.fn(), undoLastLog: vi.fn() }))
 vi.mock("@/app/actions/swap", () => ({ swapMeal: vi.fn(), revertSwap: vi.fn() }));
 vi.mock("@/app/actions/log-walk", () => ({ logWalk: vi.fn(), clearWalk: vi.fn() }));
 
-const { default: Home } = await import("@/app/page");
+const { default: Home } = await import("@/app/(app)/page");
 
 const SESSION = { userId: "11111111-2222-3333-4444-555555555555", kind: "owner" as const };
 

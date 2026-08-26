@@ -365,7 +365,7 @@ export function Training({
       (duration === "" ? null : Number(duration)) !== entry.durationMin);
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-[640px] flex-col px-[22px] pt-[22px] md:px-7">
+    <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col px-[22px] pt-[22px] md:px-7">
       <div className="flex flex-col gap-7">
         <DateNav date={date} today={today} />
 
@@ -537,26 +537,6 @@ export function Training({
           </section>
         )}
 
-        {/*
-         * The way back, at the foot of the reading order — the register
-         * `right-now.tsx` puts `/plan` and `/settings` in, and for the same
-         * reason: it sits below everything the screen is for. Inside the content
-         * column rather than after the bar, so the sticky bar never covers it.
-         */}
-        <span className="flex items-center gap-4">
-          <Link
-            href="/"
-            className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
-          >
-            Right now
-          </Link>
-          <Link
-            href="/plan"
-            className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
-          >
-            Weekly plan
-          </Link>
-        </span>
       </div>
 
       {/*
@@ -564,12 +544,13 @@ export function Training({
        * reach". `sticky bottom-0` on a `mt-auto` box keeps the bar inside the
        * viewport while the exercise list is long, and lets it settle at the end
        * of the column when it is not — `right-now.tsx` carries the measurement
-       * that made this necessary rather than tidy. The safe-area inset is on
-       * the bar itself, because a box pinned to `bottom: 0` sits below any
-       * padding its parent has.
+       * that made this necessary rather than tidy. The safe-area inset is NOT
+       * here: FUEL-58 moved it to the § Navigation shell, which is the last
+       * thing in the page column and the only one with the home indicator
+       * beneath it.
        */}
       {session ? (
-        <div className="sticky bottom-0 mt-auto flex flex-col gap-3 bg-background pt-[30px] pb-[max(1.375rem,env(safe-area-inset-bottom))]">
+        <div className="sticky bottom-0 mt-auto flex flex-col gap-3 bg-background pt-[30px]">
           {failure && (
             <div
               role="alert"
@@ -642,11 +623,7 @@ export function Training({
             </div>
           )}
         </div>
-      ) : (
-        // A rest day has no bar, so the gutter the bar would have carried has
-        // to live somewhere. `right-now.tsx`'s two quiet states do the same.
-        <div className="pb-[max(1.375rem,env(safe-area-inset-bottom))]" />
-      )}
+      ) : null}
     </main>
   );
 }

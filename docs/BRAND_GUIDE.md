@@ -224,7 +224,7 @@ Added in FUEL-35 and not in `BRAND_GUIDE.html`, which predates the chart. Record
 - **Mobile:** a centred pill — 1px `border`, 4px padding. Inactive items are 46×40px icon-only with an `aria-label`; the active item is an `ink` pill showing icon plus text label. The `aria-label` is the label, so the four names above are the only names these destinations have anywhere.
 - **Desktop:** the same four as a left sidebar at ≥1024px.
 - **Depth:** two levels maximum. Anything deeper is a sheet.
-- **Presence:** every authenticated route carries the shell, with one carve-out — the day-complete state of `/`, below. `/login` and `/dev/*` are outside it entirely.
+- **Presence:** every authenticated route carries the shell, with no carve-outs — including the day-complete state of `/`, which used to be one and is discussed below. `/login` and `/dev/*` are outside it entirely, and are held there by the route group rather than by a check the shell performs on itself.
 - **`/` never requires navigation to be useful.** PRD § P1, which now carries the one reading of what that means. This section defers to it rather than restating it.
 
 #### The routes
@@ -243,7 +243,7 @@ Added in FUEL-35 and not in `BRAND_GUIDE.html`, which predates the chart. Record
 
 **Why these four.** A slot is earned by how often you come back to a screen, not by how much the screen matters. The four are the day, the week, the session and the weigh-in — the four things done on a cadence. Settings is configuration: set once, revisited rarely, and a permanent slot for it would be four-fifths wasted. Weight has the strongest claim of the five, and it is worth saying why: every other destination is a longer look at something `/` has already shown you, while a weigh-in has no slot, no window and no card on `/` at all. It is the one screen the day cannot reach past.
 
-**Where Settings went.** To the foot of `/`, in the register it already occupies there — a text link below everything the screen is for. Two taps from anywhere: the Now pill, then the link. Not a fifth pill, because the pill is four wide and a rule that bends the first time it is applied was never a rule. Not a header control either, which would be one tap but would oblige the shell to own a header, which today it does not: five screens render their own `<header>` and the other two open on a bare `<h1>`. All seven would have to give that top up to the shell — a large change to the app's surface bought for a single low-traffic destination. On desktop the sidebar has a foot, and Settings sits there under a rule.
+**Where Settings went.** To the foot of `/`, in the register it already occupies there — a text link below everything the screen is for. Two taps from anywhere: the Now pill, then the link. It renders in every state of `/`, day-complete included: once the day is logged that state *is* `/`, so a finished page without the link would make "two taps from anywhere" false every evening. Not a fifth pill, because the pill is four wide and a rule that bends the first time it is applied was never a rule. Not a header control either, which would be one tap but would oblige the shell to own a header, which today it does not: five screens render their own `<header>` and the other two open on a bare `<h1>`. All seven would have to give that top up to the shell — a large change to the app's surface bought for a single low-traffic destination. On desktop the sidebar has a foot, and Settings sits there under a rule.
 
 **`/shopping` keeps a flat URL against its level.** The list is addressed by week through `?week=`, not nested inside a week, so `/plan/shopping` would assert a containment the data does not have. The shell reads this table, not the URL. Recorded rather than quietly tolerated, on § Data Display's precedent: a divergence that is written down is a decision, and one that is not is an accident waiting to be re-litigated.
 
@@ -251,11 +251,15 @@ Added in FUEL-35 and not in `BRAND_GUIDE.html`, which predates the chart. Record
 
 **Parent links and cross-links.** A screen has one parent link and it goes up — the one in the table, and the only one that may be rendered as an up-link. A cross-link goes sideways between two level-1 destinations: the weigh-in list to Training, the training screen to Plan. Cross-links are allowed, carry no hierarchy, and must never be styled as an up-link, because a second thing that looks like a way back is a second parent in everything but name.
 
-**Day-complete carries no shell, and the carve-out has a source.** `BRAND_GUIDE.html`'s caption for that screen reads "No tab bar, no score, no praise", and § Document History holds the mock as the source of truth for everything this file does not override. This file does not override it: crop marks close the day, and the one screen in the app that is a finished page should not carry chrome implying there is more to do on it. `right-now.test.tsx` already asserts both halves — no `navigation` role in the summary, and no foot links — so the carve-out is enforced, not merely intended.
+**Day-complete carries the shell, reversing what this section used to say.** The carve-out was real and had a source: `BRAND_GUIDE.html`'s caption for that screen reads "No tab bar, no score, no praise", and § Document History holds the mock as the source of truth for everything this file does not override. This file now overrides it, the same way it overrode the mock's fourth destination — named rather than quietly contradicted, so that caption is not read later as a live rule.
 
-Name its cost, because the table otherwise hides it: with the shell carved out and no link of its own, day-complete is the one screen in the app with no way off it. That is defensible for the last screen of the day, which is over, and it is the state the app is in least often. But it is a dead end by decision rather than by oversight, and whoever builds the shell should re-open it deliberately if it ever stops feeling like one.
+The cost was written down here before it was collected. With the shell carved out and no link of its own, day-complete was the one screen in the app with no way off it — the browser's back button and a typed URL were the only exits from a screen the user reaches every evening. A rule about how one card is composed had become a hole in the app's navigation. FUEL-56 recorded that cost precisely so whoever built the shell would re-open the question rather than inherit the answer, and FUEL-58 re-opened it.
 
-The attribution around it is wrong everywhere it appears, which is worth fixing before the shell is built. The comments and one test call this "the acceptance criterion"; PRD § P1 has no such criterion, and a search for one comes back empty. The rule is the caption. Anyone reconciling this screen against the PRD is reading the wrong document and will conclude the rule does not exist.
+**What the caption misses.** Crop marks close the *day*; the shell moves between *sections*. The shell is not part of the page it sits below — it is the app's frame, the same way the demo banner is, and a finished page inside a frame is still finished. "No score, no praise" survives untouched and is the half of that caption doing the real work: it forbids the app commenting on how the day went, which nothing here proposes to do. "No tab bar" does not survive, because it was drawn for a mock screen that never had anywhere to navigate to.
+
+Keeping the carve-out is now also the expensive option, which is worth recording as a fact rather than an argument. The shell mounts in `app/(app)/layout.tsx`, and a layout does not know which state `right-now.tsx` returned. Carving day-complete back out would mean resolving the day a second time in the layout, or threading a flag up from the page — real machinery, to restore a screen with no way off it.
+
+The attribution was wrong everywhere it appeared, and the comments and test that carried it are gone with the rule. For the record of why it was so hard to check: they called this "the acceptance criterion", PRD § P1 has no such criterion, and a search for one came back empty. The rule was the caption. Anyone reconciling this screen against the PRD was reading the wrong document.
 
 ## Materials
 
@@ -278,6 +282,8 @@ Eight marks cover the entire library: bowl, cup, roll, pot, plate, bar, egg, wal
 ### Crop Marks
 
 Print registration marks, 11px, `text-tertiary`, at the four corners of the day-complete summary **and nowhere else**. The day is a finished page. A device used once keeps its meaning.
+
+A finished page still sits in the app's frame. The § Navigation shell renders below this screen like every other authenticated one — it did not always, and that section records the reversal and the mock caption it overrides. Crop marks close the day; they do not close the app.
 
 ### Slash Metadata
 
