@@ -21,7 +21,7 @@ import { scope } from "../scope";
  * "The export runs against the logged-in account only — demo sessions export
  * demo data" is not a feature of this file so much as the absence of a way to
  * write it otherwise: `scope(userId, getDb())` prepends `user_id = $1` to all
- * eleven statements, and `scope.select` refuses a caller-supplied `user_id`
+ * twelve statements, and `scope.select` refuses a caller-supplied `user_id`
  * that would let one be widened. Testing Strategy § 1.4 case 3 is the test that
  * a demo session's export holds demo rows and zero owner rows, and it passes
  * because there is no unscoped statement here to get wrong.
@@ -32,19 +32,19 @@ import { scope } from "../scope";
  * `schema.test.ts` names it as the sole exemption, so a table that ever forgets
  * `user_id` fails that suite rather than quietly arriving here unscoped.
  *
- * ## Two waves, not eleven round trips
+ * ## Two waves, not twelve round trips
  *
  * The profile decides whether there is anything to export at all, and it
  * carries the timezone the filename's date comes from — so it and the `users`
- * row go first, together. The remaining nine tables depend on nothing but the
+ * row go first, together. The remaining ten tables depend on nothing but the
  * `user_id` already in hand, so they run through `Promise.all`: on Neon's HTTP
- * driver each statement is its own request, and nine of them in sequence is the
+ * driver each statement is its own request, and ten of them in sequence is the
  * difference between a fast tap and a slow one.
  *
  * ## The snapshot is not transactional, knowingly
  *
  * Neon's HTTP driver has no interactive transaction, so these statements are
- * eleven independent reads. A write landing between two of them could produce a
+ * twelve independent reads. A write landing between two of them could produce a
  * file where a `meal_log` names a meal the earlier query did not return. The
  * window is milliseconds, the export is a deliberate tap by the only person who
  * can also be writing, and the consequence is a backup one row out of date —
@@ -100,6 +100,7 @@ export async function loadExport(
     trainingTemplateEntries,
     workoutLogs,
     weightLogs,
+    shoppingChecks,
   ] = await Promise.all([
     s.select(schema.meals),
     s.select(schema.mealIngredients),
@@ -111,6 +112,7 @@ export async function loadExport(
     s.select(schema.trainingTemplateEntries),
     s.select(schema.workoutLogs),
     s.select(schema.weightLogs),
+    s.select(schema.shoppingChecks),
   ]);
 
   return {
@@ -138,6 +140,7 @@ export async function loadExport(
       trainingTemplateEntries,
       workoutLogs,
       weightLogs,
+      shoppingChecks,
     },
     today: todayIn(profile.timezone, now),
   };

@@ -43,7 +43,9 @@ import {
  *    enum that is `ALTER TYPE ... ADD VALUE` — a migration, which would falsify
  *    the claim. So the vocabulary stays open; see `workouts`.
  *
- * The PRD prose says "nine tables" and then enumerates twelve. Twelve is right.
+ * The PRD prose says "nine tables" and then enumerates twelve. Twelve is right
+ * for the data model it describes; there are thirteen here, because P8's check
+ * state is a table the PRD names no home for — see `shoppingChecks`.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -755,6 +757,67 @@ export const weightLogs = pgTable(
 );
 
 /* -------------------------------------------------------------------------- */
+/* Shopping                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Which lines of a week's shopping list have been ticked off — P8, FUEL-45.
+ *
+ * ## A row means checked, and there is no third state
+ *
+ * There is no `checked` boolean. Ticking an item inserts a row, unticking it
+ * deletes one, and the list renders a line as checked exactly when a row for it
+ * exists. A boolean column would introduce "explicitly unchecked" — a state
+ * distinct from "never touched" that nothing in the feature can tell apart, and
+ * that every reader would then have to decide how to treat. Presence is the
+ * whole predicate.
+ *
+ * ## The key is the ingredient's NAME, not any id
+ *
+ * `item_key` holds `shopping-list.ts`'s normalised name, and that file argues
+ * the choice at length: P8 requires that *"regenerating after a swap preserves
+ * existing check state for unchanged items"*, which needs an identity that
+ * survives the regeneration. A `meal_ingredients.id` does not — swap Tuesday's
+ * dinner and the mince arrives from a different recipe's row — and a position
+ * in the list survives even less. The normalised name is precisely what does
+ * not change when the plan around it does.
+ *
+ * So there is deliberately no foreign key here. The key is not a reference to a
+ * row; it is the text two rows agree on, which is what makes the tick stick
+ * when the row underneath it is replaced. A tick whose ingredient leaves the
+ * week is left in place rather than swept: it renders nowhere, and deleting it
+ * on regeneration would destroy exactly the state the criterion asks to keep,
+ * in the case where the swap is undone an hour later.
+ *
+ * ## Scoped to a week, by its Monday
+ *
+ * `week_start` is always a Monday — `startOfWeek` snaps it on the way in, so a
+ * URL naming a Wednesday and one naming its Monday tick the same row. Weeks are
+ * separate lists rather than one running list because the shop is: last week's
+ * ticks say nothing about this week's, and P8 scopes persistence to "that week"
+ * for that reason.
+ *
+ * The unique index is what makes a tick idempotent — a double-tap upserts the
+ * one row rather than inserting a second the reader would then have to count.
+ */
+export const shoppingChecks = pgTable(
+  "shopping_checks",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: ownerId(),
+
+    /** The Monday of the week being shopped for. */
+    weekStart: calendarDate("week_start").notNull(),
+    /** `shopping-list.ts`'s normalised ingredient name. See above. */
+    itemKey: text("item_key").notNull(),
+    checkedAt: instant("checked_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("shopping_checks_user_week_item_key").on(t.userId, t.weekStart, t.itemKey),
+  ],
+);
+
+/* -------------------------------------------------------------------------- */
 /* Inferred types                                                             */
 /* -------------------------------------------------------------------------- */
 
@@ -806,3 +869,6 @@ export type NewWorkoutLog = typeof workoutLogs.$inferInsert;
 
 export type WeightLog = typeof weightLogs.$inferSelect;
 export type NewWeightLog = typeof weightLogs.$inferInsert;
+
+export type ShoppingCheck = typeof shoppingChecks.$inferSelect;
+export type NewShoppingCheck = typeof shoppingChecks.$inferInsert;

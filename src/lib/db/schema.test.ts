@@ -49,6 +49,8 @@ describe("schema", () => {
   it("exports every table named in the PRD's data model", () => {
     // Twelve, despite the PRD's prose saying "nine" — the same twelve its own
     // listing enumerates, and the same twelve the task's acceptance criteria do.
+    // Thirteen since FUEL-45: `shopping_checks` holds P8's per-week tick state,
+    // which the PRD's data model describes no table for.
     expect(tables.map(([name]) => name).sort()).toEqual([
       "day_plan_overrides",
       "meal_ingredients",
@@ -56,6 +58,7 @@ describe("schema", () => {
       "meals",
       "plan_template_entries",
       "profiles",
+      "shopping_checks",
       "training_template_entries",
       "users",
       "weight_logs",

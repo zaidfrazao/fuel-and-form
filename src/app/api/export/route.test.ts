@@ -85,6 +85,7 @@ const PAYLOAD: ExportPayload = {
     trainingTemplateEntries: [],
     workoutLogs: [],
     weightLogs: [],
+    shoppingChecks: [],
   },
   today: "2026-08-22",
 };

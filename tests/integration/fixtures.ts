@@ -1,3 +1,4 @@
+import { startOfWeek } from "@/lib/date";
 import { getPool } from "@/lib/db/pool";
 import { scope } from "@/lib/db/scope";
 import * as schema from "@/lib/db/schema";
@@ -185,6 +186,15 @@ async function seedUser(
   await owned.insert(schema.weightLogs, {
     date: options.date,
     weightKg: 79.4,
+  });
+
+  // Ticked against the week the fixture's date falls in, and keyed on the
+  // NORMALISED spelling of the ingredient seeded above — `shopping-list.ts`
+  // lowercases and collapses, so "Rolled oats" is stored as "rolled oats" and a
+  // row that copied the display casing would join to nothing.
+  await owned.insert(schema.shoppingChecks, {
+    weekStart: startOfWeek(options.date),
+    itemKey: "rolled oats",
   });
 
   return {
