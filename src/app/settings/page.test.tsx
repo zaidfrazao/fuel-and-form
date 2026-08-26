@@ -105,6 +105,67 @@ describe("the export link", () => {
   });
 });
 
+describe("the push control", () => {
+  /**
+   * FUEL-47, and the gate is the whole of what the ROUTE decides about it —
+   * `push-form.tsx` owns everything after it renders.
+   *
+   * `NEXT_PUBLIC_VAPID_PUBLIC_KEY` is inlined at build time, so it is stubbed on
+   * `process.env` here rather than passed: that is where the page reads it, and
+   * a test that passed it as a prop would assert nothing about the gate.
+   */
+  const KEY = "NEXT_PUBLIC_VAPID_PUBLIC_KEY";
+
+  /**
+   * `findBy`, not `getBy`, in every case here including the absences.
+   *
+   * `PushForm` renders NOTHING until it has asked the browser what this device
+   * can do — see its `checking` state, which exists so the control cannot show
+   * "Turn on" and flip to "Turn off" a moment later. So a `getBy` immediately
+   * after `render` would be asserting against the first paint, in which the
+   * section is legitimately absent whether the gate opened or not: the positive
+   * test would fail and, worse, the negative one would pass for the wrong
+   * reason and keep passing after the gate was deleted.
+   *
+   * The absences therefore wait too, through the same query, so that "not
+   * there" means "not there after the component had its chance" — under
+   * coverage, where everything is slower, as well as here.
+   */
+  const heading = () => screen.findByRole("heading", { name: "Notify this device" });
+
+  test("is offered when the deployment has a key to subscribe with", async () => {
+    vi.stubEnv(KEY, "BExamplePublicKey");
+
+    render(await SettingsPage());
+
+    expect(await heading()).toBeTruthy();
+  });
+
+  test("is absent entirely when it has none", async () => {
+    // Not a disabled button and not a sentence explaining an absence. There is
+    // nothing to subscribe WITH, so there is nothing to say — P9 asks push to
+    // degrade silently, and the banner is unaffected either way.
+    vi.stubEnv(KEY, "");
+
+    render(await SettingsPage());
+
+    await expect(heading()).rejects.toThrow();
+  });
+
+  test("is offered to an account with no profile, unlike the export", async () => {
+    // Deliberately NOT gated on the profile. A subscription is a row against a
+    // user id; the timezone the scheduled job needs is that job's problem, and
+    // it checks for one itself. Asserted because the neighbouring section IS
+    // gated, and copying that gate here would be the easy mistake.
+    vi.stubEnv(KEY, "BExamplePublicKey");
+    loadSchedule.mockResolvedValue(undefined);
+
+    render(await SettingsPage());
+
+    expect(await heading()).toBeTruthy();
+  });
+});
+
 describe("the route itself", () => {
   test("sends a caller with no session to the login screen, reading nothing", async () => {
     getSession.mockResolvedValue(undefined);
