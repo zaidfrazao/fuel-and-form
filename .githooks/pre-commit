@@ -14,11 +14,10 @@
 # argument — a commit can only be held responsible for what it can actually
 # fix, and it can fix neither history nor the host.
 #
-# The full check now also contacts the remote (check 3, published refs), which
-# on this repository fails: GitHub's refs/pull/* still serve the pre-rewrite
-# values, knowingly. Gating commits on a network call that always fails would
-# block every commit, everyone would learn to pass --no-verify, and the hook
-# would be worth nothing on the day it finally mattered.
+# The full check also contacts the remote (check 3, published refs). That no
+# longer fails on this repository — the residue GitHub still serves from
+# refs/pull/* is pinned as a baseline and compared — but it is still a network
+# call, and a hook that cannot run on a train is a hook people disable.
 #
 # So the hook keeps its narrow job: stop a real figure entering the working
 # tree. Run the full scan before publishing:  npm run check:metrics
