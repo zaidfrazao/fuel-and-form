@@ -69,6 +69,7 @@ export default defineConfig({
         "src/lib/log-intent.ts",
         "src/lib/macros.ts",
         "src/lib/plan-vs-actual.ts",
+        "src/lib/push.ts",
         "src/lib/repeat.ts",
         "src/lib/resolve-plan.ts",
         "src/lib/resolve-now.ts",
@@ -287,6 +288,29 @@ export default defineConfig({
         // the sentence out word for word and a reminder is the most tempting
         // string in the app to make encouraging.
         "src/lib/walk-reminder.ts": FULLY_COVERED,
+        // FUEL-47, and walk-reminder.ts's argument moved to the layer nobody
+        // can watch. The banner is wrong in front of a person on a screen they
+        // are looking at; this file is wrong on a device, from a job with no
+        // screen, at an hour nobody is awake for — and every failure it has is
+        // silence or a duplicate rather than an error.
+        //
+        // What makes 100 the number rather than "covered" is that P9's own
+        // Risks entry rates iOS web push "historically unreliable". That is
+        // exactly the cover a real bug hides behind: a notification that never
+        // arrives because `isSubscriptionGone` deleted a live subscription on
+        // one bad 503 looks identical to the platform being what the PRD
+        // already says it is, and nobody would go looking. The transient codes
+        // are the branch that has to be measured, because they are the branch
+        // that DESTROYS something and the one no running deployment will
+        // exercise on purpose.
+        //
+        // The cap is here for date.ts's reason: `shouldNotify` is a boundary
+        // crossed once a day, and the case that separates `<` from `!==` is a
+        // stored date in the future — unreachable in an ordinary week and, when
+        // it happens, a notification every evening until the calendar catches
+        // up. The copy is covered too, because the notification and the banner
+        // must not drift into two voices for one fact.
+        "src/lib/push.ts": FULLY_COVERED,
         // FUEL-35, and gated on macros.ts's argument rather than on a refusal:
         // every way this can be wrong DRAWS something. A domain that stopped
         // including the target is a chart quietly missing a line nobody counts;

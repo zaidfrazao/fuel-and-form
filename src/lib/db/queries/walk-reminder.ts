@@ -91,25 +91,49 @@ export async function loadWalkReminder(
 
   const today: CalendarDate = todayIn(profile.timezone, now);
 
+  return (await isWalkUnlogged(s, today, profile.programStartDate)) ? { at } : undefined;
+}
+
+/**
+ * Whether `date` holds a planned walk with no row against it — stages 4 and 5,
+ * extracted.
+ *
+ * Exported for FUEL-47's scheduled job, which asks the same question about the
+ * same day from a place with no request and no session. The extraction is the
+ * point rather than a saving: P9's two layers must agree about what "the walk is
+ * unlogged" MEANS, and two copies of "find today's walk workouts, then look for
+ * a log" would drift the first time one of them learned about a new kind of
+ * walk entry. A notification that arrived about a walk the banner did not
+ * mention — or the reverse — is the failure this shape rules out.
+ *
+ * `false` for every reason there is nothing to say, exactly as `loadWalkReminder`
+ * collapses its five: before the program began, no walk planned today, or a log
+ * already filed. All three mean the same thing to both callers.
+ */
+export async function isWalkUnlogged(
+  s: ReturnType<typeof scope>,
+  date: CalendarDate,
+  programStartDate: CalendarDate,
+): Promise<boolean> {
   // Before the program began there is no plan at all, which is what
   // `resolveTraining` answers for such a date. Checked here rather than left to
   // the template read, which would otherwise happily match a weekday row on a
   // date the resolver renders as empty.
-  if (today < profile.programStartDate) return undefined;
+  if (date < programStartDate) return false;
 
-  const walkIds = await walkWorkoutIdsFor(s, today);
+  const walkIds = await walkWorkoutIdsFor(s, date);
 
-  if (walkIds.length === 0) return undefined;
+  if (walkIds.length === 0) return false;
 
   const logged = await s.selectOne(
     schema.workoutLogs,
     and(
-      eq(schema.workoutLogs.date, today),
+      eq(schema.workoutLogs.date, date),
       inArray(schema.workoutLogs.workoutId, walkIds),
     ),
   );
 
-  return logged ? undefined : { at };
+  return !logged;
 }
 
 /**

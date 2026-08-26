@@ -51,7 +51,9 @@ describe("schema", () => {
     // Twelve, despite the PRD's prose saying "nine" — the same twelve its own
     // listing enumerates, and the same twelve the task's acceptance criteria do.
     // Thirteen since FUEL-45: `shopping_checks` holds P8's per-week tick state,
-    // which the PRD's data model describes no table for.
+    // which the PRD's data model describes no table for. Fourteen since
+    // FUEL-47: `push_subscriptions` holds the address P9's notification is sent
+    // to, which has to outlive the request that created it.
     expect(tables.map(([name]) => name).sort()).toEqual([
       "day_plan_overrides",
       "meal_ingredients",
@@ -59,6 +61,7 @@ describe("schema", () => {
       "meals",
       "plan_template_entries",
       "profiles",
+      "push_subscriptions",
       "shopping_checks",
       "training_template_entries",
       "users",

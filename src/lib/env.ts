@@ -90,3 +90,62 @@ export function cronSecret(): string {
 export function sessionSecret(): string {
   return requireEnv("SESSION_SECRET");
 }
+
+/** What signing a push request needs. See `vapidKeys`. */
+export type VapidKeys = {
+  publicKey: string;
+  privateKey: string;
+  /** A `mailto:` or `https:` URI a push service can contact — RFC 8292. */
+  subject: string;
+};
+
+/**
+ * The VAPID key pair, or `null` when this deployment has none — FUEL-47, § P9.
+ *
+ * The one function in this file that does not throw, and the asymmetry is the
+ * whole point rather than an oversight.
+ *
+ * ## Why not `requireEnv`, when `cronSecret` right above it insists
+ *
+ * `cronSecret`'s argument is that a job which has never once run must not be
+ * indistinguishable from a job being probed — because the symptom of the
+ * reaper not running is demo rows accumulating until the free tier is full,
+ * arriving weeks later with no obvious cause. Throwing puts the variable's name
+ * in the platform's log at the first firing, which is the only moment anyone is
+ * looking.
+ *
+ * None of that transfers. P9 requires that "push failure degrades silently to
+ * the banner — no errors surfaced to the user", and the banner is not a
+ * fallback that might not be there: it ships in FUEL-46, it is rendered from the
+ * root layout, and it is the layer the PRD calls "cheap, reliable, always
+ * built". A deployment with no VAPID keys is therefore not broken. It is the
+ * app with one of P9's two layers switched off, which is exactly the state the
+ * PRD anticipates when it designates this feature the first to cut.
+ *
+ * And the failure mode of throwing here would be the worse one. This is read by
+ * a route that Vercel calls on a schedule; a throw would be a 500 every evening,
+ * on a deployment where nothing is wrong, for a feature nobody configured —
+ * noise in exactly the log `cronSecret` is trying to keep meaningful.
+ *
+ * ## All three, or none
+ *
+ * A public key with no private key cannot sign, and a private key with no public
+ * key cannot be matched to any subscription a browser holds. Neither is a
+ * working half, so a partial configuration answers `null` rather than a shape
+ * whose caller would then have to re-check it. The one place that difference
+ * could hide — a deployment that set two of the three and believes push is on —
+ * is not silent: the settings control keys off the PUBLIC value, which is the
+ * one reaching the browser, so a missing private key shows up as a subscription
+ * that saves and a notification that never comes. That is the same symptom as
+ * iOS being iOS, so `SUBJECT` and `PRIVATE_KEY` are named together with the
+ * public one in `.env.example` for whoever goes looking.
+ */
+export function vapidKeys(): VapidKeys | null {
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  const subject = process.env.VAPID_SUBJECT;
+
+  if (!publicKey || !privateKey || !subject) return null;
+
+  return { publicKey, privateKey, subject };
+}

@@ -50,6 +50,13 @@
       "when": 1787730718272,
       "tag": "0006_heavy_ulik",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787742464645,
+      "tag": "0007_green_patch",
+      "breakpoints": true
     }
   ]
 }
