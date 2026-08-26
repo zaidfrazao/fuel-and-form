@@ -10,6 +10,21 @@ export const metadata: Metadata = {
   title: "Fuel & Form",
   description:
     "A personal fitness & nutrition tracker: meal planning with swaps, workout scheduling, and weekly check-in exports.",
+  /*
+   * The Home Screen icon — FUEL-47, and the half of `app/manifest.ts` that iOS
+   * does not read from the manifest.
+   *
+   * Safari takes the installed icon from `apple-touch-icon` and the manifest's
+   * `icons` array only as a fallback, so an app that declared only the manifest
+   * gets a screenshot of the page on the Home Screen instead of a mark. Since
+   * an INSTALLED PWA is the only way iOS delivers a web push at all, that icon
+   * is on the path to P9's second layer working rather than beside it.
+   *
+   * The 192 rather than the 512: iOS scales to whatever the device wants, and
+   * the smaller file is a fifth of the bytes for a mark that is three strokes.
+   */
+  appleWebApp: { capable: true, title: "Fuel & Form" },
+  icons: { apple: "/icon-192.png" },
 };
 
 // The PRD targets the phone first, so the viewport is fixed here rather than

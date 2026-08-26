@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { loadSchedule } from "@/lib/db/queries/profile";
 import { scheduleFields } from "@/lib/slot-times";
+import { PushForm } from "./push-form";
 import { SlotTimesForm } from "./slot-times-form";
 
 /**
@@ -55,6 +56,32 @@ export default async function SettingsPage() {
         <p className="text-body text-text-secondary">
           Slot times appear here once a profile exists for this account.
         </p>
+      )}
+
+      {/*
+       * The walk reminder's push control — FUEL-47, P9's "subscribe from
+       * settings".
+       *
+       * Directly beneath the slot times, and above the template links, because
+       * this is the second delivery of the reminder whose TIME is set in the
+       * list above it. The links below are about a different subject entirely.
+       *
+       * ## The key is read here and passed down
+       *
+       * `NEXT_PUBLIC_VAPID_PUBLIC_KEY` is inlined at build time wherever it is
+       * named, so the client component could read it directly. It is read in
+       * this server component instead for one reason: absent, there is nothing
+       * to subscribe WITH, and the honest thing is for the section not to exist
+       * — no heading, no button, no sentence explaining an absence. A client
+       * component deciding that for itself would ship the whole control to the
+       * browser to render nothing.
+       *
+       * Not gated on `schedule`, unlike the export below. A subscription needs
+       * no profile: it is a row against a user id, and the scheduled job is what
+       * needs a timezone — which it checks for itself.
+       */}
+      {process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && (
+        <PushForm vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
       )}
 
       {/*

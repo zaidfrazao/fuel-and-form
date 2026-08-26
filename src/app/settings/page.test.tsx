@@ -31,6 +31,13 @@ vi.mock("@/lib/db/queries/profile", () => ({ loadSchedule }));
 // The form is a client component importing a "use server" module, which cannot
 // be imported under jsdom. The same reason `/weight`'s test mocks its actions.
 vi.mock("@/app/actions/settings", () => ({ saveSlotTimes: vi.fn() }));
+// FUEL-47's control, for the same reason one line up — and one more of its own:
+// its actions reach `queries/push.ts`, which is `server-only`, so importing the
+// page at all fails to collect without this.
+vi.mock("@/app/actions/push", () => ({
+  subscribeToWalkReminder: vi.fn(),
+  unsubscribeFromWalkReminder: vi.fn(),
+}));
 
 const { default: SettingsPage } = await import("./page");
 

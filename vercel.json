@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/reap-demos",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/walk-reminder",
+      "schedule": "0 19 * * *"
     }
   ]
 }
