@@ -83,6 +83,7 @@ const profile: Profile = {
   workoutTimes: { circuit: "06:30" },
   programStartDate: "2026-06-01",
   timezone: "Europe/London",
+  walkReminderAt: "19:00",
 };
 
 const meal = (id: string, name: string): Meal => ({

@@ -22,8 +22,18 @@ import { scope } from "../scope";
  * gives everywhere else.
  */
 
-/** What the settings screen renders from. `undefined` when there is no profile. */
-export type ProfileSchedule = Pick<Profile, "slotTimes" | "workoutTimes" | "timezone">;
+/**
+ * What the settings screen renders from. `undefined` when there is no profile.
+ *
+ * `walkReminderAt` joins the two time bags here rather than getting a load of
+ * its own (FUEL-46): settings edits all three in one form and saves them in one
+ * statement, and a second query for one column would be a second round trip for
+ * a screen that already has the row in hand.
+ */
+export type ProfileSchedule = Pick<
+  Profile,
+  "slotTimes" | "workoutTimes" | "timezone" | "walkReminderAt"
+>;
 
 /**
  * This user's configured times.
@@ -43,6 +53,7 @@ export async function loadSchedule(userId: string): Promise<ProfileSchedule | un
     slotTimes: profile.slotTimes,
     workoutTimes: profile.workoutTimes,
     timezone: profile.timezone,
+    walkReminderAt: profile.walkReminderAt,
   };
 }
 
@@ -84,6 +95,20 @@ export async function saveSchedule(
   const rows = await s.update(schema.profiles, {
     slotTimes: { ...profile.slotTimes, ...update.slotTimes },
     workoutTimes: { ...profile.workoutTimes, ...update.workoutTimes },
+    // A column, so there is nothing to merge — but the same rule applies for
+    // the same reason: a submission that did not carry the field leaves the
+    // stored value alone.
+    //
+    // `=== undefined` and NOT `??`, which is the whole point. `null` is a value
+    // here — P9's "the reminder can be disabled entirely" — so a nullish
+    // fallback would read a deliberate clear as an absent field and write the
+    // old time straight back. The reminder would then be un-switch-off-able
+    // from the one screen that offers to switch it off, and the form would show
+    // the time it had just been told to remove.
+    walkReminderAt:
+      update.walkReminderAt === undefined
+        ? profile.walkReminderAt
+        : update.walkReminderAt,
   });
 
   return rows.length > 0;

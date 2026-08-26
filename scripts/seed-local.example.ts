@@ -115,6 +115,12 @@ const OWNER_PROFILE = {
 
   /** IANA zone. One per account; there is no travel handling. */
   timezone: "Europe/London",
+
+  /**
+   * When the evening walk reminder appears if the day's walk is not logged —
+   * P9. `null` switches it off entirely; the column defaults to 19:00.
+   */
+  walkReminderAt: "19:00",
 } satisfies ScopedInsert<typeof schema.profiles>;
 
 /**

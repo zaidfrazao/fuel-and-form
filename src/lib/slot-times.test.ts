@@ -4,9 +4,11 @@ import { parseTimeOfDay } from "./date";
 import { mealSlot } from "./db/schema";
 import { DEFAULT_SLOT_TIMES, DEFAULT_WORKOUT_TIMES } from "./resolve-now";
 import { SLOT_ORDER } from "./resolve-plan";
+import { DEFAULT_WALK_REMINDER_AT } from "./walk-reminder";
 import {
   EDITABLE_WORKOUT_TYPES,
   parseSlotTimes,
+  REMINDER_FIELD,
   scheduleFields,
   slotField,
   workoutField,
@@ -98,6 +100,9 @@ describe("parseSlotTimes", () => {
   it("accepts an empty form as a no-op", () => {
     const update = ok(parseSlotTimes(form({})));
 
+    // The reminder key is ABSENT rather than null: an empty form asked no
+    // question, so it answers none. `saveSchedule` reads that as "leave the
+    // stored value alone", which is what makes a null a real switch-off.
     expect(update).toEqual({ slotTimes: {}, workoutTimes: {} });
   });
 
@@ -198,18 +203,87 @@ describe("the field vocabulary", () => {
   });
 });
 
+describe("the walk reminder field", () => {
+  it("reads a configured time", () => {
+    const update = ok(parseSlotTimes(form({ [REMINDER_FIELD]: "20:15" })));
+
+    expect(update.walkReminderAt).toBe("20:15");
+  });
+
+  it("reads a blank field as the reminder switched off", () => {
+    // P9's "the reminder can be disabled entirely". `null` is the OFF state,
+    // and it has to be distinguishable from the absent field below — one is a
+    // setting, the other is a form that did not carry the question.
+    const update = ok(parseSlotTimes(form({ [REMINDER_FIELD]: "" })));
+
+    expect(update.walkReminderAt).toBeNull();
+  });
+
+  it("leaves the reminder alone when the form did not carry it", () => {
+    const update = ok(parseSlotTimes(form({ [slotField("lunch")]: "12:00" })));
+
+    expect("walkReminderAt" in update).toBe(false);
+  });
+
+  it("refuses a malformed time, in the reminder's own words", () => {
+    // The same refusal as a slot's, and NOT the same sentence: blank means "no
+    // reminder" here rather than "no fixed time", so the message that explains
+    // blank has to say the right thing.
+    const result = parseSlotTimes(form({ [REMINDER_FIELD]: "7pm" }));
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.errors[REMINDER_FIELD]).toMatch(/no reminder/);
+  });
+
+  it("refuses the whole submission when only the reminder is malformed", () => {
+    // All or nothing, for the reason the rest of this file gives: a partial
+    // write leaves the profile in a state nobody asked for.
+    const result = parseSlotTimes(
+      form({ [slotField("lunch")]: "12:00", [REMINDER_FIELD]: "25:00" }),
+    );
+
+    expect(result.ok).toBe(false);
+  });
+
+  it("is not confused with a slot or a workout type", () => {
+    // Three namespaces, one form. A reminder written into `workout_times.walk`
+    // would be a scheduling WINDOW for the walk, which is the one thing P1 says
+    // it must never have.
+    const update = ok(
+      parseSlotTimes(form({ [REMINDER_FIELD]: "20:15", [workoutField("circuit")]: "06:30" })),
+    );
+
+    expect(update.workoutTimes).toEqual({ circuit: "06:30" });
+    expect(update.slotTimes).toEqual({});
+  });
+});
+
+/**
+ * A stored schedule, defaulted. Every field of it is required — the profile row
+ * always has all three — so a test that cares about one of them says so and the
+ * other two stay out of the way.
+ */
+const stored = (
+  over: Partial<Parameters<typeof scheduleFields>[0]> = {},
+): Parameters<typeof scheduleFields>[0] => ({
+  slotTimes: {},
+  workoutTimes: {},
+  walkReminderAt: DEFAULT_WALK_REMINDER_AT,
+  ...over,
+});
+
 describe("scheduleFields", () => {
   it("shows the default for a slot that was never configured", () => {
     // The time actually in force. A blank field would say the slot has no
     // window, which is a different setting and a false one.
-    const fields = scheduleFields({ slotTimes: {}, workoutTimes: {} });
+    const fields = scheduleFields(stored());
 
     expect(fields[slotField("breakfast")]).toBe(DEFAULT_SLOT_TIMES.breakfast);
     expect(fields[workoutField("circuit")]).toBe(DEFAULT_WORKOUT_TIMES.circuit);
   });
 
   it("prefers a stored time over the default", () => {
-    const fields = scheduleFields({ slotTimes: { lunch: "11:45" }, workoutTimes: {} });
+    const fields = scheduleFields(stored({ slotTimes: { lunch: "11:45" } }));
 
     expect(fields[slotField("lunch")]).toBe("11:45");
   });
@@ -218,24 +292,45 @@ describe("scheduleFields", () => {
     // The case the whole three-state distinction exists for. Falling back to
     // the default here would make a cleared slot un-clearable: it would come
     // back on the next render and be re-saved on the next submit.
-    const fields = scheduleFields({ slotTimes: { lunch: null }, workoutTimes: {} });
+    const fields = scheduleFields(stored({ slotTimes: { lunch: null } }));
 
     expect(fields[slotField("lunch")]).toBe("");
   });
 
   it("renders a workout type cleared to null as blank", () => {
-    const fields = scheduleFields({ slotTimes: {}, workoutTimes: { circuit: null } });
+    const fields = scheduleFields(stored({ workoutTimes: { circuit: null } }));
 
     expect(fields[workoutField("circuit")]).toBe("");
     expect(fields[workoutField("intervals")]).toBe(DEFAULT_WORKOUT_TIMES.intervals);
   });
 
   it("gives a field to every slot and every editable workout type", () => {
-    const fields = scheduleFields({ slotTimes: {}, workoutTimes: {} });
+    const fields = scheduleFields(stored());
 
     expect(Object.keys(fields).sort()).toEqual(
-      [...SLOT_ORDER.map(slotField), ...EDITABLE_WORKOUT_TYPES.map(workoutField)].sort(),
+      [
+        ...SLOT_ORDER.map(slotField),
+        ...EDITABLE_WORKOUT_TYPES.map(workoutField),
+        REMINDER_FIELD,
+      ].sort(),
     );
+  });
+
+  it("shows the stored reminder time", () => {
+    const fields = scheduleFields(stored({ walkReminderAt: "20:15" }));
+
+    expect(fields[REMINDER_FIELD]).toBe("20:15");
+  });
+
+  it("shows a switched-off reminder as blank, with no default filled in", () => {
+    // Unlike a slot, which shows the default that is actually in force. There
+    // is no third state here to fall back for: the column holds what is in
+    // force, so a default rendered over a `null` would make the reminder
+    // un-switch-off-able — back on the next render, re-saved on the next
+    // submit.
+    const fields = scheduleFields(stored({ walkReminderAt: null }));
+
+    expect(fields[REMINDER_FIELD]).toBe("");
   });
 
   it("round-trips through the parser unchanged", () => {
@@ -245,6 +340,7 @@ describe("scheduleFields", () => {
     const stored = {
       slotTimes: { lunch: "11:45", snack: null },
       workoutTimes: { circuit: "06:00" },
+      walkReminderAt: "19:30",
     };
     const fields = scheduleFields(stored);
     const update = ok(parseSlotTimes(form(fields)));
@@ -252,6 +348,7 @@ describe("scheduleFields", () => {
     expect(update.slotTimes.lunch).toBe("11:45");
     expect(update.slotTimes.snack).toBeNull();
     expect(update.workoutTimes.circuit).toBe("06:00");
+    expect(update.walkReminderAt).toBe("19:30");
     // The slots that were on their defaults come back as explicit times rather
     // than as absent keys — the intended consequence noted on `scheduleFields`.
     expect(update.slotTimes.dinner).toBe(DEFAULT_SLOT_TIMES.dinner);

@@ -1,0 +1,2 @@
+ALTER TABLE "profiles" ADD COLUMN "walk_reminder_at" text DEFAULT '19:00';--> statement-breakpoint
+ALTER TABLE "profiles" ADD CONSTRAINT "profiles_walk_reminder_at_format" CHECK ("walk_reminder_at" is null or "walk_reminder_at" ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$');
