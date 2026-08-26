@@ -19,9 +19,28 @@ import { cn } from "@/lib/utils";
  * block at 258. § Document History holds the mock as the source of truth for
  * appearance, so the geometry here is transcription: 1px border, 4px padding,
  * 2px gap, 46×40px inactive items, and an active item that goes `width: auto`
- * with 13px/15px padding and a 7px gap. Four divergences from it are deliberate
+ * with 13px/15px padding and a 7px gap. Five divergences from it are deliberate
  * and each is argued where it happens — the fourth destination, the landmark's
- * element, `role="img"`, and the hit area.
+ * element, `role="img"`, the hit area, and the inactive item's colour.
+ *
+ * ## The inactive colour is `text-secondary`, not the mock's `text-3`
+ *
+ * The mock paints an inactive `.tabitem` in `var(--text-3)`, which is
+ * `text-tertiary` here. Measured against the canvas it is 2.19:1 in light and
+ * 2.72:1 in dark — under § Accessibility's 4.5:1 for text and under even the
+ * 3:1 it sets for "every control, tick, dot and hairline that carries meaning".
+ * These are controls, and in the sidebar they are also text.
+ *
+ * § Accessibility settles it rather than leaving it to taste: "Where restraint
+ * and contrast conflict, contrast wins and the hairline gets darker."
+ * `text-secondary` is the next step up and clears the text bar in both modes —
+ * 4.80:1 light, 7.80:1 dark. The mock is the source of truth for appearance;
+ * it is not a source of truth for contrast, and it was drawn without a sidebar,
+ * so it never had to carry these labels as text at all.
+ *
+ * The three foot links on `/` use `text-tertiary` on the same canvas and have
+ * the same problem. They are older than this component and outside FUEL-57 —
+ * worth its own task rather than a silent fix here.
  *
  * ## The fourth destination is Training, not More
  *
@@ -186,7 +205,8 @@ export function NavShell({
                   "lg:h-11 lg:w-full lg:justify-start lg:px-[13px]",
                   isActive
                     ? "w-auto bg-ink pr-[15px] pl-[13px] text-ink-fg"
-                    : "w-[46px] text-text-tertiary",
+                    : // `text-secondary`, not the mock's `text-3` — see the header.
+                      "w-[46px] text-text-secondary",
                 )}
               >
                 <NavIcon id={destination.id} />
@@ -242,7 +262,13 @@ export function NavShell({
       <div className="hidden lg:mt-4 lg:block lg:border-t lg:border-border lg:pt-4">
         <Link
           href="/settings"
-          className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          /*
+           * `/`'s foot links set this register in `text-tertiary`. The text
+           * colour is raised to `text-secondary` here for the contrast reason in
+           * the header, and the underline is left in `text-tertiary` so the two
+           * still read as the same kind of link.
+           */
+          className="text-slash text-text-secondary underline decoration-text-tertiary underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           Settings
         </Link>
