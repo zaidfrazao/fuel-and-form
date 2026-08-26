@@ -138,7 +138,7 @@ export default async function PlanPage({
   // state to describe what will appear rather than nudge.
   if (!plan) {
     return (
-      <main className="mx-auto flex min-h-dvh w-full max-w-[640px] flex-col justify-center gap-2 px-[22px] md:px-7">
+      <main className="mx-auto flex w-full flex-1 max-w-[640px] flex-col justify-center gap-2 px-[22px] md:px-7">
         <h1 className="text-title text-text-primary">No plan yet</h1>
         <p className="text-body text-text-secondary">
           The weekly plan appears here once a profile and a weekly template exist
@@ -157,7 +157,7 @@ export default async function PlanPage({
   return (
     // 1024px, not 640px — § Spacing: "max content width: 640px single-column;
     // 1024px for the week grid".
-    <main className="mx-auto flex min-h-dvh w-full max-w-[1024px] flex-col gap-7 px-[22px] py-8 md:px-7">
+    <main className="mx-auto flex w-full flex-1 max-w-[1024px] flex-col gap-7 px-[22px] py-8 md:px-7">
       <header className="flex flex-col gap-2">
         <Link
           href="/"

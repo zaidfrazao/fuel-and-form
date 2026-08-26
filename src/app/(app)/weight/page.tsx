@@ -75,7 +75,7 @@ export default async function WeightPage() {
   // will appear rather than nudge.
   if (!history) {
     return (
-      <main className="mx-auto flex min-h-dvh w-full max-w-[640px] flex-col justify-center gap-2 px-[22px] md:px-7">
+      <main className="mx-auto flex w-full flex-1 max-w-[640px] flex-col justify-center gap-2 px-[22px] md:px-7">
         <h1 className="text-title text-text-primary">No weigh-ins yet</h1>
         <p className="text-body text-text-secondary">
           Weigh-ins appear here once a profile exists for this account.

@@ -400,9 +400,11 @@ function Anytime({
  * passes beneath it, and the 30px of it above the primary is the separation —
  * no border and no shadow, since § Materials allows neither outside sheets.
  *
- * The safe-area inset lives here rather than on the page, because a bar pinned
- * to `bottom: 0` sits below any padding its parent has: the inset only clears
- * the home indicator if it is inside the thing being pinned.
+ * The safe-area inset used to live here, because a bar pinned to `bottom: 0`
+ * sits below any padding its parent has. It has moved to the § Navigation shell
+ * — FUEL-58 — which is now the last thing in the page column and the only thing
+ * with the home indicator beneath it. A bar that kept its own inset would be
+ * clearing an indicator that is two elements away, and the gap would show.
  *
  * Swap is offered for a meal and not for a session: a swap substitutes one meal
  * for another from the library (PRD § P2), and there is no equivalent for a
@@ -434,7 +436,7 @@ function Actions({
   if (!item && !undoable && !failure) return null;
 
   return (
-    <div className="sticky bottom-0 mt-auto flex flex-col gap-3 bg-background pt-[30px] pb-[max(1.375rem,env(safe-area-inset-bottom))]">
+    <div className="sticky bottom-0 mt-auto flex flex-col gap-3 bg-background pt-[30px]">
       {/*
        * § Feedback: "inline banner at the point of action, value reverted,
        * 'Try again'. Never a modal." The point of action is this bar, so the
@@ -580,21 +582,27 @@ function SwapNote({
 /**
  * The page frame.
  *
- * `min-h-dvh` rather than the `min-h-screen` the login page uses: `100vh` on
- * mobile Safari is the viewport with the browser chrome retracted, so an action
- * bar pushed to the bottom of it sits under the toolbar until the user scrolls.
- * The dynamic unit is the one that keeps the primary action reachable, which is
- * the whole point of putting it there.
+ * `flex-1` rather than `min-h-dvh`: the viewport height belongs to
+ * `app/(app)/layout.tsx` now, because the shell sits below this column and a
+ * `<main>` that claims the whole screen leaves the shell no room but its own
+ * overflow. This fills what is left instead. The argument for the DYNAMIC unit
+ * over `100vh` moved to the layout with the class that acts on it.
  *
- * The bottom gutter is deliberately absent here and sits on the action bar
- * instead — see `Actions`, which is pinned to `bottom: 0` and would otherwise
- * be pinned below the page's own padding rather than inside it. The two quiet
- * states carry the same inset themselves, because their bar is conditional:
- * it is there only when a log can be taken back.
+ * `flex-1` and not merely `flex` — `Actions` below is `sticky bottom-0 mt-auto`
+ * inside this box, and a content-sized `<main>` on a short day ends above the
+ * fold with the bar clamped to it, floating mid-screen instead of in the thumb's
+ * reach.
+ *
+ * The bottom gutter is not here and is not on the action bar either — it is on
+ * the § Navigation shell, which sits below this column and is the only thing
+ * with the home indicator under it. Before FUEL-58 the bar carried its own, and
+ * the two quiet states carried a copy because their bar is conditional; all
+ * three are gone, which is what stops the screens that kept one from ending up
+ * with two.
  */
 function Screen({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-[640px] flex-col px-[22px] pt-[22px] md:px-7">
+    <main className="mx-auto flex w-full flex-1 max-w-[640px] flex-col px-[22px] pt-[22px] md:px-7">
       {children}
     </main>
   );
@@ -1041,59 +1049,39 @@ export function RightNow({
   );
 
   /*
-   * The way to `/settings` — FUEL-21.
+   * The way to `/settings` — FUEL-21, and now the only link at the foot of `/`.
    *
-   * A text link rather than the § Navigation pill, which does not exist yet.
-   * The PRD's first acceptance criterion is that `/` "renders the current item
-   * with no navigation", and the guide restates it: "`/` never requires
-   * navigation to be useful". A link at the foot of the screen is reachable
-   * without being part of the reading order of the card — it is below the day,
-   * after everything the screen is actually for.
+   * It used to be four. `Weekly plan`, `Training` and `Weight` were added one
+   * task at a time because there was no other way to reach those screens, and
+   * FUEL-58 gave them one: § Navigation's shell carries all four destinations
+   * on every authenticated screen, so three text links here are a second, worse
+   * copy of it — same targets, no active state, different on every screen that
+   * grew its own set.
    *
-   * Absent from day-complete for the same reason the ruler is: § Materials
-   * frames that screen as a closed page with crop marks at its corners, and its
-   * acceptance criterion says no tab bar. A navigation affordance is exactly
-   * what that criterion is about.
+   * Settings is not one of the four and does not go in the pill. § Navigation
+   * settles where it goes instead: "To the foot of `/`... Two taps from
+   * anywhere: the Now pill, then the link." `nav-shell.tsx` renders a Settings
+   * link in the sidebar's foot at ≥1024px and explicitly leaves the phone to
+   * this one, so deleting it would strand `/settings` behind `/plan/template`
+   * on every phone in the app.
+   *
+   * The register is unchanged and so is the argument for it: below everything
+   * the screen is for, so `/` still "renders the current item with no
+   * navigation" — PRD § P1, which now carries the written reading of that
+   * criterion.
+   *
+   * Rendered in all three states, INCLUDING day-complete, which never had it.
+   * That is a change and not an oversight. "Two taps from anywhere" is false
+   * every evening if the finished page omits it: once the day is logged, `/` IS
+   * this screen, so the tap that § Navigation promises lands on a page with no
+   * link on it. FUEL-29 already narrowed the closed-page rule once, for the
+   * walk row directly above, and on the same grounds — a rule about how the day
+   * reads should not hide the one thing still outstanding after dark.
    */
-  const settingsLink = (
-    <span className="flex items-center gap-4">
-      {/*
-       * The week, from the day — FUEL-28. Beside Slot times and in the same
-       * register, for the same reason: it is below everything the screen is
-       * for, so `/` still "renders the current item with no navigation".
-       */}
-      <Link
-        href="/plan"
-        className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
-      >
-        Weekly plan
-      </Link>
-      {/*
-       * The session and its history — FUEL-27. Same register and the same
-       * argument as the two beside it: `/` renders the day's training card
-       * itself, so this is the way to the DATE-addressed screen — past
-       * sessions, the note, and the six-week grid — not a way to today's.
-       */}
-      <Link
-        href="/training"
-        className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
-      >
-        Training
-      </Link>
-      {/*
-       * The weigh-in history and the form that writes it — FUEL-34. Same
-       * register and the same argument as the two beside it, with one addition
-       * that is this screen's alone: `/` shows the day, and a weigh-in is not
-       * part of a day's plan. It has no slot, no window and no card here, so
-       * this link is not a shortcut to something already on screen — it is the
-       * only way to a screen `/` cannot show.
-       */}
-      <Link
-        href="/weight"
-        className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
-      >
-        Weight
-      </Link>
+  const settingsFootLink = (
+    // Still a flex row, so the anchor is sized to its text rather than
+    // stretching the width of the column as a block-level child would.
+    <span className="flex items-center">
       <Link
         href="/settings"
         className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
@@ -1121,7 +1109,7 @@ export function RightNow({
   if (now.state === "day-complete") {
     return (
       <Screen>
-        <div className="flex flex-1 flex-col gap-[30px] pb-[max(1.375rem,env(safe-area-inset-bottom))]">
+        <div className="flex flex-1 flex-col gap-[30px]">
           <DayComplete date={base.date} entries={progress.entries} target={target} />
 
           {/*
@@ -1158,6 +1146,8 @@ export function RightNow({
               </ul>
             </section>
           )}
+
+          {settingsFootLink}
         </div>
 
         {actions}
@@ -1168,9 +1158,7 @@ export function RightNow({
   if (now.state === "nothing-planned") {
     return (
       <Screen>
-        {/* The quiet state carries the bottom inset itself, because the bar is
-            only there when there is a log to take back. */}
-        <div className="flex flex-col gap-[30px] pb-[max(1.375rem,env(safe-area-inset-bottom))]">
+        <div className="flex flex-col gap-[30px]">
           <header className="flex flex-col gap-2">
             <p className="text-micro uppercase text-text-secondary">Today</p>
             <h1 className="text-title text-text-primary">Nothing planned</h1>
@@ -1185,7 +1173,7 @@ export function RightNow({
 
           <Anytime items={base.anytime} date={base.date} walks={walks} />
 
-          {settingsLink}
+          {settingsFootLink}
         </div>
 
         {actions}
@@ -1244,7 +1232,7 @@ export function RightNow({
 
         <Anytime items={base.anytime} date={base.date} walks={walks} />
 
-        {settingsLink}
+        {settingsFootLink}
       </div>
 
       {actions}

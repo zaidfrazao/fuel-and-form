@@ -38,9 +38,10 @@ import { cn } from "@/lib/utils";
  * it is not a source of truth for contrast, and it was drawn without a sidebar,
  * so it never had to carry these labels as text at all.
  *
- * The three foot links on `/` use `text-tertiary` on the same canvas and have
- * the same problem. They are older than this component and outside FUEL-57 —
- * worth its own task rather than a silent fix here.
+ * The foot link on `/` uses `text-tertiary` on the same canvas and has the same
+ * problem. FUEL-58 removed the three beside it, so this is now one link rather
+ * than four, but it is still older than this component and still outside both
+ * tasks — worth its own rather than a silent fix here.
  *
  * ## The fourth destination is Training, not More
  *
@@ -245,7 +246,9 @@ export function NavShell({
        * Desktop only, and that asymmetry is the decision rather than an
        * oversight. Settings gave up its slot because "a slot is earned by how
        * often you come back to a screen", and on the phone it keeps the text
-       * link at the foot of `/` that `right-now.tsx` already renders. The
+       * link at the foot of `/` that `right-now.tsx` renders in all three of its
+       * states — day-complete included, or the phone's only route to Settings
+       * would vanish every evening. The
        * sidebar has room the pill does not, so the same link can sit here
        * without making the four into five.
        *
@@ -255,9 +258,11 @@ export function NavShell({
        * claiming to be the current page in one landmark is worse than the small
        * imprecision of the one that does.
        *
-       * The register — 12.5px tertiary underlined — is the one the three foot
-       * links on `/` already use, so this reads as the same kind of thing rather
-       * than as a fifth destination that lost its icon.
+       * The register — 12.5px tertiary underlined — is the one the Settings link
+       * at the foot of `/` already uses, so this reads as the same kind of thing
+       * rather than as a fifth destination that lost its icon. That link was one
+       * of four when this was written; FUEL-58 retired the other three into the
+       * shell, and it is the only one left.
        */}
       <div className="hidden lg:mt-4 lg:block lg:border-t lg:border-border lg:pt-4">
         <Link

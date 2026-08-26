@@ -132,7 +132,7 @@ export default async function TrainingPage({
   // state to describe what will appear rather than nudge.
   if (!training) {
     return (
-      <main className="mx-auto flex min-h-dvh w-full max-w-[640px] flex-col justify-center gap-2 px-[22px] md:px-7">
+      <main className="mx-auto flex w-full flex-1 max-w-[640px] flex-col justify-center gap-2 px-[22px] md:px-7">
         <h1 className="text-title text-text-primary">No training yet</h1>
         <p className="text-body text-text-secondary">
           Sessions appear here once a profile and a weekly training template exist
