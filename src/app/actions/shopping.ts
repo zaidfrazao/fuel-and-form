@@ -137,7 +137,7 @@ export async function setChecked({
 
     return DONE;
   } catch (error) {
-    console.error("setChecked failed", error);
+    console.error("Could not change the shopping list.", error);
 
     return FAILED;
   }
