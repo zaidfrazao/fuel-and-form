@@ -44,8 +44,9 @@ import {
  *    the claim. So the vocabulary stays open; see `workouts`.
  *
  * The PRD prose says "nine tables" and then enumerates twelve. Twelve is right
- * for the data model it describes; there are thirteen here, because P8's check
- * state is a table the PRD names no home for — see `shoppingChecks`.
+ * for the data model it describes; there are fourteen here. P8's check state is
+ * a table the PRD names no home for — see `shoppingChecks` — and P9's web push
+ * needs an address that outlives the request — see `pushSubscriptions`.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -869,6 +870,98 @@ export const shoppingChecks = pgTable(
 );
 
 /* -------------------------------------------------------------------------- */
+/* Push                                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Where a browser can be reached with a notification — P9, FUEL-47.
+ *
+ * P9's second layer: "web push, subscribe from settings, delivered by a
+ * scheduled job". The in-app banner needs nothing stored — it is decided from
+ * `profiles.walk_reminder_at` on every render — but a notification sent while
+ * the app is CLOSED has no request to hang off, so the address has to be kept.
+ *
+ * ## The three columns are the browser's own words, stored verbatim
+ *
+ * `PushSubscription.toJSON()` yields exactly `{ endpoint, keys: { p256dh,
+ * auth } }`, and all three are opaque: the endpoint is a URL the push service
+ * minted for one browser, `p256dh` is that browser's public key and `auth` a
+ * shared secret, both base64url. Nothing here parses, normalises or validates
+ * them beyond their presence, because there is no format this app is entitled
+ * to have an opinion about — Google, Mozilla and Apple each mint their own, and
+ * a check that rejected a shape one of them started using tomorrow would be a
+ * notification that silently stopped arriving.
+ *
+ * Flattened into three columns rather than kept as the `jsonb` blob the browser
+ * hands over. `slot_times` is jsonb because its KEYS vary; these are three
+ * fixed strings, and `not null` on each is a constraint the database can hold
+ * that a blob cannot — a subscription missing its `auth` key is one that can
+ * never be encrypted for, and it should fail at the insert rather than at
+ * 19:00 six weeks later.
+ *
+ * ## Unique on `(user_id, endpoint)`, not on `endpoint` alone
+ *
+ * An endpoint identifies a BROWSER, and this app puts two identities in one
+ * browser routinely: a demo visitor arrives on the public URL, and the owner
+ * signs in on the same phone. Those are two subscriptions to two different
+ * accounts, each with its own walk to be unlogged, and a unique constraint on
+ * the endpoint alone would make the second one overwrite or reject the first.
+ *
+ * What the pair does buy is idempotence, which is the point. `pushManager
+ * .subscribe()` returns the SAME endpoint every time it is called for a given
+ * browser and application server key, so re-subscribing — a second tap, a
+ * reinstall, a page reloaded mid-flow — upserts the one row rather than growing
+ * a duplicate that would then deliver a second notification for the same day.
+ *
+ * ## `last_notified_on`, and why it lives here rather than on the profile
+ *
+ * P9 caps delivery at "one notification per day maximum". The cap is enforced
+ * by writing the sent date and refusing to send again for the same date, and it
+ * is per-SUBSCRIPTION because a person with a phone and a laptop has two, and
+ * both should ring once. A profile-level "last notified" would silence the
+ * second device for the rest of the day the first one was reached.
+ *
+ * A calendar date rather than an instant, in the profile's own zone, so the cap
+ * means what a person means by "today" rather than a rolling 24 hours that
+ * drifts an hour later every evening.
+ *
+ * Null until the first successful send. That is the ordinary state of a
+ * subscription made this afternoon, not a missing value: nothing has been sent
+ * yet, so there is no date to record.
+ *
+ * ## Nothing here needs cleaning up
+ *
+ * `ownerId()` cascades, so a demo visitor's subscription is deleted with their
+ * account by the reaper (FUEL-42) with nothing added to it. The other way a row
+ * dies is the push service reporting 404 or 410 — the browser threw the
+ * subscription away — and the scheduled job prunes it on the spot. Neither path
+ * needs a retention rule of its own.
+ */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: ownerId(),
+
+    /** The push service's URL for this browser. Opaque; see above. */
+    endpoint: text().notNull(),
+    /** The browser's public key, base64url. */
+    p256dh: text().notNull(),
+    /** The shared auth secret, base64url. */
+    auth: text().notNull(),
+
+    createdAt: instant("created_at").notNull().defaultNow(),
+
+    /**
+     * The last date a notification was delivered to this browser, in the
+     * profile's zone. Null until the first send. See above.
+     */
+    lastNotifiedOn: calendarDate("last_notified_on"),
+  },
+  (t) => [uniqueIndex("push_subscriptions_user_endpoint_key").on(t.userId, t.endpoint)],
+);
+
+/* -------------------------------------------------------------------------- */
 /* Inferred types                                                             */
 /* -------------------------------------------------------------------------- */
 
@@ -923,3 +1016,6 @@ export type NewWeightLog = typeof weightLogs.$inferInsert;
 
 export type ShoppingCheck = typeof shoppingChecks.$inferSelect;
 export type NewShoppingCheck = typeof shoppingChecks.$inferInsert;
+
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type NewPushSubscription = typeof pushSubscriptions.$inferInsert;

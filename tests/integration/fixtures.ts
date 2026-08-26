@@ -197,6 +197,20 @@ async function seedUser(
     itemKey: "rolled oats",
   });
 
+  // A push subscription, so the leak sweep over `push_subscriptions` has a row
+  // to be wrong about. The endpoint is namespaced by the user id on purpose:
+  // the table is unique on `(user_id, endpoint)`, so two fixture users sharing
+  // one literal endpoint would be a legal pair of rows — but it would also make
+  // the sweep's "did Alice see Bob's row" question answerable by coincidence,
+  // since the two rows would then differ only in a column the assertion reads.
+  // Distinct endpoints mean a leak shows up as a value that could not be
+  // Alice's under any reading.
+  await owned.insert(schema.pushSubscriptions, {
+    endpoint: `https://push.example.test/${user.id}`,
+    p256dh: "fixture-p256dh",
+    auth: "fixture-auth",
+  });
+
   return {
     userId: user.id,
     mealId: meal.id,

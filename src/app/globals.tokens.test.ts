@@ -101,14 +101,58 @@ describe("no raw hex outside the token blocks", () => {
     expect(outside.match(HEX)).toBeNull();
   });
 
-  test.each(walk(SRC).filter((path) => path !== join(SRC, "app/globals.css")))(
-    "%s uses tokens, not hex",
-    (path) => {
-      // This file transcribes the palette by design; it is the fixture the rule
-      // is checked against, not a consumer of it.
-      if (path === THIS_FILE) return;
+  /**
+   * `app/manifest.ts` — the one consumer that cannot use a token, FUEL-47.
+   *
+   * A web app manifest is read by the OPERATING SYSTEM, not by the browser's
+   * style engine. There is no `var(--canvas)` to resolve, no stylesheet in
+   * scope, and no dark-mode swap to make: the spec takes one literal colour for
+   * the splash screen and one for the system bar, and iOS and Android bake them
+   * in at install time. A token there would ship the string "var(--canvas)" to
+   * the launcher.
+   *
+   * Exempting it would leave those two values free to drift away from the
+   * palette silently, which is the exact failure this whole describe block
+   * exists to prevent — so the ban is replaced by a stronger rule rather than
+   * lifted. The test below asserts the manifest's two colours ARE the palette's
+   * light-mode canvas and ink. Change either token and the manifest goes red
+   * until it follows.
+   */
+  const MANIFEST = join(SRC, "app/manifest.ts");
 
-      expect(readFileSync(path, "utf8").match(HEX)).toBeNull();
-    },
-  );
+  test.each(
+    walk(SRC).filter(
+      (path) => path !== join(SRC, "app/globals.css") && path !== MANIFEST,
+    ),
+  )("%s uses tokens, not hex", (path) => {
+    // This file transcribes the palette by design; it is the fixture the rule
+    // is checked against, not a consumer of it.
+    if (path === THIS_FILE) return;
+
+    expect(readFileSync(path, "utf8").match(HEX)).toBeNull();
+  });
+
+  test("the manifest's literal colours are the palette's, not near it", () => {
+    const source = readFileSync(MANIFEST, "utf8");
+
+    const value = (key: string) =>
+      source.match(new RegExp(`${key}:\\s*"(#[0-9a-f]{3,8})"`, "i"))?.[1]?.toLowerCase();
+
+    // Light mode, both of them. A manifest has one value for each and the
+    // install happens once, so there is no second mode to choose between —
+    // and the splash screen an app opens on is the canvas it opens on.
+    expect(value("background_color")).toBe(PALETTE.canvas?.light);
+    expect(value("theme_color")).toBe(PALETTE.ink?.light);
+  });
+
+  test("the manifest declares no other hex", () => {
+    // The exemption above is scoped to two known keys. Anything else creeping
+    // into that file — an icon tinted by hand, a third colour — is caught here
+    // rather than waved through by the filename.
+    const found = readFileSync(MANIFEST, "utf8").match(HEX) ?? [];
+
+    expect(found.map((hex) => hex.toLowerCase()).sort()).toEqual(
+      [PALETTE.canvas?.light, PALETTE.ink?.light].sort(),
+    );
+  });
 });

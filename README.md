@@ -333,6 +333,87 @@ Run it by hand against a local server with:
 curl -i -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/cron/reap-demos
 ```
 
+## Web push
+
+P9's walk reminder has two layers. The **in-app banner** is decided per request
+from `profiles.walk_reminder_at` and always ships. The **notification** is this
+section, and it is strictly additive: everything below can be absent and the
+banner is unaffected.
+
+### The schedule is the reminder time
+
+`GET /api/cron/walk-reminder`, `0 19 * * *` in `vercel.json`. It does **not**
+compare the run's clock against `walk_reminder_at`, and that is deliberate.
+
+A Hobby cron runs at most once a day and lands anywhere in a ±59 minute window,
+while `walk_reminder_at` is a per-user time in a per-user zone. Those cannot both
+be honoured, and the failure of trying is silent: on any evening the jitter
+landed before the configured time the check would say "not yet", no second run
+would come, and the notification would simply never arrive. In winter that is
+every evening, because 18:00 UTC is 18:00 in London.
+
+So `0 19 * * *` — 19:00–19:59 GMT, 20:00–20:59 BST, after the 19:00 default in
+both. What the configured time still does: govern the banner to the minute,
+appear in the notification's own sentence, and switch push off entirely when it
+is null. What it does not do is set the minute a phone buzzes. A reminder set
+*later* than that window therefore gets a banner and no push, which is P9's own
+degradation clause rather than a bug. On Pro this becomes `0 * * * *` and the
+per-subscription cap starts doing the work it was written for.
+
+### One notification per day
+
+`push_subscriptions.last_notified_on`, a calendar date in the profile's zone,
+written after a send resolves and never before — the other order would cap a
+browser for the day on the strength of a request that never arrived.
+
+Per subscription rather than per profile, because a phone and a laptop are two
+rows and both should ring once.
+
+### What a failed send means
+
+Only **404 and 410** delete the row: the push service has never heard of the
+endpoint, or has expired it, which means the browser threw the subscription
+away. Everything else keeps it — 429 and 5xx are transient by definition, and
+403 means the VAPID pair changed, which is a deployment's mistake rather than
+the browser's. Deleting on any of those would silently unsubscribe a working
+phone with nothing on any screen to say so.
+
+Failures are logged with the status and **never the endpoint**, which is a
+credential.
+
+### Configuration, all of it optional
+
+`NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`. Generate a
+pair with `npx web-push generate-vapid-keys`.
+
+Unlike every other variable in this app, absent is a **supported state**:
+`vapidKeys()` returns null rather than throwing, the settings control is not
+rendered at all, and the job logs once and answers 200. `CRON_SECRET` is
+unaffected by this and still throws when unset — authentication is not the thing
+degrading.
+
+Changing the public key invalidates every existing subscription: a browser binds
+its subscription to the key it was created under, and the old ones fail 403
+until each device subscribes again.
+
+### iOS
+
+Safari delivers a web push only to a site added to the **Home Screen**, which is
+why `app/manifest.ts` and the two icons in `public/` exist. Outside an installed
+PWA `PushManager` is simply absent, and the settings control says so plainly
+rather than offering a button that cannot work.
+
+`lib/service-worker.js` caches nothing. Installability and offline support
+usually arrive together; only the first is claimed here, and a `fetch` handler
+would take over serving the whole app — including, on a stale registration, an
+old build. Offline caching is a Nice-to-Have in the PRD, deferred.
+
+Run it by hand against a local server with:
+
+```bash
+curl -i -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/cron/walk-reminder
+```
+
 ### Migrations
 
 ```bash

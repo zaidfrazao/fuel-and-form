@@ -475,14 +475,35 @@ describe("drift", () => {
     .map(getTableName);
 
   /**
-   * `users` is the one table deliberately not exported wholesale.
+   * The two tables deliberately not exported wholesale.
    *
-   * Its columns belong to the session layer — `expires_at` is P7's reaper's —
-   * so four chosen fields cross as `account` instead. On the exclusion list
-   * rather than quietly absent, because that is the difference between a
-   * decision and an oversight.
+   * `users` is the first. Its columns belong to the session layer —
+   * `expires_at` is P7's reaper's — so four chosen fields cross as `account`
+   * instead. On the exclusion list rather than quietly absent, because that is
+   * the difference between a decision and an oversight.
+   *
+   * `push_subscriptions` is the second, and it is excluded for the opposite
+   * reason to a field being redundant: it is a CREDENTIAL rather than a record.
+   * The three columns are a push service's address for one browser plus that
+   * browser's own keys, and together they are sufficient to make a notification
+   * appear on the device — that is the whole of what they are for.
+   *
+   * P6 calls the export "your backup", and asks it to answer "don't lose my
+   * history". A subscription is not history: nothing that happened is recorded
+   * in it, nothing is lost if it goes, and it is remade by one tap in settings
+   * on the device it belongs to. What putting it in the file WOULD do is turn
+   * an ordinary backup — downloaded to a laptop, mailed to oneself, pasted into
+   * a support thread — into something that lets whoever holds it push
+   * notifications to a phone. That is a live capability sitting in a document
+   * whose whole purpose is to be copied around, and the thing it would buy back
+   * on a restore is a row the browser will not honour anyway: a subscription is
+   * bound to the VAPID key pair it was created under, so a restore into a
+   * deployment with different keys resurrects a row that can only ever fail 403.
+   *
+   * So the file is smaller by three opaque strings and loses nothing anyone
+   * could want back.
    */
-  const EXCLUDED = new Set(["users"]);
+  const EXCLUDED = new Set(["users", "push_subscriptions"]);
 
   /**
    * Where a table's key is not just its name in camel case.
