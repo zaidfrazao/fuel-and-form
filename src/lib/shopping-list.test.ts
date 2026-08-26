@@ -276,6 +276,25 @@ describe("combining identical ingredients", () => {
     ]);
   });
 
+  it("prints a padded name trimmed, even when the padded row is the first seen", () => {
+    // First-seen casing is kept; first-seen PADDING is not. The name is
+    // rendered, and a leading space in a shopping list is a misaligned row that
+    // looks like a rendering bug. Asserted with the padded row first because
+    // with it second the trim is unreachable — the case above would pass
+    // against a version that never trimmed the displayed name at all.
+    const rows = [
+      ingredient("chilli", "  BABY   spinach ", 30, "a big handful", "produce"),
+      ingredient("curry", "Baby spinach", 40, "a big handful", "produce"),
+    ];
+
+    // Trimmed, not otherwise rewritten: the inner run of spaces is left alone,
+    // because collapsing it would be this file editing a name rather than
+    // matching one, and `normalise` already handles the matching.
+    expect(lines(week, rows).map((line) => [line.name, line.grams])).toEqual([
+      ["BABY   spinach", 70],
+    ]);
+  });
+
   it("keeps ingredients whose names merely resemble each other apart", () => {
     // The deliberate limitation, pinned so it cannot be "fixed" by accident.
     // The seeded library really does contain all three olive oils and both
@@ -434,18 +453,26 @@ describe("grouping", () => {
     ]);
   });
 
-  it("sorts without consulting the ambient locale", () => {
-    // `localeCompare` would order these by the collation of whatever machine
-    // ran it, which is a list that reads differently in the shop than it did on
-    // the laptop that planned the week.
+  it("sorts by code point rather than by the ambient locale's collation", () => {
+    // The fixture is chosen to DISCRIMINATE, which the obvious one does not:
+    // apple / Apricot / Banana come out in the same order either way, so a test
+    // built from them passes just as happily against `localeCompare` and pins
+    // nothing. A leading accent is where the two rules part company — ICU files
+    // "éclair" under E, ahead of the milk; code point puts U+00E9 after every
+    // ASCII letter, behind it.
+    //
+    // Code point is the rule, for `resolve-plan.ts`'s reason: `localeCompare`
+    // reads the ambient collation, so a list ordered by it reads differently on
+    // the phone in the shop than it did on the laptop that planned the week.
+    // An éclair at the bottom of the aisle is a smaller cost than a list whose
+    // order depends on where it is being read.
     const rows = [
-      ingredient("chilli", "apple", 100, "1", "produce"),
-      ingredient("chilli", "Banana", 120, "1", "produce"),
-      ingredient("chilli", "Apricot", 60, "2", "produce"),
+      ingredient("chilli", "Éclair", 60, "1", "dairy"),
+      ingredient("chilli", "Milk", 200, "1 cup", "dairy"),
+      ingredient("chilli", "butter", 20, "a knob", "dairy"),
     ];
 
-    // Code-point order on the normalised name: apple, apricot, banana.
-    expect(shape([day(MON, [chilli])], rows)).toEqual(["produce: apple, Apricot, Banana"]);
+    expect(shape([day(MON, [chilli])], rows)).toEqual(["dairy: butter, Milk, Éclair"]);
   });
 
   it("files an ingredient with no category under other", () => {
