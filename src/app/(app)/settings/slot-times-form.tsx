@@ -2,10 +2,10 @@
 
 import { useActionState, useState } from "react";
 
+import { saveSlotTimes, type SettingsState } from "@/app/actions/settings";
 import { Button } from "@/components/ui/button";
 import { slotLabel } from "@/lib/now-display";
 import { REMINDER_FIELD, slotField, workoutField } from "@/lib/slot-times";
-import { saveSlotTimes, type SettingsState } from "../actions/settings";
 
 /**
  * The slot times, as a grouped list — Brand Guide § Component Patterns → Lists.

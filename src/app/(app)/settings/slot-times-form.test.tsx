@@ -26,7 +26,7 @@ import { ROWS, SlotTimesForm } from "./slot-times-form";
  */
 const saveSlotTimes = vi.fn();
 
-vi.mock("../actions/settings", () => ({
+vi.mock("@/app/actions/settings", () => ({
   saveSlotTimes: (...args: unknown[]) => saveSlotTimes(...args),
 }));
 

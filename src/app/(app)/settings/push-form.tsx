@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useTransition } from "react";
 
+import { subscribeToWalkReminder, unsubscribeFromWalkReminder } from "@/app/actions/push";
 import { Button } from "@/components/ui/button";
-import { subscribeToWalkReminder, unsubscribeFromWalkReminder } from "../actions/push";
 
 /**
  * The walk reminder's push control — FUEL-47, PRD § P9's "subscribe from
