@@ -277,64 +277,115 @@ export const users = pgTable(
  * `user_id` is the primary key, so one profile per user is a schema fact rather
  * than something the app has to remember to enforce.
  */
-export const profiles = pgTable("profiles", {
-  userId: uuid("user_id")
-    .primaryKey()
-    .references(() => users.id, { onDelete: "cascade" }),
+export const profiles = pgTable(
+  "profiles",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
 
-  heightCm: integer("height_cm").notNull(),
-  startWeightKg: kilograms("start_weight_kg").notNull(),
-  targetWeightKg: kilograms("target_weight_kg").notNull(),
-  goalPaceKgPerWeek: numeric("goal_pace_kg_per_week", {
-    precision: 4,
-    scale: 2,
-    mode: "number",
-  }).notNull(),
+    heightCm: integer("height_cm").notNull(),
+    startWeightKg: kilograms("start_weight_kg").notNull(),
+    targetWeightKg: kilograms("target_weight_kg").notNull(),
+    goalPaceKgPerWeek: numeric("goal_pace_kg_per_week", {
+      precision: 4,
+      scale: 2,
+      mode: "number",
+    }).notNull(),
 
-  targetKcal: integer("target_kcal").notNull(),
-  targetProteinG: macroGrams("target_protein_g").notNull(),
-  targetFatG: macroGrams("target_fat_g").notNull(),
-  targetCarbG: macroGrams("target_carb_g").notNull(),
+    targetKcal: integer("target_kcal").notNull(),
+    targetProteinG: macroGrams("target_protein_g").notNull(),
+    targetFatG: macroGrams("target_fat_g").notNull(),
+    targetCarbG: macroGrams("target_carb_g").notNull(),
 
-  /**
-   * When each slot is eaten, e.g. `{ breakfast: "07:30" }`. Free-shaped on
-   * purpose: these are display hints for the "Right Now" view (P1), not
-   * something any query filters or joins on, so a column per slot would buy
-   * nothing and cost a migration every time the routine shifts.
-   *
-   * Three states per slot, and settings (FUEL-21) can write all three. A time
-   * is a configured window; an ABSENT key means "never set", which takes the
-   * default; and an explicit `null` means "deliberately unscheduled", which
-   * takes no default and sends the slot to `anytime`. Absent and null have to
-   * differ because a profile starts out `{}` and must still render a day —
-   * see `scheduleFor` in resolve-now.ts.
-   */
-  slotTimes: jsonb("slot_times").$type<Partial<Record<MealSlot, string | null>>>().notNull(),
+    /**
+     * When each slot is eaten, e.g. `{ breakfast: "07:30" }`. Free-shaped on
+     * purpose: these are display hints for the "Right Now" view (P1), not
+     * something any query filters or joins on, so a column per slot would buy
+     * nothing and cost a migration every time the routine shifts.
+     *
+     * Three states per slot, and settings (FUEL-21) can write all three. A time
+     * is a configured window; an ABSENT key means "never set", which takes the
+     * default; and an explicit `null` means "deliberately unscheduled", which
+     * takes no default and sends the slot to `anytime`. Absent and null have to
+     * differ because a profile starts out `{}` and must still render a day —
+     * see `scheduleFor` in resolve-now.ts.
+     */
+    slotTimes: jsonb("slot_times").$type<Partial<Record<MealSlot, string | null>>>().notNull(),
 
-  /**
-   * When training happens, keyed by `workouts.type` — `{ circuit: "06:30" }`.
-   *
-   * A second free-shaped column rather than more keys in `slot_times`, because
-   * the two are keyed by different vocabularies: `slot_times` by the closed
-   * `meal_slot` enum, this by the deliberately OPEN `workouts.type` text (see
-   * the note on `workouts`). Merging them would mean one bag whose keys come
-   * from two namespaces that are each free to grow into the other's.
-   *
-   * Same three states as `slot_times`, and `null` is the one that matters
-   * here: the daily walk is unscheduled on purpose, and a gym session someone
-   * does whenever should be expressible the same way.
-   */
-  workoutTimes: jsonb("workout_times")
-    .$type<Record<string, string | null>>()
-    .notNull()
-    .default({}),
+    /**
+     * When training happens, keyed by `workouts.type` — `{ circuit: "06:30" }`.
+     *
+     * A second free-shaped column rather than more keys in `slot_times`, because
+     * the two are keyed by different vocabularies: `slot_times` by the closed
+     * `meal_slot` enum, this by the deliberately OPEN `workouts.type` text (see
+     * the note on `workouts`). Merging them would mean one bag whose keys come
+     * from two namespaces that are each free to grow into the other's.
+     *
+     * Same three states as `slot_times`, and `null` is the one that matters
+     * here: the daily walk is unscheduled on purpose, and a gym session someone
+     * does whenever should be expressible the same way.
+     */
+    workoutTimes: jsonb("workout_times")
+      .$type<Record<string, string | null>>()
+      .notNull()
+      .default({}),
 
-  /** Day zero for Circuit A/B alternation. See `trainingTemplateEntries`. */
-  programStartDate: calendarDate("program_start_date").notNull(),
+    /** Day zero for Circuit A/B alternation. See `trainingTemplateEntries`. */
+    programStartDate: calendarDate("program_start_date").notNull(),
 
-  /** IANA zone, e.g. 'Europe/London'. One zone per user; no travel handling. */
-  timezone: text().notNull(),
-});
+    /** IANA zone, e.g. 'Europe/London'. One zone per user; no travel handling. */
+    timezone: text().notNull(),
+
+    /**
+     * When the evening walk reminder fires, as 'HH:MM' in `timezone` — FUEL-46,
+     * PRD § P9. `null` means the reminder is switched off.
+     *
+     * ## Two states, where `slot_times` has three
+     *
+     * A slot can be absent (never configured, take the default), `null`
+     * (deliberately unscheduled) or a time. This column has no absent: every
+     * profile row has the column, and the migration's default fills the rows that
+     * existed before it. So `null` is free to mean the one thing P9 asks for —
+     * "the reminder can be disabled entirely" — with no second reading.
+     *
+     * Defaulted to 19:00 rather than to `null`, because P9 describes an evening
+     * nudge and a feature that ships switched off is a feature nobody meets. It
+     * is one blank field in settings to turn off.
+     *
+     * ## Why a column, and not a key in `workout_times`
+     *
+     * `workout_times` is keyed by `workouts.type`, so the obvious-looking home
+     * for this is `{ walk: "19:00" }` — and that key already means something
+     * else. A time there is a SCHEDULING WINDOW: `resolve-now.ts` would put the
+     * walk on the timeline and make it the active card every evening, displacing
+     * dinner on the five days that also have a real session. That is precisely
+     * why `EDITABLE_WORKOUT_TYPES` excludes 'walk'. A reminder is not a window,
+     * and storing it as one would make the two indistinguishable to the resolver.
+     *
+     * ## Why `text` with a CHECK rather than `time`
+     *
+     * `time` reads back as '19:00:00', which is not the 'HH:MM' the whole app
+     * means by `TimeOfDay` — every other time in the schema lives in jsonb in
+     * that form, and a column that agreed with none of them would need a
+     * conversion at every boundary.
+     *
+     * The CHECK is the constraint `slot_times` cannot have. `slot-times.ts`
+     * explains at length what an unvalidated time costs there: the column is
+     * free-shaped jsonb, `parseTimeOfDay` throws, and a bad value written by a
+     * hand-rolled POST breaks `/` on every request until someone edits the row.
+     * This value is read from the ROOT LAYOUT, so the same mistake would break
+     * every screen at once — and here the database can hold the line itself.
+     */
+    walkReminderAt: text("walk_reminder_at").default("19:00"),
+  },
+  () => [
+    check(
+      "profiles_walk_reminder_at_format",
+      sql`"walk_reminder_at" is null or "walk_reminder_at" ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`,
+    ),
+  ],
+);
 
 /* -------------------------------------------------------------------------- */
 /* Meals                                                                      */

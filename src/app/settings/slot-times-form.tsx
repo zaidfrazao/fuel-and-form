@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { slotLabel } from "@/lib/now-display";
-import { slotField, workoutField } from "@/lib/slot-times";
+import { REMINDER_FIELD, slotField, workoutField } from "@/lib/slot-times";
 import { saveSlotTimes, type SettingsState } from "../actions/settings";
 
 /**
@@ -75,6 +75,7 @@ export function SlotTimesForm({
   const [times, setTimes] = useState(values);
 
   const errors = state?.status === "invalid" ? state.errors : {};
+  const reminderError = errors[REMINDER_FIELD];
 
   return (
     <form action={action} className="flex flex-col gap-6">
@@ -130,6 +131,63 @@ export function SlotTimesForm({
           );
         })}
       </ul>
+
+      {/*
+       * The walk reminder — FUEL-46, P9.
+       *
+       * A section of its own rather than an eighth row in the list above, and
+       * the reason is what BLANK means. Every row up there answers "when does
+       * this happen", and clearing one says "whenever". This field answers
+       * "when should the app say something", and clearing it says "never" —
+       * P9's "the reminder can be disabled entirely". Two different questions
+       * with two different blanks, one hairline apart, would be one question a
+       * reader has to know the answer to in advance.
+       *
+       * Inside the same form and behind the same Save, because it is the same
+       * row of the same table and one screen with two save buttons is a screen
+       * where someone loses an edit.
+       */}
+      <div className="flex flex-col gap-4 border-t border-border pt-5">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-label text-text-secondary">Walk reminder</h2>
+          <p className="text-caption text-text-tertiary">
+            / a banner on every screen from this time, if the walk is not logged
+          </p>
+        </div>
+
+        <div className="flex min-h-[54px] items-center justify-between gap-4">
+          <div className="flex flex-col">
+            <label htmlFor={REMINDER_FIELD} className="text-body text-text-primary">
+              Remind at
+            </label>
+            <span className="text-caption text-text-tertiary">/ blank for no reminder</span>
+
+            {reminderError ? (
+              <span
+                id={`${REMINDER_FIELD}-error`}
+                role="alert"
+                className="text-caption text-error"
+              >
+                {reminderError}
+              </span>
+            ) : null}
+          </div>
+
+          <input
+            id={REMINDER_FIELD}
+            name={REMINDER_FIELD}
+            type="time"
+            inputMode="numeric"
+            value={times[REMINDER_FIELD] ?? ""}
+            onChange={(event) =>
+              setTimes((current) => ({ ...current, [REMINDER_FIELD]: event.target.value }))
+            }
+            aria-invalid={reminderError ? true : undefined}
+            aria-describedby={reminderError ? `${REMINDER_FIELD}-error` : undefined}
+            className="h-11 shrink-0 rounded-md border border-border bg-surface px-3 text-body tabular-nums text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background aria-invalid:border-destructive"
+          />
+        </div>
+      </div>
 
       <div className="flex flex-col gap-2">
         <Button type="submit" disabled={pending}>

@@ -1,6 +1,7 @@
 import { addDays, type CalendarDate, startOfWeek, todayIn } from "@/lib/date";
 import type { profiles } from "@/lib/db/schema";
 import type { ScopedInsert } from "@/lib/db/scope";
+import { DEFAULT_WALK_REMINDER_AT } from "@/lib/walk-reminder";
 
 /**
  * Sam Rivera — the fictional persona a demo session is a clone of (PRD § P7).
@@ -146,5 +147,15 @@ export function demoProfile(now: Date): ScopedInsert<typeof profiles> {
 
     programStartDate: demoProgramStart(now),
     timezone: DEMO_TIMEZONE,
+
+    /**
+     * The walk reminder, on and at the column's own default — FUEL-46.
+     *
+     * Written out rather than left to the SQL default, because a demo is a
+     * portfolio visit: what P9 does is only visible if the setting it depends
+     * on is visibly there, and a visitor arriving after 19:00 London with the
+     * day's walk unlogged is exactly the state the feature exists for.
+     */
+    walkReminderAt: DEFAULT_WALK_REMINDER_AT,
   };
 }

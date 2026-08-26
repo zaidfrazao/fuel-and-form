@@ -792,9 +792,13 @@ happened. `.githooks/pre-commit` runs the tree-only subset on every commit, and
 request — with `fetch-depth: 0`, without which the checkout would be shallow and
 the history check would fail rather than pass on a history it never read.
 
-Exit codes carry the distinction that matters: `1` is a finding you must fix,
-`3` is the published-refs residue below and nothing else. CI fails on the first
-and warns on the second.
+The published-refs residue described below is **pinned as a baseline** inside
+the script — how many distinct values each pattern matches and which refs carry
+them, never the figures themselves. Exactly that set passes and says so; one
+value or one ref beyond it fails. Exit codes carry the distinction: `1` is a
+finding you must fix, `3` means the residue has *shrunk* and the baseline needs
+re-cutting with `npm run check:metrics -- --print-baseline`. CI fails on the
+first and warns on the second.
 
 The script matches the *shape* of a body metric and passes only values known to
 belong to Sam Rivera, the fictional demo persona. It is an allowlist rather than
@@ -803,14 +807,14 @@ public repository would publish the very numbers it exists to protect.
 
 ### Where this repository actually stands
 
-Checked 2026-08-25, by running the scan and reading the output rather than
+Checked 2026-08-26, by running the scan and reading the output rather than
 trusting the exit code:
 
 | Check | Result |
 | --- | --- |
 | Working tree | clean |
 | This clone's history | clean |
-| Refs GitHub publishes | **not clean — see below** |
+| Refs GitHub publishes | **not clean — see below.** Unchanged since 2026-08-19, and the scan now proves that rather than asserting it |
 | Tracked `.env` files | none but `.env.example` |
 | `scripts/seed-local.ts` | ignored, never tracked |
 
@@ -833,6 +837,16 @@ It is reported on every full run so that it stays *accepted* rather than
 *forgotten*. That is also why the scan looks at the host at all: a green result
 against local refs proves the clone is clean, which is a different and much
 weaker claim than the one § P7 makes.
+
+Accepted does not mean unwatched. The scan used to report this as a failure on
+every run, which is the state a check dies in — permanently red, universally
+skipped, and useless on the day it has something new to say. So the residue is
+written down as a baseline and compared: nine distinct values across six
+patterns, carried by `refs/pull/1` through `refs/pull/22`. A tenth value, or the
+same values appearing on a twenty-third ref, fails the scan. What the baseline
+records is counts and ref names only — never a figure, not even a redacted one,
+because a baseline outlives what it describes, and if those refs are ever purged
+the baseline must not become the last copy of the leak.
 
 ### The figures in `docs/`
 

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 
 import { DemoBanner } from "@/components/demo-banner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { WalkReminder } from "@/components/walk-reminder";
 
 import "./globals.css";
 
@@ -47,6 +48,18 @@ export default function RootLayout({
            * target the whole screen is arranged around.
            */}
           <DemoBanner />
+
+          {/*
+           * P9's evening nudge — FUEL-46. Every screen, for the reason above,
+           * and BELOW the demo banner when a demo session shows both: the demo
+           * banner is a fact about the whole session and this one is a fact
+           * about today, so the wider statement reads first.
+           *
+           * Renders nothing at all until the reminder time, and nothing ever for
+           * a user who has switched it off or already logged the walk — see
+           * components/walk-reminder.tsx.
+           */}
+          <WalkReminder />
 
           {children}
         </ThemeProvider>

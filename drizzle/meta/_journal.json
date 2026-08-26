@@ -43,6 +43,13 @@
       "when": 1787726528306,
       "tag": "0005_glamorous_kronos",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787730718272,
+      "tag": "0006_heavy_ulik",
+      "breakpoints": true
     }
   ]
 }

@@ -2,6 +2,7 @@ import { getTableName, is } from "drizzle-orm";
 import { PgTable, getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_WALK_REMINDER_AT } from "../walk-reminder";
 import * as schema from "./schema";
 import type { ScopedTable } from "./scope";
 
@@ -290,6 +291,44 @@ describe("schema", () => {
     const expiresAt = columns.find((column) => column.name === "expires_at");
 
     expect(expiresAt?.notNull).toBe(false);
+  });
+
+  describe("profiles.walk_reminder_at — FUEL-46, P9", () => {
+    const column = () =>
+      getTableConfig(schema.profiles).columns.find(
+        (candidate) => candidate.name === "walk_reminder_at",
+      );
+
+    it("defaults to the time the app believes it defaults to", () => {
+      // Written twice — a migration cannot import TypeScript — so this is what
+      // stops the two drifting. If they did, settings would render a "default"
+      // the database has never used, and a profile created by the seed would
+      // remind at a time nothing in the code names.
+      expect(column()?.default).toBe(DEFAULT_WALK_REMINDER_AT);
+    });
+
+    it("is nullable, because a reminder must be switchable off", () => {
+      // P9's second criterion. A NOT NULL column would make "no reminder"
+      // inexpressible, and the feature would need a second boolean to say the
+      // same thing — one more state to disagree with this one.
+      expect(column()?.notNull).toBe(false);
+    });
+
+    it("is text, so it holds the same 'HH:MM' every other time in the app is", () => {
+      // A `time` column reads back as '19:00:00', which is not what `TimeOfDay`
+      // means anywhere else — and the sentence on the banner prints it raw.
+      expect(column()?.getSQLType()).toBe("text");
+    });
+
+    it("carries a CHECK, which slot_times cannot", () => {
+      // The value is read from the ROOT LAYOUT. `slot-times.ts` sets out what
+      // an unvalidated time costs in free-shaped jsonb — `/` broken on every
+      // request — and this one would be every screen at once. The application
+      // refuses a bad value on the way in; this is the half the database holds.
+      const { checks } = getTableConfig(schema.profiles);
+
+      expect(checks.map((c) => c.name)).toContain("profiles_walk_reminder_at_format");
+    });
   });
 
   it("stores calendar dates as strings, so no date can shift a day through UTC", () => {

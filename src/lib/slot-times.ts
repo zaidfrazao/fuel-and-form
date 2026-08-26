@@ -44,6 +44,18 @@ import { SLOT_ORDER } from "./resolve-plan";
 export type SlotTimesUpdate = {
   slotTimes: Partial<Record<MealSlot, TimeOfDay | null>>;
   workoutTimes: Record<string, TimeOfDay | null>;
+  /**
+   * The walk reminder — FUEL-46. `null` switches it off, and ABSENT means the
+   * form did not carry the field, so the stored value is left alone.
+   *
+   * Optional for the same reason a slot key is skipped when its field is
+   * missing: a caller that posted only what it renders should not silently
+   * change a setting it never showed. It is a column rather than a key in
+   * either bag above, and `schema.ts` gives the reason — a time under
+   * `workout_times.walk` would be a scheduling WINDOW, which is the one thing
+   * the walk must not have.
+   */
+  walkReminderAt?: TimeOfDay | null;
 };
 
 /** Field name → what is wrong with it. Empty when the submission is good. */
@@ -75,8 +87,29 @@ export const slotField = (slot: MealSlot) => `slot.${slot}`;
 /** Form field name for a workout type. */
 export const workoutField = (type: string) => `workout.${type}`;
 
+/**
+ * Form field name for the walk reminder — FUEL-46.
+ *
+ * A constant rather than a function, because there is one reminder and not one
+ * per anything. Prefixed like the other two so the three namespaces cannot
+ * collide: `reminder.walk` is not a slot called 'walk' and not a workout type
+ * called 'walk', and the parse below would refuse to confuse them anyway.
+ */
+export const REMINDER_FIELD = "reminder.walk";
+
 const MALFORMED =
   "Use a 24-hour time like 07:30, or leave it blank for no fixed time.";
+
+/**
+ * The same refusal for the reminder, in the reminder's own terms.
+ *
+ * Blank means something different here — no reminder at all, rather than no
+ * fixed time for an item that still happens — so the sentence that explains
+ * blank has to differ too. § Tone of Voice: name what happened, and say what the
+ * field does, rather than reuse a message that is nearly right.
+ */
+const REMINDER_MALFORMED =
+  "Use a 24-hour time like 19:00, or leave it blank for no reminder.";
 
 /**
  * 'HH:MM' or blank, from one untrusted field.
@@ -143,9 +176,26 @@ export function parseSlotTimes(form: FormData): ParseResult {
     else workoutTimes[type] = time;
   }
 
+  // The walk reminder — FUEL-46. Read by the same `readTime` as everything
+  // above, so 'HH:MM' and blank are the only two things it accepts here too.
+  //
+  // What differs is what BLANK means. A cleared slot is "deliberately
+  // unscheduled" and lands that meal in `anytime`; a cleared reminder is P9's
+  // "the reminder can be disabled entirely" — the banner never appears. Same
+  // `null`, two settings, and the difference lives in the columns they are
+  // written to rather than in this parse.
+  const update: SlotTimesUpdate = { slotTimes, workoutTimes };
+
+  if (form.has(REMINDER_FIELD)) {
+    const time = readTime(form.get(REMINDER_FIELD));
+
+    if (time === undefined) errors[REMINDER_FIELD] = REMINDER_MALFORMED;
+    else update.walkReminderAt = time;
+  }
+
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
-  return { ok: true, update: { slotTimes, workoutTimes } };
+  return { ok: true, update };
 }
 
 /**
@@ -166,6 +216,8 @@ export function parseSlotTimes(form: FormData): ParseResult {
 export function scheduleFields(stored: {
   slotTimes: Partial<Record<MealSlot, TimeOfDay | null>>;
   workoutTimes: Record<string, TimeOfDay | null>;
+  /** `profiles.walk_reminder_at` as stored. `null` is a reminder switched off. */
+  walkReminderAt: TimeOfDay | null;
 }): Record<string, string> {
   const fields: Record<string, string> = {};
 
@@ -180,6 +232,11 @@ export function scheduleFields(stored: {
       ? stored.workoutTimes[type]
       : DEFAULT_WORKOUT_TIMES[type]) ?? "";
   }
+
+  // No default to fall back to, unlike the two loops above: the reminder is a
+  // COLUMN with a default of its own, so what is stored is already what is in
+  // force. `null` renders blank, which is what a switched-off reminder is.
+  fields[REMINDER_FIELD] = stored.walkReminderAt ?? "";
 
   return fields;
 }

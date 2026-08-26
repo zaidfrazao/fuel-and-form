@@ -4,8 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mealSlot } from "@/lib/db/schema";
 import { DEFAULT_SLOT_TIMES, DEFAULT_WORKOUT_TIMES } from "@/lib/resolve-now";
+import { DEFAULT_WALK_REMINDER_AT } from "@/lib/walk-reminder";
 import {
   EDITABLE_WORKOUT_TYPES,
+  REMINDER_FIELD,
   scheduleFields,
   slotField,
   workoutField,
@@ -33,7 +35,17 @@ beforeEach(() => {
   saveSlotTimes.mockResolvedValue({ status: "saved", at: 1 });
 });
 
-const VALUES = scheduleFields({ slotTimes: {}, workoutTimes: {} });
+/** A stored schedule, defaulted — the profile row always carries all three. */
+const stored = (
+  over: Partial<Parameters<typeof scheduleFields>[0]> = {},
+): Parameters<typeof scheduleFields>[0] => ({
+  slotTimes: {},
+  workoutTimes: {},
+  walkReminderAt: DEFAULT_WALK_REMINDER_AT,
+  ...over,
+});
+
+const VALUES = scheduleFields(stored());
 
 const renderForm = (values = VALUES) =>
   render(<SlotTimesForm values={values} timezone="Europe/London" />);
@@ -104,15 +116,30 @@ describe("the initial values", () => {
   });
 
   it("shows the stored time where there is one", () => {
-    renderForm(scheduleFields({ slotTimes: { lunch: "11:45" }, workoutTimes: {} }));
+    renderForm(scheduleFields(stored({ slotTimes: { lunch: "11:45" } })));
 
     expect(field("Lunch").value).toBe("11:45");
   });
 
   it("shows a slot cleared to null as blank", () => {
-    renderForm(scheduleFields({ slotTimes: { lunch: null }, workoutTimes: {} }));
+    renderForm(scheduleFields(stored({ slotTimes: { lunch: null } })));
 
     expect(field("Lunch").value).toBe("");
+  });
+
+  it("shows the walk reminder's stored time", () => {
+    renderForm(scheduleFields(stored({ walkReminderAt: "20:15" })));
+
+    expect(field("Remind at").value).toBe("20:15");
+  });
+
+  it("shows a switched-off reminder as blank", () => {
+    // And not as the default, which would put the time back on screen for
+    // someone who has just turned the reminder off — and re-save it on the next
+    // submit.
+    renderForm(scheduleFields(stored({ walkReminderAt: null })));
+
+    expect(field("Remind at").value).toBe("");
   });
 });
 
@@ -137,6 +164,30 @@ describe("submitting", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save times" }));
 
     expect((await submitted()).get(slotField("dinner"))).toBe("20:15");
+  });
+
+  it("posts the reminder under the name the parser reads", async () => {
+    renderForm();
+
+    await userEvent.click(screen.getByRole("button", { name: "Save times" }));
+
+    expect((await submitted()).get(REMINDER_FIELD)).toBe(DEFAULT_WALK_REMINDER_AT);
+  });
+
+  it("posts a cleared reminder as blank, which switches it off", async () => {
+    // P9's "the reminder can be disabled entirely", from the one control that
+    // offers it. Blank here has to reach the action as a present-and-empty
+    // field: an omitted one would mean "leave it alone" and the reminder would
+    // survive being switched off.
+    renderForm();
+
+    await userEvent.clear(field("Remind at"));
+    await userEvent.click(screen.getByRole("button", { name: "Save times" }));
+
+    const form = await submitted();
+
+    expect(form.has(REMINDER_FIELD)).toBe(true);
+    expect(form.get(REMINDER_FIELD)).toBe("");
   });
 
   it("posts a cleared field as blank, which the parser reads as unscheduled", async () => {

@@ -80,6 +80,7 @@ export default defineConfig({
         "src/lib/slot-times.ts",
         "src/lib/template-plan.ts",
         "src/lib/walk.ts",
+        "src/lib/walk-reminder.ts",
         "src/lib/weigh-in.ts",
         "src/lib/weight-chart.ts",
         "src/lib/weight-stats.ts",
@@ -270,6 +271,22 @@ export default defineConfig({
         // anywhere that can take it back. Neither throws and neither looks
         // wrong on the screen that caused it.
         "src/lib/walk.ts": FULLY_COVERED,
+        // FUEL-46, and demo-banner.ts's argument with a wider blast radius. It
+        // is read from the ROOT LAYOUT, so every branch in it runs on every
+        // screen in the app — and one of them decides whether a stranger's
+        // malformed profile value becomes "no banner" or a 500 on all seven
+        // routes at once. The CHECK constraint means that branch should be
+        // unreachable, which is precisely why nothing but a test will ever
+        // exercise it.
+        //
+        // The comparison is here for the same reason `date.ts` is: it is a
+        // boundary a running app crosses for one minute a day. 18:59 against
+        // 19:00, and midnight, are the whole feature, and being a minute wrong
+        // in either direction is invisible — nobody is watching the clock when
+        // the banner appears. The copy is covered too, because the task writes
+        // the sentence out word for word and a reminder is the most tempting
+        // string in the app to make encouraging.
+        "src/lib/walk-reminder.ts": FULLY_COVERED,
         // FUEL-35, and gated on macros.ts's argument rather than on a refusal:
         // every way this can be wrong DRAWS something. A domain that stopped
         // including the target is a chart quietly missing a line nobody counts;

@@ -56,6 +56,7 @@ const PROFILE: Profile = {
   workoutTimes: {},
   programStartDate: "2026-06-01",
   timezone: "Pacific/Auckland",
+  walkReminderAt: "19:00",
 };
 
 /**

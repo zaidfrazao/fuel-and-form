@@ -40,8 +40,8 @@
 #
 # EXPECTED RESULT ON THIS REPOSITORY TODAY
 #
-# Checks 1, 2, 4 and 5 pass. Check 3 does not, and that is the honest report
-# rather than a bug.
+# All five checks pass. Check 3 passes in a particular way that is worth
+# understanding before trusting it, because it is not clean:
 #
 # The history this script was written to condemn has been rewritten. FUEL-14
 # replaced the owner's figures in the working tree with Sam's, and on 2026-08-19
@@ -56,9 +56,18 @@
 #
 # That is a deliberate, accepted state — the owner chose force-push-only on
 # 2026-08-19 knowing this — and check 3 exists to keep it accepted rather than
-# forgotten. It is the reason this script does not simply print PASS: a green
-# scan against local refs is not evidence of a clean repository, only of a clean
-# clone, and the difference is the whole point of the exercise.
+# forgotten. What it does NOT do is report it as a failure forever. That was the
+# original behaviour and it was the wrong one: a check that is red on every run
+# for a state nobody can fix teaches everyone to skip reading it, and it would
+# have been skipped on the day it finally had something new to say.
+#
+# So the residue is written down — as counts of distinct values per pattern and
+# the refs that carry them, never as figures; see ACCEPTED_PUBLISHED_VALUES —
+# and check 3 compares what it finds against that. Exactly the accepted set
+# passes and says so. One value or one ref beyond it fails. Less than it exits 3
+# and asks for the baseline to be re-cut. A green scan against local refs is
+# still not evidence of a clean repository; this is evidence of an UNCHANGED one,
+# which is the strongest thing that can honestly be said from here.
 #
 # Closing the gap needs GitHub Support to purge the stale refs, or the
 # repository deleted and recreated. Neither is something this script can do.
@@ -68,9 +77,11 @@
 #   ./scripts/check-no-metrics.sh --tree-only   # working tree + structure only (pre-commit)
 #   ./scripts/check-no-metrics.sh --no-remote   # skip the published-refs check (offline)
 #   ./scripts/check-no-metrics.sh --show-values # print matches unredacted (local only)
+#   ./scripts/check-no-metrics.sh --print-baseline  # re-cut the check-3 baseline
 #
-# Exit: 0 clean · 1 findings · 2 usage or environment error
-#       3 published-refs residue only — see the note by the exit itself
+# Exit: 0 clean — including a published-refs residue that matches the baseline
+#       1 findings · 2 usage or environment error
+#       3 the accepted residue has SHRUNK; re-cut the baseline (not a failure)
 #
 set -euo pipefail
 
@@ -83,6 +94,7 @@ readonly SELF="${0##*/}"
 TREE_ONLY=0
 SHOW_VALUES=0
 NO_REMOTE=0
+PRINT_BASELINE=0
 
 usage() {
   sed -n '2,/^set -euo/p' "$0" | sed 's/^# \{0,1\}//; $d'
@@ -100,6 +112,11 @@ while [ "$#" -gt 0 ]; do
     # are themselves public: a check that prints the leaked value into a build
     # log has moved the leak rather than reported it.
     --show-values) SHOW_VALUES=1 ;;
+    # Re-cut the accepted published-refs baseline. Runs check 3 alone and prints
+    # the two constants to paste back; see the note above them. Deliberately not
+    # a flag that WRITES the file: a baseline that a script can update on its own
+    # is one that gets updated instead of read.
+    --print-baseline) PRINT_BASELINE=1 ;;
     -h | --help)
       usage
       exit 0
@@ -125,6 +142,11 @@ cd "$(git rev-parse --show-toplevel)"
 
 FINDINGS=0
 FAILED_CHECKS=""
+
+# Set when check 3 finds LESS than the baseline allows for — the residue has
+# shrunk. Not a finding: nothing is wrong, but the baseline no longer describes
+# the host and should be re-cut. Reported at exit 3.
+BASELINE_STALE=0
 
 # Temp files holding real metrics, removed on any exit. A registry rather than a
 # `trap` per check: bash keeps one handler per signal, so the second check to
@@ -278,6 +300,68 @@ readonly ALLOW_KCAL="1780"
 readonly ALLOW_PROTEIN="148"
 readonly ALLOW_CARB="185"
 readonly ALLOW_FAT="50"
+
+# ---------------------------------------------------------------------------
+# The accepted published-refs residue (check 3)
+#
+# What GitHub still serves from refs/pull/* and this repository cannot remove —
+# the pre-2026-08-19 figures described in the header. The owner accepted that
+# state deliberately; these two constants are what "accepted" means in a form
+# the script can check, so that the known residue reports as known and anything
+# else still fails.
+#
+# ## Why this carries counts and ref names, and no values
+#
+# The rule at the top of this file — never put a real figure in here, not even
+# in a comment, not even redacted — applies with more force to a baseline than
+# to anything else, because a baseline outlives what it describes. If GitHub
+# ever purges those refs, a file recording "7****kg" would be the last place the
+# leading digit of the owner's weight still existed, and this script would have
+# become the leak it was written to prevent. Even a hash would: these values are
+# two or three digits, so any hash of one is recovered by trying every candidate.
+#
+# So the baseline records only how MANY distinct values each pattern matched,
+# and which refs carried them. That is enough to fail on a new value — a tenth
+# distinct figure makes some pattern's count exceed its entry — and it says
+# nothing whatsoever about what any of the nine are.
+#
+# ## Why counts of VALUES and not of occurrences
+#
+# Occurrences drift for reasons that are nobody's fault. The scan reports what
+# the host serves and this clone cannot reach, and that set grows every time a
+# pull request is squash-merged: the branch's own commits survive in
+# refs/pull/N/head and stop being reachable from main. A baseline pinned to
+# occurrence counts would go red on an ordinary merge, which is precisely the
+# permanently-red failure mode this mechanism exists to end.
+#
+# The number of distinct VALUES does not drift. It changes when a figure that
+# was not there before is there, which is the event worth failing on.
+#
+# ## Re-cutting it
+#
+#   npm run check:metrics -- --print-baseline
+#
+# Only ever after understanding why it changed. A baseline re-cut to make a red
+# check green is an exemption with extra steps, and the check would be finished.
+# ---------------------------------------------------------------------------
+
+readonly ACCEPTED_PUBLISHED_VALUES="
+body-weight-kg:2
+height-cm:1
+target-kcal:3
+target-protein-g:1
+target-carb-g:1
+target-fat-g:1
+"
+
+# Every pull request opened before the 2026-08-19 rewrite. `pull/N` matches the
+# form check 3 prints, which is the host's `refs/pull/N/head` with the suffix
+# dropped.
+readonly ACCEPTED_PUBLISHED_REFS="
+pull/1 pull/2 pull/3 pull/4 pull/5 pull/6 pull/7 pull/8 pull/9 pull/10 pull/11
+pull/12 pull/13 pull/14 pull/15 pull/16 pull/17 pull/18 pull/19 pull/20 pull/21
+pull/22
+"
 
 readonly PATTERN_NAMES=(
   "body-weight-kg"
@@ -674,14 +758,18 @@ scan_published_refs() {
     return
   fi
 
-  local i name regex allow linefilter line match count hits=0
+  local i name regex allow linefilter line match count hits=0 pattern_hits
   local -a offenders=()
+  # The observed state, in the terms the baseline is written in: how many
+  # DISTINCT values each pattern found. See ACCEPTED_PUBLISHED_VALUES.
+  local observed_values=""
 
   for i in "${!PATTERN_REGEX[@]}"; do
     name="${PATTERN_NAMES[$i]}"
     regex="${PATTERN_REGEX[$i]}"
     allow="${PATTERN_ALLOW[$i]}"
     linefilter="${PATTERN_LINEFILTER[$i]}"
+    pattern_hits=0
 
     while read -r count match; do
       [ -z "$match" ] && continue
@@ -689,12 +777,16 @@ scan_published_refs() {
         "$name" "$(redact_match "$match")" "$count"
       offenders+=("$match")
       hits=$((hits + 1))
+      pattern_hits=$((pattern_hits + 1))
     done < <(
       while IFS= read -r line; do
         offending_matches_in_line "$line" "$regex" "$allow" "$linefilter"
       done < <(grep -hE "$regex" "$dump" 2>/dev/null || true) |
         sort | uniq -c | sort -rn
     )
+
+    [ "$pattern_hits" -gt 0 ] &&
+      observed_values="$observed_values$name:$pattern_hits"$'\n'
   done
 
   if [ "$hits" -eq 0 ]; then
@@ -705,8 +797,8 @@ scan_published_refs() {
 
   # Name the refs, not just the commits. "refs/pull/14/head" tells the owner
   # which pull request page still renders the value; a bare sha does not.
-  printf '\n  Reachable from these published refs:\n'
-  {
+  local observed_refs
+  observed_refs="$(
     for match in "${offenders[@]}"; do
       local ref sha
       while IFS= read -r ref; do
@@ -714,21 +806,176 @@ scan_published_refs() {
         sha="$(git log --format='%h' -1 -S"$match" "$ref" --not $local_refs 2>/dev/null || true)"
         [ -n "$sha" ] && printf '%s\n' "${ref#"$PUBLISHED_NS/"}"
       done <<<"$published_refs"
-    done
-  } | sort -u -V | sed 's|^|    refs/|'
+    done | sort -u -V
+  )"
+
+  printf '\n  Reachable from these published refs:\n'
+  printf '%s\n' "$observed_refs" | sed 's|^|    refs/|'
 
   printf '\n  %d distinct value(s) served by %s and absent from this clone.\n' \
     "$hits" "$remote"
   printf '  A force-push does not reach refs/pull/*; they outlive the branch, the\n'
   printf '  merge and the pull request. Removing them needs the host — GitHub\n'
   printf '  Support can purge stale refs — or the repository recreated.\n'
-  printf '\n'
-  printf '  On THIS repository a known set of pre-2026-08-19 values is expected\n'
-  printf '  here and has been accepted deliberately — see the header. That is not\n'
-  printf '  a licence to wave the check through: anything outside that set is new,\n'
-  printf '  and this output cannot tell you which you are looking at. Compare\n'
-  printf '  against the header before dismissing a finding.\n'
-  fail_check "published-refs"
+
+  if [ "$PRINT_BASELINE" -eq 1 ]; then
+    print_baseline "$observed_values" "$observed_refs"
+    return
+  fi
+
+  compare_against_baseline "$observed_values" "$observed_refs"
+}
+
+# ---------------------------------------------------------------------------
+# Check 3's verdict — the accepted residue, or something new
+#
+# Everything above this point reports what the host serves. This is what decides
+# whether that is news.
+#
+# The residue described in the header is permanent and nobody can remove it from
+# this repository, so a check that reports it as a failure forever is a check
+# that gets ignored — and an ignored check is worth nothing on the day a real
+# regression lands. The fix is not to stop looking. It is to write down what is
+# already known, in a form that cannot itself leak, and fail on the difference.
+#
+# What "the difference" means here, precisely:
+#
+#   - a pattern with MORE distinct values than the baseline records, or a
+#     pattern with no baseline entry at all, is a value that was not there
+#     before. That is a finding and it fails.
+#   - a published ref not on the accepted list is a ref that has started
+#     carrying a metric. That is a finding and it fails, even if every value on
+#     it is one the baseline already knows: a value that has spread to a new
+#     pull request is a new exposure.
+#   - FEWER values, or fewer refs, is the residue shrinking — which is the
+#     outcome everyone wants and the one nobody should have to argue with a red
+#     build about. It exits 3 and asks for the baseline to be re-cut.
+# ---------------------------------------------------------------------------
+
+# A whitespace-separated list, normalised to single spaces with one at each
+# end, so that `case "$list" in *" $word "*)` is an exact WORD test.
+#
+# Both halves of that matter and both were wrong first time round. The accepted
+# lists below are written over several lines for legibility, so a raw `case`
+# missed every entry that happened to sit at a line break — and reported five
+# perfectly ordinary refs as new. Worse in the other direction: without the
+# spaces around the needle, `pull/1` matches inside `pull/11`, so a ref that had
+# genuinely stopped carrying a value would have been masked by an unrelated one
+# whose number begins with the same digits.
+as_word_list() {
+  printf ' '
+  printf '%s' "$1" | tr -s '[:space:]' ' '
+  printf ' '
+}
+
+# How many distinct values the baseline records for a pattern. Zero for a
+# pattern it does not mention, which is what makes an unknown pattern a finding.
+accepted_value_count() {
+  local name="$1" entry
+  for entry in $ACCEPTED_PUBLISHED_VALUES; do
+    case "$entry" in
+      "$name:"*)
+        printf '%s' "${entry#*:}"
+        return
+        ;;
+    esac
+  done
+  printf '0'
+}
+
+compare_against_baseline() {
+  local observed_values observed_refs accepted_values accepted_refs
+  observed_values="$(as_word_list "$1")"
+  observed_refs="$(as_word_list "$2")"
+  accepted_values="$(as_word_list "$ACCEPTED_PUBLISHED_VALUES")"
+  accepted_refs="$(as_word_list "$ACCEPTED_PUBLISHED_REFS")"
+
+  local entry name count accepted ref surplus="" shortfall=""
+
+  for entry in $observed_values; do
+    name="${entry%%:*}"
+    count="${entry#*:}"
+    accepted="$(accepted_value_count "$name")"
+
+    if [ "$count" -gt "$accepted" ]; then
+      surplus="$surplus  $name: $count distinct value(s) found, $accepted accepted"$'\n'
+    elif [ "$count" -lt "$accepted" ]; then
+      shortfall="$shortfall  $name: $count distinct value(s) found, $accepted accepted"$'\n'
+    fi
+  done
+
+  # A pattern the baseline records that has stopped appearing at all: its value
+  # is gone from the host. The loop above cannot see it — there is no observed
+  # entry to iterate — so it is checked from the other direction.
+  for entry in $accepted_values; do
+    name="${entry%%:*}"
+    case "$observed_values" in
+      *" $name:"*) ;;
+      *) shortfall="$shortfall  $name: gone, ${entry#*:} accepted"$'\n' ;;
+    esac
+  done
+
+  for ref in $observed_refs; do
+    case "$accepted_refs" in
+      *" $ref "*) ;;
+      *) surplus="$surplus  refs/$ref: not on the accepted list"$'\n' ;;
+    esac
+  done
+
+  for ref in $accepted_refs; do
+    case "$observed_refs" in
+      *" $ref "*) ;;
+      *) shortfall="$shortfall  refs/$ref: no longer carries a value"$'\n' ;;
+    esac
+  done
+
+  if [ -n "$surplus" ]; then
+    printf '\n  NEW — beyond the accepted residue:\n'
+    printf '%s' "$surplus"
+    printf '\n  The baseline in this script records what was already known on\n'
+    printf '  2026-08-19. The lines above are not on it, so something has reached\n'
+    printf '  a published ref since. Find it before re-cutting the baseline:\n'
+    printf '  --show-values prints the figures, locally, unredacted.\n'
+    fail_check "published-refs"
+    return
+  fi
+
+  if [ -n "$shortfall" ]; then
+    printf '\n  SHRUNK — accepted, and no longer present:\n'
+    printf '%s' "$shortfall"
+    printf '\n  Nothing new, and less than before: the host has stopped serving\n'
+    printf '  something the baseline still allows for. Re-cut it so the check\n'
+    printf '  keeps its grip:  npm run check:metrics -- --print-baseline\n'
+    BASELINE_STALE=1
+    return
+  fi
+
+  printf '\n  ACCEPTED — this is exactly the residue recorded on 2026-08-19, and\n'
+  printf '  nothing else. Not a pass by exemption: every distinct value and every\n'
+  printf '  ref above was compared against the baseline in this script, and one\n'
+  printf '  more of either would have failed this check.\n'
+}
+
+# The baseline as source, for pasting over the constants. Counts and ref names
+# only — see the note on ACCEPTED_PUBLISHED_VALUES for why it can never hold a
+# figure, not even a redacted one.
+print_baseline() {
+  local observed_values="$1" observed_refs="$2" entry ref
+
+  printf '\n  Paste over the constants in %s:\n\n' "$SELF"
+  printf 'readonly ACCEPTED_PUBLISHED_VALUES="\n'
+  while IFS= read -r entry; do
+    [ -z "$entry" ] && continue
+    printf '%s\n' "$entry"
+  done <<<"$observed_values"
+  printf '"\n\n'
+
+  printf 'readonly ACCEPTED_PUBLISHED_REFS="\n'
+  while IFS= read -r ref; do
+    [ -z "$ref" ] && continue
+    printf '%s\n' "$ref"
+  done <<<"$observed_refs"
+  printf '"\n'
 }
 
 # ---------------------------------------------------------------------------
@@ -811,6 +1058,16 @@ printf 'check-no-metrics'
 printf '\n'
 hr
 
+# Re-cutting the baseline is a question about the host and nothing else, so it
+# runs check 3 alone rather than making someone sit through a full scan to reach
+# the block they came for.
+if [ "$PRINT_BASELINE" -eq 1 ]; then
+  scan_published_refs
+  hr
+  [ -n "$FAILED_CHECKS" ] && exit 2
+  exit 0
+fi
+
 scan_tree
 
 if [ "$TREE_ONLY" -eq 1 ]; then
@@ -834,7 +1091,22 @@ if [ "$FINDINGS" -eq 0 ]; then
     printf 'PASS — working tree and structure clean (history not scanned).\n'
   else
     printf 'PASS — no real body metrics in the tree or history.\n'
+    # Only when the residue is exactly the accepted set. When it has shrunk the
+    # line below would contradict the exit-3 note that follows.
+    [ "$BASELINE_STALE" -eq 0 ] &&
+      printf '       The published-refs residue is the accepted set, unchanged.\n'
   fi
+
+  # Exit 3 when the only thing to say is that the accepted residue has SHRUNK.
+  # Not a failure — nothing is wrong and nothing new is exposed — but not
+  # silence either, because a baseline that allows for more than the host serves
+  # has slack in it, and slack is where the next real finding hides.
+  if [ "$BASELINE_STALE" -eq 1 ]; then
+    printf '\nExit 3: the accepted baseline is now wider than the host. Re-cut it\n'
+    printf 'with:  npm run check:metrics -- --print-baseline\n'
+    exit 3
+  fi
+
   exit 0
 fi
 
@@ -843,25 +1115,13 @@ printf '\nDo not silence this by exempting a path. If a finding is a fictional\n
 printf 'figure, add it to the matching ALLOW_* list in this script. If it is\n'
 printf 'real, remove it.\n'
 
-# Exit 3 when the ONLY thing wrong is the published-refs residue described in
-# the header — the pre-2026-08-19 values that GitHub still serves from
-# refs/pull/*, which no commit in this repository can remove.
+# A "published-refs" failure no longer means the known residue — that is
+# compared against the baseline inside check 3 and reported as accepted. It now
+# means something the baseline does not account for, which is a finding like any
+# other and exits 1 with everything else.
 #
-# The distinction exists so CI can gate. Without it the workflow would be red on
-# every run from the day it was added, for a state nobody can fix from here, and
-# a permanently red check teaches everyone to ignore it — which would cost more
-# than the check is worth on the day a real regression lands.
-#
-# It is deliberately narrow. "published-refs(skipped)" and
-# "published-refs(unreachable)" do NOT qualify: those mean the host was not
-# read, and an unread host is a failure like any other. Only a scan that ran,
-# looked, and found nothing but the known residue exits 3.
-if [ "$FAILED_CHECKS" = " published-refs" ]; then
-  printf '\nExit 3: the published-refs residue only — the accepted state, and not\n'
-  printf 'fixable from this repository. Nothing in the tree or this history is\n'
-  printf 'dirty. Compare the values above against the header before treating this\n'
-  printf 'as the expected result.\n'
-  exit 3
-fi
-
+# "published-refs(skipped)" and "published-refs(unreachable)" land here too, and
+# always did: those mean the host was not read, and an unread host is a failure
+# like any other. "I could not look" must never print what "I looked and it was
+# clean" prints.
 exit 1

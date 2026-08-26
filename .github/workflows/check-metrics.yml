@@ -35,12 +35,15 @@ jobs:
           status=$?
           set -e
           case "$status" in
+            # Includes the pre-2026-08-19 values GitHub still serves from
+            # refs/pull/*: known, accepted, and compared against the baseline
+            # in the script rather than waved through. Anything beyond that set
+            # is a finding and lands in the catch-all below.
             0) echo "::notice::clean" ;;
-            # The pre-2026-08-19 values GitHub still serves from refs/pull/*.
-            # Known, accepted, and not removable by any commit here — see the
-            # script's header. Surfaced on every run so it stays accepted
-            # rather than forgotten, but it does not fail the build, because a
-            # permanently red check is one nobody reads.
-            3) echo "::warning::published-refs residue only — the accepted state (see README, Repository hygiene)" ;;
+            # The residue has SHRUNK — the host serves less than the baseline
+            # allows for. Nothing new is exposed, so this must not fail the
+            # build; it asks for the baseline to be re-cut so the check keeps
+            # its grip. See the script's ACCEPTED_PUBLISHED_VALUES.
+            3) echo "::warning::the accepted published-refs baseline is now wider than the host — re-cut it with 'npm run check:metrics -- --print-baseline'" ;;
             *) exit "$status" ;;
           esac
