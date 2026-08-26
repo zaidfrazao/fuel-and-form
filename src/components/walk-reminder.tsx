@@ -68,7 +68,11 @@ export async function WalkReminder() {
     // to whatever page it sits above, and the landmark lets a screen-reader user
     // skip it once per screen rather than hear it before every one.
     <aside aria-label="Walk reminder" className="border-b border-border">
-      <div className="mx-auto flex w-full max-w-[640px] items-center justify-between gap-3 px-[22px] py-1.5 md:px-7">
+      {/* The demo banner's container, minus its `justify-between`: that one has
+          a dismiss button to push to the far edge and this one has nothing to
+          separate. The width and padding match every page's `main`, so the
+          sentence lines up with the content beneath it. */}
+      <div className="mx-auto flex w-full max-w-[640px] items-center gap-3 px-[22px] py-1.5 md:px-7">
         {/*
          * The canvas, a hairline, and `/ `-scale secondary text — the same
          * material as the demo banner and for the reasons set out there.
