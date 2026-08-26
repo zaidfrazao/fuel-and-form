@@ -111,7 +111,7 @@ Two of those eight rows do not resolve to a schedulable slot today, and both are
 
 The day-complete state is a separate question with a separate source — the Brand Guide's mock captions that screen "No tab bar" — and it does not turn on this criterion, though it has repeatedly been argued as though it did. Brand Guide § Navigation records that carve-out and where its authority actually comes from.
 
-Written down in FUEL-56 because it was being re-argued from scratch in a comment in every file that added a link. This paragraph is the reading; Brand Guide § Navigation defers to it and does not restate it.
+Written down in FUEL-56 because it was being re-argued from scratch in four files — the Right Now component, its day-complete summary, its test and its specimen page — citing four different authorities between them: this criterion, Brand Guide § Navigation, § Materials, and "the task's criterion". None cites the mock caption that actually carries the day-complete half of the rule. This paragraph is the reading; Brand Guide § Navigation defers to it and does not restate it.
 
 #### P2 — Weekly Plan & Meal Swap
 
