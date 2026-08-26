@@ -79,6 +79,7 @@ describe.skipIf(!configured)("the export, scoped", () => {
       "trainingTemplateEntries",
       "workoutLogs",
       "weightLogs",
+      "shoppingChecks",
     ] as const) {
       expect(document[key].length, `${key} should not be empty`).toBeGreaterThan(0);
     }

@@ -10,6 +10,7 @@ import type {
   MealLog,
   PlanTemplateEntry,
   Profile,
+  ShoppingCheck,
   TrainingTemplateEntry,
   Workout,
   WorkoutExercise,
@@ -178,6 +179,14 @@ const workoutLog = (id: string, date: string): WorkoutLog => ({
   loggedAt: new Date("2026-08-10T06:35:00.000Z"),
 });
 
+const shoppingCheck = (id: string, weekStart: string, itemKey: string): ShoppingCheck => ({
+  id,
+  userId: USER_ID,
+  weekStart,
+  itemKey,
+  checkedAt: new Date("2026-08-10T07:05:00.000Z"),
+});
+
 const weightLog = (id: string, date: string): WeightLog => ({
   id,
   userId: USER_ID,
@@ -200,6 +209,9 @@ const TABLES: ExportTables = {
   trainingTemplateEntries: [trainingEntry("bbbbbbbb-0000-4000-8000-000000000002", 1)],
   workoutLogs: [workoutLog("cccccccc-0000-4000-8000-000000000002", "2026-08-10")],
   weightLogs: [weightLog("dddddddd-0000-4000-8000-000000000002", "2026-08-10")],
+  shoppingChecks: [
+    shoppingCheck("eeeeeeee-0000-4000-8000-000000000002", "2026-08-10", "rolled oats"),
+  ],
 };
 
 /** Every table empty — a user set up but with nothing logged yet. */
@@ -215,6 +227,7 @@ const EMPTY: ExportTables = {
   trainingTemplateEntries: [],
   workoutLogs: [],
   weightLogs: [],
+  shoppingChecks: [],
 };
 
 const build = (tables: ExportTables = TABLES) =>
@@ -681,6 +694,35 @@ describe("every tie-break", () => {
       AGAINST_ID,
     );
     inOrder("weightLogs", [weightLog(LO, "2026-08-03"), weightLog(HI, "2026-08-03")], BY_ID);
+  });
+
+  test("shoppingChecks: week, then item, then id", () => {
+    inOrder(
+      "shoppingChecks",
+      [
+        shoppingCheck(HI, "2026-08-03", "onion"),
+        shoppingCheck(LO, "2026-08-24", "beef mince"),
+      ],
+      AGAINST_ID,
+    );
+    inOrder(
+      "shoppingChecks",
+      [
+        shoppingCheck(HI, "2026-08-03", "beef mince"),
+        shoppingCheck(LO, "2026-08-03", "onion"),
+      ],
+      AGAINST_ID,
+    );
+    // The last link is unreachable through the unique index — one week cannot
+    // hold the same item twice — and is asserted anyway, on this suite's own
+    // rule that a chain is only as ordered as its least-exercised link. A
+    // database constraint is not a reason to leave a comparator branch nothing
+    // has ever run.
+    inOrder(
+      "shoppingChecks",
+      [shoppingCheck(LO, "2026-08-03", "onion"), shoppingCheck(HI, "2026-08-03", "onion")],
+      BY_ID,
+    );
   });
 });
 

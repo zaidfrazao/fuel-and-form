@@ -4,9 +4,10 @@ import { type CalendarDate, parseCalendarDate } from "./date";
  * What `?week=` means — one reading, for the two places that read it.
  *
  * Lifted out of `app/plan/page.tsx`, which had it to itself until FUEL-38 gave
- * `/api/export/week` the same parameter. The screen and the file it downloads
- * have to agree about which seven days a URL names, and the way to guarantee
- * that is one function rather than two that currently match.
+ * `/api/export/week` the same parameter, and `/shopping` a third since FUEL-45.
+ * The grid, the file it downloads and the list of what to buy have to agree
+ * about which seven days a URL names, and the way to guarantee that is one
+ * function rather than three that currently match.
  *
  * ## It never throws
  *

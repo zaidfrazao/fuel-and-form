@@ -475,14 +475,23 @@ restores a uuid pointing at nothing.
 
   "weightLogs":              [ { "id", "date", "weightKg", "note", "createdAt" } ],
 
+  "shoppingChecks":          [ { "id", "weekStart", "itemKey", "checkedAt" } ],
+
   "derived": { "plannedIs": "template-as-of-export",
                "planVsActual": [ { "date", "slot", "plannedMealId", "swappedWithMealId", "actualMealId", "status", "note" } ] }
 }
 ```
 
 Dates are `YYYY-MM-DD` in the account's timezone. Instants — `createdAt`,
-`loggedAt`, `exportedAt` — are ISO 8601 in UTC. `profile` is an object rather
-than an array because `profiles` holds exactly one row per user.
+`loggedAt`, `checkedAt`, `exportedAt` — are ISO 8601 in UTC. `profile` is an
+object rather than an array because `profiles` holds exactly one row per user.
+
+`shoppingChecks` is the odd one, and it is here deliberately. `itemKey` is not
+an id but a normalised ingredient NAME — that is what lets a tick survive a
+swap regenerating the list underneath it, and it means these rows resolve
+against nothing else in the file. They are still an account's own data, and
+`src/lib/export.test.ts` makes "not in the backup" a decision someone has to
+write down rather than one they can skip.
 
 #### `derived`, the one key that is not rows
 

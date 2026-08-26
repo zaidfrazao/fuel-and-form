@@ -7,6 +7,7 @@ import type {
   MealSlot,
   PlanTemplateEntry,
   Profile,
+  ShoppingCheck,
   TrainingTemplateEntry,
   User,
   Workout,
@@ -176,6 +177,7 @@ export type ExportTables = {
   trainingTemplateEntries: readonly TrainingTemplateEntry[];
   workoutLogs: readonly WorkoutLog[];
   weightLogs: readonly WeightLog[];
+  shoppingChecks: readonly ShoppingCheck[];
 };
 
 /** One row, with `user_id` gone. */
@@ -263,6 +265,9 @@ export type ExportDocument = {
   trainingTemplateEntries: Exported<TrainingTemplateEntry>[];
   workoutLogs: (Omit<WorkoutLog, "userId" | "loggedAt"> & { loggedAt: Instant })[];
   weightLogs: (Omit<WeightLog, "userId" | "createdAt"> & { createdAt: Instant })[];
+  shoppingChecks: (Omit<ShoppingCheck, "userId" | "checkedAt"> & {
+    checkedAt: Instant;
+  })[];
   /** Readings, not rows. Last in the file, and the only key a restore skips. */
   derived: ExportDerived;
 };
@@ -508,6 +513,19 @@ export function buildExport({
         createdAt: row.createdAt.toISOString(),
       })),
       (a, b) => text(a.date, b.date) || text(a.id, b.id),
+    ),
+
+    // A week, then the items ticked within it — the order the list itself is
+    // read in. `week_start` is a date, so this reads as a history like the two
+    // above it, and `item_key` is unique within a week, which makes the chain
+    // total before it reaches `id` rather than because of it.
+    shoppingChecks: ordered(
+      tables.shoppingChecks.map((row) => ({
+        ...withoutUser(row),
+        checkedAt: row.checkedAt.toISOString(),
+      })),
+      (a, b) =>
+        text(a.weekStart, b.weekStart) || text(a.itemKey, b.itemKey) || text(a.id, b.id),
     ),
 
     // Last in the object and therefore last in the file, for the reason

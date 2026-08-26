@@ -181,8 +181,15 @@ export type ShoppingGroup = {
  * Where the seed genuinely names one thing twice, the fix belongs in the seed.
  * That is a data edit with a visible diff, not a heuristic in the aggregator
  * that has to be right about every future ingredient nobody has typed yet.
+ *
+ * Exported since FUEL-45, because the check-state action has to arrive at the
+ * same answer this does. A client sends the key it was rendered with, and the
+ * action normalises it again before writing — so the one place that decides
+ * what "the same ingredient" means is here. A second, matching implementation
+ * over there would agree until the day one of them changed, and the way anyone
+ * would find out is a tick that stopped sticking.
  */
-function normalise(name: string): string {
+export function normaliseKey(name: string): string {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
@@ -299,7 +306,7 @@ export function shoppingList<M extends { id: string }>(
   for (const day of days) {
     for (const cell of day.meals) {
       for (const row of byMeal.get(cell.meal.id) ?? []) {
-        const name = normalise(row.name);
+        const name = normaliseKey(row.name);
 
         if (!name) continue;
 

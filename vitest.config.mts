@@ -76,6 +76,7 @@ export default defineConfig({
         "src/lib/rotation.ts",
         "src/lib/session-entry.ts",
         "src/lib/shopping-list.ts",
+        "src/lib/shopping-text.ts",
         "src/lib/slot-times.ts",
         "src/lib/template-plan.ts",
         "src/lib/walk.ts",
@@ -362,6 +363,14 @@ export default defineConfig({
         // the kitchen on Thursday, which is the one place this app exists to
         // stop being a problem.
         "src/lib/shopping-list.ts": FULLY_COVERED,
+        // FUEL-45, the sentence the file above's arithmetic gets written down
+        // in — and gated for the adjacent reason rather than the same one. The
+        // aggregator's failures are wrong numbers; this one's are right numbers
+        // stripped of the qualifier that made them honest. "300g" and "300g +"
+        // differ by one character and by whether the shop comes up short, and
+        // the `+` is emitted from a branch that no other test in the suite has
+        // a reason to reach.
+        "src/lib/shopping-text.ts": FULLY_COVERED,
         // FUEL-34, and the same reasoning as session-entry.ts and slot-times.ts:
         // every branch in it is a refusal reachable by anyone who can POST to
         // the weigh-in action. What puts it here rather than in the ungated
