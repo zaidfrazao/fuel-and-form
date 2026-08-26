@@ -107,6 +107,12 @@ Two of those eight rows do not resolve to a schedulable slot today, and both are
 - [ ] Fully usable one-handed at 375px width; primary actions sit within thumb reach
 - [ ] Day boundary respects the configured timezone, not the server's
 
+**Reading "no navigation, no tab selection".** The first criterion constrains the answer, not the chrome. `/` must answer "what now?" at the moment it loads — the current item already on screen, nothing to choose first, no spinner on a warm cache. It does not mean the shell is absent from the route. Navigation is something the user *does*, and a pill sitting at the foot of the screen asks for none of it: the answer arrives without a tap either way. So the shell renders on `/`, and this criterion is satisfied by what `/` shows on arrival rather than by what it leaves out at its edges.
+
+The day-complete state is a separate question with a separate source — the Brand Guide's mock captions that screen "No tab bar" — and it does not turn on this criterion, though it has repeatedly been argued as though it did. Brand Guide § Navigation records that carve-out and where its authority actually comes from.
+
+Written down in FUEL-56 because it was being re-argued from scratch in four files — the Right Now component, its day-complete summary, its test and its specimen page — citing four different authorities between them: this criterion, Brand Guide § Navigation, § Materials, and "the task's criterion". None cites the mock caption that actually carries the day-complete half of the rule. This paragraph is the reading; Brand Guide § Navigation defers to it and does not restate it.
+
 #### P2 — Weekly Plan & Meal Swap
 
 **Description:** Two connected pieces.
