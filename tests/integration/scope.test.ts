@@ -308,9 +308,14 @@ describe.skipIf(!configured)("demo isolation — Testing Strategy § 1.4", () =>
 
     it("covers every user-owned table the schema exports", () => {
       // The sweep above is only as wide as this list. Pinning the count means a
-      // thirteenth table added later cannot silently go unswept — the walk picks
+      // fourteenth table added later cannot silently go unswept — the walk picks
       // it up, and this assertion is where someone notices it needs a fixture.
-      expect(userOwnedTables).toHaveLength(11);
+      //
+      // Twelve since FUEL-45 added `shopping_checks`, which is exactly what this
+      // assertion is for: the walk swept the new table immediately, and the
+      // count is what said out loud that it now needs a fixture row of its own
+      // before the sweep over it could mean anything.
+      expect(userOwnedTables).toHaveLength(12);
     });
   });
 
