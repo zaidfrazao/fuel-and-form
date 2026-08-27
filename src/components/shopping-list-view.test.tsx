@@ -472,6 +472,23 @@ describe("the checkbox survives the reflow", () => {
     }
   });
 
+  test("aligns the mark with the name's first line, not the middle of the row", () => {
+    // Once a row can be three lines tall, `items-center` puts the box beside
+    // the QUANTITY — measured at 375px: 17px below the name's line on
+    // `Potatoes`, 20px on `Greens`. The box belongs beside what you scan the
+    // list against. `items-center` cannot say that, so § Lists' 46px comes from
+    // padding instead: 23px of `text-body` line box plus 11.5px either side,
+    // with `min-h-[46px]` kept as the floor under § Touch Targets.
+    const { container } = list();
+
+    for (const label of container.querySelectorAll("label")) {
+      expect(label.className).toContain("items-start");
+      expect(label.className).not.toContain("items-center");
+      expect(label.className).toContain("py-[11.5px]");
+      expect(label.className).toContain("min-h-[46px]");
+    }
+  });
+
   test("still ticks the line when the amount is tapped", () => {
     // Both halves stayed inside the `<label>`. Moving the amount out to the
     // row's second line would have been less markup and would have cost the

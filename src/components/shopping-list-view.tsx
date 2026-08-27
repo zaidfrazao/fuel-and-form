@@ -100,7 +100,22 @@ function Row({
 
   return (
     <li className="flex flex-col border-b border-border last:border-b-0">
-      <label className="flex min-h-[46px] cursor-pointer items-center gap-3 py-2">
+      {/*
+       * `items-start` with the height made of padding rather than of centring.
+       *
+       * A row that can now take two lines has to decide what the tick box lines
+       * up with, and the answer is the NAME — it is what you scan the list
+       * against, and a box centred on a three-line row sits beside the quantity
+       * instead, which is FUEL-80's own complaint one level down.
+       *
+       * `items-center` cannot say that, so the vertical centring of a
+       * single-line row moves into the padding, where it is arithmetic rather
+       * than alignment: § Lists' 46px is 23px of `text-body` line box (fixed by
+       * the token, so it holds whether or not the font has loaded) plus 11.5px
+       * above and below. `min-h-[46px]` stays as the floor that guarantees
+       * § Touch Targets even if that arithmetic ever stops being true.
+       */}
+      <label className="flex min-h-[46px] cursor-pointer items-start gap-3 py-[11.5px]">
         <input
           type="checkbox"
           className="peer sr-only"
@@ -116,6 +131,10 @@ function Row({
          * The tick is an SVG path rather than a glyph so it inherits `ink-fg`
          * cleanly at any size and does not depend on a font having a checkmark
          * at the weight this needs.
+         *
+         * `mt-[2.5px]` is the rest of the label's arithmetic: the box is 18px
+         * and the line it belongs beside is 23px, so half the difference centres
+         * it on that line rather than hanging it from the top of one.
          */}
         <span
           aria-hidden
@@ -124,7 +143,7 @@ function Row({
           // SIBLING combinator, and the svg is a CHILD of this span rather than
           // a sibling of the input, so `peer-checked:opacity-100` on it would
           // never match and the box would fill with an invisible tick in it.
-          className="flex size-[18px] shrink-0 items-center justify-center rounded-[4px] border border-border [&>svg]:opacity-0 peer-checked:border-ink peer-checked:bg-ink peer-checked:[&>svg]:opacity-100 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+          className="mt-[2.5px] flex size-[18px] shrink-0 items-center justify-center rounded-[4px] border border-border [&>svg]:opacity-0 peer-checked:border-ink peer-checked:bg-ink peer-checked:[&>svg]:opacity-100 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
         >
           <svg viewBox="0 0 12 12" className="size-[10px] text-ink-fg">
             <path
