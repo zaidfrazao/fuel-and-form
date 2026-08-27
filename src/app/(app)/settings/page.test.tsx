@@ -75,6 +75,12 @@ describe("the up-link", () => {
    * § Navigation is explicit that neither is a parent: "Settings keeps its
    * link to it... but a link is not a parent." They keep their register — body
    * text, not the up-link's eyebrow — and their destination names.
+   *
+   * `Plan`, not `Weekly plan`, since FUEL-60. § Navigation: "a link is named
+   * by the table", and the table names that route `Plan` — the same name the
+   * shell's pill and the up-link on this very screen's siblings already use.
+   * The `<h1>` there still reads "Weekly plan", which the rule allows: a
+   * heading may say more than the name it maps to, and "Weekly plan" ⊃ "Plan".
    */
   test("does not turn the links Settings offers into second ways back", async () => {
     render(await SettingsPage());
@@ -82,10 +88,12 @@ describe("the up-link", () => {
     expect(
       screen.getByRole("link", { name: "Weekly template" }).getAttribute("href"),
     ).toBe("/plan/template");
-    expect(
-      screen.getByRole("link", { name: "Weekly plan" }).getAttribute("href"),
-    ).toBe("/plan");
+    expect(screen.getByRole("link", { name: "Plan" }).getAttribute("href")).toBe("/plan");
     expect(screen.queryByRole("link", { name: "Back to Plan" })).toBeNull();
+
+    // The second name this destination used to have here. Held as an absence
+    // so it cannot come back as the more descriptive-sounding of the two.
+    expect(screen.queryByRole("link", { name: "Weekly plan" })).toBeNull();
   });
 });
 
@@ -122,7 +130,10 @@ describe("the export link", () => {
     // arrives.
     render(await SettingsPage());
 
-    const link = screen.getByRole("link", { name: "open the weekly plan" });
+    // Inside a sentence, so the sentence supplies "open" and the words after
+    // it — but the destination is still named from the table, which is why
+    // this reads "open Plan" rather than "open the weekly plan".
+    const link = screen.getByRole("link", { name: "open Plan" });
 
     expect(link.getAttribute("href")).toBe("/plan");
   });

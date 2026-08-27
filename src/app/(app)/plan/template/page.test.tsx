@@ -50,8 +50,9 @@ describe("the up-link", () => {
   /*
    * The bug, at the one place it was visible.
    *
-   * Two screens link here — `/plan` ("Edit the weekly template") and
-   * `/settings` ("Weekly template") — and only one of them is the parent.
+   * Two screens link here — `/plan` and `/settings` — and only one of them is
+   * the parent. Both name it "Weekly template" since FUEL-60; `/plan`'s said
+   * "Edit the weekly template" when this was written.
    * § Navigation: "**`/plan/template` has one parent and it is `/plan`**...
    * Settings keeps its link to it... but a link is not a parent." Arriving
    * from the weekly plan, which is the likelier route since that is where the

@@ -136,16 +136,34 @@ describe("the route", () => {
    * never be styled as an up-link" — and these go DOWN to level 2, which makes
    * the collision worse than sideways. They keep their own naming; nothing
    * here is named "Back to".
+   *
+   * The names are the route table's, which is § Navigation's other rule about
+   * them — "a link is named by the table". Asserted as exact strings rather
+   * than a pattern, because the point is that these two words are the same two
+   * words `/shopping` and `/plan/template` head with.
    */
   test("keeps its links to level 2 named as destinations, not as ways back", async () => {
     await show();
 
     expect(
-      screen.getByRole("link", { name: "Edit the weekly template" }).getAttribute("href"),
+      screen.getByRole("link", { name: "Weekly template" }).getAttribute("href"),
     ).toBe("/plan/template");
     expect(
-      screen.getByRole("link", { name: "Shopping list for this week" }).getAttribute("href"),
+      screen.getByRole("link", { name: "Shopping list" }).getAttribute("href"),
     ).toBe("/shopping?week=2026-03-09");
+  });
+
+  /*
+   * The names FUEL-60 replaced, held as absences so the pair cannot drift
+   * back. One was a noun phrase with a qualifier and the other an imperative,
+   * sitting one above the other; "for this week" also read as the current week
+   * on any week that was not it, while linking to the week on screen.
+   */
+  test("names neither link with a qualifier nor as an instruction", async () => {
+    await show();
+
+    expect(screen.queryByRole("link", { name: "Shopping list for this week" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Edit the weekly template" })).toBeNull();
   });
 
   test("says which table a tap here writes", async () => {

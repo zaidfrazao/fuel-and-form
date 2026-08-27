@@ -1051,6 +1051,16 @@ export function RightNow({
   /*
    * The way to `/settings` — FUEL-21, and now the only link at the foot of `/`.
    *
+   * Named `Settings`, which it was not until FUEL-60. It read `Slot times`,
+   * which was true when FUEL-21 added it and slot times were the whole screen,
+   * and a subset of the destination ever since: `/settings` also holds the walk
+   * reminder, the push subscription, the export, the template link and
+   * sign-out, and its own `<h1>` says Settings. The string is not lost — the
+   * form there still carries it as one `<h2>` of the sections on that page,
+   * which is where a name for one section belongs. § Navigation's route table
+   * names this route `Settings`, and a link that names a destination uses the
+   * table's name; the shell and the four up-links already do.
+   *
    * It used to be four. `Weekly plan`, `Training` and `Weight` were added one
    * task at a time because there was no other way to reach those screens, and
    * FUEL-58 gave them one: § Navigation's shell carries all four destinations
@@ -1086,7 +1096,7 @@ export function RightNow({
         href="/settings"
         className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
       >
-        Slot times
+        Settings
       </Link>
     </span>
   );

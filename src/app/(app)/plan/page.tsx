@@ -238,22 +238,35 @@ export default async function PlanPage({
 
       <div className="flex flex-col gap-2">
         {/*
-         * Carries the week being shown, so the list is for the seven days on
-         * screen rather than for whichever week the server resolves "now" to.
-         * The download link above takes the same care, and for the same reason.
+         * Two links, two names, and both are the ones § Navigation's route
+         * table gives these routes — which is also what each screen's `<h1>`
+         * says on arrival. Until FUEL-60 they read "Shopping list for this
+         * week" and "Edit the weekly template": a noun phrase with a qualifier
+         * and an imperative, for two links sitting one above the other.
+         *
+         * "for this week" went with the qualifier and is not missed. The week
+         * is the grid directly above these links, the href below carries it,
+         * and on any week but the current one the phrase read as the current
+         * one while linking to the week on screen — the half of that label
+         * least able to be true.
+         *
+         * The href still carries the week being shown, so the list is for the
+         * seven days on screen rather than for whichever week the server
+         * resolves "now" to. The download link above takes the same care, and
+         * for the same reason.
          */}
         <Link
           href={`/shopping?week=${plan.monday}`}
           className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
         >
-          Shopping list for this week
+          Shopping list
         </Link>
 
         <Link
           href="/plan/template"
           className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
         >
-          Edit the weekly template
+          Weekly template
         </Link>
       </div>
     </main>
