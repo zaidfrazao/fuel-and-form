@@ -222,7 +222,10 @@ describe("resolveParent", () => {
       href: "/plan",
       label: "Plan",
     });
-    expect(resolveParent("/shopping/")).toEqual({ href: "/plan", label: "Plan" });
+    expect(resolveParent("/shopping/")).toEqual({
+      href: "/plan",
+      label: "Plan",
+    });
   });
 
   /*
@@ -249,6 +252,26 @@ describe("resolveParent", () => {
       ["/settings", "Now", "Now"],
     ]);
   });
+
+  /*
+   * The invariant tying the two columns together, so keeping both fields does
+   * not become two facts that drift apart.
+   *
+   * `destination` and `parent` are different questions — which slot glows,
+   * versus where "up" goes — and only the first survives a level-3 route. But
+   * § Navigation does bind them at level 2: a level-2 route lights its parent's
+   * slot, which is what makes `/shopping` and `/plan/template` both light Plan.
+   * If someone gives a route a new parent and forgets its destination, the
+   * sidebar and the up-link start disagreeing — which is exactly the state
+   * `/plan/template` was in before FUEL-59, with the sidebar saying Plan and
+   * the header saying Settings.
+   */
+  test.each(table)(
+    "%s lights the same destination its parent does",
+    (route, parentHref) => {
+      expect(resolveActive(route)).toBe(resolveActive(parentHref));
+    },
+  );
 
   /*
    * The query string is the caller's, not the table's. `/shopping` goes up to

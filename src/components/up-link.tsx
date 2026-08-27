@@ -122,9 +122,18 @@ export function UpLink({
       className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
       {/*
-       * Hidden whole, as `week-nav.tsx` hides its own: the `aria-label` above is
-       * the name, and leaving the text visible to the tree would append a second
-       * copy of it in browsers that concatenate.
+       * Hidden whole, as `week-nav.tsx` hides its own.
+       *
+       * The glyph has to be hidden or it is announced — "single left-pointing
+       * angle quotation mark", or a pause, depending on the reader. Wrapping
+       * the NAME in the same span is not doing accessibility work: `aria-label`
+       * on the anchor already wins the name computation outright, so the text
+       * inside is never consulted either way. It is here so the markup matches
+       * the paginator's, which is the only other place in the app that puts a
+       * glyph beside a name.
+       *
+       * The text stays in the DOM regardless, so WCAG 2.5.3 still has a visible
+       * word to compare against — see the `aria-label` above.
        */}
       <span aria-hidden="true">&lsaquo; {parent.label}</span>
     </Link>
