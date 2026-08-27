@@ -11,6 +11,7 @@ import { DayRuler } from "@/components/day-ruler";
 import { ExerciseList } from "@/components/exercise-list";
 import { KeyValueGrid, SlashMeta } from "@/components/kv-grid";
 import { MacroGrid } from "@/components/macro-grid";
+import { PageMain } from "@/components/page-main";
 import { SwapSheet, type PlannedMeal, type SwappableMeal } from "@/components/swap-sheet";
 import { WalkRow } from "@/components/walk-row";
 import { Button } from "@/components/ui/button";
@@ -602,9 +603,9 @@ function SwapNote({
  */
 function Screen({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col px-[22px] pt-[22px] md:px-7">
+    <PageMain className="pt-[22px]">
       {children}
-    </main>
+    </PageMain>
   );
 }
 

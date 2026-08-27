@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import { PageMain } from "@/components/page-main";
 import { WeighIns, type WeighInRow } from "@/components/weigh-ins";
 import { getSession } from "@/lib/auth/session";
 import { loadWeighIns } from "@/lib/db/queries/weight";
@@ -75,12 +76,12 @@ export default async function WeightPage() {
   // will appear rather than nudge.
   if (!history) {
     return (
-      <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col justify-center gap-2 px-[22px] md:px-7">
+      <PageMain className="justify-center gap-2">
         <h1 className="text-title text-text-primary">No weigh-ins yet</h1>
         <p className="text-body text-text-secondary">
           Weigh-ins appear here once a profile exists for this account.
         </p>
-      </main>
+      </PageMain>
     );
   }
 

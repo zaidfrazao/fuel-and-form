@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import { PageMain } from "@/components/page-main";
 import { UpLink } from "@/components/up-link";
 import { getSession } from "@/lib/auth/session";
 import { loadTemplate } from "@/lib/db/queries/template";
@@ -47,7 +48,7 @@ export default async function TemplatePage() {
   const { entries, meals } = await loadTemplate(session.userId);
 
   return (
-    <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col gap-7 px-[22px] py-8 md:px-7">
+    <PageMain className="gap-7 py-8">
       <header className="flex flex-col gap-2">
         {/*
          * `/plan`, where this used to send people to `/settings`.
@@ -118,6 +119,6 @@ export default async function TemplatePage() {
           plan with.
         </p>
       )}
-    </main>
+    </PageMain>
   );
 }

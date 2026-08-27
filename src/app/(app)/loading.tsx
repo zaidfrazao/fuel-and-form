@@ -20,6 +20,8 @@
  * the boxes are, literally, nothing.
  */
 
+import { PageMain } from "@/components/page-main";
+
 /** A placeholder block. `surface` is the stone fill, so it recedes in both modes. */
 function Block({ className }: { className: string }) {
   return <div className={`rounded-sm bg-surface ${className}`} />;
@@ -27,7 +29,7 @@ function Block({ className }: { className: string }) {
 
 export default function Loading() {
   return (
-    <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col px-[22px] pt-[22px] md:px-7">
+    <PageMain className="pt-[22px]">
       <p className="sr-only" role="status">
         Loading today&rsquo;s plan.
       </p>
@@ -81,6 +83,6 @@ export default function Loading() {
           <Block className="h-[2.875rem] flex-1 rounded-md" />
         </div>
       </div>
-    </main>
+    </PageMain>
   );
 }
