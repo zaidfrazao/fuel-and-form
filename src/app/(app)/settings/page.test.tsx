@@ -55,6 +55,40 @@ beforeEach(() => {
   loadSchedule.mockResolvedValue(SCHEDULE);
 });
 
+describe("the up-link", () => {
+  /*
+   * `/settings` is parented to `/` — § Navigation's route table — and the link
+   * above the `<h1>` used to say "Right Now" while `/plan`'s said "Right now"
+   * for the same screen. The name is the shell's name now, resolved from the
+   * table by `up-link.tsx`, so there is one of it.
+   */
+  test("goes up to Now, named as a way back", async () => {
+    render(await SettingsPage());
+
+    expect(
+      screen.getByRole("link", { name: "Back to Now" }).getAttribute("href"),
+    ).toBe("/");
+  });
+
+  /*
+   * Settings links DOWN to the weekly template and across to the plan, and
+   * § Navigation is explicit that neither is a parent: "Settings keeps its
+   * link to it... but a link is not a parent." They keep their register — body
+   * text, not the up-link's eyebrow — and their destination names.
+   */
+  test("does not turn the links Settings offers into second ways back", async () => {
+    render(await SettingsPage());
+
+    expect(
+      screen.getByRole("link", { name: "Weekly template" }).getAttribute("href"),
+    ).toBe("/plan/template");
+    expect(
+      screen.getByRole("link", { name: "Weekly plan" }).getAttribute("href"),
+    ).toBe("/plan");
+    expect(screen.queryByRole("link", { name: "Back to Plan" })).toBeNull();
+  });
+});
+
 describe("the export link", () => {
   test("points at the endpoint, as a plain anchor", async () => {
     render(await SettingsPage());

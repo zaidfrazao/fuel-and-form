@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { UpLink } from "@/components/up-link";
 import { WeekGrid } from "@/components/week-grid";
 import { WeekNav } from "@/components/week-nav";
 import { getSession } from "@/lib/auth/session";
@@ -159,12 +160,12 @@ export default async function PlanPage({
     // 1024px for the week grid".
     <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[1024px] flex-col gap-7 px-[22px] py-8 md:px-7">
       <header className="flex flex-col gap-2">
-        <Link
-          href="/"
-          className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
-        >
-          Right now
-        </Link>
+        {/*
+         * No `week` — the parent is `/`, which takes no `searchParams` and has
+         * no week to be on. The grid's own `?week=` is carried by `WeekNav`
+         * below and by the "Back to this week" reset at the foot.
+         */}
+        <UpLink pathname="/plan" />
         <h1 className="text-title text-text-primary">Weekly plan</h1>
         {/*
          * What a tap on this screen does, before anything is tapped — the

@@ -119,6 +119,35 @@ describe("the route", () => {
     expect(screen.getByText("9 – 15 Mar 2026")).toBeTruthy();
   });
 
+  /*
+   * The page passes the component its OWN route. `up-link.test.tsx` proves
+   * `/plan` resolves to no parent; it cannot prove this page says "/plan"
+   * rather than "/plan/template", and the wrong string here would render a
+   * link back to a screen the user is not below.
+   */
+  test("is level 1, so it offers no way up", async () => {
+    await show();
+
+    expect(screen.queryByRole("link", { name: /^Back to (Now|Plan)$/ })).toBeNull();
+  });
+
+  /*
+   * The two cross-links this screen carries. § Navigation: a cross-link "must
+   * never be styled as an up-link" — and these go DOWN to level 2, which makes
+   * the collision worse than sideways. They keep their own naming; nothing
+   * here is named "Back to".
+   */
+  test("keeps its links to level 2 named as destinations, not as ways back", async () => {
+    await show();
+
+    expect(
+      screen.getByRole("link", { name: "Edit the weekly template" }).getAttribute("href"),
+    ).toBe("/plan/template");
+    expect(
+      screen.getByRole("link", { name: "Shopping list for this week" }).getAttribute("href"),
+    ).toBe("/shopping?week=2026-03-09");
+  });
+
   test("says which table a tap here writes", async () => {
     await show();
 

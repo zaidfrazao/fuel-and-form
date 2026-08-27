@@ -157,9 +157,30 @@ describe("the screen", () => {
     // Carrying the week, so the two screens cannot end up a week apart.
     await page({ week: WED });
 
-    expect(screen.getByRole("link", { name: "Weekly plan" }).getAttribute("href")).toBe(
+    // Named "Back to Plan", not "Weekly plan". The header link used to be a
+    // bare destination name in the same register as a cross-link — see
+    // `up-link.tsx`, which is where the naming is now decided for all four
+    // screens that carry one.
+    expect(screen.getByRole("link", { name: "Back to Plan" }).getAttribute("href")).toBe(
       `/plan?week=${MON}`,
     );
+  });
+
+  test("keeps the up-link distinct from the link that resets the week", async () => {
+    // Both go to `/plan`-ish places and both are a "way back", which is why
+    // they are asserted together: one moves up a level carrying the week, the
+    // other stays on this screen and drops it. § Navigation's cross-link rule
+    // is about exactly this collision.
+    loadShoppingWeek.mockResolvedValue({ ...WEEK, monday: "2026-03-16", today: MON });
+
+    await page({ week: "2026-03-16" });
+
+    expect(screen.getByRole("link", { name: "Back to Plan" }).getAttribute("href")).toBe(
+      "/plan?week=2026-03-16",
+    );
+    expect(
+      screen.getByRole("link", { name: "Back to this week" }).getAttribute("href"),
+    ).toBe("/shopping");
   });
 
   test("offers a way back when the week shown is not the current one", async () => {
