@@ -53,6 +53,12 @@ import { weekTotals } from "@/lib/week-totals";
  * `app/layout.tsx` is deliberately left scalable — removing pinch-zoom would be
  * the accessibility failure, not the fix.
  *
+ * That sentence was written as a design intent and was false in the browser for
+ * as long as it has been here: the page body scrolled sideways 629px at 375px
+ * and 234px at 1024px. The `relative` on the container below is what finally
+ * makes it true — the mechanic is explained there, and it is worth knowing that
+ * the escape was invisible, because everything that escaped was `sr-only`.
+ *
  * ## One umber mark
  *
  * § The Four Rules: "today's column header in the week grid" is named as one of
@@ -407,8 +413,25 @@ export function WeekGrid({
        * it bleed to the screen edges inside a guttered page, so the seventh
        * column is reachable without the gutter eating the last few pixels of
        * the swipe.
+       *
+       * `relative` is load-bearing and was missing until FUEL-65. An `overflow`
+       * clip only applies to descendants whose CONTAINING BLOCK is inside the
+       * scroll container, and this table holds nine `sr-only` cells — the
+       * caption and each day's full date — which `sr-only` makes
+       * `position: absolute`. With the wrapper `static`, their containing block
+       * was the initial one, so they were never clipped: they sat out at the
+       * table's true width and the whole PAGE scrolled sideways to reach them.
+       * Measured at 375×667 before the fix: `documentElement.scrollWidth` 1004
+       * against a 375px viewport, the rightmost `sr-only` ending at 1003.73px,
+       * and 629px of pan into a region that painted blank, because `sr-only`
+       * hides them with `clip-path`. `relative` makes this element their
+       * containing block, and the clip that was already here starts applying to
+       * them.
+       *
+       * It does not disturb the pinned column: a `sticky` cell positions
+       * against the nearest scrollport, which is this element either way.
        */}
-      <div className="-mx-[22px] overflow-x-auto px-[22px] md:mx-0 md:px-0">
+      <div className="relative -mx-[22px] overflow-x-auto px-[22px] md:mx-0 md:px-0">
         <table className="w-max min-w-full border-separate border-spacing-0 text-left">
           <caption className="sr-only">
             The week&rsquo;s plan, by day and meal slot. Swapped meals are marked.

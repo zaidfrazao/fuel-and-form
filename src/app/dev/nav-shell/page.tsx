@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { NavShell } from "@/components/nav-shell";
 import { ThemeToggle } from "@/components/theme-toggle";
 
+import { ShellHeightCheck } from "./shell-height-check";
+
 /**
  * The navigation shell — Brand Guide § Navigation, rendered.
  *
@@ -13,11 +15,16 @@ import { ThemeToggle } from "@/components/theme-toggle";
  * bar. `nav-shell.test.tsx` takes the accessibility contract and leaves those
  * here, the same division `dot-grid` uses.
  *
- * The last section WAS the load-bearing one, and is now the only part of this
- * page that history has overtaken. It is the arrangement FUEL-58 had to build,
- * at 375×667, with a real scroll container and a real `sticky bottom-0` bar
- * copied from `right-now.tsx` — and FUEL-58 built it, so the real `/` is now
- * the honest specimen for that claim. It measured 0px overlap there too.
+ * The last two sections are the load-bearing ones and both are about where the
+ * shell sits. FUEL-58 built the arrangement the first of them shows, so the real
+ * `/` is the honest specimen for it; it is kept because it is the only place the
+ * failure can be produced on purpose, by putting the bar back on `bottom-0`.
+ *
+ * FUEL-65 pinned the shell and added the second. That one is not a drawing at
+ * all — it measures, and says AGREES or DISAGREES. It exists because pinning the
+ * shell moved a number into globals.css that nothing derives from the shell, and
+ * the way that number goes wrong is that a primary action quietly disappears
+ * under the nav on `/` and `/training`.
  *
  * Not a product screen, and FUEL-58 considered deleting it as this header
  * asked. Kept, for the reason /dev/tokens and /dev/day-ruler were kept: the
@@ -164,28 +171,34 @@ export default function NavShellSpecimen() {
       </Section>
 
       <Section
-        title="The collision, at 375×667"
-        note="`/`'s sticky action bar and the shell both want the bottom of the screen. Scroll this frame to the end: the bar stops where <main> does, and the shell sits below it."
+        title="The stack, at 375×667"
+        note="`/`'s sticky action bar and the shell both want the bottom of the screen. Scroll this frame: both stay in view, the shell against the bottom edge and the bar resting on top of it, with no gap and no overlap."
       >
         {/*
-         * The arrangement FUEL-58 has to build, not a drawing of it.
+         * The arrangement as FUEL-65 leaves it, not a drawing of it.
          *
          * The frame is a scroll container at the phone's viewport size. Inside
          * it, the page column is `min-h-full flex flex-col`; `<main>` is
          * `flex-1` and holds the sticky bar; the shell is main's SIBLING, after
-         * it. That sibling relationship is the whole resolution: a `sticky
-         * bottom-0` element is clamped to its own parent's box, so once the bar
-         * lives inside `<main>` it can only reach main's bottom edge — which is
-         * where the shell begins. Nothing overlaps, and the bar keeps the
-         * reach-friendly placement `right-now.tsx:396` argues for.
+         * it.
          *
-         * Put the shell INSIDE `<main>` instead and the bar floats over it, which
-         * is the failure this section exists to make visible.
+         * That sibling relationship USED to be the whole resolution: with the
+         * shell in flow at the end of the column, a bar at `bottom: 0` was
+         * clamped to main's box and could only reach main's bottom edge, which
+         * was where the shell began. FUEL-65 pinned the shell — it now floats up
+         * over the page rather than waiting at the end of it — so that clamp no
+         * longer separates them and both would claim the same strip.
          *
-         * The bar below is copied from `right-now.tsx:437` with its own bottom
-         * inset removed — FUEL-58 moves that inset onto the shell, and the
-         * comment at `right-now.tsx:403` explaining why it lives on the bar has
-         * to be rewritten when it does.
+         * What separates them now is the offset: the bar sticks to
+         * `--nav-shell-h` rather than to 0, so it comes to rest exactly one
+         * shell-height off the bottom. The section below this one asserts that
+         * the variable and the shell agree; this one shows the result. Set the
+         * bar back to `bottom-0` and it slides underneath, which is the failure
+         * this section exists to make visible.
+         *
+         * The bar is copied from `right-now.tsx` and carries no bottom inset of
+         * its own: the shell owns the home indicator, and it is between this bar
+         * and the bottom of the screen.
          */}
         {/*
          * Breaking out of the page's own 22px gutters, so the frame is genuinely
@@ -208,7 +221,7 @@ export default function NavShellSpecimen() {
                   </p>
                 ))}
 
-                <div className="sticky bottom-0 mt-auto flex flex-col gap-3 bg-background pt-[30px]">
+                <div className="sticky bottom-[var(--nav-shell-h)] mt-auto flex flex-col gap-3 bg-background pt-[30px]">
                   <span className="flex h-12 items-center justify-center rounded-md bg-ink text-body font-medium text-ink-fg">
                     Log eaten
                   </span>
@@ -222,6 +235,13 @@ export default function NavShellSpecimen() {
             </div>
           </div>
         </div>
+      </Section>
+
+      <Section
+        title="`--nav-shell-h` against the shell"
+        note="The one number globals.css and three action bars have to agree about, checked against the shell that defines it. Runs below 1024px."
+      >
+        <ShellHeightCheck />
       </Section>
     </main>
   );

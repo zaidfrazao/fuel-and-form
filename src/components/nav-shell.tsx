@@ -62,13 +62,26 @@ import { cn } from "@/lib/utils";
  * ## Where it sits, and the bar it does not cover
  *
  * `.tabbar` is `margin-top: auto` in the mock — normal flow, not `fixed` and not
- * `sticky` — and the mock's own screens stack it *after* the action bar. That is
- * the resolution to the collision with `/`'s `sticky bottom-0` box: the shell is
- * the last child in the page column, and the bar's containing block becomes the
- * `<main>` above it, so the bar stops at the point the shell begins instead of
- * floating over it. Mounting that arrangement is FUEL-58's; this component only
- * has to be the kind of thing that can be mounted that way, which means staying
- * in flow and owning the bottom inset itself.
+ * `sticky` — and the mock's own screens stack it *after* the action bar. This
+ * component was built that way, and FUEL-65 changed it: below `lg` the shell is
+ * now `sticky bottom-0`. § Navigation carries the override and the reasoning;
+ * what matters here is that the mock's `margin-top: auto` is no longer the live
+ * rule, so it is not restored as a fidelity fix.
+ *
+ * The measurement that forced it, at 375×667: the shell sat at the very end of
+ * the document on every route, so reaching it meant scrolling 525px on `/`,
+ * 1373px on `/training` and 3636px on `/weight` — and on `/` the sticky action
+ * bar occupied the exact strip a tab bar would, so the screen showed a pinned
+ * bar and no navigation at all. A shell that far down is not navigation; it is
+ * a footer.
+ *
+ * The collision that the old arrangement resolved is real and comes back, so it
+ * is re-resolved rather than dropped. `/`'s and `/training`'s `sticky bottom-0`
+ * action bars stick to `--nav-shell-h` instead of to 0, which is this shell's
+ * own height, declared once in globals.css. Staying `sticky` rather than
+ * `fixed` is what keeps the rest of FUEL-58's arrangement intact: the shell is
+ * still in flow, still the last child of the page column, and still reserves its
+ * own space, so no page needs padding to keep its final line clear of it.
  */
 export function NavShell({
   /**
@@ -110,6 +123,29 @@ export function NavShell({
         // a device with no notch. The shell owns this because it is the last
         // thing in the column; see the header.
         "mt-auto flex justify-center pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))]",
+        /*
+         * Pinned to the bottom of the viewport — FUEL-65. `sticky` and not
+         * `fixed`: sticky stays in flow, so the shell still reserves its own
+         * space at the end of the column and no page owes it compensating
+         * padding to keep its last line clear. `mt-auto` above still puts it at
+         * the bottom of a short page; this only adds holding it there on a long
+         * one.
+         *
+         * `bg-background` because content now passes underneath it, where
+         * before nothing did. `z-20` puts it over the action bars, which is the
+         * safe direction to fail: the bars carry their own offset off
+         * `--nav-shell-h` and so never reach it, but if that offset were ever
+         * wrong the shell covering a bar is recoverable by scrolling, while a
+         * bar covering the app's only navigation is not.
+         *
+         * `max-lg:`, rather than a `lg:static` that undoes it. The layout hands
+         * this component `lg:sticky lg:top-0` for the sidebar, and both sets
+         * would land on the same element — leaving a sticky box holding a
+         * `top-0` and a `bottom-0` at once, resolved by whichever class the
+         * merge happened to keep. Below the breakpoint only, there is nothing
+         * to resolve.
+         */
+        "max-lg:sticky max-lg:bottom-0 max-lg:z-20 max-lg:bg-background",
         // As a sidebar the pill's centring, its auto top margin and its bottom
         // inset are all wrong: it is a column at the top left, and nothing is
         // below it to keep clear of the home indicator.

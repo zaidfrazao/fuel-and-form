@@ -155,9 +155,24 @@ function Row({
          *
          * Absent entirely rather than an em dash when a line has no quantity —
          * `shopping-text.ts` argues it: for salt, the name IS the instruction.
+         *
+         * `shrink-0` protects a short amount from being squeezed to nothing by a
+         * long name, and until FUEL-65 that was all it did — including when the
+         * AMOUNT was the long one. `shopping-text.ts` composes household
+         * measures onto the weight, so these run to "800g · 2/3–3/4 cup, or a
+         * small handful", and a span that refuses to shrink simply left the row:
+         * measured at 375px, four lines reached 487px and the whole page scrolled
+         * 112px sideways to follow them.
+         *
+         * `max-w-[55%]` bounds it without giving up the protection — a short
+         * amount is nowhere near the cap and behaves exactly as before — and
+         * `truncate` handles the ones that hit it, in the register the name
+         * beside it already uses. The weight leads the string, so what an
+         * ellipsis takes is the parenthetical, which is the half § Slash Metadata
+         * calls secondary.
          */}
         {amount && (
-          <span className="shrink-0 text-slash tabular-nums text-text-secondary">
+          <span className="max-w-[55%] shrink-0 truncate text-slash tabular-nums text-text-secondary">
             {amount}
           </span>
         )}

@@ -542,16 +542,21 @@ export function Training({
 
       {/*
        * § Touch Targets: "primary actions sit in the bottom third, within thumb
-       * reach". `sticky bottom-0` on a `mt-auto` box keeps the bar inside the
-       * viewport while the exercise list is long, and lets it settle at the end
-       * of the column when it is not — `right-now.tsx` carries the measurement
-       * that made this necessary rather than tidy. The safe-area inset is NOT
-       * here: FUEL-58 moved it to the § Navigation shell, which is the last
-       * thing in the page column and the only one with the home indicator
-       * beneath it.
+       * reach". `sticky` on a `mt-auto` box keeps the bar inside the viewport
+       * while the exercise list is long, and lets it settle at the end of the
+       * column when it is not — `right-now.tsx` carries the measurement that
+       * made this necessary rather than tidy. The safe-area inset is NOT here:
+       * FUEL-58 moved it to the § Navigation shell, which is the last thing in
+       * the page column and the only one with the home indicator beneath it.
+       *
+       * It stops at `--nav-shell-h` rather than at 0 because FUEL-65 pinned that
+       * shell to the bottom of the viewport, and the two would otherwise occupy
+       * the same strip with the shell on top. `right-now.tsx` carries that
+       * argument in full; this bar and the `loading.tsx` skeleton follow it so
+       * the primary does not move between the three.
        */}
       {session ? (
-        <div className="sticky bottom-0 mt-auto flex flex-col gap-3 bg-background pt-[30px]">
+        <div className="sticky bottom-[var(--nav-shell-h)] mt-auto flex flex-col gap-3 bg-background pt-[30px] lg:bottom-0">
           {failure && (
             <div
               role="alert"

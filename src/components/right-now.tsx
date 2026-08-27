@@ -394,7 +394,7 @@ function Anytime({
  * at y=703 — thirty-six pixels below the fold, reachable only by scrolling.
  * That is the criterion failing on the default case, not an edge.
  *
- * `sticky bottom-0` fixes the reach without giving up the natural placement:
+ * `sticky` fixes the reach without giving up the natural placement:
  * the bar keeps its own box at the end of the column, so it never overlaps the
  * last row once the page is scrolled to the end, and it is pinned inside the
  * viewport until then. `bg-background` is what makes it opaque as content
@@ -406,6 +406,18 @@ function Anytime({
  * — FUEL-58 — which is now the last thing in the page column and the only thing
  * with the home indicator beneath it. A bar that kept its own inset would be
  * clearing an indicator that is two elements away, and the gap would show.
+ *
+ * ## It sticks to the shell's height, not to zero
+ *
+ * FUEL-65 pinned that shell to the bottom of the viewport, and two boxes
+ * claiming `bottom: 0` means the later one wins — the shell, covering this bar
+ * and the one action P1 is measured on. So the bar stops at `--nav-shell-h`
+ * instead, the shell's own height, declared once in globals.css and read here
+ * and in `training.tsx` and `loading.tsx`.
+ *
+ * `lg:bottom-0` because above 1024px the shell is a sidebar to the left and
+ * there is nothing under this bar to clear. Offsetting there would float it
+ * 86px off the foot of a desktop window for no reason.
  *
  * Swap is offered for a meal and not for a session: a swap substitutes one meal
  * for another from the library (PRD § P2), and there is no equivalent for a
@@ -437,7 +449,7 @@ function Actions({
   if (!item && !undoable && !failure) return null;
 
   return (
-    <div className="sticky bottom-0 mt-auto flex flex-col gap-3 bg-background pt-[30px]">
+    <div className="sticky bottom-[var(--nav-shell-h)] mt-auto flex flex-col gap-3 bg-background pt-[30px] lg:bottom-0">
       {/*
        * § Feedback: "inline banner at the point of action, value reverted,
        * 'Try again'. Never a modal." The point of action is this bar, so the
