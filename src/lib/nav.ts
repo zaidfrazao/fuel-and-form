@@ -140,6 +140,31 @@ const ROUTES = new Map<string, Route>([
 ]);
 
 /**
+ * Every path the table holds — the table's own census, for callers that need to
+ * ask it what it contains rather than what one route resolves to.
+ *
+ * FUEL-62 is the reason this exists, and the reason is worth stating because the
+ * export looks redundant beside the two functions below. `ROUTES` is private, so
+ * until now the only questions anything could ask were about a path it already
+ * had. Nothing could ask "what are all of them?" — and a reachability test that
+ * cannot enumerate the table has to carry its own list of routes instead, which
+ * is a COPY. A copy passes forever after someone adds a row here and forgets it,
+ * which is precisely the drift FUEL-62 exists to catch. One list, two readers.
+ *
+ * Frozen, and a plain array rather than the `Map`: the shape a caller wants is a
+ * list of strings, and handing out the `Map` itself would hand out `set` and
+ * `delete` along with it. `readonly` alone is a compile-time claim, and the
+ * consumer here is a test — the one place where a type assertion is least able
+ * to stop a mistake, since a test can cast anything it likes.
+ *
+ * Order is `ROUTES`' insertion order, which is § Navigation's table order: the
+ * four level-1 routes and then the three level-2 ones. Nothing depends on that
+ * and no test should start to — `DESTINATIONS` is the array whose order is
+ * load-bearing, and it is a different one for a different reason.
+ */
+export const ROUTE_PATHS: readonly string[] = Object.freeze([...ROUTES.keys()]);
+
+/**
  * Strip a trailing slash, so `/plan/` and `/plan` are the same route.
  *
  * `usePathname` does not add one, so this is not defending against Next — it is
