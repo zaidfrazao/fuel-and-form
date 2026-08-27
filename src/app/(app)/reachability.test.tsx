@@ -324,6 +324,51 @@ async function show(path: string, search: Search = {}) {
 /** The four destinations as the shell renders them, scoped to the landmark. */
 const shell = () => within(screen.getByRole("navigation", { name: "Primary" }));
 
+/**
+ * Everything the shell links to, in order, as `[accessible name, href]`.
+ *
+ * The name falls back to the text because the four destinations carry an
+ * `aria-label` — § Navigation: "The `aria-label` is the label" — and the
+ * sidebar's Settings link does not, being a link rather than a destination.
+ */
+const shellLinks = () =>
+  shell()
+    .getAllByRole("link")
+    .map((link) => [
+      link.getAttribute("aria-label") ?? link.textContent!.trim(),
+      link.getAttribute("href"),
+    ]);
+
+/**
+ * What the shell must contain, written out longhand rather than read from
+ * `DESTINATIONS`.
+ *
+ * This is the whole point of the literal and it was found by mutation rather
+ * than by design. The first draft of the sweep below iterated `DESTINATIONS` and
+ * asserted each entry was reachable — which cannot fail when a destination is
+ * DELETED, because the loop simply runs one time fewer. Removing Training from
+ * the array left every "all four are reachable" case green. A test that reads
+ * its expectations from the thing under test measures nothing about that thing's
+ * contents; § Navigation names four and this is where the shell is held to it.
+ *
+ * The order is asserted too, and is load-bearing for the same reason
+ * `nav.test.ts` pins it: the pill shows inactive items as icons alone, so
+ * position is the only cue about which slot is which.
+ *
+ * The Settings link at the end is the sidebar's foot — inside this landmark,
+ * desktop-only in CSS and therefore always in the tree under jsdom. It is listed
+ * because the set is asserted whole: a fifth destination promoted into the pill
+ * has to come through here, which is the argument § Navigation makes for why
+ * Settings is NOT one of the four.
+ */
+const THE_SHELL: [name: string, href: string | null][] = [
+  ["Now", "/"],
+  ["Plan", "/plan"],
+  ["Training", "/training"],
+  ["Weight", "/weight"],
+  ["Settings", "/settings"],
+];
+
 beforeEach(() => {
   vi.clearAllMocks();
   nav.pathname = "/";
@@ -375,13 +420,7 @@ describe("the four destinations", () => {
   test.each([...ROUTE_PATHS])("are all reachable from %s", async (path) => {
     await show(path);
 
-    for (const destination of DESTINATIONS) {
-      const link = shell().getByRole("link", { name: destination.label });
-
-      expect(link.getAttribute("href"), `${destination.label} from ${path}`).toBe(
-        destination.href,
-      );
-    }
+    expect(shellLinks()).toEqual(THE_SHELL);
   });
 
   test.each([...ROUTE_PATHS])("light the one the table names, from %s", async (path) => {
@@ -439,12 +478,7 @@ describe("the home screen", () => {
 
     await show("/");
 
-    for (const destination of DESTINATIONS) {
-      expect(
-        shell().getByRole("link", { name: destination.label }).getAttribute("href"),
-        `${destination.label} in ${state}`,
-      ).toBe(destination.href);
-    }
+    expect(shellLinks(), state).toEqual(THE_SHELL);
   });
 
   test.each(STATES)("keeps Settings at the foot in %s", async (state) => {
@@ -690,8 +724,6 @@ describe("a week other than this one", () => {
     expect(screen.queryByRole("link", { name: /^Back to / })).toBeNull();
     // And the destinations are still all reachable from a dated view, which is
     // the property that actually matters on a screen with no parent.
-    for (const destination of DESTINATIONS) {
-      expect(shell().getByRole("link", { name: destination.label })).toBeTruthy();
-    }
+    expect(shellLinks()).toEqual(THE_SHELL);
   });
 });
