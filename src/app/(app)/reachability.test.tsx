@@ -264,12 +264,43 @@ const SHOPPING = {
   checked: [],
 };
 
-/** A rest day. The screen renders its frame either way, and the frame is what is under test. */
+/**
+ * A rest day — `sessions: []`, so `/training` renders "Nothing scheduled".
+ *
+ * Named because it is a real state rather than a thin fixture: the template has
+ * rest days, and a screen with nothing on it is where a nav is most likely to be
+ * quietly missing. The `!history` empty state one level up — the user with no
+ * profile row — is a different thing and is NOT what this renders; that branch
+ * carries no up-link at all, which is worth knowing before anyone reads a green
+ * up-link test as covering it.
+ */
 const TRAINING = { date: MON, today: TUE, day: { date: MON, sessions: [] }, logs: [], adherence: [] };
 
+/**
+ * One weigh-in, so `/weight` renders its chart and list rather than
+ * `WeighIns`' own "No weigh-ins yet".
+ *
+ * The entry is here because the first draft had `entries: []` and rendered the
+ * empty state on a screen this file describes as populated — found by probing
+ * what each of the seven actually renders rather than by assuming the fixture
+ * was truthy. It is the populated path that carries the chart, so it is the one
+ * worth sweeping.
+ *
+ * The figures are invented, per Testing Strategy § 1.5 — the owner's real
+ * metrics stay out of a public repository.
+ */
 const WEIGHT = {
   today: TUE,
-  entries: [],
+  entries: [
+    {
+      id: "weigh-1",
+      userId: SESSION.userId,
+      date: MON,
+      weightKg: 82,
+      note: null,
+      createdAt: new Date("2026-03-09T07:00:00Z"),
+    },
+  ],
   startWeightKg: 84,
   targetWeightKg: 76,
   goalPaceKgPerWeek: 0.5,

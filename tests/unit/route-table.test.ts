@@ -1,5 +1,6 @@
 import { readdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vitest";
 
@@ -43,8 +44,25 @@ import { ROUTE_PATHS } from "@/lib/nav";
  * everywhere, while every per-screen test in the suite goes on passing.
  */
 
+/**
+ * `src/app`, resolved from THIS FILE rather than from the working directory.
+ *
+ * `globals.tokens.test.ts` walks the tree the same way and resolves it the same
+ * way, and the reason is worth keeping: a bare `"src/app"` is relative to
+ * `process.cwd()`, so it depends on where the runner was invoked from rather
+ * than on where the repository is. Vitest sets the cwd to the config's directory
+ * today, so both spellings work — but one of them is a fact about the checkout
+ * and the other is a fact about the command line, and only the first stays true
+ * if this file is ever run by something else.
+ *
+ * The failure it avoids is also the worst kind for a test like this: a wrong cwd
+ * makes `readdirSync` throw, which is loud, but a cwd pointing at a DIFFERENT
+ * checkout would silently compare this table against another tree's routes.
+ */
+const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "src", "app");
+
 /** Every `page.tsx` under `src/app`, as a path relative to it. */
-function pageFiles(dir = "src/app", prefix = ""): string[] {
+function pageFiles(dir = APP_DIR, prefix = ""): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     if (entry.isDirectory()) {
       return pageFiles(join(dir, entry.name), `${prefix}${entry.name}/`);
