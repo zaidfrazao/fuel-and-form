@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { UpLink } from "@/components/up-link";
 import { getSession } from "@/lib/auth/session";
 import { loadTemplate } from "@/lib/db/queries/template";
 import { TemplateEditor } from "./template-editor";
@@ -49,12 +49,16 @@ export default async function TemplatePage() {
   return (
     <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col gap-7 px-[22px] py-8 md:px-7">
       <header className="flex flex-col gap-2">
-        <Link
-          href="/settings"
-          className="text-label text-text-secondary underline decoration-text-tertiary underline-offset-4"
-        >
-          Settings
-        </Link>
+        {/*
+         * `/plan`, where this used to send people to `/settings`.
+         *
+         * Two screens link here and Settings is the one that is not the parent
+         * — § Navigation: "Settings keeps its link to it... but a link is not a
+         * parent." Arriving from the weekly plan, which is where the template's
+         * effect is visible, the only way out used to be a screen you were
+         * never on. The component reads the table; nothing here names a parent.
+         */}
+        <UpLink pathname="/plan/template" />
         <h1 className="text-title text-text-primary">Weekly template</h1>
         {/*
          * The blast radius, in words, before anything is tapped. § Tone of

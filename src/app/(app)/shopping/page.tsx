@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { ShoppingListView } from "@/components/shopping-list-view";
+import { UpLink } from "@/components/up-link";
 import { WeekNav } from "@/components/week-nav";
 import { getSession } from "@/lib/auth/session";
 import { startOfWeek } from "@/lib/date";
@@ -94,12 +95,15 @@ export default async function ShoppingPage({
     // 1024px for the week grid". This is a single column of rows, not a grid.
     <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col gap-7 px-[22px] py-8 md:px-7">
       <header className="flex flex-col gap-2">
-        <Link
-          href={`/plan?week=${list.monday}`}
-          className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
-        >
-          Weekly plan
-        </Link>
+        {/*
+         * The week travels up. Both this screen and `/plan` are addressed by
+         * `?week=`, so an up-link without it would leave the week of the 24th
+         * and arrive at whichever week the server resolves "now" to — a
+         * different week's plan, behind the link that claims to be the way
+         * back. The download link and the shopping cross-link on `/plan` take
+         * the same care, for the same reason.
+         */}
+        <UpLink pathname="/shopping" week={list.monday} />
         <h1 className="text-title text-text-primary">Shopping list</h1>
         {/*
          * What the list IS, before anything is read — the same § Tone of Voice

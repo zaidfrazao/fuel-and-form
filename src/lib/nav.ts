@@ -4,7 +4,13 @@
  * FUEL-56 decided the information architecture and wrote it down as a table of
  * seven routes, each with one level and one parent. It shipped as documentation
  * only; nothing in `src/` encoded it. This is that table, and it is the single
- * place the shell asks "which destination am I in?".
+ * place two questions are asked of it: "which destination am I in?" for the
+ * shell, and "where does up go, and what is it called?" for the up-link.
+ *
+ * FUEL-58 encoded the first column and FUEL-59 the other two. Between them the
+ * four screens with an up-link each named their own parent, and one named a
+ * screen that merely links to it — the failure mode of a table that ships as
+ * prose.
  *
  * ## Why a table and not a prefix match
  *
@@ -45,12 +51,53 @@ export const DESTINATIONS: readonly Destination[] = [
 ] as const;
 
 /**
- * Every authenticated route, mapped to the destination whose slot it lights.
+ * One row of § Navigation's route table.
  *
- * This is § Navigation's route table with its Level and Parent columns collapsed
- * into the one question the shell actually asks. A level-1 route maps to itself;
- * a level-2 route maps to its parent, which is what makes `/plan/template` and
- * `/shopping` both light Plan, and `/settings` light Now.
+ * `name` is the table's Destination column and `parent` is its Parent column —
+ * `null` for a level-1 route, which is how Level is encoded without a third
+ * field: a route with no parent is at level 1, and § Navigation caps the depth
+ * at two, so there is no case where that inference is wrong.
+ */
+type Route = {
+  /** Whose slot this route lights in the shell. */
+  destination: DestinationId;
+  /**
+   * The one name this route has, from the table's Destination column.
+   *
+   * § Navigation, of the four: "The `aria-label` is the label, so the four names
+   * above are the only names these destinations have anywhere." That sentence
+   * was written about the shell and it binds every link that names a
+   * destination, which is why the up-links no longer spell `/` "Right Now" on
+   * one screen and "Right now" on another. A destination is named once, here.
+   *
+   * The four level-1 names are the same strings `DESTINATIONS` carries, and are
+   * deliberately repeated rather than read across: that array is ordered because
+   * the pill has no other cue about which slot is which, and this table is keyed
+   * because a lookup is what it is for. Deriving one from the other would tie an
+   * order to a lookup for the sake of four short strings.
+   */
+  name: string;
+  /** The route this one goes up to, or `null` at level 1. */
+  parent: string | null;
+};
+
+/**
+ * Every authenticated route — § Navigation's route table, in code.
+ *
+ * This used to hold the Destination column alone, with Level and Parent
+ * "collapsed into the one question the shell actually asks". The collapse is
+ * what FUEL-59 came back for: with no Parent column here, the four screens that
+ * render an up-link each had to name their own parent, and one of them
+ * (`/plan/template`) named `/settings` — a screen that links TO it, which
+ * § Navigation answers directly: "a link is not a parent."
+ *
+ * `destination` is still the question the shell asks. A level-1 route lights
+ * itself; a level-2 route lights its parent, which is what makes
+ * `/plan/template` and `/shopping` both light Plan, and `/settings` light Now.
+ * For every route here that is `parent`'s destination, but the two fields are
+ * not the same thing and are not derived from one another — `destination` is
+ * about which slot glows, `parent` is about where "up" goes, and only the first
+ * survives a hypothetical level-3 route.
  *
  * `/login` and `/dev/*` are deliberately absent rather than mapped to `null`
  * entries: § Navigation places them outside the hierarchy rather than at level 1
@@ -66,14 +113,30 @@ export const DESTINATIONS: readonly Destination[] = [
  * and every inherited key lacks the leading slash. It is still a signature that
  * lies, and a `Map` has no prototype chain to inherit from.
  */
-const ROUTES = new Map<string, DestinationId>([
-  ["/", "now"],
-  ["/plan", "plan"],
-  ["/training", "training"],
-  ["/weight", "weight"],
-  ["/plan/template", "plan"],
-  ["/shopping", "plan"],
-  ["/settings", "now"],
+const ROUTES = new Map<string, Route>([
+  ["/", { destination: "now", name: "Now", parent: null }],
+  ["/plan", { destination: "plan", name: "Plan", parent: null }],
+  ["/training", { destination: "training", name: "Training", parent: null }],
+  ["/weight", { destination: "weight", name: "Weight", parent: null }],
+  /*
+   * `/plan`, not `/settings`.
+   *
+   * § Navigation: "**`/plan/template` has one parent and it is `/plan`,**
+   * matching its URL. The template is what recurs each week before any swaps,
+   * which is plan content — § Terminology reserves 'Plan' for exactly that.
+   * Settings keeps its link to it, and the sentence there explaining which table
+   * it writes is worth keeping where it is, but a link is not a parent."
+   *
+   * So the second entry point is not resolved with a `from` param or a
+   * `referer` — there is nothing to resolve. Two screens link here and one of
+   * them is the parent.
+   */
+  [
+    "/plan/template",
+    { destination: "plan", name: "Weekly template", parent: "/plan" },
+  ],
+  ["/shopping", { destination: "plan", name: "Shopping list", parent: "/plan" }],
+  ["/settings", { destination: "now", name: "Settings", parent: "/" }],
 ]);
 
 /**
@@ -109,5 +172,43 @@ function normalise(pathname: string): string {
  * both addressed by week.
  */
 export function resolveActive(pathname: string): DestinationId | null {
-  return ROUTES.get(normalise(pathname)) ?? null;
+  return ROUTES.get(normalise(pathname))?.destination ?? null;
+}
+
+/**
+ * Where the given route's up-link goes, and what it is called — or `null` when
+ * there is no up to go to.
+ *
+ * `null` is a real answer and `components/up-link.tsx` renders it as nothing.
+ * Three kinds of path get it: a level-1 route, which is already the top; a path
+ * outside the hierarchy, `/login` and `/dev/*`; and a route added later and not
+ * added to the table. That last one is the same honest failure `resolveActive`
+ * takes — a missing up-link is visible on the screen, where a guessed parent
+ * would look correct and send people somewhere nobody chose.
+ *
+ * The label is the PARENT's name, not the child's, which is the whole point of
+ * doing the lookup twice: the up-link says where it goes, and the `<h1>` under
+ * it already says where you are.
+ *
+ * Query strings are not handled here, and not by accident. A parent's `?week=`
+ * belongs to the caller — `/shopping` knows which week is on screen and this
+ * table cannot — so the href returned is always the bare pathname and the
+ * component appends. See `up-link.tsx`.
+ */
+export function resolveParent(
+  pathname: string,
+): { href: string; label: string } | null {
+  const parent = ROUTES.get(normalise(pathname))?.parent;
+  if (!parent) return null;
+
+  const route = ROUTES.get(parent);
+  /*
+   * A parent named in the table but not keyed in it. Unreachable as the table
+   * stands — all three parents are `/` or `/plan`, both of which are rows — and
+   * `null` rather than a throw if that ever stops being true, for the reason
+   * above: the app loses an up-link, not a screen.
+   */
+  if (!route) return null;
+
+  return { href: parent, label: route.name };
 }
