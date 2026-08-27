@@ -26,14 +26,18 @@ describe("SkipLink", () => {
   test("is reachable by keyboard while hidden, and shown once focused", () => {
     render(<SkipLink />);
 
-    const className = screen.getByRole("link").className;
+    const { classList } = screen.getByRole("link");
 
     // `sr-only` clips the link to 1px without removing it from the tab order or
     // the accessibility tree; `focus:not-sr-only` reverses that on focus. Drop
     // the first and it is visible on every screen; drop the second and a
     // sighted keyboard user tabs to something they cannot see.
-    expect(className).toContain("sr-only");
-    expect(className).toContain("focus:not-sr-only");
+    //
+    // `classList` rather than a substring test on `className`: "focus:not-sr-only"
+    // CONTAINS "sr-only", so `toContain` passed with the base class deleted —
+    // it asserted nothing, and a mutation run is what caught it.
+    expect(classList.contains("sr-only")).toBe(true);
+    expect(classList.contains("focus:not-sr-only")).toBe(true);
   });
 
   test("names its destination rather than what it skips", () => {
