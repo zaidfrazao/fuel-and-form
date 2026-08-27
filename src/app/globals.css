@@ -132,6 +132,29 @@
 :root {
   --radius: 0.75rem; /* 12px — the button base */
 
+  /* The height the navigation shell occupies at the bottom of the phone
+     viewport — FUEL-65, and the one number two unrelated components have to
+     agree about.
+
+     Since the shell became `sticky bottom-0` it no longer ends the page column;
+     it floats over it. `/`'s and `/training`'s action bars are `sticky bottom-0`
+     too, so without an offset the shell lands on top of them and the primary
+     action of both screens is covered. They stick to this instead of to 0, and
+     the value lives here rather than in any of the three files that need it.
+
+     The sum is the shell's own box, in the order it is built in nav-shell.tsx:
+     12px `pt-3`, a 50px pill (4px padding, a 40px item, 4px padding, two 1px
+     borders), and a bottom inset of 24px or the home indicator, whichever is
+     larger. 86px on a device with no notch, which is what the shell measures.
+
+     Kept honest rather than trusted: /dev/nav-shell asserts this value against
+     the shell's real `getBoundingClientRect().height`, so a change to the pill's
+     geometry that forgets this line is reported instead of silently uncovering
+     an action bar. */
+  --nav-shell-h: calc(
+    0.75rem + 3.125rem + max(1.5rem, env(safe-area-inset-bottom))
+  );
+
   /* Brand Guide § Color Palette — light */
   --ink: #1c1917;
   --ink-fg: #ffffff;

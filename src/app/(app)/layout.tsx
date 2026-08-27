@@ -41,15 +41,21 @@ import { RouteFocus } from "@/components/route-focus";
  * reachable, and that argument now lives with the class that acts on it.
  * `/login` keeps its own `min-h-screen` and is outside this group.
  *
- * ## The shell is `<main>`'s sibling, and that resolves the collision
+ * ## The shell is `<main>`'s sibling, and the bars clear it by its own height
  *
- * `/`'s action bar and `/training`'s are `sticky bottom-0` inside `<main>`. A
- * sticky box is clamped to its own parent, so with the shell as main's SIBLING
- * the bar can only reach main's bottom edge — which is exactly where the shell
- * begins. Nothing overlaps and the bar keeps the reach-friendly placement
- * § Touch Targets asks for. Put the shell INSIDE `<main>` and the bar floats
- * over it instead. `/dev/nav-shell` measured this arrangement at 375×667 before
- * it was built here: 0px overlap, not 1.
+ * `/`'s action bar and `/training`'s are `sticky` inside `<main>`, and the shell
+ * is main's SIBLING rather than its child. That sibling relationship was once
+ * the whole resolution to the collision between them: a sticky box is clamped to
+ * its own parent, so a bar at `bottom: 0` could only reach main's bottom edge,
+ * which was exactly where the shell began.
+ *
+ * FUEL-65 pinned the shell to the viewport below `lg`, which ends that: a shell
+ * that floats up over the page reaches the strip the bars occupy. The sibling
+ * relationship still matters — it is what keeps the shell out of main's own
+ * scroll and clip context — but the collision is now resolved by the bars
+ * sticking to `--nav-shell-h` instead of to 0. That variable is the shell's
+ * height, declared once in globals.css; `nav-shell.tsx` carries the reasoning
+ * and `/dev/nav-shell` asserts the number against the rendered shell.
  *
  * That is also why `flex-1` is not optional. The shell's own `mt-auto` would
  * push it to the bottom of a short page either way, but a content-sized `<main>`

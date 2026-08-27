@@ -72,10 +72,13 @@ export default function Loading() {
 
       {/* The action bar, at the same 52px / 46px heights, the same 30px off the
           content above it and pinned the same way, so the primary does not move
-          on swap-in. */}
+          on swap-in. "Pinned the same way" now includes stopping at
+          `--nav-shell-h` rather than at 0 — see right-now.tsx. A skeleton that
+          pinned to 0 would put its primary 86px lower than the real one and the
+          swap-in would jump. */}
       <div
         aria-hidden
-        className="sticky bottom-0 mt-auto flex flex-col gap-3 bg-background pt-[30px]"
+        className="sticky bottom-[var(--nav-shell-h)] mt-auto flex flex-col gap-3 bg-background pt-[30px] lg:bottom-0"
       >
         <Block className="h-13 w-full rounded-md" />
         <div className="flex gap-3">
