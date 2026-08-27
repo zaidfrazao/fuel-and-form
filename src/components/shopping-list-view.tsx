@@ -100,7 +100,22 @@ function Row({
 
   return (
     <li className="flex flex-col border-b border-border last:border-b-0">
-      <label className="flex min-h-[46px] cursor-pointer items-center gap-3 py-2">
+      {/*
+       * `items-start` with the height made of padding rather than of centring.
+       *
+       * A row that can now take two lines has to decide what the tick box lines
+       * up with, and the answer is the NAME — it is what you scan the list
+       * against, and a box centred on a three-line row sits beside the quantity
+       * instead, which is FUEL-80's own complaint one level down.
+       *
+       * `items-center` cannot say that, so the vertical centring of a
+       * single-line row moves into the padding, where it is arithmetic rather
+       * than alignment: § Lists' 46px is 23px of `text-body` line box (fixed by
+       * the token, so it holds whether or not the font has loaded) plus 11.5px
+       * above and below. `min-h-[46px]` stays as the floor that guarantees
+       * § Touch Targets even if that arithmetic ever stops being true.
+       */}
+      <label className="flex min-h-[46px] cursor-pointer items-start gap-3 py-[11.5px]">
         <input
           type="checkbox"
           className="peer sr-only"
@@ -116,6 +131,10 @@ function Row({
          * The tick is an SVG path rather than a glyph so it inherits `ink-fg`
          * cleanly at any size and does not depend on a font having a checkmark
          * at the weight this needs.
+         *
+         * `mt-[2.5px]` is the rest of the label's arithmetic: the box is 18px
+         * and the line it belongs beside is 23px, so half the difference centres
+         * it on that line rather than hanging it from the top of one.
          */}
         <span
           aria-hidden
@@ -124,7 +143,7 @@ function Row({
           // SIBLING combinator, and the svg is a CHILD of this span rather than
           // a sibling of the input, so `peer-checked:opacity-100` on it would
           // never match and the box would fill with an invisible tick in it.
-          className="flex size-[18px] shrink-0 items-center justify-center rounded-[4px] border border-border [&>svg]:opacity-0 peer-checked:border-ink peer-checked:bg-ink peer-checked:[&>svg]:opacity-100 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+          className="mt-[2.5px] flex size-[18px] shrink-0 items-center justify-center rounded-[4px] border border-border [&>svg]:opacity-0 peer-checked:border-ink peer-checked:bg-ink peer-checked:[&>svg]:opacity-100 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
         >
           <svg viewBox="0 0 12 12" className="size-[10px] text-ink-fg">
             <path
@@ -138,44 +157,79 @@ function Row({
           </svg>
         </span>
 
-        <span
-          className={
-            checked
-              ? "flex-1 truncate text-body text-text-tertiary line-through"
-              : "flex-1 truncate text-body text-text-primary"
-          }
-        >
-          {line.name}
-        </span>
-
         {/*
-         * § Slash Metadata's register: the amount is secondary to the name, and
-         * it is what the eye lands on second. Tabular figures so a column of
-         * weights lines up down the aisle.
+         * Name and amount, on one line while they both fit and on two when they
+         * do not.
          *
-         * Absent entirely rather than an em dash when a line has no quantity —
-         * `shopping-text.ts` argues it: for salt, the name IS the instruction.
+         * ## What the cap fixed, and what it cost
          *
-         * `shrink-0` protects a short amount from being squeezed to nothing by a
-         * long name, and until FUEL-65 that was all it did — including when the
-         * AMOUNT was the long one. `shopping-text.ts` composes household
-         * measures onto the weight, so these run to "800g · 2/3–3/4 cup, or a
-         * small handful", and a span that refuses to shrink simply left the row:
-         * measured at 375px, four lines reached 487px and the whole page scrolled
-         * 112px sideways to follow them.
+         * The amount was `shrink-0` with no bound, and until FUEL-65 that was
+         * all it was — including when the AMOUNT was the long one.
+         * `shopping-text.ts` composes household measures onto the weight, so
+         * these run to "800g · 2/3–3/4 cup, or a small handful", and a span that
+         * refuses to shrink simply left the row: measured at 375px, four lines
+         * reached 487px and the whole page scrolled 112px sideways to follow
+         * them. `max-w-[55%] truncate` stopped that, and the ellipsis was argued
+         * for the amount specifically — the weight leads the string, so what an
+         * ellipsis takes is the parenthetical, which is the half § Slash
+         * Metadata calls secondary.
          *
-         * `max-w-[55%]` bounds it without giving up the protection — a short
-         * amount is nowhere near the cap and behaves exactly as before — and
-         * `truncate` handles the ones that hit it, in the register the name
-         * beside it already uses. The weight leads the string, so what an
-         * ellipsis takes is the parenthetical, which is the half § Slash Metadata
-         * calls secondary.
+         * That argument was sound and it was only ever about the amount. The
+         * name beside it was `flex-1 truncate`, and with the amount entitled to
+         * 55% of a 301px content box the name was left ~136px and lost: measured
+         * at 375px, 34 of 58 rows clipped, and `Bell pepper, red or …` does not
+         * tell you which pepper to buy. A cap that protects one half by clipping
+         * the other is a trade, not a fix, and the half it clipped is the
+         * primary content — FUEL-80.
+         *
+         * ## Wrapping instead of clipping, and why not simply a taller row
+         *
+         * Nothing here refuses to shrink and nothing carries a width cap, so the
+         * overflow FUEL-65 measured cannot return: a flex line that does not fit
+         * WRAPS, and `min-w-0` plus `break-words` mean even a single unbroken
+         * token wider than the row breaks rather than pushing the page out.
+         * What was an ellipsis is now a second line.
+         *
+         * Wrapping rather than a permanent second line, because the condition is
+         * the whole point. § Lists gives ingredients the 46px dense height and
+         * this list is ~58 rows; stacking every one of them to fix the ~34 that
+         * overflow would spend that height on "Spinach · 200g", which has always
+         * fit. A wrapped row grows only where the text genuinely does not fit.
+         *
+         * It is also why there is no breakpoint here. The row composes off the
+         * width it is given, so it needs no opinion about which width is a phone
+         * — which is what lets it sit inside FUEL-78's desktop columns without
+         * the two having to agree about a number.
+         *
+         * `ml-auto` keeps the amount hard right on whichever line it lands, so
+         * the tabular figures still line up down the aisle when some rows have
+         * wrapped and others have not.
          */}
-        {amount && (
-          <span className="max-w-[55%] shrink-0 truncate text-slash tabular-nums text-text-secondary">
-            {amount}
+        <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3">
+          <span
+            className={
+              checked
+                ? "min-w-0 break-words text-body text-text-tertiary line-through"
+                : "min-w-0 break-words text-body text-text-primary"
+            }
+          >
+            {line.name}
           </span>
-        )}
+
+          {/*
+           * § Slash Metadata's register: the amount is secondary to the name,
+           * and it is what the eye lands on second. Tabular figures so a column
+           * of weights lines up down the aisle.
+           *
+           * Absent entirely rather than an em dash when a line has no quantity —
+           * `shopping-text.ts` argues it: for salt, the name IS the instruction.
+           */}
+          {amount && (
+            <span className="ml-auto min-w-0 break-words text-slash tabular-nums text-text-secondary">
+              {amount}
+            </span>
+          )}
+        </span>
       </label>
 
       {failed && (
