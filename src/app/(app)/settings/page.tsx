@@ -114,11 +114,24 @@ export default async function SettingsPage() {
           future week; swapping a meal does not.
         </p>
 
+        {/*
+         * `Plan`, not `Weekly plan` — FUEL-60. § Navigation's table names this
+         * route `Plan`, and the shell and the up-links have called it that
+         * since FUEL-58; a third name for it in a link would be the drift that
+         * section exists to prevent. The screen's own `<h1>` stays "Weekly
+         * plan", which the table allows and the mock's caption for that screen
+         * already uses — a heading may say more than the name it maps to.
+         *
+         * The pairing with `Weekly template` above loses nothing by it. The
+         * contrast between the two was never carried by the shared adjective;
+         * it is carried by the sentence under each, which says which table the
+         * screen writes.
+         */}
         <Link
           href="/plan"
           className="pt-3 text-body text-text-primary underline decoration-text-tertiary underline-offset-4"
         >
-          Weekly plan
+          Plan
         </Link>
         <p className="text-slash text-text-secondary">
           The seven days as they are actually planned, week by week. Changing a
@@ -170,6 +183,10 @@ export default async function SettingsPage() {
            * Named here at all because this is the page a person comes to
            * looking for "export", and an export that exists but is mentioned
            * nowhere they would look is one they will not find.
+           *
+           * The link sits inside a sentence, so the sentence governs the words
+           * around it — but the destination is still named by the table, which
+           * is why it reads "open Plan" and not "open the weekly plan".
            */}
           <p className="text-slash text-text-secondary">
             For a check-in, one week as a spreadsheet:{" "}
@@ -177,7 +194,7 @@ export default async function SettingsPage() {
               href="/plan"
               className="underline decoration-text-tertiary underline-offset-4"
             >
-              open the weekly plan
+              open Plan
             </Link>{" "}
             and download the week you are looking at.
           </p>

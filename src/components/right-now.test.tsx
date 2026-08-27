@@ -1877,7 +1877,23 @@ describe("the link at the foot", () => {
 
     expect(
       screen.getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")]),
-    ).toEqual([["Slot times", "/settings"]]);
+    ).toEqual([["Settings", "/settings"]]);
+  });
+
+  test("is named for the screen it opens, not for one section of it", () => {
+    // FUEL-60. It said "Slot times", which was the whole of `/settings` when
+    // FUEL-21 put it here and a subset of it from the next task onward — that
+    // screen also holds the walk reminder, the push subscription, the export,
+    // the template link and sign-out, and heads itself "Settings".
+    //
+    // Both directions asserted. The name is the one § Navigation's route table
+    // gives the route, and the old one is gone rather than merely joined.
+    renderNow(active(0));
+
+    expect(screen.getByRole("link", { name: "Settings" }).getAttribute("href")).toBe(
+      "/settings",
+    );
+    expect(screen.queryByRole("link", { name: "Slot times" })).toBeNull();
   });
 
   test("is on the finished page too, which it did not used to be", () => {
@@ -1888,7 +1904,7 @@ describe("the link at the foot", () => {
     // (the sidebar's Settings link is ≥1024px only).
     renderNow({ ...BASE, state: "day-complete" });
 
-    expect(screen.getByRole("link", { name: "Slot times" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Settings" }).getAttribute("href")).toBe(
       "/settings",
     );
   });
@@ -1896,9 +1912,14 @@ describe("the link at the foot", () => {
   test("no longer duplicates the shell's four destinations", () => {
     // The three that left, named individually, so this fails loudly if one is
     // reintroduced on the argument that `/` "needs a way to reach it".
+    //
+    // `/plan` is listed under both names it has been given: "Plan", which is
+    // what § Navigation's table calls it and what a link added back today
+    // would most likely say, and "Weekly plan", which is what the link here
+    // actually said before FUEL-58 removed it.
     renderNow(active(0));
 
-    for (const name of ["Weekly plan", "Training", "Weight"]) {
+    for (const name of ["Plan", "Weekly plan", "Training", "Weight"]) {
       expect(screen.queryByRole("link", { name })).toBeNull();
     }
   });
