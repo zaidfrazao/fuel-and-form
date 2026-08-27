@@ -48,13 +48,19 @@ import { MAIN_ID } from "@/components/page-main";
  * `absolute` rather than `fixed`, so it scrolls with the top of the page instead
  * of hovering over content the user has scrolled to; it is only ever reached
  * from the top of the document. `z-50` clears the two bars it overlays while
- * focused.
+ * focused — it is drawn over the demo banner by design, for as long as it holds
+ * focus and no longer.
+ *
+ * `min-h-11` is § Touch Targets' 44×44 minimum. Padding alone left it at 41px,
+ * which is the same 3px miss `nav-shell.tsx` corrects on the pill's inactive
+ * items — invisible until someone measures it, and this element is genuinely
+ * tappable once revealed. The width is past the minimum on the text alone.
  */
 export function SkipLink() {
   return (
     <a
       href={`#${MAIN_ID}`}
-      className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-full focus:border focus:border-border focus:bg-background focus:px-4 focus:py-2 focus:text-body focus:text-text-primary focus:no-underline focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+      className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:inline-flex focus:min-h-11 focus:items-center focus:rounded-full focus:border focus:border-border focus:bg-background focus:px-4 focus:py-2 focus:text-body focus:text-text-primary focus:no-underline focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
     >
       {/*
        * § Tone of Voice: plain, and describing the destination rather than the

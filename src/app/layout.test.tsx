@@ -36,7 +36,10 @@ vi.mock("@/components/demo-banner", () => ({
 vi.mock("@/components/walk-reminder", () => ({
   WalkReminder: () => (
     <aside aria-label="Walk reminder">
-      <a href="/">Log the walk.</a>
+      {/* `#walk` rather than the real `/`: what this stub owes the test is a
+          focusable element above `children`, and an `<a href="/">` here trips
+          the no-html-link-for-pages rule for a link that is not the real one. */}
+      <a href="#walk">Log the walk.</a>
     </aside>
   ),
 }));

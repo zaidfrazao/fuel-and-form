@@ -62,7 +62,7 @@ const MEALS: readonly PickableMeal[] = [
 
 export default function MealPickerSpecimenPage() {
   return (
-    <main className="mx-auto flex max-w-[640px] flex-col gap-[30px] px-[22px] py-10">
+    <main id="main" tabIndex={-1} className="mx-auto flex max-w-[640px] flex-col gap-[30px] px-[22px] py-10">
       {/* Wraps, because the title and the toggle pill together exceed 375px
           minus the gutters — and a specimen page that scrolls sideways is the
           one thing that would make the § Accessibility check it exists for

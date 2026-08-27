@@ -65,7 +65,7 @@ function Section({
 
 export default function PrimitivesSpecimen() {
   return (
-    <main className="mx-auto flex max-w-[640px] flex-col gap-[30px] px-[22px] py-10 md:px-7">
+    <main id="main" tabIndex={-1} className="mx-auto flex max-w-[640px] flex-col gap-[30px] px-[22px] py-10 md:px-7">
       <header className="flex flex-col gap-[14px]">
         {/* Two words, not "Primitives". At 200% Dynamic Type a single
             eleven-character word set at 40px is wider than the 375px screen's

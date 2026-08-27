@@ -1,4 +1,5 @@
 import { NavShellMount } from "@/components/nav-shell-mount";
+import { RouteFocus } from "@/components/route-focus";
 
 /**
  * The authenticated app's frame — Brand Guide § Navigation, mounted.
@@ -99,6 +100,14 @@ export default function AppLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <div className="flex min-h-dvh flex-col lg:flex-row lg:gap-7">
+      {/*
+       * Renders nothing. It moves focus into the new screen's `<main>` on a
+       * navigation between destinations, and deliberately not on the `?date=`
+       * and `?week=` steps that stay on one screen — see route-focus.tsx, which
+       * carries the measurement that showed Next does not do this on its own.
+       */}
+      <RouteFocus />
+
       {children}
 
       <NavShellMount

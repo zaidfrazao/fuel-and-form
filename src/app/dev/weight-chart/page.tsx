@@ -126,7 +126,7 @@ const CASES: {
 
 export default function WeightChartSpecimen() {
   return (
-    <main className="mx-auto flex max-w-[640px] flex-col gap-[30px] px-[22px] py-10 md:px-7">
+    <main id="main" tabIndex={-1} className="mx-auto flex max-w-[640px] flex-col gap-[30px] px-[22px] py-10 md:px-7">
       <header className="flex flex-col gap-[14px]">
         <h1 className="text-title">Weight chart</h1>
         <p className="text-body text-text-secondary">

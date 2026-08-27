@@ -91,7 +91,7 @@ const CASES: { label: string; note: string; slots: Slot[]; now?: number }[] = [
 
 export default function DayRulerSpecimen() {
   return (
-    <main className="mx-auto flex max-w-[640px] flex-col gap-[30px] px-[22px] py-10 md:px-7">
+    <main id="main" tabIndex={-1} className="mx-auto flex max-w-[640px] flex-col gap-[30px] px-[22px] py-10 md:px-7">
       <header className="flex flex-col gap-[14px]">
         <h1 className="text-title">Day ruler</h1>
         <p className="text-body text-text-secondary">

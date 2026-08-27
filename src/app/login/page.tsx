@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 
 export default function LoginPage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 p-6">
+    <main id="main" tabIndex={-1} className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 p-6">
       <div className="flex flex-col gap-2">
         <h1 className="text-title">Fuel &amp; Form</h1>
         <p className="text-body text-text-secondary">
