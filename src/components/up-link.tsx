@@ -104,7 +104,22 @@ export function UpLink({
        * accessible name rather than replaced by it.
        */
       aria-label={`Back to ${parent.label}`}
-      className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
+      /*
+       * § Accessibility: "2px `accent` ring, 2px offset, on every interactive
+       * element in both modes. Never removed." `ring` is `accent`, per
+       * globals.css — the string is `nav-shell.tsx`'s, character for character.
+       *
+       * None of the four links this replaces declared one, so all four fell
+       * back to the browser's default `outline: auto 1px` — a hairline in the
+       * UA's colour rather than the app's, and one that does not clear the 3:1
+       * the same section sets for anything carrying meaning. Fixed here because
+       * this is now the one place the up-link is styled; the other links that
+       * share the omission are named below.
+       *
+       * Still outstanding, and not this component's to fix: `week-nav.tsx`'s
+       * prev/next and the "Back to this week" resets are in the same position.
+       */
+      className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
       {/*
        * Hidden whole, as `week-nav.tsx` hides its own: the `aria-label` above is
