@@ -2,6 +2,7 @@
 
 import { startTransition, useOptimistic, useRef, useState } from "react";
 
+import { PageMain } from "@/components/page-main";
 import { Button } from "@/components/ui/button";
 import { KeyValueGrid, type KeyValueItem } from "@/components/kv-grid";
 import { Sheet } from "@/components/ui/sheet";
@@ -390,7 +391,7 @@ export function WeighIns({
     "h-11 rounded-md border border-border bg-surface px-3 text-body text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background aria-invalid:border-destructive";
 
   return (
-    <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col gap-7 px-[22px] pt-[22px] md:px-7">
+    <PageMain className="gap-7 pt-[22px]">
       <div className="flex flex-col gap-3">
         <h2 className="text-micro uppercase text-text-secondary">Weight</h2>
         <h1 className="text-title text-text-primary">
@@ -698,6 +699,6 @@ export function WeighIns({
           </Button>
         </div>
       </Sheet>
-    </main>
+    </PageMain>
   );
 }

@@ -63,7 +63,16 @@ import { NavShellMount } from "@/components/nav-shell-mount";
  * reading order is content-then-navigation on the phone and on the desktop
  * alike. A landmark that a screen reader meets in a different place depending on
  * the window width is the kind of inconsistency § Navigation exists to remove,
- * and there is nothing above the content to skip past, so no skip link is owed.
+ * and there is nothing above the content to skip past to reach it.
+ *
+ * That argument is about the shell and it still holds; it was once written here
+ * as "no skip link is owed", which was too broad. FUEL-61 found the part it does
+ * not cover: the ROOT layout renders a demo banner and a walk reminder above
+ * `children`, both carrying focusables, so there is chrome to bypass on this
+ * group's pages even though none of it is the nav. The skip link lives in
+ * `app/layout.tsx` — above those two, which is the only position that makes it
+ * the first focusable element — and it targets the `<main>` that `PageMain`
+ * renders here. Nothing about it changes the shell's place in the DOM.
  *
  * `self-start` before `sticky`: a flex item in a row stretches to its
  * container's full height by default, and an element as tall as its container

@@ -7,6 +7,7 @@ import { clearSessionStatus, setSessionStatus } from "@/app/actions/training";
 import { DotGrid, type Week } from "@/components/dot-grid";
 import { ExerciseList, type ListedExercise } from "@/components/exercise-list";
 import { SlashMeta } from "@/components/kv-grid";
+import { PageMain } from "@/components/page-main";
 import { RecentSessions } from "@/components/recent-sessions";
 import { Button } from "@/components/ui/button";
 import { WalkRow } from "@/components/walk-row";
@@ -365,7 +366,7 @@ export function Training({
       (duration === "" ? null : Number(duration)) !== entry.durationMin);
 
   return (
-    <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col px-[22px] pt-[22px] md:px-7">
+    <PageMain className="pt-[22px]">
       <div className="flex flex-col gap-7">
         <DateNav date={date} today={today} />
 
@@ -624,6 +625,6 @@ export function Training({
           )}
         </div>
       ) : null}
-    </main>
+    </PageMain>
   );
 }

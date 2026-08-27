@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 
 import { DemoBanner } from "@/components/demo-banner";
+import { SkipLink } from "@/components/skip-link";
 import { ThemeProvider } from "@/components/theme-provider";
 import { WalkReminder } from "@/components/walk-reminder";
 
@@ -48,6 +49,20 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body>
         <ThemeProvider>
+          {/*
+           * FIRST, and that is the requirement rather than a preference —
+           * FUEL-61. WCAG 2.4.1 asks for a way past repeated blocks, and the two
+           * bars below this line are exactly that: both render above `children`
+           * on every screen that gets them, and both carry focusables. A skip
+           * link mounted in `app/(app)/layout.tsx` would sit behind them and be
+           * reachable only after tabbing through the things it exists to skip.
+           *
+           * Anything added to this layout later goes BELOW it. See
+           * components/skip-link.tsx for what it does and does not cover — the
+           * nav is deliberately not among it.
+           */}
+          <SkipLink />
+
           {/*
            * P7's "persistent" banner — every screen, which is what makes the
            * layout the right place for it and the five pages the wrong one.

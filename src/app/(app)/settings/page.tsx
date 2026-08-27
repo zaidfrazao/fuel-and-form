@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { PageMain } from "@/components/page-main";
 import { UpLink } from "@/components/up-link";
 import { getSession } from "@/lib/auth/session";
 import { loadSchedule } from "@/lib/db/queries/profile";
@@ -38,7 +39,7 @@ export default async function SettingsPage() {
   const schedule = await loadSchedule(session.userId);
 
   return (
-    <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col gap-7 px-[22px] py-8 md:px-7">
+    <PageMain className="gap-7 py-8">
       <header className="flex flex-col gap-2">
         <UpLink pathname="/settings" />
         <h1 className="text-title text-text-primary">Settings</h1>
@@ -200,6 +201,6 @@ export default async function SettingsPage() {
           </p>
         </section>
       )}
-    </main>
+    </PageMain>
   );
 }

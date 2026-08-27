@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { PageMain } from "@/components/page-main";
 import { UpLink } from "@/components/up-link";
 import { WeekGrid } from "@/components/week-grid";
 import { WeekNav } from "@/components/week-nav";
@@ -139,13 +140,13 @@ export default async function PlanPage({
   // state to describe what will appear rather than nudge.
   if (!plan) {
     return (
-      <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[640px] flex-col justify-center gap-2 px-[22px] md:px-7">
+      <PageMain className="justify-center gap-2">
         <h1 className="text-title text-text-primary">No plan yet</h1>
         <p className="text-body text-text-secondary">
           The weekly plan appears here once a profile and a weekly template exist
           for this account.
         </p>
-      </main>
+      </PageMain>
     );
   }
 
@@ -158,7 +159,7 @@ export default async function PlanPage({
   return (
     // 1024px, not 640px — § Spacing: "max content width: 640px single-column;
     // 1024px for the week grid".
-    <main className="mx-auto flex w-full min-w-0 flex-1 max-w-[1024px] flex-col gap-7 px-[22px] py-8 md:px-7">
+    <PageMain className="max-w-[1024px] gap-7 py-8">
       <header className="flex flex-col gap-2">
         {/*
          * No `week` — the parent is `/`, which takes no `searchParams` and has
@@ -269,6 +270,6 @@ export default async function PlanPage({
           Weekly template
         </Link>
       </div>
-    </main>
+    </PageMain>
   );
 }
