@@ -19,6 +19,19 @@ import type { WeekFigures } from "@/lib/week-totals";
  * last cell of the last row. That is where a summary belongs — it reads after
  * the days it summarises rather than before them.
  *
+ * ## What it became on a phone, without changing
+ *
+ * FUEL-81 turned the week ninety degrees below 768px, and this block did not
+ * move: it was never inside the grid's scroller, so its width budget is the
+ * same three ~110px columns it always had at 375px.
+ *
+ * Its JOB changed, though. Stacked, the grid can no longer be read across days
+ * — comparing Tuesday against Thursday means scrolling — and § The Week, Two
+ * Ways names that as the trade the phone shape makes. This is where the trade
+ * is partly repaid: seven days of kcal and protein, side by side, in one glance.
+ * It is the only cross-day comparison left on a phone, which is an argument for
+ * keeping it exactly as it is rather than folding it into the day sections.
+ *
  * ## No umber here
  *
  * Today's column in the table above takes the screen's one accent (§ The Four
