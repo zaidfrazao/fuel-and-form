@@ -1,7 +1,12 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 
-import { isMaterialOverage, MacroGrid, OVERAGE_TOLERANCE } from "@/components/macro-grid";
+import {
+  isMaterialOverage,
+  MacroGrid,
+  MealDayGrid,
+  OVERAGE_TOLERANCE,
+} from "@/components/macro-grid";
 import type { MacroTarget, MacroTotals } from "@/lib/macros";
 
 /**
@@ -218,5 +223,98 @@ describe("stability", () => {
     const { container } = grid();
 
     expect(container.querySelector("dl")!.className).toContain("grid-cols-2");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The merged grid — FUEL-82                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The phone's shape: the meal's four macros, each with the day's running total
+ * on its slash line.
+ *
+ * These are the criteria that made the merge permissible rather than merely
+ * shorter. PRD § P4 asks for "all four values shown against target with a
+ * signed delta", and `MacroGrid` is the only place that criterion is met on a
+ * phone — `week-totals.tsx` carries kcal and protein alone. So a merged shape
+ * that dropped fat or carbs, or dropped a target, or dropped a delta, would
+ * satisfy § P4 on no phone screen in the app. Each of those is pinned below.
+ */
+const MEAL = { kcal: 455, proteinG: 34.5, fatG: 16.5, carbG: 42.5 };
+
+const merged = (fields: Partial<MacroTotals> = {}) =>
+  render(<MealDayGrid meal={MEAL} totals={totals(fields)} target={TARGET} />);
+
+describe("the merged meal-and-day grid", () => {
+  test("shows the MEAL in the value and the DAY on the slash line", () => {
+    // Which way round is the whole design: the `<h1>` above names the meal, so
+    // the value slot describes the thing that was named, and the day is the
+    // secondary fact § Slash Metadata exists for.
+    const { container } = merged({ kcal: 1655 });
+
+    const calories = within(container.querySelector("dl")!.children[0] as HTMLElement);
+
+    expect(calories.getByText("455")).toBeTruthy();
+    expect(calories.getByText(/day 1,655 of 2,000/)).toBeTruthy();
+  });
+
+  test("keeps all four macros, each against target with a signed delta", () => {
+    // PRD § P4, and the reason the mock's two-figure summary was not adopted.
+    const { container } = merged({ kcal: 1800, proteinG: 128, fatG: 66, carbG: 200 });
+
+    const lines = [...container.querySelectorAll("dl > div")].map((cell) =>
+      cell.textContent?.replace(/\s+/g, " ").trim(),
+    );
+
+    expect(lines).toEqual([
+      "Calories455/ day 1,800 of 2,000 · −200",
+      "Protein34.5 g/ day 128 g of 150 · −22",
+      "Fat16.5 g/ day 66 g of 60 · +6",
+      // A day that landed exactly on target reads `0`, not `+0` — `signed()`'s
+      // convention, and the same one the two-grid shape prints.
+      "Carbs42.5 g/ day 200 g of 200 · 0",
+    ]);
+  });
+
+  test("emphasises the meal's protein by weight, like every other grid", () => {
+    const { container } = merged();
+
+    const values = [...container.querySelectorAll("dl > div")].map(
+      (cell) => cell.querySelector("dd > span")!.className,
+    );
+
+    expect(values[1]).toContain("font-bold");
+    expect(values[0]).not.toContain("font-bold");
+    expect(values[2]).not.toContain("font-bold");
+    expect(values[3]).not.toContain("font-bold");
+  });
+
+  test("colours a material calorie overage and nothing else", () => {
+    // The same predicate `MacroGrid` uses — `isMaterialOverage` — reached from a
+    // second callsite. The header on that function records what it cost when two
+    // callers wrote the condition by hand and disagreed at 3 kcal over.
+    const { container } = merged({ kcal: 2200, fatG: 90 });
+
+    expect(screen.getByText("+200").className).toContain("text-error");
+    expect(screen.getByText(/\+30/).className).not.toContain("text-error");
+
+    expect(container.querySelectorAll(".text-error")).toHaveLength(1);
+  });
+
+  test("leaves an immaterial overage uncoloured", () => {
+    // 5% of 2,000 is 100, so 2,050 is inside the tolerance and reported plainly.
+    merged({ kcal: 2050 });
+
+    expect(screen.getByText("+50").className).not.toContain("text-error");
+  });
+
+  test("sets tabular figures and a tighter row gap than the two-line grid", () => {
+    // 14px rather than the grid's own 22: a merged cell is three lines, so the
+    // rows read as blocks and 22 between them was tuned for the tighter pair.
+    const { container } = merged();
+
+    expect(container.querySelector("dl")!.className).toContain("tabular-nums");
+    expect(container.querySelector("dl")!.className).toContain("gap-y-[14px]");
   });
 });

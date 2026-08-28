@@ -107,7 +107,35 @@ export function DemoBannerBar() {
             }
           }}
         >
-          <Button aria-label="Dismiss" size="icon-xs" type="submit" variant="ghost">
+          {/*
+           * A 24px mark with a 44px target — FUEL-82.
+           *
+           * `size-11` made the button itself 44px, and at 6px of band padding
+           * that set the whole banner's height: the paragraph beside it is 34px,
+           * so the control, not the copy, was what made this 57px. On a 667px
+           * phone the four chrome bands come to 313px — 46.9% — and this was the
+           * cheapest 10px of it to give back.
+           *
+           * § Touch Targets asks for "44×44px minimum", which is a requirement
+           * about the area that responds to a thumb, not about the size of the
+           * mark drawn inside it. The `after` pseudo-element is that area,
+           * centred on the icon and part of the button, so a tap anywhere in it
+           * submits; the X shrinks to 24px and the band closes to 47px.
+           *
+           * The 44px area is 10px taller than the band it sits in, which is
+           * deliberate and harmless: it overhangs into the hairline and the top
+           * of whatever follows, where there is nothing else to press. It is the
+           * far right of a full-width row, and both things that can follow — the
+           * walk reminder's sentence and the page's own content column — start
+           * at the left.
+           */}
+          <Button
+            aria-label="Dismiss"
+            className="relative size-6 rounded-sm after:absolute after:left-1/2 after:top-1/2 after:size-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']"
+            size="icon-xs"
+            type="submit"
+            variant="ghost"
+          >
             <XIcon />
           </Button>
         </form>

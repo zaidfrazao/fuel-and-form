@@ -366,7 +366,11 @@ export function Training({
       (duration === "" ? null : Number(duration)) !== entry.durationMin);
 
   return (
-    <PageMain className="pt-[22px]">
+    // 12px of head clearance below 768px — FUEL-82, the same reduction `/` takes
+    // and for the same reason: this screen carries the identical 140px action bar
+    // and 86px shell under the same two notice bands, so the fold sits in the
+    // same place and the head room is the same 10px that cannot be spared.
+    <PageMain className="pt-3 md:pt-[22px]">
       <div className="flex flex-col gap-7">
         <DateNav date={date} today={today} />
 

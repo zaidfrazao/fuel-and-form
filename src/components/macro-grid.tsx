@@ -1,6 +1,13 @@
+import type { ReactNode } from "react";
+
 import { KeyValueGrid, type KeyValueItem } from "@/components/kv-grid";
 import { figure, signed } from "@/lib/format";
-import { deltaFromTarget, type MacroTarget, type MacroTotals } from "@/lib/macros";
+import {
+  deltaFromTarget,
+  type MacroBearing,
+  type MacroTarget,
+  type MacroTotals,
+} from "@/lib/macros";
 import { cn } from "@/lib/utils";
 
 /**
@@ -106,6 +113,128 @@ export function isMaterialOverage(delta: number, target: number): boolean {
  * stands alone beneath it.
  */
 export type CaloriesFigure = "actual" | "target";
+
+/**
+ * The meal and the day in one grid — FUEL-82, Brand Guide § The Day's Numbers
+ * on a Phone.
+ *
+ * ## Why this exists
+ *
+ * `/` stacked two four-cell grids: `THIS MEAL` at 142px and `TODAY` at 182px,
+ * 30px apart. At 375×667 in a demo session the chrome takes 313px of the 667 —
+ * two notice bands, the action bar and the nav pill — and the 354px those grids
+ * occupy does not fit the 354px window that leaves. Measured: the bar's top edge
+ * lands at y=441, `THIS MEAL`'s second row at 438–483 and `TODAY`'s heading at
+ * 513, so half the meal's macros were sliced mid-glyph and the day's totals were
+ * off-screen entirely.
+ *
+ * Nothing above them is padding — a two-line 40px title, the day ruler, and a
+ * four-cell grid — so no amount of spacing reaches 88px. The two grids had to
+ * become one.
+ *
+ * ## The value is the meal, the slash line is the day
+ *
+ * Which way round is not arbitrary. The `<h1>` directly above names the meal, and
+ * `right-now.tsx`'s `MealMacros` argues the grid beneath a 40px name describes
+ * the thing that was named — so the meal keeps the value slot. The day is the
+ * secondary fact about that figure, which is exactly what § Slash Metadata is
+ * for: "the fact the number is measured against, set beneath it".
+ *
+ * It also settles a worry `MealMacros` records and could not fix on its own:
+ * *"two unlabelled grids reading Calories / Protein / Fat / Carbs one after the
+ * other are not a layout a reader can resolve"*. Merged, there is only one.
+ *
+ * ## PRD § P4 still holds, which is the constraint that shaped this
+ *
+ * "All four values shown against target with a signed delta" — all four are
+ * here, each against its target, each with its delta. The mock's two-figure
+ * summary (`docs/BRAND_GUIDE.html`: "Today so far", "Protein left") would have
+ * been shorter still, but `week-totals.tsx` carries only kcal and protein and
+ * `MacroGrid` appears on `/` and the day-complete summary and nowhere else — so
+ * dropping fat and carbs here would satisfy that criterion on no phone screen at
+ * all. The compactness was worth having; the two figures were not.
+ *
+ * ## `day` prefixes the line rather than the label
+ *
+ * The label is a Micro at 10.5px and § Accessibility permits that size "only
+ * where the value sits adjacent at 22px or more" — a longer label wraps and
+ * stops sitting adjacent. The word rides the slash line instead, where it is
+ * 12.5px and free to wrap without moving anything.
+ */
+export function MealDayGrid({
+  meal,
+  totals,
+  target,
+  className,
+}: {
+  /** The meal in the middle of the screen — its own four figures, not the day's. */
+  meal: MacroBearing;
+  /** What the day comes to after overrides, the same value `MacroGrid` takes. */
+  totals: MacroTotals;
+  target: MacroTarget;
+  className?: string;
+}) {
+  const delta = deltaFromTarget(totals, target);
+
+  /*
+   * The same rule as `MacroGrid`'s, reached the same way.
+   *
+   * Duplicating the condition here rather than importing the rendered span is
+   * deliberate — the span carries `MacroGrid`'s figures, not these — but the
+   * PREDICATE is `isMaterialOverage` in both, which is the drift this file's
+   * header warns about: two callsites once wrote `delta.kcal > 0` and
+   * `cn(delta.kcal > 0 && ...)` and disagreed on a day 3 kcal over. One
+   * function, two callers.
+   */
+  const caloriesDelta = (
+    <span className={cn(isMaterialOverage(delta.kcal, target.targetKcal) && "text-error")}>
+      {signed(delta.kcal)}
+    </span>
+  );
+
+  /** The day's line beneath a meal's figure: where the day stands on this macro. */
+  const dayLine = (dayValue: string, targetValue: number, deltaValue: ReactNode) => (
+    <>
+      day {dayValue} of {figure(targetValue)} · {deltaValue}
+    </>
+  );
+
+  const items: KeyValueItem[] = [
+    {
+      label: "Calories",
+      value: figure(meal.kcal),
+      meta: dayLine(figure(totals.kcal), target.targetKcal, caloriesDelta),
+    },
+    {
+      label: "Protein",
+      value: `${figure(meal.proteinG)} g`,
+      meta: dayLine(`${figure(totals.proteinG)} g`, target.targetProteinG, signed(delta.proteinG)),
+      // § Typography: "protein stays emphasised by weight, not colour". The
+      // merged grid is still one grid, so it still carries exactly one of these.
+      emphasis: true,
+    },
+    {
+      label: "Fat",
+      value: `${figure(meal.fatG)} g`,
+      meta: dayLine(`${figure(totals.fatG)} g`, target.targetFatG, signed(delta.fatG)),
+    },
+    {
+      label: "Carbs",
+      value: `${figure(meal.carbG)} g`,
+      meta: dayLine(`${figure(totals.carbG)} g`, target.targetCarbG, signed(delta.carbG)),
+    },
+  ];
+
+  /*
+   * A 14px row gap where the grid's own is 22 — FUEL-82.
+   *
+   * A merged cell is three lines rather than two, so the rows are 65px instead
+   * of 45 and read as blocks on their own; 22px between them was tuned for the
+   * tighter pair. 14 is § Spacing's "Micro label and its content" step and is on
+   * the base scale, and it buys 8px of the 52 this screen had to find.
+   */
+  return <KeyValueGrid items={items} className={cn("gap-y-[14px] tabular-nums", className)} />;
+}
 
 export function MacroGrid({
   totals,
