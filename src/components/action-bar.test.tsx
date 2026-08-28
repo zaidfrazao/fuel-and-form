@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { render } from "@testing-library/react";
@@ -70,7 +70,6 @@ describe("no second copy of the string", () => {
     // file is not — every file would be clean because none of them, including
     // the real one, would contain it. Planting the positive is the cheap half.
     expect(readFileSync(CONSTANTS, "utf8")).toContain(LITERAL);
-    expect(relative(SRC, CONSTANTS)).toBe("components/action-bar.ts");
   });
 
   test("the specimen's bar is the shared one minus the desktop release", () => {
@@ -85,15 +84,30 @@ describe("no second copy of the string", () => {
 });
 
 describe("the scroll edge", () => {
-  /** The `.action-bar-fade` rule's body, media query and all. */
-  const RULE = CSS.slice(CSS.indexOf(".action-bar-fade"));
+  /**
+   * The rule, matched by shape rather than by position: the media query it sits
+   * in and the declarations it carries, in one go. Reading it by slicing the
+   * file at the selector and anchoring the query to the end of the slice worked,
+   * but tied the assertions to how `globals.css` happens to be formatted — a
+   * Prettier run that moved a blank line would have failed a test about a
+   * stylesheet that had not changed.
+   */
+  const RULE = CSS.match(
+    /@media \(([^)]+)\)\s*\{\s*\.action-bar-fade\s*\{([^}]*)\}/,
+  );
 
   function declaration(property: string): string {
-    const found = RULE.match(new RegExp(`${property}:\\s*([^;]+);`))?.[1];
+    const found = RULE?.[2]?.match(new RegExp(`${property}:\\s*([^;]+);`))?.[1];
 
     expect(found, `${property} not declared on .action-bar-fade`).toBeDefined();
     return found ?? "";
   }
+
+  test("is one rule, in one media query, in globals.css", () => {
+    // Everything below reads out of this match, so its absence would make the
+    // rest of the block assert nothing.
+    expect(RULE).not.toBeNull();
+  });
 
   test("is a class the bar actually carries, and globals.css actually defines", () => {
     // Two files, one name, and nothing in the type system joining them. Either
@@ -126,10 +140,6 @@ describe("the scroll edge", () => {
     // content above it — where a fade would ghost content with nothing passing
     // under it to justify the ramp. Scoping now means that ticket finds nothing
     // here to undo.
-    const query = CSS.slice(0, CSS.indexOf(".action-bar-fade")).match(
-      /@media \(([^)]+)\)\s*\{\s*$/,
-    );
-
-    expect(query?.[1]).toBe("width < 64rem");
+    expect(RULE?.[1]).toBe("width < 64rem");
   });
 });

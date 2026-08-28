@@ -387,6 +387,12 @@
  * than kept as insurance, because a declaration defending against an impossible
  * failure is indistinguishable from one defending against a real one.
  *
+ * Unprefixed, and that is a statement about the build rather than about
+ * browsers: lightningcss emits `-webkit-mask-image` beside this in the compiled
+ * stylesheet, which is what reaches Safari. Checked in `.next` rather than
+ * assumed. Writing the prefix here as well would be the fifth copy of a thing
+ * the pipeline already guarantees.
+ *
  * Scoped below `lg`, where the bar is pinned over a scrolling page and this
  * edge exists. FUEL-72 may release the pinning at desktop widths, at which
  * point there is no edge there to treat; scoping now means that ticket has
