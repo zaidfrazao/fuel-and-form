@@ -11,7 +11,7 @@ import type { MealSlot } from "@/lib/db/schema";
 import type { MacroTarget } from "@/lib/macros";
 import { dayLabel, slotLabel } from "@/lib/now-display";
 import { SLOT_ORDER } from "@/lib/resolve-plan";
-import { type GridCell, type PlannedDay, weekGrid } from "@/lib/week-grid";
+import { type GridCell, type GridColumn, type PlannedDay, weekGrid } from "@/lib/week-grid";
 import { weekTotals } from "@/lib/week-totals";
 
 /**
@@ -23,41 +23,30 @@ import { weekTotals } from "@/lib/week-totals";
  * Thirty-five cells whose meaning is entirely positional: a cell says what it
  * says because of the column and the row it is in. A grid of divs would carry
  * that meaning in the layout alone, which is exactly the information a screen
- * reader cannot recover — so the day is a `<th scope="col">`, the slot is a
- * `<th scope="row">`, and the association is the markup's rather than the CSS's.
- * FUEL-50's accessible-summary work builds on this rather than replacing it.
+ * reader cannot recover — so the day is a `<th>` scoped over its days (`col`
+ * wide, `rowgroup` stacked), the slot is a `<th scope="row">`, and the
+ * association is the markup's rather than the CSS's. FUEL-50's
+ * accessible-summary work builds on this rather than replacing it.
  *
- * ## The pinned column, and the one fill that makes it work
+ * ## Two shapes, one week
  *
- * § Spacing caps the week grid at 1024px and § Accessibility excepts it from
- * the no-horizontal-scroll rule — "the week grid excepted, which scrolls by
- * design". Seven days do not fit at 375px, so the table scrolls inside its own
- * container and the slot column is `sticky left-0`, which is what keeps the
- * question ("which meal is this?") on screen while the answer scrolls past.
+ * § The Week, Two Ways: below 768px the week is seven stacked day sections
+ * (`WeekStack`), at 768px and up it is seven day columns (`WeekTable`). Both
+ * are rendered and CSS picks one — the reasoning for that, rather than a
+ * `matchMedia` read, is at the call site.
  *
- * Two mechanics that are easy to get wrong and fail quietly:
+ * FUEL-81 decided this, and the reason is the text rather than the layout: a
+ * meal name reaches fifty characters and this screen never truncates one, so
+ * seven columns at 375px give each about 45px and a narrower column only wraps
+ * the same name taller. § Dynamic Type used to except "the week grid" from the
+ * no-horizontal-scroll rule without qualifying the width; it now excepts the
+ * wide shape only, and below 768px this screen scrolls sideways nowhere.
  *
- *   - `border-separate`, not `border-collapse`. A collapsed table hands its
- *     borders to the table itself, and a sticky cell then scrolls out from
- *     under its own hairlines — so the borders sit on the cells and the spacing
- *     is zeroed to keep the grid tight.
- *   - The pinned cells need an OPAQUE ground or the columns scroll visibly
- *     through them. That ground is `bg-surface`, which is also the AC's "one of
- *     only two components permitted a `surface` fill" (§ Color Palette: "stone
- *     tiles only — the one fill permitted outside sheets", the other being
- *     `Tile`). The brand permission and the mechanic want the same pixel.
- *
- * Only this container scrolls, never the page body, which is what the "no
- * pinch-zoom, no rotation prompt" criterion actually asks for: the screen is
- * usable held upright at 375px without reaching for either. The viewport in
- * `app/layout.tsx` is deliberately left scalable — removing pinch-zoom would be
- * the accessibility failure, not the fix.
- *
- * That sentence was written as a design intent and was false in the browser for
- * as long as it has been here: the page body scrolled sideways 629px at 375px
- * and 234px at 1024px. The `relative` on the container below is what finally
- * makes it true — the mechanic is explained there, and it is worth knowing that
- * the escape was invisible, because everything that escaped was `sr-only`.
+ * What survives the rotation is the association: the stacked shape makes the
+ * day a `<th scope="rowgroup">` and keeps the slot a `<th scope="row">`, so the
+ * markup still carries what the layout alone could not. Every cell is the same
+ * `GridButton` either way, over one `useOptimistic` state, so the two shapes
+ * cannot disagree about what is in a slot.
  *
  * ## One umber mark
  *
@@ -67,9 +56,16 @@ import { weekTotals } from "@/lib/week-totals";
  * timezone — not from a clock read in the browser, which would put the marker
  * on the wrong column for anyone travelling.
  *
- * Colour is not the only carrier: the header also says "Today" to assistive
- * technology, because § Accessibility does not allow a fact to exist in a hue
- * alone.
+ * It marks today's day heading stacked and today's column header wide. Both
+ * shapes are in the DOM, so the document holds two umber marks and a SCREEN
+ * still shows one — `display: none` takes the losing shape out of the
+ * accessibility tree as well as off the screen. `week-grid.test.tsx` counts per
+ * shape for that reason, and counts rather than spot-checks because a second
+ * accent inside one shape would not look wrong in a diff.
+ *
+ * Colour is not the only carrier: the heading also says "Today" to assistive
+ * technology — and visibly, stacked, where there is room for the word —
+ * because § Accessibility does not allow a fact to exist in a hue alone.
  *
  * ## Optimistic, on `template-editor.tsx`'s terms
  *
@@ -266,6 +262,247 @@ function GridButton({
   );
 }
 
+/** What both shapes draw: the week already shaped and overlaid. */
+type WeekColumns = readonly GridColumn<GridMeal>[];
+
+/** Opening the sheet — the one thing a cell does, in either shape. */
+type OpenCell = (cell: Cell) => void;
+
+/** The caption, written once because both tables are the same table. */
+const CAPTION = "The week’s plan, by day and meal slot. Swapped meals are marked.";
+
+/**
+ * The day heading's two halves, shared so the shapes cannot drift apart.
+ *
+ * The eye gets the short form the column header has always shown. Assistive
+ * technology gets the weekday in full, the date, and the word "today" — because
+ * § Accessibility does not let a fact live in a hue alone, and `isToday` is
+ * otherwise carried by the accent only.
+ */
+function DayName({ day, marked }: { day: GridColumn<GridMeal>; marked: boolean }) {
+  return (
+    <>
+      <span aria-hidden="true">
+        {dayLabel(day.date)}
+        {marked && day.isToday ? " · Today" : ""}
+      </span>
+      <span className="sr-only">
+        {day.name} {day.date}
+        {day.isToday ? ", today" : ""}
+      </span>
+    </>
+  );
+}
+
+/**
+ * The week as seven stacked day sections — the shape below 768px.
+ *
+ * ## Still a table
+ *
+ * The obvious phone shape is a list of divs per day, and it is the one thing
+ * this cannot be: a cell means what it means because of the day and the slot it
+ * belongs to, and a div carries that in the layout alone. So the day becomes a
+ * `<th scope="rowgroup">` over its own `<tbody>` and the slot stays a
+ * `<th scope="row">`, which is the same association the wide grid makes with
+ * `scope="col"` — rotated, not dropped. The caption comes with it.
+ *
+ * ## Why the week turns ninety degrees at all
+ *
+ * Not because seven columns are too many, but because the text in them is too
+ * long: a meal name reaches fifty characters and this screen never truncates
+ * one. Seven columns at 375px give each about 45px, and a narrower column does
+ * not fit more of the week — it wraps the same name taller. Stacked, every name
+ * has the full width of the screen and nothing scrolls sideways.
+ *
+ * The trade is written down rather than hidden: comparing Tuesday's dinner
+ * against Thursday's at a glance is the wide grid's, and is what ≥768px is for.
+ *
+ * `table-fixed` is load-bearing. An auto table sizes its columns to their
+ * content, and one fifty-character name would push the slot column to a sliver
+ * and the layout would shift from day to day. Fixed, the slot column is 72px on
+ * every row of every section, and the meal column takes the rest.
+ */
+function WeekStack({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
+  return (
+    <table
+      // Both shapes carry the same caption, because a reader is only ever
+      // offered one and it is the same week either way. This is what lets a
+      // test address one shape without inventing a difference the screen would
+      // have to show.
+      data-shape="stacked"
+      className="w-full table-fixed border-collapse text-left md:hidden"
+    >
+      <caption className="sr-only">{CAPTION}</caption>
+
+      {week.map((day) => (
+        // One `tbody` per day. The grouping is the point: it is what gives the
+        // day heading a `rowgroup` to scope over, so the five rows beneath it
+        // are its rows rather than merely the next five.
+        <tbody key={day.date}>
+          <tr>
+            <th
+              scope="rowgroup"
+              colSpan={2}
+              className={`border-b pt-5 pb-1.5 text-micro uppercase ${
+                day.isToday
+                  ? "border-accent text-accent"
+                  : "border-text-tertiary text-text-secondary"
+              }`}
+            >
+              <DayName day={day} marked />
+            </th>
+          </tr>
+
+          {SLOT_ORDER.map((slot) => (
+            <tr key={slot}>
+              <th
+                scope="row"
+                className="w-[72px] border-b border-border py-2 pr-2 align-top text-micro font-semibold uppercase text-text-secondary"
+              >
+                {slotLabel(slot)}
+              </th>
+
+              <td className="border-b border-border p-0 align-top">
+                <GridButton
+                  date={day.date}
+                  cell={cellFor(day, slot)}
+                  onOpen={() => onOpen({ date: day.date, slot })}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      ))}
+    </table>
+  );
+}
+
+/**
+ * The week as seven day columns — the shape at 768px and up.
+ *
+ * ## The pinned column, and the one fill that makes it work
+ *
+ * Seven days do not fit every width this shape runs at, so the table scrolls
+ * inside its own container and the slot column is `sticky left-0`, which keeps
+ * the question ("which meal is this?") on screen while the answer scrolls past.
+ *
+ * Two mechanics that are easy to get wrong and fail quietly:
+ *
+ *   - `border-separate`, not `border-collapse`. A collapsed table hands its
+ *     borders to the table itself, and a sticky cell then scrolls out from
+ *     under its own hairlines — so the borders sit on the cells and the spacing
+ *     is zeroed to keep the grid tight. (The stacked shape collapses freely: it
+ *     pins nothing.)
+ *   - The pinned cells need an OPAQUE ground or the columns scroll visibly
+ *     through them. That ground is `bg-surface`, which is also the AC's "one of
+ *     only two components permitted a `surface` fill" (§ Color Palette: "stone
+ *     tiles only — the one fill permitted outside sheets", the other being
+ *     `Tile`). The brand permission and the mechanic want the same pixel.
+ */
+function WeekTable({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
+  return (
+    /*
+     * `relative` is load-bearing and was missing until FUEL-65. An `overflow`
+     * clip only applies to descendants whose CONTAINING BLOCK is inside the
+     * scroll container, and this table holds nine `sr-only` cells — the caption
+     * and each day's full date — which `sr-only` makes `position: absolute`.
+     * With the wrapper `static`, their containing block was the initial one, so
+     * they were never clipped: they sat out at the table's true width and the
+     * whole PAGE scrolled sideways to reach them. Measured at 375×667 before
+     * the fix: `documentElement.scrollWidth` 1004 against a 375px viewport, and
+     * 629px of pan into a region that painted blank, because `sr-only` hides
+     * them with `clip-path`. `relative` makes this element their containing
+     * block, and the clip that was already here starts applying to them.
+     *
+     * It does not disturb the pinned column: a `sticky` cell positions against
+     * the nearest scrollport, which is this element either way.
+     *
+     * The measurement above is a phone width this shape no longer runs at, and
+     * the reasoning is kept anyway: the escape is a property of an unpositioned
+     * scroll container, not of 375px, and this one still scrolls below ~1074px.
+     */
+    <div className="relative hidden overflow-x-auto md:block">
+      {/*
+       * That it scrolls, said visibly — FUEL-81's "no fade, shadow, or
+       * affordance" finding. A fade at the right edge is the whole cue: content
+       * passing under it rather than ending at it.
+       *
+       * Bounded to the widths where the table ACTUALLY overflows, because an
+       * affordance for scrolling that is not possible is a worse lie than none.
+       * The table is 86px + 7 × 132px plus its hairlines; § Spacing caps the
+       * page at 1024px with a 28px gutter each side, so the last width that
+       * overflows is about 1074px. Above that the grid fits and the fade goes.
+       *
+       * `z-20` clears the `z-10` on the pinned column, which is a scrolling
+       * sibling and would otherwise paint over it at the moment it matters.
+       */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 right-0 z-20 hidden w-10 bg-gradient-to-l from-background to-transparent md:max-[1074px]:block"
+      />
+
+      <table
+        data-shape="wide"
+        className="w-max min-w-full border-separate border-spacing-0 text-left"
+      >
+        <caption className="sr-only">{CAPTION}</caption>
+
+        <thead>
+          <tr>
+            {/* The corner. Empty to the eye — the row headers beneath say what
+                the column holds — but named for assistive technology, which
+                would otherwise announce a blank header for every row. */}
+            <th
+              scope="col"
+              className="sticky left-0 z-10 w-[86px] min-w-[86px] border-b border-border bg-surface px-2.5 py-2"
+            >
+              <span className="sr-only">Meal slot</span>
+            </th>
+
+            {week.map((day) => (
+              <th
+                key={day.date}
+                scope="col"
+                className={`w-[132px] min-w-[132px] border-b border-l border-border px-2.5 py-2 text-micro uppercase ${
+                  day.isToday ? "text-accent" : "text-text-secondary"
+                }`}
+              >
+                <DayName day={day} marked={false} />
+              </th>
+            ))}
+          </tr>
+        </thead>
+
+        <tbody>
+          {SLOT_ORDER.map((slot) => (
+            <tr key={slot}>
+              <th
+                scope="row"
+                className="sticky left-0 z-10 border-b border-border bg-surface px-2.5 py-2 align-middle text-micro font-semibold uppercase text-text-secondary"
+              >
+                {slotLabel(slot)}
+              </th>
+
+              {week.map((day) => (
+                <td
+                  key={day.date}
+                  className="border-b border-l border-border p-0 align-top"
+                >
+                  <GridButton
+                    date={day.date}
+                    cell={cellFor(day, slot)}
+                    onOpen={() => onOpen({ date: day.date, slot })}
+                  />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function WeekGrid({
   today,
   days,
@@ -409,93 +646,25 @@ export function WeekGrid({
       )}
 
       {/*
-       * The one scrolling container on the screen. `-mx-[22px] px-[22px]` lets
-       * it bleed to the screen edges inside a guttered page, so the seventh
-       * column is reachable without the gutter eating the last few pixels of
-       * the swipe.
+       * Two shapes, one week — § The Week, Two Ways.
        *
-       * `relative` is load-bearing and was missing until FUEL-65. An `overflow`
-       * clip only applies to descendants whose CONTAINING BLOCK is inside the
-       * scroll container, and this table holds nine `sr-only` cells — the
-       * caption and each day's full date — which `sr-only` makes
-       * `position: absolute`. With the wrapper `static`, their containing block
-       * was the initial one, so they were never clipped: they sat out at the
-       * table's true width and the whole PAGE scrolled sideways to reach them.
-       * Measured at 375×667 before the fix: `documentElement.scrollWidth` 1004
-       * against a 375px viewport, the rightmost `sr-only` ending at 1003.73px,
-       * and 629px of pan into a region that painted blank, because `sr-only`
-       * hides them with `clip-path`. `relative` makes this element their
-       * containing block, and the clip that was already here starts applying to
-       * them.
+       * Below 768px the week is seven stacked day sections; at 768px and up it
+       * is the seven-column grid. Both are rendered, and CSS picks one. The
+       * alternative was a `matchMedia` read, which cannot work here: this is
+       * server-rendered into one HTML for every viewport, so the server would
+       * have to guess a width and every phone would paint the wide grid for a
+       * frame before hydration swapped it.
        *
-       * It does not disturb the pinned column: a `sticky` cell positions
-       * against the nearest scrollport, which is this element either way.
+       * `display: none` — which is what `hidden` and `md:hidden` compile to —
+       * takes the losing shape out of the accessibility tree as well as off the
+       * screen, so a screen reader is offered exactly one table, never two.
+       *
+       * The cost is 35 more buttons in the DOM. They share `pending`,
+       * `setEditing` and `act` with the visible ones, so the two shapes cannot
+       * disagree about what is in a slot: there is one state, drawn twice.
        */}
-      <div className="relative -mx-[22px] overflow-x-auto px-[22px] md:mx-0 md:px-0">
-        <table className="w-max min-w-full border-separate border-spacing-0 text-left">
-          <caption className="sr-only">
-            The week&rsquo;s plan, by day and meal slot. Swapped meals are marked.
-          </caption>
-
-          <thead>
-            <tr>
-              {/* The corner. Empty to the eye — the row headers beneath say what
-                  the column holds — but named for assistive technology, which
-                  would otherwise announce a blank header for every row. */}
-              <th
-                scope="col"
-                className="sticky left-0 z-10 w-[86px] min-w-[86px] border-b border-border bg-surface px-2.5 py-2"
-              >
-                <span className="sr-only">Meal slot</span>
-              </th>
-
-              {week.map((day) => (
-                <th
-                  key={day.date}
-                  scope="col"
-                  className={`w-[132px] min-w-[132px] border-b border-l border-border px-2.5 py-2 text-micro uppercase ${
-                    day.isToday ? "text-accent" : "text-text-secondary"
-                  }`}
-                >
-                  <span aria-hidden="true">{dayLabel(day.date)}</span>
-                  {/* The full weekday for assistive technology, and the word
-                      "Today" so the one umber column is not a colour alone. */}
-                  <span className="sr-only">
-                    {day.name} {day.date}
-                    {day.isToday ? ", today" : ""}
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody>
-            {SLOT_ORDER.map((slot) => (
-              <tr key={slot}>
-                <th
-                  scope="row"
-                  className="sticky left-0 z-10 border-b border-border bg-surface px-2.5 py-2 align-middle text-micro font-semibold uppercase text-text-secondary"
-                >
-                  {slotLabel(slot)}
-                </th>
-
-                {week.map((day) => (
-                  <td
-                    key={day.date}
-                    className="border-b border-l border-border p-0 align-top"
-                  >
-                    <GridButton
-                      date={day.date}
-                      cell={cellFor(day, slot)}
-                      onOpen={() => setEditing({ date: day.date, slot })}
-                    />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <WeekStack week={week} onOpen={setEditing} />
+      <WeekTable week={week} onOpen={setEditing} />
 
       {/* Totalled from `week` rather than from `days`, so the figures carry the
           pending swap the cells above are already showing. Passing the props
