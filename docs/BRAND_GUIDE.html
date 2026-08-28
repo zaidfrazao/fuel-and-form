@@ -41,6 +41,16 @@
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   color-scheme: light dark;
 }
+/* The deck below breaks out to the full viewport with `calc(50% - 50vw)`, and
+   `50vw` counts the classic scrollbar that `clientWidth` does not — so on a
+   browser that reserves gutter, the breakout is a scrollbar's width wider than
+   the visible page and the document scrolls sideways. `clip` and not `hidden`:
+   clip prevents the scroll without making the root a scroll container, so
+   `position: sticky` and anchor jumps are untouched. The frames stay reachable
+   because the deck has its own `overflow-x: auto`. This hides no real overflow
+   — there is none at 390, 768, 1100, 1440 or 1920 — it stops one the viewer's
+   scrollbar style would otherwise introduce. */
+html { overflow-x: clip; }
 body {
   background: var(--pg-canvas); color: var(--pg-text); font-family: var(--sans);
   font-size: 17px; line-height: 1.6; letter-spacing: -.011em; -webkit-font-smoothing: antialiased;
@@ -372,7 +382,13 @@ table.week thead th.now { color: var(--accent); border-bottom-color: var(--accen
 .dband > div { margin-left: calc(var(--rail) + var(--gutter)); width: var(--measure);
   min-height: 47px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dband p { font-size: 12.5px; font-weight: 500; line-height: 17px; color: var(--text-2); }
-.dband a { color: var(--text); text-decoration: underline; text-underline-offset: 4px; }
+/* The underline rests in `text-3` so that the shared link hover has something to
+   change. These links are already at `--text` — the register's other half — so
+   without this the rule that raises colour and takes the underline to
+   currentColor is a no-op here, and the one link on the screen a first-time
+   visitor is most likely to point at would answer nothing. */
+.dband a { color: var(--text); text-decoration: underline; text-underline-offset: 4px;
+  text-decoration-color: var(--text-3); }
 .dband .dismiss { flex: 0 0 24px; width: 24px; height: 24px; color: var(--text); }
 
 /* ---------- the rail ----------
@@ -493,7 +509,11 @@ table.week td.sw .kcal { color: var(--accent); }
   .dframe .railitem:not(.active):hover { background: var(--hover-ground); color: var(--text); }
   .dframe .railitem.active:hover { background: var(--hover-ink); }
   .dframe .list .row:hover { background: var(--hover-ground); }
-  .dframe .tile.stone:hover { box-shadow: var(--hover-ring); }
+  /* `:not(.sel)` — selection outranks hover. Both are a 1.5px inset rule on the
+     same property, so without this a pointer crossing the chosen tile would
+     take its umber ring away and leave a grey one, which says the opposite of
+     what happened. The ink tile has no such clash: its hover is a fill. */
+  .dframe .tile.stone:not(.sel):hover { box-shadow: var(--hover-ring); }
   .dframe .tile.ink:hover { background: var(--hover-ink); }
   .dframe .lnk:hover, .dframe .railfoot a:hover, .dframe .dband a:hover {
     color: var(--text); text-decoration-color: currentColor; }
@@ -509,7 +529,7 @@ table.week td.sw .kcal { color: var(--accent); }
 .railitem.is-hover:not(.active) { background: var(--hover-ground); color: var(--text); }
 .railitem.active.is-hover { background: var(--hover-ink); }
 .row.is-hover { background: var(--hover-ground); }
-.tile.stone.is-hover { box-shadow: var(--hover-ring); }
+.tile.stone.is-hover:not(.sel) { box-shadow: var(--hover-ring); }
 .tile.ink.is-hover { background: var(--hover-ink); }
 .lnk.is-hover { color: var(--text); text-decoration-color: currentColor; }
 .cbx.is-hover { background: var(--hover-ground); border-color: var(--text-2); }
