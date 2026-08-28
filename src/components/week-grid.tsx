@@ -455,18 +455,30 @@ function WeekTable({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
        * affordance" finding. A fade at the right edge is the whole cue: content
        * passing under it rather than ending at it.
        *
-       * Bounded to the widths where the table ACTUALLY overflows, because an
-       * affordance for scrolling that is not possible is a worse lie than none.
-       * The table is 86px + 7 × 132px plus its hairlines; § Spacing caps the
-       * page at 1024px with a 28px gutter each side, so the last width that
-       * overflows is about 1074px. Above that the grid fits and the fade goes.
+       * Unbounded, because this grid overflows at EVERY width it is shown at.
+       * That is not obvious and was got wrong once: the arithmetic looks like
+       * 86px + 7 × 132px against a 1024px page and comes out fitting, so the
+       * fade was first bounded to widths below ~1074px. Measured at 1440 it
+       * still had 55px left to scroll and the fade was gone — the affordance
+       * absent exactly where the pan was still real.
+       *
+       * The 86px is a minimum, not a width. An auto table grows a column to
+       * its content and "Breakfast" is 79.3px at `text-micro`, so the pinned
+       * column resolves to 99.3px and the table to ~1023px. § Spacing caps the
+       * page at 1024px with a 28px gutter each side, which leaves 968px. 1023
+       * against 968 is 55px of overflow that no viewport width removes.
+       *
+       * So the fade is honest wherever the wide shape is drawn. FUEL-71 is the
+       * ticket that gives this grid the width it needs; when it does, this is
+       * the comment that has to be revisited rather than a number buried in a
+       * variant.
        *
        * `z-20` clears the `z-10` on the pinned column, which is a scrolling
        * sibling and would otherwise paint over it at the moment it matters.
        */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 right-0 z-20 hidden w-10 bg-gradient-to-l from-background to-transparent md:max-[1074px]:block"
+        className="pointer-events-none absolute inset-y-0 right-0 z-20 w-10 bg-gradient-to-l from-background to-transparent"
       />
 
       <table

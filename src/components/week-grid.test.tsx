@@ -219,11 +219,17 @@ describe("the table", () => {
     expect(fade).toBeTruthy();
     expect(fade?.getAttribute("aria-hidden")).toBe("true");
 
-    // Bounded to the widths that actually overflow. The table is 86px + 7 ×
-    // 132px, and the page is capped at 1024px with a 28px gutter each side, so
-    // about 1074px is the last width that scrolls. An affordance for scrolling
-    // that is not possible is a worse lie than none at all.
-    expect(fade?.className).toContain("md:max-[1074px]:block");
+    // NOT bounded to a width range, because this grid overflows at every width
+    // it is drawn at. That was got wrong once: 86px + 7 × 132px against a
+    // 1024px page looks like it fits above ~1074px, so the fade was bounded
+    // there — and at 1440 the scroller still had 55px to go with no fade on it.
+    //
+    // The 86px is a minimum. An auto table grows a column to its content, so
+    // the pinned column resolves to 99.3px and the table to ~1023px against the
+    // 968px the page cap leaves. The fade lives inside the `md:block` scroller,
+    // which is the only bound it needs.
+    expect(fade?.className).not.toContain("1074");
+    expect(fade?.closest(".overflow-x-auto")?.className).toContain("md:block");
 
     // Above the pinned column, which is a scrolling sibling at `z-10` and would
     // otherwise paint over the fade at the moment it matters.
