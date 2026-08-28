@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -109,7 +109,32 @@ const swappedTuesday = () =>
     day.date === TUE ? { ...day, meals: [dinner(CURRY, "override", "o1")] } : day,
   );
 
-const cell = (name: string | RegExp) => screen.getByRole("button", { name });
+/**
+ * One shape of the week — FUEL-81.
+ *
+ * `/plan` renders both: seven stacked day sections below 768px and seven day
+ * columns at 768px and up, with CSS choosing one. jsdom loads no stylesheet, so
+ * unlike a browser it has BOTH in the tree and an unscoped `getByRole` would
+ * find every cell twice. Every query below goes through a shape for that
+ * reason.
+ *
+ * Addressed by `data-shape` rather than by accessible name because the two
+ * carry the same caption on purpose — a reader is only ever offered one, and it
+ * is the same week either way.
+ */
+const shape = (which: "stacked" | "wide") =>
+  within(document.querySelector<HTMLElement>(`[data-shape="${which}"]`)!);
+
+/**
+ * The default shape for a test that is not about layout.
+ *
+ * The wide grid, because it is the shape these tests were written against and
+ * the behaviour they check — opening the sheet, the optimistic value, the
+ * banner — is shared: both shapes render the same `GridButton` over one
+ * `useOptimistic` state. `describe("stacked")` covers what is genuinely its
+ * own, and `both shapes` below pins the sharing rather than assuming it.
+ */
+const cell = (name: string | RegExp) => shape("wide").getByRole("button", { name });
 
 /**
  * The same lookup, awaited — for anything that appears through a transition.
@@ -120,7 +145,8 @@ const cell = (name: string | RegExp) => screen.getByRole("button", { name });
  * uninstrumented and lost under coverage, which is the same flake waiting to
  * happen on a loaded CI runner.
  */
-const findCell = (name: string | RegExp) => screen.findByRole("button", { name });
+const findCell = (name: string | RegExp) =>
+  shape("wide").findByRole("button", { name });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -134,19 +160,17 @@ describe("the table", () => {
     grid();
 
     // Seven day columns plus the pinned corner.
-    expect(screen.getAllByRole("columnheader")).toHaveLength(8);
+    expect(shape("wide").getAllByRole("columnheader")).toHaveLength(8);
 
     // Five slot rows, whatever any one day plans.
-    expect(screen.getAllByRole("rowheader").map((th) => th.textContent)).toEqual([
-      "Breakfast",
-      "Lunch",
-      "Snack",
-      "Dinner",
-      "Extra",
-    ]);
+    expect(
+      shape("wide")
+        .getAllByRole("rowheader")
+        .map((th) => th.textContent),
+    ).toEqual(["Breakfast", "Lunch", "Snack", "Dinner", "Extra"]);
 
     // Thirty-five cells, always — a day that plans one meal still has five.
-    expect(screen.getAllByRole("cell")).toHaveLength(35);
+    expect(shape("wide").getAllByRole("cell")).toHaveLength(35);
   });
 
   test("associates each cell with its day and slot for a screen reader", () => {
@@ -161,8 +185,8 @@ describe("the table", () => {
   test("keeps the slot column pinned over the scrolling days", () => {
     const { container } = grid();
 
-    const [corner] = screen.getAllByRole("columnheader");
-    const [breakfast] = screen.getAllByRole("rowheader");
+    const [corner] = shape("wide").getAllByRole("columnheader");
+    const [breakfast] = shape("wide").getAllByRole("rowheader");
 
     // Sticky, and opaque. Without the fill the day columns scroll visibly
     // through the pinned cells; `bg-surface` is also the AC's permitted
@@ -179,7 +203,255 @@ describe("the table", () => {
 
     // `border-separate`, because a collapsed table hands its borders to the
     // table and the sticky column then scrolls out from under its own hairlines.
-    expect(container.querySelector("table")?.className).toContain("border-separate");
+    expect(
+      container.querySelector('[data-shape="wide"]')?.className,
+    ).toContain("border-separate");
+  });
+
+  test("says that it scrolls, at the widths where it does", () => {
+    const { container } = grid();
+
+    // FUEL-81: the only cue that the grid scrolled used to be Wednesday being
+    // sliced at the right edge. A fade is the affordance — content passing
+    // under it rather than ending at it.
+    const fade = container.querySelector(".bg-gradient-to-l");
+
+    expect(fade).toBeTruthy();
+    expect(fade?.getAttribute("aria-hidden")).toBe("true");
+
+    // NOT bounded to a width range, because this grid overflows at every width
+    // it is drawn at. That was got wrong once: 86px + 7 × 132px against a
+    // 1024px page looks like it fits above ~1074px, so the fade was bounded
+    // there — and at 1440 the scroller still had 55px to go with no fade on it.
+    //
+    // The 86px is a minimum. An auto table grows a column to its content, so
+    // the pinned column resolves to 99.3px and the table to ~1023px against the
+    // 968px the page cap leaves. The fade lives inside the `md:block` scroller,
+    // which is the only bound it needs.
+    expect(fade?.className).not.toContain("1074");
+    expect(fade?.closest(".overflow-x-auto")?.className).toContain("md:block");
+
+    // Above the pinned column, which is a scrolling sibling at `z-10` and would
+    // otherwise paint over the fade at the moment it matters.
+    expect(fade?.className).toContain("z-20");
+  });
+});
+
+/**
+ * The week stacked — FUEL-81, and the shape a phone gets.
+ *
+ * The decision these tests hold to the wall is in § The Week, Two Ways: the
+ * week turns ninety degrees below 768px because a meal name reaches fifty
+ * characters and this screen never truncates one, not because seven columns are
+ * too many. What must survive the rotation is the association — the thing a
+ * list of divs would have lost, and the reason this is still a table.
+ */
+describe("the week, stacked", () => {
+  test("gives every day its own row group, headed by the day", () => {
+    grid();
+
+    const stacked = shape("stacked");
+
+    // Seven groups, one per day. The grouping is what the day heading scopes
+    // over: without it the five rows beneath are merely the next five.
+    expect(
+      stacked
+        .getAllByRole("rowgroup")
+        .filter((group) => group.tagName === "TBODY"),
+    ).toHaveLength(7);
+
+    // Thirty-five cells here too — the same week, drawn the other way up.
+    expect(stacked.getAllByRole("cell")).toHaveLength(35);
+  });
+
+  test("keeps the day/slot association in the markup, not the layout", () => {
+    grid();
+
+    const scopes = Array.from(
+      document.querySelectorAll('[data-shape="stacked"] th'),
+    ).map((th) => th.getAttribute("scope"));
+
+    // Seven day headings scoped over their group, and thirty-five slot headings
+    // scoped over their row. `scope="rowgroup"` is what replaces the wide
+    // shape's `scope="col"`; dropping to unscoped `th`, or to divs, would leave
+    // the meaning in the layout alone — which is the one thing a screen reader
+    // cannot recover.
+    expect(scopes.filter((scope) => scope === "rowgroup")).toHaveLength(7);
+    expect(scopes.filter((scope) => scope === "row")).toHaveLength(35);
+    expect(scopes.filter((scope) => scope === null)).toHaveLength(0);
+
+    // And the caption comes with it, so the table is announced as what it is.
+    expect(
+      document.querySelector('[data-shape="stacked"] caption')?.textContent,
+    ).toContain("by day and meal slot");
+  });
+
+  test("names each cell by its day and slot, as the wide grid does", () => {
+    grid();
+
+    // The same accessible name from the same `GridButton`. Thirty-five buttons
+    // reading "Dinner" would be unusable in either shape.
+    expect(
+      shape("stacked").getByRole("button", {
+        name: "Tue 10 Mar dinner: Chilli con Carne",
+      }),
+    ).toBeTruthy();
+    expect(
+      shape("stacked").getByRole("button", { name: "Sun 15 Mar lunch: not planned" }),
+    ).toBeTruthy();
+  });
+
+  test("marks today's day heading, and says so in words as well", () => {
+    grid();
+
+    const today = shape("stacked")
+      .getAllByRole("rowheader")
+      .find((th) => th.getAttribute("scope") === "rowgroup" && th.textContent?.includes("Tue 10 Mar"));
+
+    expect(today?.className).toContain("text-accent");
+
+    // § Accessibility: never colour alone. Stacked there is room for the word
+    // on the screen as well as in the accessible name, so it is on both.
+    expect(today?.textContent).toContain("Today");
+    expect(today?.textContent).toContain("Tuesday");
+  });
+
+  test("scrolls nowhere sideways — no scroller, and no fixed column widths", () => {
+    grid();
+
+    const table = document.querySelector('[data-shape="stacked"]')!;
+
+    // The heart of the ticket: below 768px nothing on this screen pans. There
+    // is no `overflow-x` container here to pan inside, and the table is the
+    // width of the screen rather than the width of seven columns.
+    expect(table.closest(".overflow-x-auto")).toBeNull();
+    expect(table.className).toContain("w-full");
+    expect(table.className).not.toContain("w-max");
+    expect(table.querySelector('[class*="min-w-["]')).toBeNull();
+
+    // `table-fixed`, or one fifty-character meal name sizes the slot column to
+    // a sliver and the layout shifts from day to day.
+    expect(table.className).toContain("table-fixed");
+  });
+
+  test("states its column widths where a fixed table will read them", () => {
+    grid();
+
+    // `table-fixed` takes its widths from the first row, and the first row here
+    // spans both columns — so a width on the slot `th` is read from a row that
+    // decides nothing and is ignored in silence. Measured at 375px before the
+    // `colgroup`: the slot column took 165.5px of 331 rather than 88, half the
+    // screen, which is worse than the pinned column this shape exists to stop
+    // paying for. Nothing about the DOM says so, which is why it is pinned here.
+    const cols = document.querySelectorAll('[data-shape="stacked"] colgroup col');
+
+    expect(cols).toHaveLength(2);
+    // 88px is the longest label, "Breakfast", at 79.3px plus its 8px gap —
+    // measured, not guessed. A fixed table grows no column to fit its content
+    // the way the wide grid's auto table does, so a tight number clips a word.
+    expect(cols[0]?.className).toContain("w-[88px]");
+    // The second takes what is left — the whole point of the shape.
+    expect(cols[1]?.className).toBe("");
+  });
+
+  test("a fifty-character meal name is never truncated", () => {
+    const long = "Steak with Garlic Butter, Chips & Peppercorn Sauce";
+
+    grid(
+      template.map((day) =>
+        day.date === TUE
+          ? { ...day, meals: [dinner({ ...CHILLI, name: long }, "template", "t1")] }
+          : day,
+      ),
+    );
+
+    // The reason the week turns at all. The name is rendered whole — no clamp,
+    // no ellipsis — because a half-read meal name is not a meal you recognise,
+    // and it is what the full width of the screen is being spent on.
+    const named = shape("stacked").getByRole("button", {
+      name: `Tue 10 Mar dinner: ${long}`,
+    });
+
+    expect(named.textContent).toContain(long);
+    expect(named.className).not.toContain("truncate");
+    expect(named.className).not.toContain("line-clamp");
+  });
+});
+
+/**
+ * One state, drawn twice.
+ *
+ * The behaviour tests above all run against the wide shape, which is only safe
+ * while both shapes share a `GridButton` over one `useOptimistic` state. That
+ * is a thing to pin rather than to assume: two shapes that disagreed about what
+ * is in a slot would be a bug no test in this file would otherwise see.
+ */
+describe("both shapes", () => {
+  test("a tap in the stacked week opens the same sheet", async () => {
+    grid();
+    const user = userEvent.setup();
+
+    await user.click(
+      shape("stacked").getByRole("button", {
+        name: /Tue 10 Mar dinner: Chilli con Carne/,
+      }),
+    );
+
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  test("an optimistic swap lands in both at once", async () => {
+    // Held open — the optimistic value only stands while the action is in
+    // flight, and there is no revalidation behind it in a test.
+    let release: () => void = () => {};
+    swapOnDate.mockReturnValue(
+      new Promise((resolve) => {
+        release = () => resolve({ ok: true });
+      }),
+    );
+
+    grid();
+    const user = userEvent.setup();
+
+    await user.click(cell(/Tue 10 Mar dinner: Chilli con Carne/));
+    await user.click(screen.getByRole("button", { name: /Chickpea Curry/ }));
+    await user.click(screen.getByRole("button", { name: "Swap" }));
+
+    // The tap was made in the wide shape; the stacked one moves with it,
+    // because there is one state and two drawings of it.
+    expect(
+      await shape("stacked").findByRole("button", {
+        name: /Tue 10 Mar dinner: Chickpea Curry, swapped/,
+      }),
+    ).toBeTruthy();
+    expect(
+      await shape("wide").findByRole("button", {
+        name: /Tue 10 Mar dinner: Chickpea Curry, swapped/,
+      }),
+    ).toBeTruthy();
+
+    release();
+  });
+
+  test("a failure surfaces once, above both", async () => {
+    swapOnDate.mockResolvedValue({ ok: false });
+
+    grid();
+    const user = userEvent.setup();
+
+    await user.click(
+      shape("stacked").getByRole("button", {
+        name: /Tue 10 Mar dinner: Chilli con Carne/,
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: /Chickpea Curry/ }));
+    await user.click(screen.getByRole("button", { name: "Swap" }));
+
+    // One banner, not one per shape: it sits above both, where the eye returns
+    // after the sheet goes.
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 });
 
@@ -228,7 +500,7 @@ describe("the one umber mark", () => {
   test("today's column header takes the accent", () => {
     grid();
 
-    const tuesday = screen
+    const tuesday = shape("wide")
       .getAllByRole("columnheader")
       .find((th) => th.textContent?.includes("Tue 10 Mar"));
 
@@ -240,15 +512,30 @@ describe("the one umber mark", () => {
 
     // Counted rather than spot-checked. § The Four Rules allows exactly one
     // umber element per screen, and a second one would not look wrong in a diff.
-    expect(container.querySelectorAll('[class*="text-accent"]')).toHaveLength(1);
-    expect(container.querySelectorAll('[class*="bg-accent"]:not([class*="subtle"])'))
-      .toHaveLength(0);
+    //
+    // Counted per SHAPE since FUEL-81, which is the honest reading of "per
+    // screen": both shapes are in the document and CSS shows one, so the rule
+    // is about what a viewport renders, not about what the DOM holds. Counting
+    // the container would now assert 2 and would go on passing if one shape
+    // grew a second mark while the other lost its only one.
+    for (const which of ["stacked", "wide"] as const) {
+      const table = document.querySelector(`[data-shape="${which}"]`)!;
+
+      expect(table.querySelectorAll('[class*="text-accent"]')).toHaveLength(1);
+      expect(
+        table.querySelectorAll('[class*="bg-accent"]:not([class*="subtle"])'),
+      ).toHaveLength(0);
+    }
+
+    // And nothing outside either table takes one — the totals block below the
+    // grid is the one most likely to reach for it.
+    expect(container.querySelectorAll('[class*="text-accent"]')).toHaveLength(2);
   });
 
   test("says 'today' as well as colouring it", () => {
     grid();
 
-    const tuesday = screen
+    const tuesday = shape("wide")
       .getAllByRole("columnheader")
       .find((th) => th.textContent?.includes("Tue 10 Mar"));
 
@@ -562,8 +849,12 @@ describe("what the week comes to", () => {
     // Awaited, not read synchronously: the optimistic value lands inside a
     // transition, and a `getBy` here passes uninstrumented and flakes under
     // coverage — the same race `findCell` exists for.
-    expect(await screen.findByText("560 kcal")).toBeTruthy();
-    expect(totalFor("Tue 10 Mar").textContent).toContain("560 kcal");
+    // Waited on the TOTAL rather than on the text "560 kcal" anywhere, which
+    // now appears in the cell as well and in both shapes of it — three matches
+    // for a figure this test cares about in exactly one place.
+    await waitFor(() =>
+      expect(totalFor("Tue 10 Mar").textContent).toContain("560 kcal"),
+    );
     expect(totalFor("Average").textContent).toContain("680 kcal");
 
     release();

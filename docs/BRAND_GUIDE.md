@@ -159,8 +159,27 @@ Two exceptions that outrank the aesthetic:
 - **Key/value grid:** two columns, 22px row gap, 16px column gap. Three columns for compact stats.
 - **Radius:** `sm` 6px (tags) · `md` 12px (buttons) · `lg` 14px (tiles) · `xl` 26px (sheets) · `full` 999px (tab pill, NOW pill).
 - **Hairlines:** 1px `border`, dropping to 0.5px at `min-resolution: 2dppx`.
-- **Max content width:** 640px single-column, centred on desktop; 1024px for the week grid.
+- **Max content width:** 640px single-column, centred on desktop; 1024px for the week grid at ≥768px.
 - **Elevation:** none, except sheets — `0 -8px 34px rgba(0,0,0,0.12)`.
+
+### The Week, Two Ways
+
+`/plan` draws the same week in two shapes, and which one you get is a width, not a preference.
+
+| | **< 768px** | **≥ 768px** |
+|---|---|---|
+| Shape | Seven day sections, stacked | Seven day columns × five slot rows |
+| Long axis | Vertical | Horizontal |
+| Sideways scroll | None | Yes, to 1024px — by design |
+| Meal name | Full width, wraps, never clipped | Column width, wraps |
+
+**Why they diverge.** A meal's name is up to fifty characters — `Steak with Garlic Butter, Chips & Peppercorn Sauce` — and the grid never truncates one, because a half-read meal name is not a meal you can recognise. Seven columns carrying that at 375px gives each about 45px, and narrower columns do not fit more of the week: they wrap the same text taller. The horizontal shape fails on a phone for a reason no amount of CSS reaches, so below 768px the week turns ninety degrees and scrolls the way a phone already scrolls.
+
+**What does not change.** Both shapes are one real `<table>`, because a cell still means what it means by the day and the slot it belongs to. The stacked shape makes the day a `<th scope="rowgroup">` and keeps the slot a `<th scope="row">`; the wide shape keeps `scope="col"` for the day. Every cell is the same button, opening the same sheet, optimistic on the same terms. Only one shape is in the accessibility tree at a time.
+
+**The one umber mark** is per shape, not per document: today's day heading when stacked, today's column header when wide. A screen still shows exactly one.
+
+**The cost, stated.** Stacked, you cannot compare Tuesday's dinner against Thursday's at a glance — that comparison is the wide shape's, and it is what the ≥768px screen is for.
 
 ### Touch Targets
 
@@ -346,7 +365,7 @@ One question per screen. Bottom sheets for the meal picker and swap preview; the
 - **Focus:** 2px `accent` ring, 2px offset, on every interactive element in both modes. Never removed.
 - **Touch:** 44×44px minimum. Icon-only tabs carry an `aria-label`; the active tab shows its label as text.
 - **Reduced motion:** `prefers-reduced-motion: reduce` drops the chart and ruler draw-in; sheets cross-fade at 100ms.
-- **Dynamic Type:** sizes in `rem`, tested to 200% zoom with no horizontal scroll — the week grid excepted, which scrolls by design.
+- **Dynamic Type:** sizes in `rem`, tested to 200% zoom with no horizontal scroll — the week grid at ≥768px excepted, which scrolls by design. Below 768px nothing on any screen scrolls sideways, the week grid included; see § The Week, Two Ways.
 
 ## Tone of Voice
 

@@ -157,9 +157,20 @@ export default async function PlanPage({
   const elsewhere = startOfWeek(plan.today) !== plan.monday;
 
   return (
-    // 1024px, not 640px — § Spacing: "max content width: 640px single-column;
-    // 1024px for the week grid".
-    <PageMain className="max-w-[1024px] gap-7 py-8">
+    /*
+     * 1024px, not 640px — § Spacing: "max content width: 640px single-column;
+     * 1024px for the week grid at ≥768px".
+     *
+     * The bottom padding clears the nav pill. Below `lg` the shell is pinned to
+     * the viewport (FUEL-65) and floats over whatever is beneath it, and unlike
+     * `/` and `/training` this screen has no sticky action bar to stop at
+     * `--nav-shell-h` — it just ends. That was survivable while the week was a
+     * table 35 cells tall; stacked it is seven day sections, so the page scrolls
+     * to a bottom that Sunday's dinner would otherwise sit under, unreachable
+     * and un-tappable. At `lg` the shell becomes a sidebar and takes no
+     * horizontal strip of the page's bottom, so the padding goes back to 8.
+     */
+    <PageMain className="max-w-[1024px] gap-7 pt-8 pb-[calc(var(--nav-shell-h)+--spacing(8))] lg:pb-8">
       <header className="flex flex-col gap-2">
         {/*
          * No `week` — the parent is `/`, which takes no `searchParams` and has
