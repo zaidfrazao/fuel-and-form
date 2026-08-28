@@ -385,7 +385,11 @@ function WeekStack({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
             <tr key={slot}>
               <th
                 scope="row"
-                className="w-[72px] border-b border-border py-2 pr-2 align-top text-micro font-semibold uppercase text-text-secondary"
+                // No width here on purpose — the `colgroup` above states it,
+                // and a second number in this spot would be dead the moment it
+                // disagreed, which is how the 72px that never applied survived
+                // long enough to ship half the screen to the slot column.
+                className="border-b border-border py-2 pr-2 align-top text-micro font-semibold uppercase text-text-secondary"
               >
                 {slotLabel(slot)}
               </th>
