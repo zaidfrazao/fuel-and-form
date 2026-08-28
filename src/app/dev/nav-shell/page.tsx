@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { ACTION_BAR } from "@/components/action-bar";
 import { NavShell } from "@/components/nav-shell";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -221,7 +222,7 @@ export default function NavShellSpecimen() {
                   </p>
                 ))}
 
-                <div className="sticky bottom-[var(--nav-shell-h)] mt-auto flex flex-col gap-3 bg-background pt-[30px]">
+                <div className={ACTION_BAR}>
                   <span className="flex h-12 items-center justify-center rounded-md bg-ink text-body font-medium text-ink-fg">
                     Log eaten
                   </span>

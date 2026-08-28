@@ -20,6 +20,7 @@
  * the boxes are, literally, nothing.
  */
 
+import { APP_ACTION_BAR } from "@/components/action-bar";
 import { PageMain } from "@/components/page-main";
 
 /** A placeholder block. `surface` is the stone fill, so it recedes in both modes. */
@@ -72,13 +73,15 @@ export default function Loading() {
 
       {/* The action bar, at the same 52px / 46px heights, the same 30px off the
           content above it and pinned the same way, so the primary does not move
-          on swap-in. "Pinned the same way" now includes stopping at
-          `--nav-shell-h` rather than at 0 — see right-now.tsx. A skeleton that
-          pinned to 0 would put its primary 86px lower than the real one and the
-          swap-in would jump. */}
+          on swap-in. "Pinned the same way" used to be a claim about two class
+          strings that happened to match — a skeleton pinned to 0 while the real
+          bar cleared `--nav-shell-h` would put its primary 86px lower and the
+          swap-in would jump. FUEL-83 made it the same string: `APP_ACTION_BAR`,
+          which both take, so the two cannot disagree about the pinning or about
+          the fade over the bar's top. */}
       <div
         aria-hidden
-        className="sticky bottom-[var(--nav-shell-h)] mt-auto flex flex-col gap-3 bg-background pt-[30px] lg:bottom-0"
+        className={APP_ACTION_BAR}
       >
         <Block className="h-13 w-full rounded-md" />
         <div className="flex gap-3">

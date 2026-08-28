@@ -27,7 +27,7 @@ Practical consequences:
 
 ## The Four Rules
 
-The interface is flat: no gradients, no textures, no shadows outside sheets. What makes it read as designed rather than generic is scale, restraint, and two signature graphics.
+The interface is flat: no gradients, no textures, no shadows outside sheets. One exception, named and scoped in § Materials → The Scroll Edge. What makes it read as designed rather than generic is scale, restraint, and two signature graphics.
 
 ### 1. Scale — 7× contrast, minimum
 
@@ -330,7 +330,7 @@ The attribution was wrong everywhere it appeared, and the comments and test that
 
 ## Materials
 
-Flat, with four devices doing the work depth would otherwise do.
+Flat, with five devices doing the work depth would otherwise do.
 
 ### Hatching
 
@@ -355,6 +355,14 @@ A finished page still sits in the app's frame. The § Navigation shell renders b
 ### Slash Metadata
 
 A leading `/ ` in `text-tertiary` marks every secondary fact — `/ 612 kcal · 25 min · serves 1`. It replaces the parentheses, dashes and colons that make interface copy look unconsidered, and costs one character.
+
+### The Scroll Edge
+
+The sticky action bars on `/` and `/training` are opaque, so the page scrolls out of sight at their top edge. Below 1024px that edge is masked over its top 24px, and a line of type meeting it runs out rather than being cut through the x-height.
+
+The **one permitted exception to "no gradients"**, and narrow on purpose: it is a mask, not a material. Nothing is painted — the bar's flat fill is unchanged and the stencil only decides where the bar stops covering. What the flat rule bans is a ramp standing in for depth, which is why Hatching is "a pattern, not a texture" and why charts get no area fill. A shadow would have been the system's second and § Materials reserves the only one for sheets; a rule would have said "boundary" where the screen needs to say "there is more below".
+
+Nowhere else. A device used once keeps its meaning.
 
 ### Deliberately Absent
 
@@ -473,7 +481,8 @@ Two components are bespoke and worth building first, since every screen depends 
 
 - **Created:** 2026-08-10
 - **v2:** accent changed from amber `#E8833A` to umber, collapsing the fill/ink token split; cards replaced by hairline-separated content on canvas.
-- **v3.6 (current):** § The Day's Numbers on a Phone added (FUEL-82): below 768px `/` merges `This meal` and `Today` into one grid, the meal's figure as the value and the day's on the slash line, and the day ruler follows the figures rather than preceding them. Driven by measurement — 313px of the 667 at 375×667 is chrome, and the two grids wanted the whole 354px that left. All four macros survive against target with a signed delta, so PRD § P4 still holds on a phone; the mock's own two-figure summary would have satisfied it nowhere. § Touch Targets gains the sentence its 44×44 minimum always implied — the rule is about the area, not the mark — which is what lets the demo banner close from 57px to 47. The 375px Right Now frame in `BRAND_GUIDE.html` is redrawn to the merged shape and now carries the two notice bands it had always omitted; that omission is why four bands were never summed. Above 768px the two named sections are unchanged, and the mock remains the source of truth for everything else.
+- **v3.7 (current):** § Materials gains The Scroll Edge (FUEL-83) and, with it, the single exception to "no gradients" the guide has ever carried. The sticky action bars on `/` and `/training` are opaque, and at 375×667 the resulting hard edge cut the first exercise's prescription through the x-height — half of every letter drawn and half not, which reads as a rendering fault rather than as content continuing below. Below 1024px the top 24px of the bar is now masked so the line runs out instead. Recorded as an exception rather than waved through because the flat rule is stated three times in this document and twice in the mock: what it bans is a ramp painted as a material, and a mask paints nothing — the bar's flat fill is untouched and the stencil only decides where it stops covering. The alternatives are named in the section and both were rejected on the guide's own terms: a shadow would be the system's second, and a rule states a boundary where the screen needs to state continuation. No change to any bar's position, height or `--nav-shell-h` offset, and none above 1024px, where FUEL-72 may remove the pinning that creates the edge at all.
+- **v3.6:** § The Day's Numbers on a Phone added (FUEL-82): below 768px `/` merges `This meal` and `Today` into one grid, the meal's figure as the value and the day's on the slash line, and the day ruler follows the figures rather than preceding them. Driven by measurement — 313px of the 667 at 375×667 is chrome, and the two grids wanted the whole 354px that left. All four macros survive against target with a signed delta, so PRD § P4 still holds on a phone; the mock's own two-figure summary would have satisfied it nowhere. § Touch Targets gains the sentence its 44×44 minimum always implied — the rule is about the area, not the mark — which is what lets the demo banner close from 57px to 47. The 375px Right Now frame in `BRAND_GUIDE.html` is redrawn to the merged shape and now carries the two notice bands it had always omitted; that omission is why four bands were never summed. Above 768px the two named sections are unchanged, and the mock remains the source of truth for everything else.
 - **v3.5:** § Navigation pins the mobile pill to the bottom of the viewport (FUEL-65), overriding the mock's `.tabbar { margin-top: auto }` — the third override this section records against the HTML mock, after the fourth destination and the day-complete tab bar. Driven by measurement rather than taste: the shell sat at the end of the document, 3636px down on `/weight`. The action bars on `/` and `/training` now clear it by `--nav-shell-h`. Appearance of the pill itself is unchanged, and the desktop sidebar is untouched; the mock remains the source of truth for everything else.
 - **v3.4:** § Navigation gains the naming rule its route table implied but never stated (FUEL-60): the Destination column is the name, every link that names a destination uses it, and the `<h1>` is a heading that must map to that name rather than a second name for it. Two carve-outs are named — a link inside a sentence and a link whose name is an action — and the labels corrected under the rule are listed. No visual change; the HTML mock is unchanged and remains the source of truth for everything else.
 - **v3.3:** § Navigation names the four top-level destinations (FUEL-56) and gains a route table giving every authenticated route one level and one parent. Settings gives up its slot for a link at the foot of `/`; `/shopping` and `/plan/template` are both placed under `/plan`. The reading of the PRD's "no navigation" criterion moves to the PRD, where § Navigation now points instead of arguing, and day-complete's absent tab bar is re-sourced to the mock caption that actually requires it. A section that had specified a shell without naming its contents; the HTML mock predates the shell entirely and remains the source of truth for everything else.

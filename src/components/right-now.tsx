@@ -3,6 +3,7 @@
 import { type ReactNode, startTransition, useOptimistic, useState } from "react";
 
 import { logItem, undoLastLog } from "@/app/actions/log";
+import { APP_ACTION_BAR } from "@/components/action-bar";
 import { repeatMeal, revertSwap, swapMeal } from "@/app/actions/swap";
 import { DayComplete } from "@/components/day-complete";
 import Link from "next/link";
@@ -425,6 +426,12 @@ function Anytime({
  * passes beneath it, and the 30px of it above the primary is the separation —
  * no border and no shadow, since § Materials allows neither outside sheets.
  *
+ * What that opacity used to arrive as was a hard edge, cutting whatever line of
+ * type it landed on through the x-height. `action-bar-fade` masks the top 24px
+ * of the bar below `lg` so the line runs out instead — FUEL-83, and globals.css
+ * carries the argument for a mask over the alternatives. The fill, the height
+ * and the offset are all untouched by it.
+ *
  * The safe-area inset used to live here, because a bar pinned to `bottom: 0`
  * sits below any padding its parent has. It has moved to the § Navigation shell
  * — FUEL-58 — which is now the last thing in the page column and the only thing
@@ -473,7 +480,7 @@ function Actions({
   if (!item && !undoable && !failure) return null;
 
   return (
-    <div className="sticky bottom-[var(--nav-shell-h)] mt-auto flex flex-col gap-3 bg-background pt-[30px] lg:bottom-0">
+    <div className={APP_ACTION_BAR}>
       {/*
        * § Feedback: "inline banner at the point of action, value reverted,
        * 'Try again'. Never a modal." The point of action is this bar, so the

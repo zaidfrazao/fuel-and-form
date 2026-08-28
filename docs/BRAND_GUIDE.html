@@ -437,8 +437,9 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
       <div class="sec-no"><b>01</b><i></i></div>
       <h2>Four rules that carry the whole design</h2>
       <p>
-        No gradients, no textures, no shadows outside sheets. What makes it feel designed instead of
-        generic is scale, restraint, and two signature graphics.
+        No gradients, no textures, no shadows outside sheets &mdash; with one exception, named and
+        scoped under Materials. What makes it feel designed instead of generic is scale, restraint,
+        and two signature graphics.
       </p>
     </div>
 
@@ -1204,7 +1205,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
     <div class="section-head">
       <div class="sec-no"><b>06</b><i></i></div>
       <h2>Flat, and the details that replace depth</h2>
-      <p>No gradients. No textures. No shadows outside sheets. Distinctiveness comes from these instead.</p>
+      <p>No gradients. No textures. No shadows outside sheets. One exception, below. Distinctiveness comes from these instead.</p>
     </div>
 
     <div class="grid2">
@@ -1258,6 +1259,24 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
           </div>
         </div>
         <p>A leading slash in tertiary grey marks every secondary fact. It replaces the parentheses, dashes and colons that make interface copy look unconsidered, and it costs one character.</p>
+      </div>
+
+      <div class="item">
+        <span class="item-head">The scroll edge</span>
+        <div class="plate">
+          <div class="ui" data-mode="light" style="position:relative;height:100px;overflow:hidden;">
+            <div style="display:flex;flex-direction:column;gap:7px;">
+              <span class="u-slash">Circuit A &middot; 8&ndash;12 rounds</span>
+              <span class="u-slash">40 sec on / 40 sec off</span>
+              <span class="u-slash">Kettlebell swing &middot; 16 kg</span>
+              <span class="u-slash">Goblet squat &middot; 20 kg</span>
+            </div>
+            <div style="position:absolute;left:0;right:0;bottom:0;padding-top:24px;background:var(--canvas);-webkit-mask-image:linear-gradient(to bottom,transparent,#000 24px);mask-image:linear-gradient(to bottom,transparent,#000 24px);">
+              <span style="display:flex;height:38px;align-items:center;justify-content:center;border-radius:10px;background:var(--ink);color:var(--ink-fg);font-size:13px;font-weight:500;">Log session</span>
+            </div>
+          </div>
+        </div>
+        <p>The sticky action bar is opaque, so the page scrolls out of sight at its top edge &mdash; and a hard edge cuts whatever line of type it lands on through the x-height. Below 1024px the bar's top 24px is masked, so the line runs out instead. The <em>one</em> exception to &ldquo;no gradients&rdquo;, and it is a mask, not a material: nothing is painted, the bar's flat fill is unchanged, and the stencil only decides where the bar stops covering. A shadow would have been the system's second; a rule would say &ldquo;boundary&rdquo; where the screen needs to say &ldquo;there is more below&rdquo;.</p>
       </div>
     </div>
 

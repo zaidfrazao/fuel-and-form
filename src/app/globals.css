@@ -324,3 +324,66 @@
     animation: none;
   }
 }
+
+/* Brand Guide § Materials — the scroll edge (FUEL-83).
+ *
+ * `/`'s and `/training`'s action bars are `sticky` and opaque, so the page
+ * scrolls underneath them and stops being visible at whatever pixel their top
+ * edge happens to fall on. Measured at 375×667 on `/training`, that edge landed
+ * through the x-height of the first exercise's prescription — the top half of
+ * every letter drawn and the bottom half not. Content passing behind the bar is
+ * intended and this app commits to it elsewhere (the exercise list is sized so
+ * the sixth row sits behind the bar by design); a line of type cut through the
+ * middle by a hard edge is not, because it reads as a rendering fault rather
+ * than as content continuing below.
+ *
+ * ## Why a mask and not the obvious alternatives
+ *
+ * A drop shadow would be the system's second, and § Materials reserves the only
+ * one for sheets. A hairline would be a boundary, which is a different sentence
+ * from "there is more below" — and half a glyph above a rule still reads as
+ * half a glyph. What is wanted is the type running out, which is a ramp.
+ *
+ * § Materials says "no gradients", and this is the one exception the guide now
+ * records by name. The distinction it draws: the banned gradients are painted
+ * fills standing in for depth (§ Materials' "area fills and gradients under
+ * charts", the ramp Hatching rules out with "no blending, no opacity ramp"). No
+ * gradient is painted here. The bar's own fill is the flat `bg-background` it
+ * always was, and the mask is a stencil on it — the bar stops covering, rather
+ * than a new material being laid over anything.
+ *
+ * ## The mask is on the bar, not on a strip above it
+ *
+ * A separately positioned fade above the bar was the first shape and it is
+ * wrong at the end of the scroll: the bar comes to rest at the foot of its
+ * column with real content directly above it, and a strip there would ghost
+ * that content permanently, with nothing scrolling under it to justify the
+ * fade. Masking the bar's own top has the property that fixes this for free —
+ * when there is nothing behind the bar, a transparent band over the page
+ * background is indistinguishable from an opaque one.
+ *
+ * 24px against the bar's 30px of head, so the ramp finishes inside the padding
+ * and never reaches the controls. That 6px of clearance is load-bearing rather
+ * than slack: § Accessibility's focus ring is 2px at 2px offset, so the
+ * primary's ring rises 4px above it, to 26px — inside the opaque part, and it
+ * would not be if the ramp ran the full 30.
+ *
+ * `no-repeat` with 8px of overhang for the same reason at the other end. A mask
+ * layer tiles by default, which would repeat the transparent head of the ramp
+ * immediately below the bar's border box and erase the bottom row's focus ring
+ * where it overflows. Sizing the layer past the box and switching off the
+ * repeat leaves that overflow opaque. § Accessibility: the ring is "never
+ * removed", and a mask removes without touching a single declaration that
+ * mentions it.
+ *
+ * Scoped below `lg`, where the bar is pinned over a scrolling page and this
+ * edge exists. FUEL-72 may release the pinning at desktop widths, at which
+ * point there is no edge there to treat; scoping now means that ticket has
+ * nothing to undo here. */
+@media (width < 64rem) {
+  .action-bar-fade {
+    mask-image: linear-gradient(to bottom, transparent, black 24px);
+    mask-repeat: no-repeat;
+    mask-size: 100% calc(100% + 8px);
+  }
+}

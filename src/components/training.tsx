@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type ReactNode, startTransition, useOptimistic, useState } from "react";
 
 import { clearSessionStatus, setSessionStatus } from "@/app/actions/training";
+import { APP_ACTION_BAR } from "@/components/action-bar";
 import { DotGrid, type Week } from "@/components/dot-grid";
 import { ExerciseList, type ListedExercise } from "@/components/exercise-list";
 import { SlashMeta } from "@/components/kv-grid";
@@ -557,10 +558,16 @@ export function Training({
        * shell to the bottom of the viewport, and the two would otherwise occupy
        * the same strip with the shell on top. `right-now.tsx` carries that
        * argument in full; this bar and the `loading.tsx` skeleton follow it so
-       * the primary does not move between the three.
+       * the primary does not move between the three — literally now, since
+       * FUEL-83 gave the three one class string in `action-bar.ts` rather than
+       * three copies kept in step by hand.
+       *
+       * This screen is where the edge that string's `action-bar-fade` exists to
+       * fix was measured: at 375×667 the bar's top landed through the x-height
+       * of the first exercise's prescription. See globals.css.
        */}
       {session ? (
-        <div className="sticky bottom-[var(--nav-shell-h)] mt-auto flex flex-col gap-3 bg-background pt-[30px] lg:bottom-0">
+        <div className={APP_ACTION_BAR}>
           {failure && (
             <div
               role="alert"
