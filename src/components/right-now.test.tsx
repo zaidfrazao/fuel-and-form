@@ -306,9 +306,10 @@ const shape = (which: "merged" | "split") =>
 const dayRuler = (which: "wide" | "phone" = "wide"): HTMLElement => {
   const scoped = document.querySelector<HTMLElement>(`[data-ruler="${which}"]`);
 
-  return scoped
-    ? within(scoped).getByRole("img")
-    : screen.getAllByRole("img")[0];
+  // `getAllByRole` throws when it finds none, so the index is safe — but it is
+  // typed as possibly-undefined, and an assertion is honest here where a `??`
+  // fallback would invent an element that does not exist.
+  return scoped ? within(scoped).getByRole("img") : screen.getAllByRole("img")[0]!;
 };
 
 /** A day's log of `count` lines, for the cases that only care that there is one. */
