@@ -159,7 +159,7 @@ Two exceptions that outrank the aesthetic:
 - **Key/value grid:** two columns, 22px row gap, 16px column gap. Three columns for compact stats.
 - **Radius:** `sm` 6px (tags) · `md` 12px (buttons) · `lg` 14px (tiles) · `xl` 26px (sheets) · `full` 999px (tab pill, NOW pill).
 - **Hairlines:** 1px `border`, dropping to 0.5px at `min-resolution: 2dppx`.
-- **Max content width:** 640px single-column, centred on desktop; 1024px for the week grid at ≥768px.
+- **Max content width:** 640px — the reading measure, at every width. 1024px for the week grid at ≥768px. Above 1024px the measure sits in a centred frame beside the navigation rail rather than being centred on what is left of the screen; § Desktop owns that grid and this line defers to it.
 - **Elevation:** none, except sheets — `0 -8px 34px rgba(0,0,0,0.12)`.
 
 ### The Week, Two Ways
@@ -212,6 +212,109 @@ Two exceptions that outrank the aesthetic:
 44×44px minimum. Primary actions sit in the bottom third, within thumb reach. Destructive controls never sit adjacent to a frequently-tapped one.
 
 The minimum is about the **area that responds to a thumb**, not the size of the mark drawn inside it. A smaller glyph with its hit area expanded to 44×44 — by padding, or by a pseudo-element where padding would set the height of the row — meets this in full. The demo banner's dismiss is the one place that distinction is currently load-bearing; see § The Day's Numbers on a Phone.
+
+### Desktop
+
+Everything above this line was drawn at 375px and grown outward, and above 1024px that shows. Measured at 1920×1080 on `/shopping`, before this section:
+
+| | |
+|---|---|
+| Sidebar | x 0 → 220 |
+| Content column | x 764 → 1404 (640px) |
+| Void between them | **544px** |
+| Void to the right | **516px** |
+| Notice band centre against content centre | **−124px** |
+
+**The void and the offset are one fault with two symptoms.** The demo banner and the walk reminder centre a 640px box on the **viewport**, because the root layout renders them above `children`. `<main>` centres its 640px column on the **post-sidebar remainder**, because it is a flex item beside the shell. Two centres, 124px apart, on every screen a demo visitor meets. Nothing is on a shared grid, and a fix for either symptom alone leaves the other standing.
+
+#### The frame
+
+**One container holds the rail and the content, and everything drawn on a screen is inside it — the notice bands included.** It is 1272px wide and centred; below that width it is fluid and its left edge is the screen's.
+
+| Column | Width | |
+|---|---|---|
+| Rail | 220px | The sidebar — § Navigation's four, with Settings at its foot |
+| Gutter | 28px | § Spacing's ≥768px gutter, doing the same job between columns |
+| Measure | 640px | The reading column. Every screen has one |
+| Gutter | 28px | |
+| Aside | 356px | The second column, on the screens that have one |
+
+**1272 is a sum rather than a round number:** the rail, a gutter, and the 1024px § Spacing already fixes as the week grid's maximum. The measure and the aside together come to exactly that 1024 — so `/plan`'s grid spans them both and, at this width and above, stops scrolling sideways for the first time.
+
+At 1920 the three measurements resolve together:
+
+```
+|<--- 324 --->|  rail 220  |28|<--- measure 640 --->|28|<- aside 356 ->|<--- 324 --->|
+             324         544 572                  1212 1240          1596          1920
+
+notice band inner box:        572 ----------------- 1212        offset from content: 0
+```
+
+The 544px void becomes the 28px gutter. The right-hand void becomes a column with something in it, or — on a screen with no aside — the frame's own margin. And the notice bands stop having a centre of their own: they take the measure's position, which is what `walk-reminder.tsx` already says it wants ("the width and padding match every page's `main`, so the sentence lines up with the content beneath it") and which has never been true above 1024px.
+
+**The mechanism is a grid, not a layout.** The frame, the rail, the gutter and the measure are declared once as custom properties in `globals.css` and read by both layouts. The root layout does not learn the sidebar's width; it reads the same rail declaration the sidebar reads. That distinction is the whole reason this drifted — two independent centrings can disagree, two readers of one declaration cannot.
+
+**Content is left-aligned in the frame, not centred in it.** A rail, a 640px measure and a 1920px screen cannot all be symmetric, and this is where the asymmetry is spent. Every screen puts its measure at the same x whether or not it has an aside, so the column does not move under the reader as they navigate. A screen with no aside leaves that column empty, and the emptiness reads as margin because the rail balances it on the left.
+
+**What this costs, stated.** The sidebar stops being flush with the screen edge — at 1920 it begins 324px in. § Navigation says "the same four as a left sidebar at ≥1024px" and does not say flush, so no rule is bent, but it is a visible change to a shipped screen and it is the price of the notice bands being right. The alternative — keep the rail at x 0 and teach the bands the rail's width — was rejected: it makes the root layout depend on something that exists only under `(app)`, at one breakpoint, which is the shape of the original fault rather than a fix for it.
+
+#### The breakpoints
+
+Two are in use and neither is declared; both are the framework's defaults. Named here with the job each does, for FUEL-67 to declare in `@theme`.
+
+| | Width | What changes at it | Why this width |
+|---|---|---|---|
+| — | < 768 | The phone. Pinned pill, 22px gutter, merged macro grid, stacked week, phone ruler | The case the PRD is written for |
+| `md` | 768 | Gutter 22 → 28. The week becomes seven columns; `/` splits its macro grid and takes the wide ruler | Already load-bearing — § The Week, Two Ways and § The Day's Numbers on a Phone both turn here. Not moved, because moving it re-opens two settled sections |
+| `lg` | 1024 | The pill becomes the rail. The action bars stop being sticky. The frame appears, fluid | Where the sidebar already is, and the width `min-w-0` was paid for |
+| `xl` | 1272 | The frame caps and centres. The aside appears. `/plan`'s week grid stops scrolling | Rail + gutter + the 1024px week grid |
+
+**768 to 1023 is a real band and it now has a rule.** Today it is a phone with a wide week grid: an iPad in portrait at 820px gets a floating pill on a 1180px-tall screen. The ruling is that this band takes the **phone's navigation and the desktop's content shapes** — the pill stays, because a 220px rail at 768px is a fifth of the width spent on four items, while the wide week and the split macro grid have the room they were drawn for. It is the one band nobody had looked at, and it is stated here rather than left to fall out of two breakpoints that were never chosen together.
+
+#### The measure stays 640
+
+**640px survives, unchanged.** It is a typographic bound rather than a layout one: it was set against § Typography's 17px body, which "stays at 17px" for its own stated reason, and widening the column would buy a longer line at the same type size on every screen in the app — the thing a measure exists to prevent.
+
+What was wrong was never the 640. It was that 640 was the *whole app*, so the only thing extra width could become was void. **Screens gain columns beside the measure; the measure does not grow.** `/plan`'s 1024px is not an exception to that and never was — it is a table rather than prose, and no measure applies to a table. At ≥1272 it is exactly the measure plus the aside.
+
+#### What each screen becomes
+
+The mock's seven, which are four routes, one sheet and two states of `/`:
+
+| Screen | Is | At ≥1272 |
+|---|---|---|
+| **Right Now** | `/` | Two columns — the measure keeps the meal, the macro grid and the action bar; the aside takes the day ruler and the Anytime list, which is what the 544px of nothing sat in front of |
+| **Swap** | `/`, a sheet | Stays a sheet at the measure's width: a swap is one decision about one meal, and putting the cost and the choice on opposite sides of a gutter would make it two |
+| **Meal detail** | a state of `/` | The same column with more air — one object, read top to bottom, with nothing to set beside it |
+| **Training** | `/training` | Two columns — the measure keeps the session and the exercise list; the aside takes the dot grid and recent sessions, which are below the fold at every width today |
+| **Weight** | `/weight` | Two columns — the measure keeps the chart and the entry control; the aside takes the weigh-in history FUEL-84 bounded |
+| **Weekly plan** | `/plan` | One column at 1024px — the measure and the aside spanned, the grid at its natural width and no sideways scroll. The only screen where the extra width goes to the content rather than beside it |
+| **Day complete** | a state of `/` | The same column, with more air. Crop marks close the day, and a second column would set something beside a screen whose whole argument is that there is nothing left |
+
+**The three the mock never drew.** `/shopping`, `/plan/template` and `/settings` are each a single list or form, and each is the measure with more air. Written down rather than left to whichever ticket meets them first: the mock's seven are not the app's seven, and a screen with no ruling is a screen that gets argued about.
+
+#### What carries from the phone, and what does not
+
+**A mobile decision carries to desktop unless its written rationale names the phone.** A test rather than a taste, and it settles the cases already on the table:
+
+| Rule | Carries | Because |
+|---|---|---|
+| § Touch Targets, the 44×44 minimum | **Yes** | It is about the area a pointer must hit, and it names no posture. A mouse is not more accurate than a finger for a user with a tremor |
+| § Touch Targets, "primary actions sit in the bottom third, **within thumb reach**" | **No** | Thumb reach is a one-handed phone posture, named in the rule itself |
+| § Spacing & Layout, the 22px gutter | **No** | The line reads "22px mobile" and settles itself |
+| § The Day's Numbers on a Phone, the merged grid | **No** | Titled for the phone, and its rationale is an arithmetic at 375×667 |
+| § The Week, Two Ways, the stacked week | **No** | Its rationale is fifty characters in a 45px column at 375px |
+| § Navigation, two levels maximum | **Yes** | Depth is a fact about the information architecture; FUEL-56 argued it without reference to a width |
+
+**The action bars unsticking is the visible consequence,** and it is where the rule earns its keep. § The Scroll Edge already scopes its mask below 1024px, and § Document History records that "FUEL-72 may remove the pinning that creates the edge at all" above it. This is that removal, decided on a rule rather than screen by screen: above 1024px there is no thumb, so the bar has no posture to serve, and a control pinned over content the reader is reading is only a cost. The primary action sits at the end of its column.
+
+#### What does not change
+
+`<main>` keeps `min-w-0`, and the frame does not retire the reason for it: `/plan`'s grid is still wider than the space beside a rail at 1024px, and without it the page pushes off the right of the screen at exactly that width, silently. `--nav-shell-h` is a below-1024px measurement and stays one — above it the shell is a rail with no height to clear, and the two bars that read it are no longer sticky. Both notice bands keep their full-bleed hairline and their independence; only the position of their inner box changes.
+
+#### The mock is silent above 375px, not authoritative there
+
+`BRAND_GUIDE.html` draws all seven screens at `.device { width: 375px }`, captioned "True 375px — the width the PRD names as the dominant case". That caption says what the mock *is*, not what the app may be. It is recorded here as the fourth named override for the same reason as the other three: so that nobody reads "the mock has no second column" as a prohibition, and restores a single column later as a fidelity fix. The mock remains the source of truth for appearance at 375px, which is every rule in it except the one width it was drawn at.
 
 ## Component Patterns
 
@@ -269,7 +372,7 @@ Added in FUEL-35 and not in `BRAND_GUIDE.html`, which predates the chart. Record
 **The four:** **Now** `/` · **Plan** `/plan` · **Training** `/training` · **Weight** `/weight`.
 
 - **Mobile:** a centred pill — 1px `border`, 4px padding. Inactive items are 46×40px icon-only with an `aria-label`; the active item is an `ink` pill showing icon plus text label. The `aria-label` is the label, so the four names above are the only names these destinations have anywhere. It is **pinned to the bottom of the viewport**, overriding the mock — see below.
-- **Desktop:** the same four as a left sidebar at ≥1024px.
+- **Desktop:** the same four as a left sidebar at ≥1024px — the rail, and § Desktop places it. It is a left sidebar rather than a flush one: above 1272px it begins at the frame's edge, not the screen's.
 - **Depth:** two levels maximum. Anything deeper is a sheet.
 - **Presence:** every authenticated route carries the shell, with no carve-outs — including the day-complete state of `/`, which used to be one and is discussed below. `/login` and `/dev/*` are outside it entirely, and are held there by the route group rather than by a check the shell performs on itself.
 - **`/` never requires navigation to be useful.** PRD § P1, which now carries the one reading of what that means. This section defers to it rather than restating it.
@@ -481,7 +584,8 @@ Two components are bespoke and worth building first, since every screen depends 
 
 - **Created:** 2026-08-10
 - **v2:** accent changed from amber `#E8833A` to umber, collapsing the fill/ink token split; cards replaced by hairline-separated content on canvas.
-- **v3.7 (current):** § Materials gains The Scroll Edge (FUEL-83) and, with it, the single exception to "no gradients" the guide has ever carried. The sticky action bars on `/` and `/training` are opaque, and at 375×667 the resulting hard edge cut the first exercise's prescription through the x-height — half of every letter drawn and half not, which reads as a rendering fault rather than as content continuing below. Below 1024px the top 24px of the bar is now masked so the line runs out instead. Recorded as an exception rather than waved through because the flat rule is stated three times in this document and twice in the mock: what it bans is a ramp painted as a material, and a mask paints nothing — the bar's flat fill is untouched and the stencil only decides where it stops covering. The alternatives are named in the section and both were rejected on the guide's own terms: a shadow would be the system's second, and a rule states a boundary where the screen needs to state continuation. No change to any bar's position, height or `--nav-shell-h` offset, and none above 1024px, where FUEL-72 may remove the pinning that creates the edge at all.
+- **v3.8 (current):** § Desktop added (FUEL-66) — the decision the Desktop Version milestone is built on, and the first time this document specifies a width above 1024px. Driven by measurement: at 1920×1080 the sidebar ended at x 220 and the content column began at x 764, a **544px void**, while the demo banner and the walk reminder sat **124px** off the content's centre because the root layout centres them on the viewport and `<main>` centres itself on what the sidebar leaves. Two symptoms, one fault — nothing was on a shared grid — so they are fixed together by a single centred frame of **1272px** (the 220px rail, a 28px gutter, and the 1024px § Spacing already fixes for the week grid) whose columns are declared as custom properties both layouts read. Four breakpoints are named and given jobs, including the 768–1023 band that had none; **640px survives unchanged as the reading measure**, with screens gaining columns beside it rather than a wider column; each of the mock's seven screens gets its desktop composition in a sentence, as do the three routes the mock never drew; and a carry-over rule is stated — a mobile decision carries unless its written rationale names the phone — whose first application unsticks the action bars above 1024px, which is the removal § The Scroll Edge left to FUEL-72. § Spacing & Layout's max-content-width line now defers to § Desktop rather than restating a rule it no longer owns. The cost is named: the sidebar stops being flush with the screen edge. `BRAND_GUIDE.html` is unchanged — FUEL-67 draws the frames — and its silence above 375px is recorded as the fourth named override, so that a mock with no second column is not later read as a mock that forbids one. It remains the source of truth for appearance at 375px, which is every rule in it except the one width it was drawn at.
+- **v3.7:** § Materials gains The Scroll Edge (FUEL-83) and, with it, the single exception to "no gradients" the guide has ever carried. The sticky action bars on `/` and `/training` are opaque, and at 375×667 the resulting hard edge cut the first exercise's prescription through the x-height — half of every letter drawn and half not, which reads as a rendering fault rather than as content continuing below. Below 1024px the top 24px of the bar is now masked so the line runs out instead. Recorded as an exception rather than waved through because the flat rule is stated three times in this document and twice in the mock: what it bans is a ramp painted as a material, and a mask paints nothing — the bar's flat fill is untouched and the stencil only decides where it stops covering. The alternatives are named in the section and both were rejected on the guide's own terms: a shadow would be the system's second, and a rule states a boundary where the screen needs to state continuation. No change to any bar's position, height or `--nav-shell-h` offset, and none above 1024px, where FUEL-72 may remove the pinning that creates the edge at all.
 - **v3.6:** § The Day's Numbers on a Phone added (FUEL-82): below 768px `/` merges `This meal` and `Today` into one grid, the meal's figure as the value and the day's on the slash line, and the day ruler follows the figures rather than preceding them. Driven by measurement — 313px of the 667 at 375×667 is chrome, and the two grids wanted the whole 354px that left. All four macros survive against target with a signed delta, so PRD § P4 still holds on a phone; the mock's own two-figure summary would have satisfied it nowhere. § Touch Targets gains the sentence its 44×44 minimum always implied — the rule is about the area, not the mark — which is what lets the demo banner close from 57px to 47. The 375px Right Now frame in `BRAND_GUIDE.html` is redrawn to the merged shape and now carries the two notice bands it had always omitted; that omission is why four bands were never summed. Above 768px the two named sections are unchanged, and the mock remains the source of truth for everything else.
 - **v3.5:** § Navigation pins the mobile pill to the bottom of the viewport (FUEL-65), overriding the mock's `.tabbar { margin-top: auto }` — the third override this section records against the HTML mock, after the fourth destination and the day-complete tab bar. Driven by measurement rather than taste: the shell sat at the end of the document, 3636px down on `/weight`. The action bars on `/` and `/training` now clear it by `--nav-shell-h`. Appearance of the pill itself is unchanged, and the desktop sidebar is untouched; the mock remains the source of truth for everything else.
 - **v3.4:** § Navigation gains the naming rule its route table implied but never stated (FUEL-60): the Destination column is the name, every link that names a destination uses it, and the `<h1>` is a heading that must map to that name rather than a second name for it. Two carve-outs are named — a link inside a sentence and a link whose name is an action — and the labels corrected under the rule are listed. No visual change; the HTML mock is unchanged and remains the source of truth for everything else.
