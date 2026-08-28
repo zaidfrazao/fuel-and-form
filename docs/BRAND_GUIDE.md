@@ -170,7 +170,7 @@ Two exceptions that outrank the aesthetic:
 |---|---|---|
 | Shape | Seven day sections, stacked | Seven day columns × five slot rows |
 | Long axis | Vertical | Horizontal |
-| Sideways scroll | None | Yes, to 1024px — by design |
+| Sideways scroll | None | Yes, to 1024px — by design. None at ≥1272px, where the frame is wide enough to hold all 1024 (§ Desktop) |
 | Meal name | Full width, wraps, never clipped | Column width, wraps |
 
 **Why they diverge.** A meal's name is up to fifty characters — `Steak with Garlic Butter, Chips & Peppercorn Sauce` — and the grid never truncates one, because a half-read meal name is not a meal you can recognise. Seven columns carrying that at 375px gives each about 45px, and narrower columns do not fit more of the week: they wrap the same text taller. The horizontal shape fails on a phone for a reason no amount of CSS reaches, so below 768px the week turns ninety degrees and scrolls the way a phone already scrolls.
@@ -212,6 +212,8 @@ Two exceptions that outrank the aesthetic:
 44×44px minimum. Primary actions sit in the bottom third, within thumb reach. Destructive controls never sit adjacent to a frequently-tapped one.
 
 The minimum is about the **area that responds to a thumb**, not the size of the mark drawn inside it. A smaller glyph with its hit area expanded to 44×44 — by padding, or by a pseudo-element where padding would set the height of the row — meets this in full. The demo banner's dismiss is the one place that distinction is currently load-bearing; see § The Day's Numbers on a Phone.
+
+**The 44×44 minimum holds at every width; the bottom third does not.** The area a pointer must hit names no posture, but thumb reach is a one-handed phone posture named in the rule itself, so above 1024px the primary action sits at the end of its column and the action bars are not sticky. § Desktop carries the rule that decides this, and the reasoning belongs there rather than here.
 
 ### Desktop
 
@@ -419,7 +421,7 @@ The cost of the mock's arrangement was measured at 375×667 before it was change
 
 **What the override costs, and where it is paid.** The mock's flow arrangement was doing real work — it kept the shell clear of `/`'s and `/training`'s `sticky bottom-0` action bars without either knowing about the other. Pinning the shell puts both in the same strip, so the bars now stop one shell-height short of the bottom. That height is `--nav-shell-h` in `globals.css`, one declaration read by both bars and the loading skeleton. It is a hand-written sum rather than something derived from the shell, so `/dev/nav-shell` asserts it against the rendered shell and says so on the page: get it wrong and a screen's primary action goes under the nav, which is silent and happens on the two screens the PRD measures.
 
-**Desktop is untouched.** The sidebar at ≥1024px was already pinned — `sticky top-0` — and the pill's bottom pin is scoped below that breakpoint, so nothing about the sidebar changes.
+**Desktop was untouched by the pinning.** The sidebar at ≥1024px was already pinned — `sticky top-0` — and the pill's bottom pin is scoped below that breakpoint, so nothing about the sidebar changed here. Said of that override only: § Desktop later moved the rail off the screen edge and unstuck the action bars above 1024px, and this paragraph is not a standing claim that desktop is settled.
 
 **Day-complete carries the shell, reversing what this section used to say.** The carve-out was real and had a source: `BRAND_GUIDE.html`'s caption for that screen reads "No tab bar, no score, no praise", and § Document History holds the mock as the source of truth for everything this file does not override. This file now overrides it, the same way it overrode the mock's fourth destination — named rather than quietly contradicted, so that caption is not read later as a live rule.
 
