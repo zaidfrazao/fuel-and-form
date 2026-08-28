@@ -324,3 +324,81 @@
     animation: none;
   }
 }
+
+/* Brand Guide § Materials — the scroll edge (FUEL-83).
+ *
+ * `/`'s and `/training`'s action bars are `sticky` and opaque, so the page
+ * scrolls underneath them and stops being visible at whatever pixel their top
+ * edge happens to fall on. Measured at 375×667 on `/training`, that edge landed
+ * through the x-height of the first exercise's prescription — the top half of
+ * every letter drawn and the bottom half not. Content passing behind the bar is
+ * intended and this app commits to it elsewhere (the exercise list is sized so
+ * the sixth row sits behind the bar by design); a line of type cut through the
+ * middle by a hard edge is not, because it reads as a rendering fault rather
+ * than as content continuing below.
+ *
+ * ## Why a mask and not the obvious alternatives
+ *
+ * A drop shadow would be the system's second, and § Materials reserves the only
+ * one for sheets. A hairline would be a boundary, which is a different sentence
+ * from "there is more below" — and half a glyph above a rule still reads as
+ * half a glyph. What is wanted is the type running out, which is a ramp.
+ *
+ * § Materials says "no gradients", and this is the one exception the guide now
+ * records by name. The distinction it draws: the banned gradients are painted
+ * fills standing in for depth (§ Materials' "area fills and gradients under
+ * charts", the ramp Hatching rules out with "no blending, no opacity ramp"). No
+ * gradient is painted here. The bar's own fill is the flat `bg-background` it
+ * always was, and the mask is a stencil on it — the bar stops covering, rather
+ * than a new material being laid over anything.
+ *
+ * ## The mask is on the bar, not on a strip above it
+ *
+ * A separately positioned fade above the bar was the first shape and it is
+ * wrong at the end of the scroll: the bar comes to rest at the foot of its
+ * column with real content directly above it, and a strip there would ghost
+ * that content permanently, with nothing scrolling under it to justify the
+ * fade. Masking the bar's own top has the property that fixes this for free —
+ * when there is nothing behind the bar, a transparent band over the page
+ * background is indistinguishable from an opaque one.
+ *
+ * 24px against the bar's 30px of head, so the ramp finishes inside the padding
+ * and never reaches the controls. That 6px of clearance is load-bearing rather
+ * than slack: § Accessibility's focus ring is 2px at 2px offset, so the
+ * primary's ring rises 4px above it, to 26px — inside the opaque part, and it
+ * would not be if the ramp ran the full 30.
+ *
+ * That 24 is measured rather than chosen: running the ramp the full 30 visibly
+ * dims the ring — 664 pixels of it at 375×667, the whole top arc — and the ring
+ * is the one thing on the screen § Accessibility says is never removed. A
+ * shorter head or a longer ramp reintroduces that, so `action-bar.test.tsx`
+ * reads both numbers back out and fails on the overlap rather than leaving it
+ * to be noticed.
+ *
+ * Nothing else is needed to make the mask safe, and two declarations that
+ * looked as though they were have been left out deliberately. A mask layer
+ * tiles by default, so the transparent head of the ramp looks as though it
+ * would repeat under the bar's border box and erase the bottom row's focus ring
+ * where that overflows — `mask-repeat: no-repeat` and an oversized `mask-size`
+ * were written here to prevent exactly that. Measured against a build, they
+ * prevent nothing: `mask-clip` is `border-box`, so the mask's effect stops at
+ * the box and the ring below it was never a candidate. Switching the repeat
+ * back on renders the screen byte-for-byte identically. They are gone rather
+ * than kept as insurance, because a declaration defending against an impossible
+ * failure is indistinguishable from one defending against a real one.
+ *
+ * Unprefixed, and that is a statement about the build rather than about
+ * browsers: lightningcss emits `-webkit-mask-image` beside this in the compiled
+ * stylesheet, which is what reaches Safari. Checked in `.next` rather than
+ * assumed. Writing the prefix here as well would be the fifth copy of a thing
+ * the pipeline already guarantees.
+ *
+ * Scoped below `lg`, where the bar is pinned over a scrolling page and this
+ * edge exists. FUEL-72 may release the pinning at desktop widths, at which
+ * point there is no edge there to treat; scoping now means that ticket has
+ * nothing to undo here. */
+@media (width < 64rem) {
+  .action-bar-fade {
+    mask-image: linear-gradient(to bottom, transparent, black 24px);
+  }
+}
