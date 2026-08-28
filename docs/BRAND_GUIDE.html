@@ -131,6 +131,18 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--pg-accent); out
 .u-slash::before { content: "/ "; color: var(--text-3); }
 
 .topbar { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+
+/* ---------- root notice bands (FUEL-82) ----------
+   The demo banner and the walk reminder, drawn because they were the two bands
+   this file left out. They render from the root layout above every screen's
+   content, they are full-bleed where `.app` is inset, and together they take
+   77px of a 667px phone — which is why the frames below them are drawn to the
+   space that actually leaves rather than to the whole device. */
+.noticeband { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 6px 22px; border-bottom: 1px solid var(--border); }
+.noticeband p { font-size: 12.5px; font-weight: 500; line-height: 17px; color: var(--text-2); }
+.noticeband a { color: var(--text-1); text-decoration: underline; text-underline-offset: 4px; }
+.noticeband .dismiss { flex: 0 0 24px; width: 24px; height: 24px; color: var(--text-1); }
 .hr { height: 1px; background: var(--border); }
 @media (min-resolution: 2dppx) { .hr { height: .5px; } }
 
@@ -535,21 +547,47 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
       <!-- ===== 1 · RIGHT NOW ===== -->
       <div class="cell">
         <div class="stage">
-          <div class="ui device" data-mode="light" role="img" aria-label="Right Now screen: Chilli con Carne at 19:00, with a day ruler showing progress through the day and a macro key-value grid">
+          <div class="ui device" data-mode="light" role="img" aria-label="Right Now screen at 375 by 667: a demo banner and a walk reminder above the content, Chilli con Carne at 19:00, one key-value grid carrying the meal's four macros with the day's totals beneath each, then the day ruler, the action bar and the navigation pill">
             <div class="statusbar"><span>18:54</span>
               <span class="glyphs" aria-hidden="true">
                 <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.7" y="5" width="3" height="6" rx="1"/><rect x="9.4" y="2.5" width="3" height="8.5" rx="1"/><rect x="14" y="0" width="3" height="11" rx="1"/></svg>
                 <svg width="24" height="11" viewBox="0 0 24 11" fill="none"><rect x=".5" y=".5" width="20" height="10" rx="3" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="15" height="7" rx="1.5" fill="currentColor"/></svg>
               </span>
             </div>
-            <div class="app">
-              <div class="topbar"><span class="u-micro">Right now</span><span class="u-micro">Mon 10 Aug</span></div>
+            <!-- The two root notice bands — FUEL-82. Full-bleed, above the
+                 content column, and 77px of the 667 between them. -->
+            <div class="noticeband">
+              <p>Demo session — your changes are temporary. <a href="#">View the source.</a></p>
+              <svg class="dismiss" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </div>
+            <div class="noticeband">
+              <p>Walk not logged. Reminder set for 19:00. <a href="#">Log the walk.</a></p>
+            </div>
 
-              <div style="display:flex;flex-direction:column;gap:12px;">
+            <!-- 22px rhythm and 12px of head, not the 30 and 22 the wider
+                 screens keep: below 768px the bands above have taken 77px and
+                 the action bar and shell take 226 more. -->
+            <div class="app" style="gap:22px;padding-top:12px;">
+              <div style="display:flex;flex-direction:column;gap:4px;">
                 <span class="u-micro" style="color:var(--text-3);">Dinner · 19:00</span>
                 <div class="u-title">Chilli<br>con Carne</div>
               </div>
 
+              <!-- One grid, not two: the meal's figure is the value and the
+                   day's is the slash line beneath it. All four macros against
+                   target with a signed delta, which is what PRD § P4 asks for
+                   and what a two-figure summary could not have given. 14px
+                   between the rows, because a three-line cell reads as a block.
+                   See § The Day's Numbers on a Phone. -->
+              <div class="kv" style="row-gap:14px;">
+                <div class="kvi"><span class="u-micro">Calories</span><span class="u-val">612</span><span class="u-slash">day 1,178 of 1,780 · −602</span></div>
+                <div class="kvi"><span class="u-micro">Protein</span><span class="u-val em">48 g</span><span class="u-slash">day 98 g of 148 · −50</span></div>
+                <div class="kvi"><span class="u-micro">Fat</span><span class="u-val">18 g</span><span class="u-slash">day 41 g of 50 · −9</span></div>
+                <div class="kvi"><span class="u-micro">Carbs</span><span class="u-val">61 g</span><span class="u-slash">day 132 g of 185 · −53</span></div>
+              </div>
+
+              <!-- Below the figures on a phone. On the longest meal names one of
+                   the two goes under the action bar, and it is not the numbers. -->
               <div>
                 <div class="ruler">
                   <div class="ruler-base"></div>
@@ -567,20 +605,6 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                     <span style="left:75%">18</span><span style="left:100%">22</span>
                   </div>
                 </div>
-              </div>
-
-              <div class="kv">
-                <div class="kvi"><span class="u-micro">Calories</span><span class="u-val">612</span></div>
-                <div class="kvi"><span class="u-micro">Protein</span><span class="u-val em">48 g</span></div>
-                <div class="kvi"><span class="u-micro">Fat</span><span class="u-val">18 g</span></div>
-                <div class="kvi"><span class="u-micro">Carbs</span><span class="u-val">61 g</span></div>
-              </div>
-
-              <div class="hr"></div>
-
-              <div class="kv">
-                <div class="kvi"><span class="u-micro">Today so far</span><span class="u-val">1,178</span><span class="u-slash">of 1,780 kcal</span></div>
-                <div class="kvi"><span class="u-micro">Protein left</span><span class="u-val">50 g</span><span class="u-slash">98 of 148 g</span></div>
               </div>
 
               <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:4px;">
@@ -605,7 +629,8 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
         <div class="cap">
           <span class="tagline">P1 · / · light</span>
           <h3>Right Now</h3>
-          <p>40px name, 10.5px labels, the ruler carrying the day's shape, macros as a key/value grid rather than a strip. One umber mark on the screen and it means “now”.</p>
+          <p>40px name, 10.5px labels, macros as a key/value grid rather than a strip. One umber mark on the screen and it means “now”.</p>
+          <p>Drawn to the space the chrome actually leaves &mdash; FUEL-82. The two notice bands are part of this screen and were missing from this frame for as long as it existed, which is how four bands each took their share without anything summing them. Below 768px the meal's macros and the day's totals are <strong>one</strong> grid &mdash; the meal in the value, the day on the slash line &mdash; and the ruler follows the figures rather than preceding them. See &sect; The Day's Numbers on a Phone; at 768px and up the two named sections are unchanged.</p>
         </div>
       </div>
 

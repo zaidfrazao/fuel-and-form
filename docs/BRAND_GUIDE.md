@@ -181,9 +181,37 @@ Two exceptions that outrank the aesthetic:
 
 **The cost, stated.** Stacked, you cannot compare Tuesday's dinner against Thursday's at a glance — that comparison is the wide shape's, and it is what the ≥768px screen is for.
 
+### The Day's Numbers on a Phone
+
+`/` draws the meal's macros and the day's totals in two shapes, and which one you get is a width, not a preference.
+
+| | **< 768px** | **≥ 768px** |
+|---|---|---|
+| Shape | One grid | Two named sections, `This meal` and `Today` |
+| The meal's figure | The value | The value, under `This meal` |
+| The day's figure | The slash line beneath it | Its own grid, under `Today` |
+| Height | ~144px | 354px |
+| The day ruler | Below the figures | Above them |
+
+**Why they diverge, and it is arithmetic rather than taste.** At 375×667 the chrome comes to **313px — 46.9%**: the demo banner, the walk reminder, a 140px action bar and the 86px navigation shell. That leaves a 354px window, and the two grids wanted all 354 of it before the title and the ruler had taken anything. Half the meal's macros were sliced mid-glyph by the action bar's opaque edge and the day's totals were off-screen entirely. Four bands had each taken their share independently and nothing had summed them.
+
+**Alternatives weighed, and why they were not taken.** The action bar's 140px and its place in the bottom third is § Touch Targets working as designed, and the shell's 86px was settled against measurement — neither is available. The § Spacing rhythm would have given ~30px app-wide for a fault local to one screen. The mock's own two-figure summary (`Today so far`, `Protein left`) was shorter still, and is the reason this section exists rather than a straight adoption of it: `week-totals.tsx` carries only kcal and protein, and the four-value grid appears on `/` and the day-complete summary and nowhere else — so dropping fat and carbs on a phone would satisfy **PRD § P4's "all four values shown against target with a signed delta" on no phone screen in the app.** Merging keeps all four. It was the only shape that was both short enough and complete.
+
+**Which way round.** The `<h1>` above names the meal, so the value slot describes the thing that was named; the day is the secondary fact, which is what § Slash Metadata is for. It also resolves a problem the two-grid shape had at every width — two unlabelled grids reading `Calories / Protein / Fat / Carbs` one after the other are not a layout a reader can resolve. Merged, there is only one.
+
+**The ruler moves, and this is the real trade.** A meal name runs to fifty characters against a Title fixed at 40/41 with no smaller step in the scale, so the longest wraps to four lines and 164px — 46% of the window on its own. Measured across all seventeen meals in the library, the ruler above the grid put three of them under the action bar; below it, all seventeen clear. On the longest names something goes under the bar, and it is not the figures: they are what § P4 is measured on, while the ruler is orientation and carries a complete `aria-label` summary of its own. Only a meal card reorders — a workout card has no merged grid to move it past.
+
+**Two notice bands, and they stay two.** The demo banner and the walk reminder are independent by design: one is dismissed with a cookie, the other by logging the walk, and merging them would mean dismissing one took the other with it. Neither is dropped, because the case where both are up — a first-time visitor in the evening, which on a public repository is the common case rather than the rare one — is exactly the case each was written for. The height came out of the demo banner instead: its 57px was the dismiss control's 44px box, not its copy, and § Touch Targets asks for a 44×44 **area**, which a 24px mark with a pseudo-element hit area satisfies exactly. 57 → 47px, no rule bent and no notice hidden.
+
+**What does not change.** Every figure is the same figure, from the same `deltaFromTarget`, with the same signed convention and the same single `error` on a material calorie overage. Protein keeps its weight-700 emphasis in both shapes. Only one shape is in the accessibility tree at a time, and the ruler is rendered twice rather than reordered with CSS `order`, so the sequence a screen reader walks matches what is drawn at both widths.
+
+**The limit, stated.** At **320×568** the chrome is 56.3% of the viewport and the window is 248px — enough for the title and the first row of figures, not the second. There is no arrangement of a 40px title, a two-row grid and 320px of chrome that fits 248px, and this section does not pretend otherwise.
+
 ### Touch Targets
 
 44×44px minimum. Primary actions sit in the bottom third, within thumb reach. Destructive controls never sit adjacent to a frequently-tapped one.
+
+The minimum is about the **area that responds to a thumb**, not the size of the mark drawn inside it. A smaller glyph with its hit area expanded to 44×44 — by padding, or by a pseudo-element where padding would set the height of the row — meets this in full. The demo banner's dismiss is the one place that distinction is currently load-bearing; see § The Day's Numbers on a Phone.
 
 ## Component Patterns
 
@@ -445,7 +473,8 @@ Two components are bespoke and worth building first, since every screen depends 
 
 - **Created:** 2026-08-10
 - **v2:** accent changed from amber `#E8833A` to umber, collapsing the fill/ink token split; cards replaced by hairline-separated content on canvas.
-- **v3.5 (current):** § Navigation pins the mobile pill to the bottom of the viewport (FUEL-65), overriding the mock's `.tabbar { margin-top: auto }` — the third override this section records against the HTML mock, after the fourth destination and the day-complete tab bar. Driven by measurement rather than taste: the shell sat at the end of the document, 3636px down on `/weight`. The action bars on `/` and `/training` now clear it by `--nav-shell-h`. Appearance of the pill itself is unchanged, and the desktop sidebar is untouched; the mock remains the source of truth for everything else.
+- **v3.6 (current):** § The Day's Numbers on a Phone added (FUEL-82): below 768px `/` merges `This meal` and `Today` into one grid, the meal's figure as the value and the day's on the slash line, and the day ruler follows the figures rather than preceding them. Driven by measurement — 313px of the 667 at 375×667 is chrome, and the two grids wanted the whole 354px that left. All four macros survive against target with a signed delta, so PRD § P4 still holds on a phone; the mock's own two-figure summary would have satisfied it nowhere. § Touch Targets gains the sentence its 44×44 minimum always implied — the rule is about the area, not the mark — which is what lets the demo banner close from 57px to 47. The 375px Right Now frame in `BRAND_GUIDE.html` is redrawn to the merged shape and now carries the two notice bands it had always omitted; that omission is why four bands were never summed. Above 768px the two named sections are unchanged, and the mock remains the source of truth for everything else.
+- **v3.5:** § Navigation pins the mobile pill to the bottom of the viewport (FUEL-65), overriding the mock's `.tabbar { margin-top: auto }` — the third override this section records against the HTML mock, after the fourth destination and the day-complete tab bar. Driven by measurement rather than taste: the shell sat at the end of the document, 3636px down on `/weight`. The action bars on `/` and `/training` now clear it by `--nav-shell-h`. Appearance of the pill itself is unchanged, and the desktop sidebar is untouched; the mock remains the source of truth for everything else.
 - **v3.4:** § Navigation gains the naming rule its route table implied but never stated (FUEL-60): the Destination column is the name, every link that names a destination uses it, and the `<h1>` is a heading that must map to that name rather than a second name for it. Two carve-outs are named — a link inside a sentence and a link whose name is an action — and the labels corrected under the rule are listed. No visual change; the HTML mock is unchanged and remains the source of truth for everything else.
 - **v3.3:** § Navigation names the four top-level destinations (FUEL-56) and gains a route table giving every authenticated route one level and one parent. Settings gives up its slot for a link at the foot of `/`; `/shopping` and `/plan/template` are both placed under `/plan`. The reading of the PRD's "no navigation" criterion moves to the PRD, where § Navigation now points instead of arguing, and day-complete's absent tab bar is re-sourced to the mock caption that actually requires it. A section that had specified a shell without naming its contents; the HTML mock predates the shell entirely and remains the source of truth for everything else.
 - **v3.2:** § Data Display added for the weight trend chart (FUEL-35), and `surface` gains its second permitted use — the chart's plot area — in § Color Palette. Both are additions the HTML mock predates; it remains the source of truth for everything else.

@@ -10,7 +10,7 @@ import Link from "next/link";
 import { DayRuler } from "@/components/day-ruler";
 import { ExerciseList } from "@/components/exercise-list";
 import { KeyValueGrid, SlashMeta } from "@/components/kv-grid";
-import { MacroGrid } from "@/components/macro-grid";
+import { MacroGrid, MealDayGrid } from "@/components/macro-grid";
 import { PageMain } from "@/components/page-main";
 import { SwapSheet, type PlannedMeal, type SwappableMeal } from "@/components/swap-sheet";
 import { WalkRow } from "@/components/walk-row";
@@ -22,6 +22,7 @@ import type { LogVerb } from "@/lib/log-intent";
 import { type MacroBearing, type MacroTarget, summariseDay } from "@/lib/macros";
 import { itemLabel, itemName, rulerSlots } from "@/lib/now-display";
 import { swapNote } from "@/lib/swap-note";
+import { cn } from "@/lib/utils";
 import { isWalk, type WalkEntryView } from "@/lib/walk";
 import {
   type AnytimeItem,
@@ -198,13 +199,30 @@ function Subject({
           qualifies WHICH dinner this is, and the Title is meant to have its row
           to itself at the size that makes it readable across a kitchen. */}
       <div className="flex items-center gap-2">
-        <p className="text-micro uppercase text-text-secondary">{itemLabel(item)}</p>
+        <p className="text-micro uppercase text-text-secondary">
+          {itemLabel(item)}
+          {/*
+           * The time joins the slot label on one line below 768px — FUEL-82,
+           * and it is what `docs/BRAND_GUIDE.html` draws: the mock's Right Now
+           * frame carries `Dinner · 19:00` as a single Micro line, where this
+           * screen had split it into an eyebrow here and a slash line beneath
+           * the title. Rejoining them returns the 17px line and the 4px gap
+           * above it — 21px, and the margin that takes the merged grid clear of
+           * the action bar rather than level with it.
+           *
+           * Both facts survive; only the line count changes. Above 768px the
+           * slash treatment is restored, where § Slash Metadata's "the fact the
+           * number is measured against, set beneath it" reads as intended and
+           * there is no fold paying for it.
+           */}
+          {at !== undefined && <span className="md:hidden"> &middot; {at}</span>}
+        </p>
         {swapped && <SwappedTag />}
       </div>
       {/* The one h1 on the page. A screen whose whole job is answering "what
           now?" should have the answer as its heading, not the product name. */}
       <h1 className="text-title text-text-primary">{name ?? itemName(item)}</h1>
-      {at !== undefined && <SlashMeta>{at}</SlashMeta>}
+      {at !== undefined && <SlashMeta className="hidden md:block">{at}</SlashMeta>}
     </header>
   );
 }
@@ -228,9 +246,13 @@ function Subject({
  * one after the other are not a layout a reader can resolve. Both are named, and
  * neither name is a decoration.
  */
-function MealMacros({ meal }: { meal: MacroBearing }) {
+function MealMacros({
+  meal,
+  className,
+  ...rest
+}: { meal: MacroBearing; className?: string } & { "data-shape"?: string }) {
   return (
-    <section className="flex flex-col gap-[14px]">
+    <section className={cn("flex flex-col gap-[14px]", className)} {...rest}>
       <Eyebrow>This meal</Eyebrow>
 
       <KeyValueGrid
@@ -272,12 +294,14 @@ function MealMacros({ meal }: { meal: MacroBearing }) {
 function DayTotals({
   planned,
   target,
+  className,
 }: {
   planned: readonly PlannedMeal[];
   target: MacroTarget;
+  className?: string;
 }) {
   return (
-    <section className="flex flex-col gap-[14px]">
+    <section className={cn("flex flex-col gap-[14px]", className)}>
       {/* "Today" rather than "Day totals": § Content Guidelines asks for the
           shortest true label, and the screen is already about today. */}
       <Eyebrow>Today</Eyebrow>
@@ -615,7 +639,12 @@ function SwapNote({
  */
 function Screen({ children }: { children: ReactNode }) {
   return (
-    <PageMain className="pt-[22px]">
+    // 12px of head clearance below 768px rather than 22 — FUEL-82. This screen
+    // opens under up to two notice bands, each with its own hairline, so the gap
+    // between the last of them and the eyebrow is already read as separation;
+    // the full 22 is head room the fold cannot spare. Above 768px there is no
+    // fold to spare it from and the gutter's own 22 is restored.
+    <PageMain className="pt-3 md:pt-[22px]">
       {children}
     </PageMain>
   );
@@ -1058,8 +1087,56 @@ export function RightNow({
   // as a closed page rather than a position within one. The Brand Guide's mock
   // of it carries no ruler either.
   const ruler = (
-    <DayRuler slots={rulerSlots(base.timeline)} now={base.minutesOfDay} className="pt-2" />
+    // The extra 8px of head was tuned when the section rhythm was 30px at every
+    // width. Below 768px it is 22 — FUEL-82 — and `pt-2` there would give the
+    // ruler 30px of clearance while every other block on the screen has 22,
+    // which is the inconsistency rather than the rhythm. Restored from 768px up,
+    // where the rhythm it was tuned against is still what runs.
+    <DayRuler slots={rulerSlots(base.timeline)} now={base.minutesOfDay} className="md:pt-2" />
   );
+
+  /*
+   * On a phone the ruler follows the numbers instead of preceding them —
+   * FUEL-82.
+   *
+   * A meal's name runs to fifty characters and the Title is 40/41 with no
+   * smaller step in the scale, so `Roasted Red Pepper & Provolone Ciabatta Roll`
+   * is four lines and 164px — 46% of the 354px the chrome leaves. Measured
+   * across the seventeen meals in the library, the ruler above the grid put
+   * three of them under the action bar. Below it, all seventeen clear.
+   *
+   * Which is to say the trade is not "ruler or macros" in the abstract: it is
+   * that on the longest names something must go under the bar, and the four
+   * figures are what § P4 is measured on while the ruler is orientation with a
+   * complete `aria-label` summary of its own. The numbers win.
+   *
+   * Two positions rather than one with `order`: CSS `order` moves the box and
+   * not the sequence, so a screen reader would meet the ruler in a different
+   * place from a sighted user at one of the two widths. Rendered twice, the
+   * hidden copy is `display: none` and out of the accessibility tree entirely,
+   * so the DOM order a screen reader walks matches the visual order at BOTH
+   * widths. That is the same reasoning the two macro shapes above are built on.
+   */
+  /*
+   * Only a meal card moves it. On a workout card there is no merged grid to move
+   * it past — the middle of the screen is `ExerciseList`, which runs to six rows
+   * — so demoting the ruler below that would push it most of a screen down to
+   * buy nothing. The card that has the fold problem is the one that gets the
+   * reordering.
+   */
+  const rulerAbove = activeMeal ? (
+    <div className="hidden md:block" data-ruler="wide">
+      {ruler}
+    </div>
+  ) : (
+    ruler
+  );
+
+  const rulerBelow = activeMeal ? (
+    <div className="md:hidden" data-ruler="phone">
+      {ruler}
+    </div>
+  ) : null;
 
   /*
    * The way to `/settings` — FUEL-21, and now the only link at the foot of `/`.
@@ -1206,8 +1283,18 @@ export function RightNow({
 
   return (
     <Screen>
-      {/* 30px between blocks — § Spacing & Layout's section rhythm. */}
-      <div className="flex flex-col gap-[30px]">
+      {/*
+       * § Spacing & Layout's section rhythm is 30px between blocks, and that is
+       * what this screen uses from 768px up. Below it the rhythm steps to 22 —
+       * FUEL-82.
+       *
+       * 22 is on the guide's own base scale (4, 8, 12, 14, 20, 22, 26, 30), so
+       * this is a step down the rhythm rather than an off-scale value invented
+       * for one screen. It is scoped to `/` and to phones because that is where
+       * the constraint is: 313px of the 667 is chrome, and three of these gaps
+       * fall inside the 354px that leaves.
+       */}
+      <div className="flex flex-col gap-[22px] md:gap-[30px]">
         <Subject
           item={now.active}
           at={now.active.at}
@@ -1215,11 +1302,38 @@ export function RightNow({
           name={activeMeal?.meal.name}
         />
 
-        {ruler}
+        {rulerAbove}
 
         {activeMeal ? (
           <div className="flex flex-col gap-3">
-            <MealMacros meal={activeMeal.meal} />
+            {/*
+             * Two shapes, and CSS picks one — FUEL-82, the same arrangement
+             * `/plan`'s week grid settled on in FUEL-81 and for the same reason.
+             * The page is server-rendered into one HTML for every viewport, so a
+             * `matchMedia` read would have the server guess a width and every
+             * phone paint the wrong shape for a frame before hydration swapped
+             * it. The cost is four extra cells in the DOM; the hidden shape is
+             * `display: none`, so it is out of the accessibility tree and only
+             * one grid is ever announced.
+             *
+             * Below 768px the meal and the day share one grid, because the fold
+             * does not fit two — see `MealDayGrid`. At 768px and above there is
+             * no fold to fit and the two named sections read better apart, which
+             * is where `MealMacros` and `DayTotals` still render.
+             */}
+            <div className="md:hidden" data-shape="merged">
+              <MealDayGrid
+                meal={activeMeal.meal}
+                totals={summariseDay(plannedToday)}
+                target={target}
+              />
+            </div>
+
+            <MealMacros
+              meal={activeMeal.meal}
+              className="hidden md:flex"
+              data-shape="split"
+            />
 
             {/*
              * The swap's state and its revert, together — FUEL-25. Gated on
@@ -1248,8 +1362,23 @@ export function RightNow({
         )}
 
         {/* After the swap note, and that order is the argument: the note says
-            what the swap cost, and these are the figures it cost it from. */}
-        <DayTotals planned={plannedToday} target={target} />
+            what the swap cost, and these are the figures it cost it from.
+
+            Hidden below 768px when there is a meal, because `MealDayGrid` above
+            is already carrying these four figures — FUEL-82. On a workout card
+            there is no meal to merge into, so the section renders at every width
+            and the day's numbers are still on the screen, which is the point
+            `DayTotals` makes about being present on a session too. */}
+        <DayTotals
+          planned={plannedToday}
+          target={target}
+          className={activeMeal ? "hidden md:flex" : undefined}
+        />
+
+        {/* The phone's position for it — see `rulerBelow`. Below the figures,
+            because on the longest meal names one of the two has to go under the
+            action bar and it should not be the numbers. */}
+        {rulerBelow}
 
         <UpNext items={now.upcoming} />
 

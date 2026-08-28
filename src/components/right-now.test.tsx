@@ -271,6 +271,47 @@ const renderNow = (
   )
 );
 
+/**
+ * One shape of the meal's numbers — FUEL-82.
+ *
+ * `/` renders both: below 768px one grid carrying the meal's four macros with
+ * the day's totals on the slash line, and at 768px and up the two named sections
+ * `This meal` and `Today`. CSS chooses one. jsdom loads no stylesheet, so unlike
+ * a browser it has BOTH in the tree — and since all three grids carry the labels
+ * `Calories / Protein / Fat / Carbs`, an unscoped `getByText("32.5 g")` finds
+ * the meal's protein twice.
+ *
+ * Every query that reaches for a macro figure goes through a shape for that
+ * reason. Anyone adding one to this file must do the same, or it will match
+ * ambiguously — the same rule `week-grid.test.tsx` records for `/plan`.
+ *
+ * Addressed by `data-shape` rather than by text: the two carry the same figures
+ * on purpose, because they are the same meal either way.
+ */
+const shape = (which: "merged" | "split") =>
+  within(document.querySelector<HTMLElement>(`[data-shape="${which}"]`)!);
+
+/**
+ * One copy of the day ruler — FUEL-82.
+ *
+ * Also rendered twice on a meal card, because the phone puts it below the
+ * figures and the desktop above them, and CSS `order` would have moved the box
+ * without moving the sequence a screen reader walks. `"wide"` is the default for
+ * a test that is not about position: it is the copy these tests were written
+ * against, and both are the same `DayRuler` with the same props.
+ *
+ * On a workout card there is no merged grid to move it past, so only one copy
+ * renders and it carries no `data-ruler` — hence the fallback to `getAllByRole`.
+ */
+const dayRuler = (which: "wide" | "phone" = "wide"): HTMLElement => {
+  const scoped = document.querySelector<HTMLElement>(`[data-ruler="${which}"]`);
+
+  // `getAllByRole` throws when it finds none, so the index is safe — but it is
+  // typed as possibly-undefined, and an assertion is honest here where a `??`
+  // fallback would invent an element that does not exist.
+  return scoped ? within(scoped).getByRole("img") : screen.getAllByRole("img")[0]!;
+};
+
 /** A day's log of `count` lines, for the cases that only care that there is one. */
 const someLogs = (count: number) =>
   Array.from({ length: count }, (_, index) => entry({ id: `log-${index}` }));
@@ -316,14 +357,92 @@ describe("the active meal", () => {
     // colour", because colour is spoken for by the accent.
     renderNow(active(0));
 
-    expect(screen.getByText("32.5 g").className).toContain("font-bold");
-    expect(screen.getByText("48 g").className).not.toContain("font-bold");
+    // Both shapes, because the rule is about the screen a reader is offered and
+    // there are two of those now — FUEL-82. A check on one shape alone would
+    // pass while the other quietly lost the emphasis.
+    for (const which of ["merged", "split"] as const) {
+      expect(shape(which).getByText("32.5 g").className).toContain("font-bold");
+      expect(shape(which).getByText("48 g").className).not.toContain("font-bold");
+    }
   });
 
   test("renders no exercise list", () => {
     renderNow(active(0));
 
     expect(screen.queryByText("3 x 12")).toBeNull();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The two shapes of the day's numbers — FUEL-82                              */
+/* -------------------------------------------------------------------------- */
+
+describe("the day's numbers, in two shapes", () => {
+  test("draws both, and lets CSS choose between them", () => {
+    // The page is server-rendered into one HTML for every viewport, so the
+    // choice cannot be a `matchMedia` read without every phone painting the
+    // wide shape for a frame first. Both are in the tree; the classes are what
+    // decides.
+    renderNow(active(0));
+
+    expect(document.querySelector('[data-shape="merged"]')!.className).toContain(
+      "md:hidden",
+    );
+    expect(document.querySelector('[data-shape="split"]')!.className).toContain(
+      "hidden md:flex",
+    );
+  });
+
+  test("the merged shape carries the day's totals, so `Today` is hidden with it", () => {
+    // The two must not both be showing at any width: the merged grid already
+    // prints the day's four figures on its slash lines, and `Today` beneath it
+    // would be the same numbers twice.
+    renderNow(active(0));
+
+    const today = screen.getByRole("heading", { name: "Today" }).closest("section")!;
+
+    expect(today.className).toContain("hidden md:flex");
+  });
+
+  test("a workout card keeps `Today` at every width", () => {
+    // There is no meal to merge the day's figures into, so the section is the
+    // only place they appear and it may not be hidden on a phone. `DayTotals`
+    // makes the point itself: the totals belong to the day, not to the item in
+    // the middle of the screen.
+    renderNow(active(2));
+
+    const today = screen.getByRole("heading", { name: "Today" }).closest("section")!;
+
+    expect(today.className).not.toContain("hidden");
+  });
+
+  test("the ruler follows the figures on a phone and precedes them elsewhere", () => {
+    // On the longest meal names something goes under the action bar, and the
+    // four figures are what § P4 is measured on. Two copies rather than CSS
+    // `order`, so the sequence a screen reader walks matches what is drawn at
+    // both widths.
+    renderNow(active(0));
+
+    const wide = document.querySelector('[data-ruler="wide"]')!;
+    const phone = document.querySelector('[data-ruler="phone"]')!;
+    const merged = document.querySelector('[data-shape="merged"]')!;
+
+    // `DOCUMENT_POSITION_FOLLOWING` is set when the argument comes after the
+    // node in document order — which is the sequence a screen reader walks.
+    const follows = (node: Element, other: Element) =>
+      Boolean(node.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+    expect(follows(wide, merged)).toBe(true);
+    expect(follows(merged, phone)).toBe(true);
+  });
+
+  test("a workout card draws the ruler once, in its original place", () => {
+    // Nothing to move it past, and `ExerciseList` runs to six rows — demoting it
+    // below that would push it most of a screen down to buy nothing.
+    renderNow(active(2));
+
+    expect(document.querySelector('[data-ruler="phone"]')).toBeNull();
+    expect(screen.getAllByRole("img")).toHaveLength(1);
   });
 });
 
@@ -714,12 +833,17 @@ describe("the day ruler", () => {
   test("marks the day's shape and puts NOW at the clock", () => {
     renderNow(active(0));
 
-    const ruler = screen.getByRole("img");
+    // Both copies, because a meal card draws the ruler twice and only one of
+    // them is ever visible — FUEL-82. The summary is the same either way, and
+    // asserting it on one would let the other drift.
+    for (const which of ["wide", "phone"] as const) {
+      const ruler = dayRuler(which);
 
-    // The ruler's accessible summary is built from the same array as its marks.
-    expect(ruler.getAttribute("aria-label")).toContain("4 slots");
-    expect(ruler.getAttribute("aria-label")).toContain("Now 08:00");
-    expect(within(ruler).getByText("Now")).toBeDefined();
+      // The ruler's accessible summary is built from the same array as its marks.
+      expect(ruler.getAttribute("aria-label")).toContain("4 slots");
+      expect(ruler.getAttribute("aria-label")).toContain("Now 08:00");
+      expect(within(ruler).getByText("Now")).toBeDefined();
+    }
   });
 
   test("positions NOW from the clock, not from the active item", () => {
@@ -732,9 +856,9 @@ describe("the day ruler", () => {
     // cannot hang outside the ruler near either end; the rule is unclamped, so
     // it is the one that marks the precise moment. See day-ruler.tsx on
     // `NOW_PILL_HALF`.
-    const rule = screen
-      .getByRole("img")
-      .querySelector('[class*="bg-accent"]:not([class*="rounded-full"])');
+    const rule = dayRuler().querySelector(
+      '[class*="bg-accent"]:not([class*="rounded-full"])',
+    );
 
     expect(rule).not.toBeNull();
     expect(rule!.getAttribute("style")).toContain("12.5%");
@@ -1090,7 +1214,20 @@ describe("the accent", () => {
     // ruler's NOW marker, drawn as a rule plus its pill.
     const { container } = renderNow(active(0));
 
-    const ruler = screen.getByRole("img");
+    /*
+     * Counted per SHAPE now, plus a total — FUEL-82.
+     *
+     * "One umber element per screen" is a claim about a rendered viewport, and a
+     * meal card holds two rulers in the DOM because the phone puts it below the
+     * figures and the desktop above them. Only one is ever displayed, so the
+     * rule is intact; what changed is that the DOM cannot be counted as if it
+     * were the screen.
+     *
+     * The total is asserted as well as the per-copy check because that is the
+     * assertion that fails if a third copy is ever added and nobody revisits
+     * this — the per-copy loop alone would pass forever.
+     */
+    const rulers = [dayRuler("wide"), dayRuler("phone")];
     const accented = [...container.querySelectorAll('[class*="accent"]')];
 
     // A positive control first: an assertion that everything accented is inside
@@ -1098,8 +1235,14 @@ describe("the accent", () => {
     // would mean the marker had gone missing rather than the rule being kept.
     expect(accented.length).toBeGreaterThan(0);
 
+    for (const ruler of rulers) {
+      expect([...ruler.querySelectorAll('[class*="accent"]')].length).toBe(
+        accented.length / rulers.length,
+      );
+    }
+
     for (const element of accented) {
-      expect(ruler.contains(element)).toBe(true);
+      expect(rulers.some((ruler) => ruler.contains(element))).toBe(true);
     }
   });
 
@@ -1512,8 +1655,11 @@ describe("swapping a meal", () => {
       expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chickpea curry"),
     );
     expect(screen.getByText("Swapped")).toBeTruthy();
-    // The macro grid follows the meal, not the slot.
-    expect(screen.getByText("560")).toBeTruthy();
+    // The macro grid follows the meal, not the slot — in both shapes, since they
+    // share the one `useOptimistic` state and a swap that moved only one of them
+    // would be a swap the phone or the desktop did not see.
+    expect(shape("merged").getByText("560")).toBeTruthy();
+    expect(shape("split").getByText("560")).toBeTruthy();
 
     held.settle({ ok: true });
     await waitFor(() => expect(swapMeal).toHaveBeenCalled());
