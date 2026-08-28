@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { PageMain } from "@/components/page-main";
-import { WeighIns, type WeighInRow } from "@/components/weigh-ins";
+import { WeighIns } from "@/components/weigh-ins";
 import { getSession } from "@/lib/auth/session";
 import { loadWeighIns } from "@/lib/db/queries/weight";
-import type { WeightLog } from "@/lib/db/schema";
+import { RECENT_WEIGH_INS, narrowWeighIn } from "@/lib/weigh-in";
 
 /**
  * `/weight` — the weigh-in history, and the form that writes it. PRD § P5,
@@ -28,6 +28,11 @@ import type { WeightLog } from "@/lib/db/schema";
  * screen and reads the same list, which is the other half of the reason: a
  * per-date route would render a chart of one point.
  *
+ * FUEL-84 bounded how much of it is LISTED without changing that. Every date is
+ * still on the page — the chart draws each one and tables it for § Accessibility
+ * — and what is paged is the rows underneath, which is a quantity of screen
+ * rather than a place to be at.
+ *
  * ## The auth check is here rather than in a layout
  *
  * The reasoning every other page in this app sets out: a check in a layout does
@@ -41,24 +46,6 @@ export const metadata: Metadata = {
   title: "Weight · Fuel & Form",
   robots: { index: false, follow: false },
 };
-
-/**
- * One weigh-in, narrowed to what the browser is allowed to hold.
- *
- * `id` and `user_id` do not cross, and neither does `created_at`. The same rule
- * `/` , `/plan` and `/training` apply, and here it is more than hygiene: the
- * row's ADDRESS is its date — `weight_logs` is unique on `(user_id, date)` and
- * every write names a date — so an id in the payload would be an identifier the
- * client could hold, send back, and have ignored. A field that looks like it
- * addresses something but does not is worse than one that is absent.
- *
- * `created_at` stays behind because nothing draws it. It says when the row was
- * first written, which on a corrected weigh-in is not when the measurement was
- * taken, and a date beside a date is a question the screen would have to answer.
- */
-function narrow(entry: WeightLog): WeighInRow {
-  return { date: entry.date, weightKg: entry.weightKg, note: entry.note };
-}
 
 export default async function WeightPage() {
   const session = await getSession();
@@ -85,12 +72,38 @@ export default async function WeightPage() {
     );
   }
 
+  /*
+   * Two narrowings of one fetch — FUEL-84, and the place the screen is bounded.
+   *
+   * `readings` is every weigh-in as a date and a weight, because every one of
+   * them is DRAWN: the chart plots them and § Accessibility obliges it to carry
+   * "an adjacent data table", which is a row per reading. Cutting this to a
+   * window would cut the chart to a window with it.
+   *
+   * `entries` is the newest `RECENT_WEIGH_INS` of the same rows, and the only
+   * ones that carry a `note`. The list is the one thing that renders a note, the
+   * list is what was unbounded — 58 rows and 4333px on the demo account, with no
+   * ceiling — and a note is `MAX_NOTE_LENGTH`, five hundred characters, against
+   * a reading's thirty-odd bytes. So the payload keeps what is rendered and
+   * drops what is not, and `actions/weight.ts` hands over the rest a page at a
+   * time when the reader asks for it.
+   *
+   * Both come off one `loadWeighIns`, not two queries. `queries/weight.ts`
+   * argues the round trips: a second statement for the same rows on Neon's HTTP
+   * driver buys nothing that slicing an array in hand does.
+   */
+  const readings = history.entries.map((entry) => ({
+    date: entry.date,
+    weightKg: entry.weightKg,
+  }));
+
   return (
     <WeighIns
       today={history.today}
-      entries={history.entries.map(narrow)}
+      entries={history.entries.slice(0, RECENT_WEIGH_INS).map(narrowWeighIn)}
+      readings={readings}
       // The two figures FUEL-35's chart rules against. They are body metrics
-      // rather than logs, so unlike `narrow` above there is nothing to strip:
+      // rather than logs, so unlike `narrowWeighIn` there is nothing to strip:
       // the whole of each is what the reference line is.
       startWeightKg={history.startWeightKg}
       targetWeightKg={history.targetWeightKg}

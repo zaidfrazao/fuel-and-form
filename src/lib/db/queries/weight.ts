@@ -1,6 +1,6 @@
 import "server-only";
 
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, lt } from "drizzle-orm";
 
 import { type CalendarDate, todayIn } from "@/lib/date";
 import type { WeighIn } from "@/lib/weigh-in";
@@ -33,15 +33,26 @@ import { scope } from "../scope";
  * judged on. Here the case cannot arise: there is nothing to move, because the
  * date is not a field of the row so much as the name of it.
  *
- * ## The whole history, unnarrowed
+ * ## The whole history, and where FUEL-84 bounded it
  *
- * `loadWeighIns` fetches every row rather than a window, unlike `training.ts`
- * which narrows `workout_logs` to six weeks. The difference is the growth rate:
- * P5 describes a WEEKLY weigh-in, so a year is 52 rows and a decade is 520 —
- * a table that does not need paginating within the life of this app. FUEL-35's
- * chart asks for "the full history" by acceptance criterion, so a narrowed
- * fetch here would be a second query for the same rows, or a limit the chart
- * would have to know about and undo.
+ * `loadWeighIns` still fetches every row rather than a window, unlike
+ * `training.ts` which narrows `workout_logs` to six weeks — because the CHART
+ * renders every row. FUEL-35 asks for "the full history" by acceptance
+ * criterion, and § Accessibility obliges the chart to carry "an adjacent data
+ * table", which `weight-chart.tsx` does: one `<tr>` per reading, every one of
+ * them. A narrowed fetch here would be a second query for the same rows, or a
+ * limit the chart would have to know about and undo.
+ *
+ * What FUEL-84 bounded is what CROSSES to the browser, and it is bounded in
+ * `app/(app)/weight/page.tsx` rather than here. Every reading goes over as a
+ * date and a weight, because the chart and its table draw all of them; only the
+ * newest `RECENT_WEIGH_INS` carry a `note`, because the history list is the one
+ * thing that renders a note and the list is the thing that was unbounded. A
+ * note is `MAX_NOTE_LENGTH` — 500 characters — so at a year of daily weighing
+ * the notes are the payload, and the ones nothing draws are the ones that go.
+ *
+ * The rest of the history reaches the screen through `loadEarlierWeighIns` and
+ * `loadWeighInOn` below, a page at a time, when the reader asks for it.
  */
 
 /** What `/weight` needs to render. */
@@ -126,6 +137,64 @@ export async function loadWeighIns(
     targetWeightKg: profile.targetWeightKg,
     goalPaceKgPerWeek: profile.goalPaceKgPerWeek,
   };
+}
+
+/**
+ * The page of weigh-ins immediately older than a date — FUEL-84's "show earlier".
+ *
+ * Keyset, not offset. `before` is the oldest row the screen already holds, so a
+ * page is "the next `limit` rows older than that one" and it stays correct while
+ * the list underneath it moves: a weigh-in deleted from the window between two
+ * taps shifts every offset by one and would make the next page skip a row, and a
+ * weigh-in logged for an old date would make it repeat one. Neither can happen
+ * against a date, which is this table's address anyway.
+ *
+ * No count of what is left comes back with it, deliberately. The screen already
+ * knows how many weigh-ins exist — it holds every READING for the chart — so
+ * "are there earlier entries" is `readings.length > rows.length` there and does
+ * not need a second answer from here that could disagree with the first.
+ *
+ * Newest first, matching `loadWeighIns`, so a page appends to the list the
+ * screen already has rather than being merged into it.
+ */
+export async function loadEarlierWeighIns(
+  userId: string,
+  before: CalendarDate,
+  limit: number,
+): Promise<WeightLog[]> {
+  const s = scope(userId, getDb());
+
+  return s.select(schema.weightLogs, lt(schema.weightLogs.date, before), {
+    orderBy: desc(schema.weightLogs.date),
+    limit,
+  });
+}
+
+/**
+ * The weigh-in on one date, or `undefined` — FUEL-84's other read.
+ *
+ * The screen's date field addresses a weigh-in by its date, and with the history
+ * bounded that date can name an entry the list has not loaded. What is missing
+ * in that case is the NOTE: the chart's readings carry a date and a weight, so
+ * the form can already show the reading it is about to replace, but a note it
+ * could not see is a note the upsert would overwrite with an empty one. This is
+ * how it sees it.
+ *
+ * `selectOne` without an `orderBy` is safe here where the doc on it warns
+ * otherwise: `weight_logs` is unique on `(user_id, date)`, so a scoped equality
+ * on the date matches at most one row and "whichever Postgres returns first" is
+ * the only row there is.
+ *
+ * `undefined` for a date with no weigh-in AND for another user's — the same
+ * answer, which is the § Security promise `removeWeighIn` sets out below.
+ */
+export async function loadWeighInOn(
+  userId: string,
+  date: CalendarDate,
+): Promise<WeightLog | undefined> {
+  const s = scope(userId, getDb());
+
+  return s.selectOne(schema.weightLogs, eq(schema.weightLogs.date, date));
 }
 
 /**

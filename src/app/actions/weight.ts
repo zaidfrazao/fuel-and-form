@@ -3,8 +3,21 @@
 import { refresh } from "next/cache";
 
 import { getSession } from "@/lib/auth/session";
-import { recordWeighIn, removeWeighIn, weighInToday } from "@/lib/db/queries/weight";
-import { parseWeighIn, parseWeighInDate } from "@/lib/weigh-in";
+import {
+  loadEarlierWeighIns,
+  loadWeighInOn,
+  recordWeighIn,
+  removeWeighIn,
+  weighInToday,
+} from "@/lib/db/queries/weight";
+import {
+  RECENT_WEIGH_INS,
+  type WeighInRow,
+  narrowWeighIn,
+  parseHistoryDate,
+  parseWeighIn,
+  parseWeighInDate,
+} from "@/lib/weigh-in";
 
 /**
  * Weigh-ins written and taken back — P5's writes (FUEL-34).
@@ -50,6 +63,26 @@ export type WeightResult = { ok: boolean };
 
 const DONE: WeightResult = { ok: true };
 const FAILED: WeightResult = { ok: false };
+
+/**
+ * What FUEL-84's two READS hand back.
+ *
+ * Unlike `WeightResult` these carry rows, so they are unions rather than one
+ * shape with an `ok` flag: a caller that reached for `entries` on a failed read
+ * would be reaching for rows that do not exist, and the union is what stops it
+ * compiling. Success and failure are still the only two answers — a read that
+ * was refused for want of a session and one the database dropped are
+ * indistinguishable, for `saveWeighIn`'s reason.
+ *
+ * `entry: null` is NOT a failure. "No weigh-in on that date" is an answer the
+ * form acts on — it means the fields stay empty — and collapsing it into
+ * `{ ok: false }` would make the screen warn about a note it was never going to
+ * overwrite.
+ */
+export type EarlierWeighInsResult = { ok: true; entries: WeighInRow[] } | { ok: false };
+export type WeighInOnResult = { ok: true; entry: WeighInRow | null } | { ok: false };
+
+const UNREAD = { ok: false } as const;
 
 /**
  * Logs a weigh-in, or replaces the one already on that date.
@@ -149,5 +182,85 @@ export async function deleteWeighIn(input: { date: unknown }): Promise<WeightRes
     console.error("Could not delete the weigh-in.", error);
 
     return FAILED;
+  }
+}
+
+/**
+ * The page of weigh-ins older than a date — FUEL-84's "show earlier".
+ *
+ * ## A read, in a file of writes
+ *
+ * `/weight` bounds what it renders, so the rest of the history has to arrive
+ * some other way, and this is it. The screen holds every READING already —
+ * the chart draws them and § Accessibility obliges it to table them — so what
+ * this adds is the rows themselves: the note, and a `<li>` to edit and delete
+ * from.
+ *
+ * No `refresh()`, which is the whole difference between this and the two above.
+ * Nothing was written, so there is no server render to invalidate; calling it
+ * would throw away the pages the reader has already asked for and put the list
+ * back to ten rows underneath them.
+ *
+ * The page size is `RECENT_WEIGH_INS` — the same figure the first window uses,
+ * and taken from the module that defines it rather than from the caller. A
+ * limit named by the client is a limit a hand-rolled POST can set to a year of
+ * rows, which is the payload this ticket exists to bound.
+ */
+export async function earlierWeighIns(input: {
+  before: unknown;
+}): Promise<EarlierWeighInsResult> {
+  try {
+    const session = await getSession();
+
+    if (!session) return UNREAD;
+
+    // Shape only, and no timezone fetched to check the future against — see
+    // `parseHistoryDate`. "Older than a date in the future" is every row this
+    // user has, in pages of ten, which is neither a refusal worth making nor a
+    // way to learn anything about someone else.
+    const before = parseHistoryDate(input.before);
+
+    if (!before) return UNREAD;
+
+    const entries = await loadEarlierWeighIns(session.userId, before, RECENT_WEIGH_INS);
+
+    return { ok: true, entries: entries.map(narrowWeighIn) };
+  } catch (error) {
+    console.error("Could not load earlier weigh-ins.", error);
+
+    return UNREAD;
+  }
+}
+
+/**
+ * The weigh-in on one date — what the form needs before it can replace one.
+ *
+ * The date field addresses an entry, and with the history bounded it can name
+ * one the list has not loaded. The reading is already on the screen, so the
+ * form can say what it is about to replace either way; what is missing is the
+ * NOTE, and `recordWeighIn` sets the note on every write. Without this the
+ * screen would prefill an empty note over a real one and the upsert would
+ * store it — a note silently lost by correcting a weight, which is the one
+ * failure a bounded list could introduce that the unbounded one could not.
+ *
+ * A read, so no `refresh()`, for `earlierWeighIns`' reason.
+ */
+export async function weighInOn(input: { date: unknown }): Promise<WeighInOnResult> {
+  try {
+    const session = await getSession();
+
+    if (!session) return UNREAD;
+
+    const date = parseHistoryDate(input.date);
+
+    if (!date) return UNREAD;
+
+    const entry = await loadWeighInOn(session.userId, date);
+
+    return { ok: true, entry: entry ? narrowWeighIn(entry) : null };
+  } catch (error) {
+    console.error("Could not load that weigh-in.", error);
+
+    return UNREAD;
   }
 }

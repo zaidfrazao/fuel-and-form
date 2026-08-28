@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+import { RECENT_WEIGH_INS } from "@/lib/weigh-in";
+
 /**
  * P5's action layer — what a weigh-in is allowed to write (FUEL-34).
  *
@@ -22,26 +24,50 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
  * unique index that makes it true lives in the database.
  */
 
-const { getSession, weighInToday, recordWeighIn, removeWeighIn, refresh } = vi.hoisted(
-  () => ({
-    getSession: vi.fn(),
-    weighInToday: vi.fn(),
-    recordWeighIn: vi.fn(),
-    removeWeighIn: vi.fn(),
-    refresh: vi.fn(),
-  }),
-);
+const {
+  getSession,
+  weighInToday,
+  recordWeighIn,
+  removeWeighIn,
+  loadEarlierWeighIns,
+  loadWeighInOn,
+  refresh,
+} = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  weighInToday: vi.fn(),
+  recordWeighIn: vi.fn(),
+  removeWeighIn: vi.fn(),
+  loadEarlierWeighIns: vi.fn(),
+  loadWeighInOn: vi.fn(),
+  refresh: vi.fn(),
+}));
 
 vi.mock("@/lib/auth/session", () => ({ getSession }));
-vi.mock("@/lib/db/queries/weight", () => ({ weighInToday, recordWeighIn, removeWeighIn }));
+vi.mock("@/lib/db/queries/weight", () => ({
+  weighInToday,
+  recordWeighIn,
+  removeWeighIn,
+  loadEarlierWeighIns,
+  loadWeighInOn,
+}));
 vi.mock("next/cache", () => ({ refresh }));
 
-const { deleteWeighIn, saveWeighIn } = await import("./weight");
+const { deleteWeighIn, earlierWeighIns, saveWeighIn, weighInOn } = await import("./weight");
 
 const USER = "11111111-2222-3333-4444-555555555555";
 const SESSION = { userId: USER, kind: "owner" as const };
 
 const TODAY = "2026-08-21";
+
+/** A stored row, carrying everything `weight_logs` really holds. */
+const STORED = {
+  id: "b2f1c0de-0000-4000-8000-000000000001",
+  userId: USER,
+  date: "2026-07-04",
+  weightKg: 81.6,
+  note: "before breakfast",
+  createdAt: new Date("2026-07-04T05:30:00Z"),
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -49,6 +75,8 @@ beforeEach(() => {
   weighInToday.mockResolvedValue(TODAY);
   recordWeighIn.mockResolvedValue(undefined);
   removeWeighIn.mockResolvedValue(true);
+  loadEarlierWeighIns.mockResolvedValue([STORED]);
+  loadWeighInOn.mockResolvedValue(STORED);
 });
 
 describe("saving a weigh-in", () => {
@@ -174,5 +202,116 @@ describe("deleting a weigh-in", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
 
     await expect(deleteWeighIn({ date: TODAY })).resolves.toEqual({ ok: false });
+  });
+});
+
+/**
+ * FUEL-84's two reads — the rest of a bounded history, on request.
+ *
+ * `/weight` lists a window and sends the notes for that window only, so these
+ * are how anything older reaches the screen. Two things are asserted that the
+ * write paths cannot be asked about: that the page size is the SERVER's, and
+ * that a row crosses narrowed. Both are payload promises, and a payload promise
+ * is exactly the kind that rots without a word.
+ */
+describe("reading earlier weigh-ins", () => {
+  test("returns the page narrowed to what the browser may hold", async () => {
+    await expect(earlierWeighIns({ before: "2026-08-11" })).resolves.toEqual({
+      ok: true,
+      entries: [{ date: STORED.date, weightKg: STORED.weightKg, note: STORED.note }],
+    });
+
+    expect(loadEarlierWeighIns).toHaveBeenCalledWith(USER, "2026-08-11", RECENT_WEIGH_INS);
+  });
+
+  test("takes the page size from this module, never from the caller", async () => {
+    // A limit the client could name is a limit a hand-rolled POST sets to a
+    // year of rows, which is the payload this ticket exists to bound.
+    await earlierWeighIns({ before: "2026-08-11", limit: 5000 } as { before: unknown });
+
+    expect(loadEarlierWeighIns.mock.calls[0]?.[2]).toBe(RECENT_WEIGH_INS);
+  });
+
+  test("does not refuse a date in the future, and does not fetch a timezone to check one", async () => {
+    /*
+     * The read paths deliberately part company with the writes here. "Older
+     * than tomorrow" is this user's own history in pages of ten — not a refusal
+     * worth a round trip to `profiles.timezone`, and not a way to learn
+     * anything about anyone else.
+     */
+    await expect(earlierWeighIns({ before: "2099-01-01" })).resolves.toEqual({
+      ok: true,
+      entries: [{ date: STORED.date, weightKg: STORED.weightKg, note: STORED.note }],
+    });
+
+    expect(weighInToday).not.toHaveBeenCalled();
+  });
+
+  test("refuses a malformed date without touching the database", async () => {
+    await expect(earlierWeighIns({ before: "2026-02-30" })).resolves.toEqual({ ok: false });
+    await expect(earlierWeighIns({ before: 20260811 })).resolves.toEqual({ ok: false });
+
+    expect(loadEarlierWeighIns).not.toHaveBeenCalled();
+  });
+
+  test("reads nothing for a request with no session", async () => {
+    getSession.mockResolvedValue(null);
+
+    await expect(earlierWeighIns({ before: "2026-08-11" })).resolves.toEqual({ ok: false });
+
+    expect(loadEarlierWeighIns).not.toHaveBeenCalled();
+  });
+
+  test("returns a result rather than throwing when the read fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    loadEarlierWeighIns.mockRejectedValue(new Error("connection terminated"));
+
+    await expect(earlierWeighIns({ before: "2026-08-11" })).resolves.toEqual({ ok: false });
+  });
+
+  test("does not invalidate the render, which would fold the pages back up", async () => {
+    await earlierWeighIns({ before: "2026-08-11" });
+
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("reading the weigh-in on one date", () => {
+  test("returns the entry narrowed, so the form can see the note it would replace", async () => {
+    await expect(weighInOn({ date: STORED.date })).resolves.toEqual({
+      ok: true,
+      entry: { date: STORED.date, weightKg: STORED.weightKg, note: STORED.note },
+    });
+
+    expect(loadWeighInOn).toHaveBeenCalledWith(USER, STORED.date);
+  });
+
+  test("says a date has no weigh-in without calling it a failure", async () => {
+    // The screen acts on the difference: no entry means the fields stay empty,
+    // a failure means it warns that logging would replace a note it never saw.
+    loadWeighInOn.mockResolvedValue(undefined);
+
+    await expect(weighInOn({ date: "2026-07-05" })).resolves.toEqual({ ok: true, entry: null });
+  });
+
+  test("refuses a malformed date without touching the database", async () => {
+    await expect(weighInOn({ date: "the fourth" })).resolves.toEqual({ ok: false });
+
+    expect(loadWeighInOn).not.toHaveBeenCalled();
+  });
+
+  test("reads nothing for a request with no session", async () => {
+    getSession.mockResolvedValue(null);
+
+    await expect(weighInOn({ date: STORED.date })).resolves.toEqual({ ok: false });
+
+    expect(loadWeighInOn).not.toHaveBeenCalled();
+  });
+
+  test("returns a result rather than throwing when the read fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    loadWeighInOn.mockRejectedValue(new Error("connection terminated"));
+
+    await expect(weighInOn({ date: STORED.date })).resolves.toEqual({ ok: false });
   });
 });

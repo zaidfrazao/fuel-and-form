@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { getDb } from "@/lib/db";
 import {
+  loadEarlierWeighIns,
+  loadWeighInOn,
   loadWeighIns,
   recordWeighIn,
   removeWeighIn,
@@ -212,5 +214,89 @@ describe.skipIf(!configured)("weigh-ins, scoped", () => {
 
     await expect(loadWeighIns(fixture.bob.userId, new Date())).resolves.toBeUndefined();
     await expect(weighInToday(fixture.bob.userId, new Date())).resolves.toBeUndefined();
+  });
+
+  /**
+   * FUEL-84's paging, against the index that has to serve it.
+   *
+   * The hermetic suites can prove that the action passes `before` through and
+   * that the screen appends what comes back. What they cannot prove is that
+   * `lt(date, before)` with a `desc` order and a `limit` returns the rows
+   * immediately older than a date, in that order, for THIS user only — which is
+   * three separate claims about a statement, and the last of them is § 1.4's.
+   */
+  describe("paging back through the history", () => {
+    /**
+     * Six consecutive days for Alice, newest 2026-05-06.
+     *
+     * On top of the one the fixture already seeds her, which is older than all
+     * six — so "the end of the history" is past that row rather than past these.
+     */
+    const DAYS = [
+      "2026-05-01",
+      "2026-05-02",
+      "2026-05-03",
+      "2026-05-04",
+      "2026-05-05",
+      "2026-05-06",
+    ];
+
+    beforeEach(async () => {
+      for (const [index, date] of DAYS.entries()) {
+        await recordWeighIn(fixture.alice.userId, {
+          date,
+          weightKg: 80 + index,
+          note: `note for ${date}`,
+        });
+      }
+    });
+
+    it("returns the rows immediately older than a date, newest first", async () => {
+      const page = await loadEarlierWeighIns(fixture.alice.userId, "2026-05-05", 3);
+
+      expect(page.map((row) => row.date)).toEqual(["2026-05-04", "2026-05-03", "2026-05-02"]);
+    });
+
+    it("excludes the date it is given, so a page cannot repeat the row it followed", async () => {
+      const page = await loadEarlierWeighIns(fixture.alice.userId, "2026-05-04", 10);
+
+      expect(page.map((row) => row.date)).not.toContain("2026-05-04");
+    });
+
+    it("runs out rather than wrapping when there is nothing older", async () => {
+      // Past the six above lies the fixture's own row, and past that lies the
+      // end. Both steps are asserted, so "empty" cannot pass by the statement
+      // matching nothing all along.
+      const tail = await loadEarlierWeighIns(fixture.alice.userId, "2026-05-01", 10);
+
+      expect(tail.map((row) => row.date)).toEqual([fixture.alice.weighInDate]);
+
+      await expect(
+        loadEarlierWeighIns(fixture.alice.userId, fixture.alice.weighInDate, 10),
+      ).resolves.toEqual([]);
+    });
+
+    it("pages nobody else's history", async () => {
+      // § 1.4. Bob's own weigh-in is older than this date, so an unscoped
+      // statement would hand Alice's rows to him and his to himself alike.
+      const page = await loadEarlierWeighIns(fixture.bob.userId, "2026-12-31", 10);
+
+      expect(page.every((row) => row.userId === fixture.bob.userId)).toBe(true);
+      expect(page.map((row) => row.date)).toEqual([fixture.bob.weighInDate]);
+    });
+
+    it("reads the weigh-in on one date, with the note the form would replace", async () => {
+      const entry = await loadWeighInOn(fixture.alice.userId, "2026-05-03");
+
+      expect(entry?.weightKg).toBe(82);
+      expect(entry?.note).toBe("note for 2026-05-03");
+    });
+
+    it("has nothing on a date with no weigh-in, and nothing on another user's", async () => {
+      // The same answer for both, which is `removeWeighIn`'s promise from the
+      // read side: this cannot be used to ask whether Alice weighed in on a date.
+      await expect(loadWeighInOn(fixture.alice.userId, "2026-05-07")).resolves.toBeUndefined();
+      await expect(loadWeighInOn(fixture.bob.userId, "2026-05-03")).resolves.toBeUndefined();
+    });
   });
 });

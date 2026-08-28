@@ -1,18 +1,30 @@
 "use client";
 
-import { startTransition, useOptimistic, useRef, useState } from "react";
+import { startTransition, useOptimistic, useRef, useState, useTransition } from "react";
 
 import { PageMain } from "@/components/page-main";
 import { Button } from "@/components/ui/button";
 import { KeyValueGrid, type KeyValueItem } from "@/components/kv-grid";
 import { Sheet } from "@/components/ui/sheet";
 import { WeightChart } from "@/components/weight-chart";
-import { deleteWeighIn, saveWeighIn } from "@/app/actions/weight";
+import {
+  deleteWeighIn,
+  earlierWeighIns,
+  saveWeighIn,
+  weighInOn,
+} from "@/app/actions/weight";
 import type { CalendarDate } from "@/lib/date";
 import { figure } from "@/lib/format";
 import { entryLabel } from "@/lib/now-display";
 import { MAX_NOTE_LENGTH } from "@/lib/session-entry";
-import { MAX_KG, MIN_KG, parseWeighInDate, parseWeightKg } from "@/lib/weigh-in";
+import {
+  MAX_KG,
+  MIN_KG,
+  type WeighInRow,
+  parseWeighInDate,
+  parseWeightKg,
+} from "@/lib/weigh-in";
+import type { Reading } from "@/lib/weight-chart";
 import { type WeightStats, weightStats } from "@/lib/weight-stats";
 
 /**
@@ -57,12 +69,14 @@ import { type WeightStats, weightStats } from "@/lib/weight-stats";
  * does not pretend to know more than it does.
  */
 
-/** One weigh-in, narrowed by `app/weight/page.tsx`. No id — the date is the id. */
-export type WeighInRow = {
-  date: CalendarDate;
-  weightKg: number;
-  note: string | null;
-};
+/**
+ * One weigh-in, narrowed by `lib/weigh-in.ts`. No id — the date is the id.
+ *
+ * Re-exported from here, where this screen's callers already reach for it.
+ * FUEL-84 moved the declaration itself so that `actions/weight.ts` could narrow
+ * older entries to the same shape without importing a client component.
+ */
+export type { WeighInRow };
 
 /**
  * A tap, in the form a retry needs.
@@ -90,6 +104,61 @@ type Attempt =
       note: string;
     }
   | { kind: "delete"; date: CalendarDate };
+
+/** Newest first — the order `loadWeighIns` returns and the list reads in. */
+function newestFirst(a: Reading, b: Reading): number {
+  return a.date < b.date ? 1 : -1;
+}
+
+/**
+ * Puts a reading into a list at its date, replacing whatever was on that date.
+ *
+ * Generic over the two lists FUEL-84 split the history into — the ROWS the
+ * screen lists and the READINGS the chart draws — because a weigh-in has to
+ * land in both at the same moment, or the line and the list disagree about what
+ * just happened. One function, so the two cannot drift.
+ *
+ * Re-sorted rather than prepended: a weigh-in logged for a past date belongs
+ * where that date belongs and not at the top.
+ */
+function withReading<T extends Reading>(list: readonly T[], entry: T): readonly T[] {
+  return [entry, ...list.filter((row) => row.date !== entry.date)].sort(newestFirst);
+}
+
+/**
+ * Applies a write to the older pages the reader loaded — the half `refresh()`
+ * cannot reach.
+ *
+ * Those pages are client state. The server re-renders `entries`, so a write
+ * inside the window corrects itself; a write to a row the reader had PAGED IN
+ * does not, and the optimistic value is discarded the moment the transition
+ * ends. Without this, a deleted old entry reappears and a corrected one
+ * reappears at its old weight.
+ *
+ * A logged weigh-in is put back only if it is older than the server's window,
+ * which is where the server would put it. Anything newer arrives in `entries`
+ * on the next render, and a second copy here is what the dedupe in `loaded`
+ * would then have to undo.
+ */
+function reconcile(
+  earlier: readonly WeighInRow[],
+  attempt: Attempt,
+  window: readonly WeighInRow[],
+): readonly WeighInRow[] {
+  const without = earlier.filter((row) => row.date !== attempt.date);
+
+  if (attempt.kind === "delete") return without;
+
+  const oldest = window[window.length - 1];
+
+  if (!oldest || attempt.date >= oldest.date) return without;
+
+  return withReading(without, {
+    date: attempt.date,
+    weightKg: attempt.weightKg,
+    note: attempt.note.trim() || null,
+  });
+}
 
 /** § Tone of Voice: name what happened. Never "Something went wrong". */
 function banner(failure: Attempt): string {
@@ -206,14 +275,36 @@ function progressItems(
 export function WeighIns({
   today,
   entries,
+  readings,
   startWeightKg,
   targetWeightKg,
   goalPaceKgPerWeek,
 }: {
   /** Today in the user's own zone — the form's default and its ceiling. */
   today: CalendarDate;
-  /** Every weigh-in, newest first, from `loadWeighIns`. */
+  /**
+   * The newest `RECENT_WEIGH_INS` weigh-ins, with their notes — the list.
+   *
+   * A window rather than the history, since FUEL-84. The list used to render
+   * every row there was: 58 on the demo account, 4333px, six and a half screens
+   * of phone, and no ceiling on any of it. The rest arrives through
+   * `earlierWeighIns` a page at a time, which is also the only way a note older
+   * than this window reaches the browser at all.
+   */
   entries: readonly WeighInRow[];
+  /**
+   * EVERY weigh-in as a date and a weight, newest first.
+   *
+   * The chart draws all of them and § Accessibility obliges it to table all of
+   * them, so unlike the rows above this one is not windowed — and because it is
+   * whole, it is also what the rest of the screen counts against: the headline
+   * reading, the progress figures, whether the date in the form already holds a
+   * weigh-in, and how many entries are still unlisted.
+   *
+   * No notes. A note is `MAX_NOTE_LENGTH` against a reading's thirty-odd bytes,
+   * and the list is the one thing that renders one — see `weight/page.tsx`.
+   */
+  readings: readonly Reading[];
   /**
    * `profiles.start_weight_kg` and `profiles.target_weight_kg` — the chart's two
    * reference lines, and FUEL-35's "target line and starting weight both
@@ -249,63 +340,166 @@ export function WeighIns({
   /** The date whose delete is being confirmed, or `null` for no sheet. */
   const [confirming, setConfirming] = useState<CalendarDate | null>(null);
 
+  /** The older pages the reader has asked for, continuing `entries`. */
+  const [earlier, setEarlier] = useState<readonly WeighInRow[]>([]);
+  /**
+   * Where the next page starts — the oldest date PAGING has reached, or `null`
+   * before the first step.
+   *
+   * Held rather than read off the last row on screen, which is what this was
+   * first written to do. A weigh-in logged for an old date sorts to the bottom
+   * of the list, and a cursor taken from there would ask for "older than
+   * January" while August was still unfetched — stranding every row between,
+   * counted as unlisted and reachable by nothing. A write must not be able to
+   * move the read's place in the history.
+   */
+  const [cursor, setCursor] = useState<CalendarDate | null>(null);
+  /** A page that did not come back — § Feedback, beside the control that asked. */
+  const [unreachable, setUnreachable] = useState(false);
+  /*
+   * The reads are a transition of their own, not the writes'. Nothing about
+   * them is optimistic — there is no value to show before the answer arrives —
+   * so what is wanted is the pending flag, and sharing `startTransition` with
+   * `act` would put a fetch behind a save and make the button say nothing while
+   * it waited.
+   */
+  const [loading, startLoading] = useTransition();
+
   // Focus moves to the weight box when a row is loaded for editing: the form is
   // above the list, so without it the user taps Edit and nothing they can see
   // changes. § Accessibility's "focus is never removed" is the same rule from
   // the other side.
   const weightBox = useRef<HTMLInputElement>(null);
 
+  /**
+   * The date the form is addressed at, readable from an async callback.
+   *
+   * `date` is state, so a closure that started before the reader moved on holds
+   * the date they have left. One thing reads it late — the note prefill below,
+   * which waits on a fetch — and dropping a fetched note into a form that now
+   * addresses some other day would be a note appearing under the wrong weight.
+   * Every write of `date` goes through `address`, so the two cannot separate.
+   */
+  const addressed = useRef<CalendarDate>(today);
+
+  /**
+   * Whether the reader has typed in the note box since the form was addressed.
+   *
+   * The note prefill below waits on a fetch, and a reader who starts writing a
+   * note in the meantime is a reader whose words the answer would overwrite —
+   * on the same date, so `addressed` does not catch it. Cleared by `address`,
+   * because a form pointed at a new entry has no draft to protect.
+   */
+  const noteTouched = useRef(false);
+
+  const address = (next: CalendarDate) => {
+    addressed.current = next;
+    noteTouched.current = false;
+    setDate(next);
+  };
+
+  /*
+   * What the screen has before optimism: the server's window, and every older
+   * page the reader has asked for since.
+   *
+   * Deduplicated on the date and re-sorted, neither of which is belt and braces.
+   *
+   * The window is the newest `RECENT_WEIGH_INS` and it MOVES: delete a recent
+   * weigh-in and the server's next window reaches one row further back, into a
+   * page this client already holds. A weigh-in LOGGED for an old date lands in
+   * `earlier` through `reconcile` and is then returned again by the page that
+   * eventually reaches its date. Either way a row would render twice under one
+   * React key, so the dedupe is over the whole concatenation rather than
+   * between the two lists — the server's copy first, so it wins.
+   *
+   * The sort is for that same logged old date. It goes into `earlier` at the
+   * end, which is not where its date belongs once the pages between have been
+   * fetched, and a history list out of date order is a list you cannot read.
+   */
+  const seen = new Set<CalendarDate>();
+  const loaded = [...entries, ...earlier]
+    .filter((row) => !seen.has(row.date) && seen.add(row.date))
+    .sort(newestFirst);
+
   /*
    * What the screen says the history is, before the server has answered.
    *
-   * One reducer over the whole list rather than a value per row, so a log and a
-   * delete cannot revert independently. Both are keyed by date, which is the
-   * row's address — see the module comment.
+   * One reducer over the whole history rather than a value per row, so a log
+   * and a delete cannot revert independently. Both are keyed by date, which is
+   * the row's address — see the module comment.
+   *
+   * Over BOTH lists since FUEL-84, in one state rather than two `useOptimistic`
+   * calls. The rows and the readings are two views of one table and every write
+   * touches both, so a logged weigh-in has to reach the list, the line, the
+   * progress figures and the count of what is still unlisted in the same
+   * render. Two reducers could each be right and still show a screen that was
+   * not.
    */
-  const [rows, apply] = useOptimistic(
-    entries,
-    (current: readonly WeighInRow[], next: Attempt) => {
-      const without = current.filter((row) => row.date !== next.date);
+  const [history, apply] = useOptimistic(
+    { rows: loaded, readings },
+    (
+      current: { rows: readonly WeighInRow[]; readings: readonly Reading[] },
+      next: Attempt,
+    ) => {
+      if (next.kind === "delete") {
+        return {
+          rows: current.rows.filter((row) => row.date !== next.date),
+          readings: current.readings.filter((row) => row.date !== next.date),
+        };
+      }
 
-      if (next.kind === "delete") return without;
+      const { date: at, weightKg, note } = next;
 
-      return [
-        { date: next.date, weightKg: next.weightKg, note: next.note.trim() || null },
-        ...without,
-        // Newest first, matching `loadWeighIns`. Re-sorted rather than
-        // prepended, because a weigh-in logged for a past date belongs where
-        // that date belongs and not at the top.
-      ].sort((a, b) => (a.date < b.date ? 1 : -1));
+      return {
+        rows: withReading(current.rows, { date: at, weightKg, note: note.trim() || null }),
+        readings: withReading(current.readings, { date: at, weightKg }),
+      };
     },
   );
 
-  /** The weigh-in already on the form's date, if there is one. */
-  const existing = rows.find((row) => row.date === date);
+  /**
+   * The weigh-in already on the form's date, if there is one.
+   *
+   * Against the READINGS, not the listed rows. The form's date field addresses
+   * any date in the history, including one older than the list has loaded, and
+   * a lookup that missed those would drop the "replaces" line below on exactly
+   * the entries whose replacement is least expected.
+   */
+  const existing = history.readings.find((row) => row.date === date);
 
   /**
    * The most recent reading — the figure the screen leads with.
    *
-   * `rows[0]` because the list is newest first, and read into a name rather
-   * than indexed twice so the empty case is stated once. The number and its
-   * date are the hero; FUEL-36's progress figures sit further down, beneath the
-   * chart they are the arithmetic of.
+   * `readings[0]` because that list is newest first AND whole, which is what
+   * makes the headline independent of how much of the history is listed. Read
+   * into a name rather than indexed twice, so the empty case is stated once.
+   * The number and its date are the hero; FUEL-36's progress figures sit
+   * further down, beneath the chart they are the arithmetic of.
    */
-  const latest = rows[0];
+  const latest = history.readings[0];
+
+  /** Weigh-ins that exist and are not listed — FUEL-84's "show earlier". */
+  const unlisted = history.readings.length - history.rows.length;
 
   /*
    * The progress figures and the trailing rate — FUEL-36.
    *
-   * Over `rows` rather than `entries`, on the chart's reasoning one line of
-   * argument further: these are the OPTIMISTIC rows, so a logged weigh-in moves
-   * the percentage and the rate at the same moment it appears in the list and
-   * on the line. Figures that waited for the round trip would sit beside a
-   * chart that had already moved, which reads as one of them being broken.
+   * Over the OPTIMISTIC readings, which is the chart's reasoning one line of
+   * argument further: a logged weigh-in moves the percentage and the rate at
+   * the same moment it appears in the list and on the line. Figures that waited
+   * for the round trip would sit beside a chart that had already moved, which
+   * reads as one of them being broken.
+   *
+   * Readings rather than rows, since FUEL-84: the rate is a slope through a
+   * trailing window of the HISTORY, and taking it through the ten rows that
+   * happen to be listed would make a figure about the last four weeks depend on
+   * how far the reader had scrolled.
    *
    * `null` for an empty history, so the section below is gated by the same
    * answer that produced it rather than by a second count of the same rows.
    */
   const stats = weightStats({
-    readings: rows,
+    readings: history.readings,
     startWeightKg,
     targetWeightKg,
     goalPaceKgPerWeek,
@@ -332,7 +526,51 @@ export function WeighIns({
       // The optimistic value has already reverted by the time this renders —
       // the transition ending is what discards it — so the banner reports a
       // screen that is back where it started.
-      if (!result.ok) setFailure(attempt);
+      if (!result.ok) {
+        setFailure(attempt);
+
+        return;
+      }
+
+      // `refresh()` re-renders the server's window, which corrects `entries`.
+      // The older pages are this client's own state and it cannot reach them,
+      // so the write is applied to them here — see `reconcile`.
+      setEarlier((current) => reconcile(current, attempt, entries));
+    });
+  };
+
+  /**
+   * Loads the next page of older weigh-ins — FUEL-84.
+   *
+   * Keyed on the oldest row the screen holds rather than on a page number, so
+   * the step stays correct while the list underneath it moves; `queries/weight.ts`
+   * argues the keyset. One way only, with no matching "show fewer": § Progressive
+   * Disclosure rules out accordions, and a list that can be collapsed again is
+   * one.
+   */
+  const showEarlier = () => {
+    // Before the first step the window's own oldest row is the boundary, read
+    // fresh at the tap so a window the server has since moved is the one used.
+    const from = cursor ?? entries[entries.length - 1]?.date;
+
+    if (!from) return;
+
+    setUnreachable(false);
+
+    startLoading(async () => {
+      const result = await earlierWeighIns({ before: from });
+
+      if (!result.ok) {
+        setUnreachable(true);
+
+        return;
+      }
+
+      const last = result.entries[result.entries.length - 1];
+
+      if (last) setCursor(last.date);
+
+      setEarlier((current) => [...current, ...result.entries]);
     });
   };
 
@@ -375,13 +613,13 @@ export function WeighIns({
     // has something to say.
     setWeight("");
     setNote("");
-    setDate(today);
+    address(today);
   };
 
   /** Loads a row into the form — the "edit" half of the criterion. */
   const edit = (row: WeighInRow) => {
     setProblem({});
-    setDate(row.date);
+    address(row.date);
     setWeight(String(row.weightKg));
     setNote(row.note ?? "");
     weightBox.current?.focus();
@@ -421,7 +659,7 @@ export function WeighIns({
             onChange={(event) => {
               const next = event.target.value;
 
-              setDate(next);
+              address(next);
               setProblem({});
 
               /*
@@ -430,15 +668,63 @@ export function WeighIns({
                * moving to a date that already has a reading would leave the
                * previous one's number in the box, one tap away from
                * overwriting a measurement with a different day's.
-               *
-               * A date with no weigh-in clears them rather than leaving them:
-               * the form is then empty, which is what "this date has nothing"
-               * should look like.
                */
-              const row = rows.find((entry) => entry.date === next);
+              const row = history.rows.find((entry) => entry.date === next);
 
-              setWeight(row ? String(row.weightKg) : "");
-              setNote(row?.note ?? "");
+              if (row) {
+                setWeight(String(row.weightKg));
+                setNote(row.note ?? "");
+
+                return;
+              }
+
+              /*
+               * FUEL-84: a date can now name a weigh-in the LIST has not
+               * loaded. The reading is here either way — the chart holds every
+               * one — so the weight prefills from it and the "replaces" line
+               * below is right whether or not the row is listed.
+               *
+               * The note is not here, and `recordWeighIn` sets the note on
+               * every write. An empty box saved over a real note would lose it
+               * with nothing on the screen having said so, which is the one
+               * failure a bounded list could introduce that the unbounded one
+               * could not. So it is fetched rather than assumed.
+               *
+               * A date with no weigh-in at all clears both fields rather than
+               * leaving them: the form is then empty, which is what "this date
+               * has nothing" should look like.
+               */
+              const unloaded = history.readings.find((entry) => entry.date === next);
+
+              setWeight(unloaded ? String(unloaded.weightKg) : "");
+              setNote("");
+
+              if (!unloaded) return;
+
+              startLoading(async () => {
+                const result = await weighInOn({ date: next });
+
+                if (!result.ok) {
+                  // Said in the date's own error slot, because it is about the
+                  // date the form is pointed at — and as a warning rather than
+                  // a block: replacing the entry may well be the intention, and
+                  // `log` checks the date itself regardless.
+                  setProblem((current) => ({
+                    ...current,
+                    date: "Couldn’t load this entry’s note. Logging now would replace it.",
+                  }));
+
+                  return;
+                }
+
+                // Two ways the answer can arrive too late to be wanted: the
+                // form has moved to another date, or the reader has started
+                // writing a note of their own on this one. Neither is a note
+                // this fetch may overwrite.
+                if (addressed.current === next && !noteTouched.current) {
+                  setNote(result.entry?.note ?? "");
+                }
+              });
             }}
             // Today in the USER's zone, not the browser's. It is what stops a
             // future weigh-in by accident; `lib/weigh-in.ts` is what stops one
@@ -502,7 +788,10 @@ export function WeighIns({
           <textarea
             id="weigh-in-note"
             value={note}
-            onChange={(event) => setNote(event.target.value)}
+            onChange={(event) => {
+              noteTouched.current = true;
+              setNote(event.target.value);
+            }}
             // The same bound `parseNote` refuses past, so the refusal is
             // unreachable through the screen and is only ever a forged request.
             maxLength={MAX_NOTE_LENGTH}
@@ -551,13 +840,15 @@ export function WeighIns({
        * Below the form rather than above it, so a ~176px graphic never pushes
        * the screen's one primary action out of thumb reach — § Touch Targets.
        *
-       * `rows`, not `entries`: these are the optimistic rows, so a logged
-       * weigh-in moves the line at the same moment it appears in the list.
-       * `WeightChart` renders nothing at all when there are none, which is why
-       * this needs no gate of its own.
+       * The optimistic READINGS, so a logged weigh-in moves the line at the
+       * same moment it appears in the list. Not the listed rows: FUEL-35 asks
+       * for the full history by acceptance criterion and § Accessibility makes
+       * the chart table every point, so FUEL-84's window is the list's and not
+       * the chart's. `WeightChart` renders nothing at all when there are none,
+       * which is why this needs no gate of its own.
        */}
       <WeightChart
-        entries={rows}
+        entries={history.readings}
         today={today}
         startWeightKg={startWeightKg}
         targetWeightKg={targetWeightKg}
@@ -591,7 +882,7 @@ export function WeighIns({
           {/* § Lists: rows on the canvas, separated by hairlines. No card, no
               fill, no outer rule. */}
           <ul aria-label="Weigh-ins" className="flex flex-col">
-            {rows.map((row) => (
+            {history.rows.map((row) => (
               <li
                 key={row.date}
                 className="flex items-center justify-between gap-3 border-b border-border last:border-b-0"
@@ -604,6 +895,14 @@ export function WeighIns({
                 <button
                   type="button"
                   onClick={() => edit(row)}
+                  /*
+                   * The row the FORM is addressed at, which is the latest one
+                   * only because the form opens on today. Said here because
+                   * FUEL-84 and FUEL-78 both read it as "the latest entry
+                   * carries aria-current": it does not, and a change that made
+                   * it so would stop the marker following an entry being
+                   * edited, which is the one thing it is for.
+                   */
                   aria-current={row.date === date ? "true" : undefined}
                   className="flex min-h-[54px] min-w-0 flex-1 flex-col justify-center gap-1 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
@@ -647,6 +946,44 @@ export function WeighIns({
               </li>
             ))}
           </ul>
+
+          {/*
+           * FUEL-84's way back to the rest of it.
+           *
+           * A step rather than a collapsible section: § Progressive Disclosure
+           * rules out accordions, and it only goes one way for the same reason
+           * — a list that can be folded shut again is one. The count is beside
+           * the control rather than inside its label, because the label says
+           * what the tap does and the tap shows a page rather than all of them.
+           *
+           * Gated on there being unlisted entries, so a history shorter than
+           * the window renders exactly what it did before this ticket: a list,
+           * and nothing underneath it.
+           */}
+          {unlisted > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-slash text-text-tertiary">
+                / {unlisted} earlier {unlisted === 1 ? "weigh-in" : "weigh-ins"}
+              </p>
+
+              {unreachable && (
+                <p role="alert" className="text-slash text-error">
+                  Couldn’t load earlier weigh-ins.
+                </p>
+              )}
+
+              {/* § Buttons' Text variant. The screen's one primary is "Log
+                  weigh-in" and this is not competing with it. */}
+              <Button
+                variant="link"
+                className="w-full"
+                onClick={showEarlier}
+                disabled={loading}
+              >
+                {loading ? "Loading…" : unreachable ? "Try again" : "Show earlier"}
+              </Button>
+            </div>
+          )}
         </section>
       )}
 

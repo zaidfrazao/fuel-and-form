@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { WeighInRow } from "@/components/weigh-ins";
+import { RECENT_WEIGH_INS } from "@/lib/weigh-in";
+import type { Reading } from "@/lib/weight-chart";
 
 /**
  * The Weight screen — FUEL-34's acceptance criteria, as the DOM answers them.
@@ -23,12 +25,19 @@ import type { WeighInRow } from "@/components/weigh-ins";
  *     rather than about a value, so it is asserted as one.
  */
 
-const { saveWeighIn, deleteWeighIn } = vi.hoisted(() => ({
+const { saveWeighIn, deleteWeighIn, earlierWeighIns, weighInOn } = vi.hoisted(() => ({
   saveWeighIn: vi.fn(),
   deleteWeighIn: vi.fn(),
+  earlierWeighIns: vi.fn(),
+  weighInOn: vi.fn(),
 }));
 
-vi.mock("@/app/actions/weight", () => ({ saveWeighIn, deleteWeighIn }));
+vi.mock("@/app/actions/weight", () => ({
+  saveWeighIn,
+  deleteWeighIn,
+  earlierWeighIns,
+  weighInOn,
+}));
 
 const { WeighIns } = await import("./weigh-ins");
 
@@ -60,10 +69,38 @@ const ON_PACE_ENTRIES: WeighInRow[] = [
   { date: "2026-08-06", weightKg: 81.1, note: null },
 ];
 
-const view = (entries: WeighInRow[] = ENTRIES) => (
+/**
+ * Fourteen consecutive days, newest first — a history longer than the window.
+ *
+ * Written out rather than generated from `addDays`, so the dates a test asserts
+ * on are dates this file states rather than dates a shared helper computed. The
+ * notes are what FUEL-84's one data-loss path turns on, so the older half
+ * carries them.
+ */
+const LONG_HISTORY: WeighInRow[] = Array.from({ length: 14 }, (_, index) => ({
+  date: `2026-08-${String(20 - index).padStart(2, "0")}`,
+  weightKg: Math.round((80 - index / 10) * 10) / 10,
+  note: index >= RECENT_WEIGH_INS ? `logged on day ${index}` : null,
+}));
+
+/** The window, as `weight/page.tsx` narrows it. */
+const WINDOW = LONG_HISTORY.slice(0, RECENT_WEIGH_INS);
+
+/** The oldest weigh-in there is — outside the window by ten places. */
+const OLDEST = LONG_HISTORY[LONG_HISTORY.length - 1]!;
+
+/**
+ * The screen as the page renders it.
+ *
+ * `readings` defaults to the rows themselves, which is what a history shorter
+ * than `RECENT_WEIGH_INS` looks like: everything listed, nothing earlier. The
+ * two are passed apart only where FUEL-84's window is the thing under test.
+ */
+const view = (entries: WeighInRow[] = ENTRIES, readings: Reading[] = entries) => (
   <WeighIns
     today={TODAY}
     entries={entries}
+    readings={readings}
     startWeightKg={START_KG}
     targetWeightKg={TARGET_KG}
     goalPaceKgPerWeek={GOAL_PACE}
@@ -98,6 +135,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   saveWeighIn.mockResolvedValue({ ok: true });
   deleteWeighIn.mockResolvedValue({ ok: true });
+  earlierWeighIns.mockResolvedValue({ ok: true, entries: LONG_HISTORY.slice(RECENT_WEIGH_INS) });
+  weighInOn.mockResolvedValue({ ok: true, entry: OLDEST });
 });
 
 describe("logging a weigh-in", () => {
@@ -563,5 +602,347 @@ describe("progress and the trailing rate", () => {
 
     pending.settle({ ok: true });
     await waitFor(() => expect(saveWeighIn).toHaveBeenCalledOnce());
+  });
+});
+
+/**
+ * FUEL-84 — the history is a window, and the rest is a step away.
+ *
+ * The screen used to render every weigh-in it had: 58 on the demo account,
+ * 4333px, six and a half screens of phone, and no ceiling on any of it. What is
+ * asserted here is the bound and everything the bound could have broken —
+ * because most of that would break QUIETLY. A note fetched into the wrong
+ * date, an earlier entry that comes back after being deleted, and a marker that
+ * stops following the form are all screens that look right.
+ */
+describe("the bounded history", () => {
+  test("lists the window it was given and not the history behind it", () => {
+    render(view(WINDOW, LONG_HISTORY));
+
+    expect(rows()).toHaveLength(RECENT_WEIGH_INS);
+    expect(screen.queryByRole("button", { name: new RegExp(OLDEST.weightKg.toString()) })).toBe(
+      null,
+    );
+  });
+
+  test("says how many weigh-ins are not listed", () => {
+    render(view(WINDOW, LONG_HISTORY));
+
+    expect(screen.getByText(`/ ${LONG_HISTORY.length - RECENT_WEIGH_INS} earlier weigh-ins`)).
+      toBeTruthy();
+  });
+
+  test("counts one earlier weigh-in in the singular", () => {
+    render(view(WINDOW, LONG_HISTORY.slice(0, RECENT_WEIGH_INS + 1)));
+
+    expect(screen.getByText("/ 1 earlier weigh-in")).toBeTruthy();
+  });
+
+  test("offers nothing to expand when the whole history is listed", () => {
+    // A history shorter than the window renders exactly what it rendered before
+    // this ticket: the rows, and nothing underneath them.
+    render(view());
+
+    expect(rows()).toHaveLength(ENTRIES.length);
+    expect(screen.queryByRole("button", { name: "Show earlier" })).toBe(null);
+    expect(screen.queryByText(/earlier weigh-in/)).toBe(null);
+  });
+
+  test("leads with the latest weigh-in and lists it first", () => {
+    // The criterion says the latest entry is always shown. It is structural
+    // here rather than incidental: the readings are newest first and whole, and
+    // the window is a prefix of them.
+    render(view(WINDOW, LONG_HISTORY));
+
+    // Read off the fixture rather than written out, so the assertion says "the
+    // newest reading" rather than a figure that happens to be it.
+    const newest = `${LONG_HISTORY[0]!.weightKg} kg`;
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(newest);
+    expect(rows()[0]?.textContent).toContain(newest);
+  });
+
+  test("marks the entry the form addresses, not the latest one", async () => {
+    // FUEL-84 and FUEL-78 both read `aria-current` as "the latest entry". It is
+    // not: it follows the form, and it lands on the latest only because the
+    // form opens on today.
+    const user = userEvent.setup();
+
+    render(view(WINDOW, LONG_HISTORY));
+
+    const [first, second] = rows();
+
+    expect(within(first!).getByRole("button", { name: /kg/ }).getAttribute("aria-current")).toBe(
+      "true",
+    );
+
+    await user.click(within(second!).getByRole("button", { name: /kg/ }));
+
+    expect(within(first!).getByRole("button", { name: /kg/ }).getAttribute("aria-current")).toBe(
+      null,
+    );
+    expect(within(second!).getByRole("button", { name: /kg/ }).getAttribute("aria-current")).toBe(
+      "true",
+    );
+  });
+
+  test("shows the earlier entries when asked, and stops offering once they are all listed", async () => {
+    const user = userEvent.setup();
+
+    render(view(WINDOW, LONG_HISTORY));
+
+    await user.click(screen.getByRole("button", { name: "Show earlier" }));
+
+    await waitFor(() => expect(rows()).toHaveLength(LONG_HISTORY.length));
+
+    // Keyset, not an offset: the page is asked for by the oldest date on screen.
+    expect(earlierWeighIns).toHaveBeenCalledWith({ before: WINDOW[WINDOW.length - 1]?.date });
+    expect(screen.queryByRole("button", { name: "Show earlier" })).toBe(null);
+  });
+
+  test("does not list a row twice when the server's window reaches into a loaded page", async () => {
+    /*
+     * The window is the newest `RECENT_WEIGH_INS` and it MOVES. Delete a recent
+     * weigh-in and the next server render reaches one row further back — into a
+     * page this client already fetched — and without the dedupe that row renders
+     * twice under one React key, which is a warning in the console and a list
+     * that is wrong on the screen.
+     */
+    const user = userEvent.setup();
+    const { rerender } = render(view(WINDOW, LONG_HISTORY));
+
+    await user.click(screen.getByRole("button", { name: "Show earlier" }));
+    await waitFor(() => expect(rows()).toHaveLength(LONG_HISTORY.length));
+
+    // The newest weigh-in gone, as `refresh()` would hand it back.
+    rerender(view(LONG_HISTORY.slice(1, RECENT_WEIGH_INS + 1), LONG_HISTORY.slice(1)));
+
+    expect(rows()).toHaveLength(LONG_HISTORY.length - 1);
+  });
+
+  test("a weigh-in logged for an old date does not divert where paging resumes", async () => {
+    /*
+     * The cursor used to be read off the last row on screen. Log a weigh-in for
+     * a date older than the window and it sorts to the bottom, so the next page
+     * would have been asked for as "older than THAT" — stranding every row
+     * between, still counted as unlisted and reachable by nothing.
+     */
+    const user = userEvent.setup();
+
+    render(view(WINDOW, LONG_HISTORY));
+
+    await user.clear(dateBox());
+    await user.type(dateBox(), "2026-08-05"); // older than every row in LONG_HISTORY
+    await user.type(weightBox(), "81.2");
+    await user.click(screen.getByRole("button", { name: "Log weigh-in" }));
+
+    await waitFor(() => expect(saveWeighIn).toHaveBeenCalled());
+    // It is on screen, at the foot of the list where its date belongs.
+    await waitFor(() => expect(rows().at(-1)?.textContent).toContain("Wed 5 Aug"));
+
+    await user.click(screen.getByRole("button", { name: "Show earlier" }));
+
+    // The window's own oldest row, not the one just written beneath it.
+    await waitFor(() =>
+      expect(earlierWeighIns).toHaveBeenCalledWith({ before: WINDOW[WINDOW.length - 1]?.date }),
+    );
+  });
+
+  test("keeps the list in date order when a page arrives after an old entry was logged", async () => {
+    const user = userEvent.setup();
+
+    render(view(WINDOW, LONG_HISTORY));
+
+    await user.clear(dateBox());
+    await user.type(dateBox(), "2026-08-05");
+    await user.type(weightBox(), "81.2");
+    await user.click(screen.getByRole("button", { name: "Log weigh-in" }));
+    await waitFor(() => expect(saveWeighIn).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: "Show earlier" }));
+    await waitFor(() => expect(rows().length).toBeGreaterThan(RECENT_WEIGH_INS + 1));
+
+    // The paged rows belong ABOVE the entry logged for the 5th, and the list is
+    // unreadable if they land under it.
+    const dates = rows().map((li) => li.querySelector("button")!.textContent ?? "");
+
+    expect(dates.at(-1)).toContain("Wed 5 Aug");
+  });
+
+  test("an entry that was paged in can still be edited", async () =>{
+    // The criterion's other half: reachable is not enough, it has to be
+    // editable — and the note has to come with it, or the edit replaces one.
+    const user = userEvent.setup();
+
+    render(view(WINDOW, LONG_HISTORY));
+
+    await user.click(screen.getByRole("button", { name: "Show earlier" }));
+
+    const row = await screen.findByRole("button", { name: new RegExp(`${OLDEST.weightKg} kg`) });
+
+    await user.click(row);
+
+    expect(dateBox()).toHaveProperty("value", OLDEST.date);
+    expect(weightBox()).toHaveProperty("value", String(OLDEST.weightKg));
+    expect(screen.getByLabelText("Note")).toHaveProperty("value", OLDEST.note);
+  });
+
+  test("says so when a page does not come back, and offers the tap again", async () => {
+    const user = userEvent.setup();
+
+    earlierWeighIns.mockResolvedValue({ ok: false });
+
+    render(view(WINDOW, LONG_HISTORY));
+
+    await user.click(screen.getByRole("button", { name: "Show earlier" }));
+
+    const alert = await screen.findByRole("alert");
+
+    // § Tone of Voice: name what happened.
+    expect(alert.textContent).toContain("Couldn’t load earlier weigh-ins.");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(rows()).toHaveLength(RECENT_WEIGH_INS);
+  });
+
+  test("does not put a deleted earlier entry back when the write settles", async () => {
+    /*
+     * The failure this guards is invisible in a diff. `refresh()` re-renders the
+     * server's window and the paged-in rows are client state it cannot reach, so
+     * without `reconcile` the optimistic delete reverts into a row that is
+     * already gone from the database.
+     */
+    const user = userEvent.setup();
+
+    render(view(WINDOW, LONG_HISTORY));
+
+    await user.click(screen.getByRole("button", { name: "Show earlier" }));
+    await screen.findByRole("button", { name: new RegExp(`${OLDEST.weightKg} kg`) });
+
+    await user.click(
+      // 2026-08-07, ten places outside the window and a Friday.
+      screen.getByRole("button", { name: "Delete the weigh-in for Fri 7 Aug" }),
+    );
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => expect(deleteWeighIn).toHaveBeenCalledWith({ date: OLDEST.date }));
+    await waitFor(() => expect(rows()).toHaveLength(LONG_HISTORY.length - 1));
+
+    expect(
+      screen.queryByRole("button", { name: new RegExp(`${OLDEST.weightKg} kg`) }),
+    ).toBe(null);
+  });
+});
+
+/**
+ * The one data-loss path a bounded list could open.
+ *
+ * The date field addresses a weigh-in by its date, and that date can now name
+ * an entry the list has not loaded. The reading is on the screen either way —
+ * the chart holds every one — but the NOTE is not, and `recordWeighIn` writes
+ * the note on every save. An empty box over a real note loses it with nothing
+ * having said so.
+ */
+describe("addressing a weigh-in the list has not loaded", () => {
+  test("shows the reading, and fetches the note behind it", async () => {
+    const user = userEvent.setup();
+
+    render(view(WINDOW, LONG_HISTORY));
+
+    await user.clear(dateBox());
+    await user.type(dateBox(), OLDEST.date);
+
+    // The weight comes off the readings, which are whole — so the "replaces"
+    // line is right before the fetch has answered.
+    await waitFor(() => expect(weightBox()).toHaveProperty("value", String(OLDEST.weightKg)));
+    expect(await screen.findByText(new RegExp(`replaces ${OLDEST.weightKg} kg`))).toBeTruthy();
+
+    await waitFor(() => expect(weighInOn).toHaveBeenCalledWith({ date: OLDEST.date }));
+    await waitFor(() => expect(screen.getByLabelText("Note")).toHaveProperty("value", OLDEST.note));
+  });
+
+  test("warns rather than silently replacing when the note cannot be loaded", async () => {
+    const user = userEvent.setup();
+
+    weighInOn.mockResolvedValue({ ok: false });
+
+    render(view(WINDOW, LONG_HISTORY));
+
+    await user.clear(dateBox());
+    await user.type(dateBox(), OLDEST.date);
+
+    const alert = await screen.findByRole("alert");
+
+    expect(alert.textContent).toContain("Couldn’t load this entry’s note.");
+    // A warning, not a block: replacing the entry may well be the intention.
+    const log = screen.getByRole("button", { name: "Log weigh-in" }) as HTMLButtonElement;
+
+    expect(log.disabled).toBe(false);
+  });
+
+  test("leaves the note alone for a date with no weigh-in at all", async () => {
+    const user = userEvent.setup();
+
+    render(view(WINDOW, LONG_HISTORY));
+
+    await user.clear(dateBox());
+    await user.type(dateBox(), "2026-07-04");
+
+    await waitFor(() => expect(weightBox()).toHaveProperty("value", ""));
+    expect(screen.getByLabelText("Note")).toHaveProperty("value", "");
+    expect(weighInOn).not.toHaveBeenCalled();
+  });
+
+  test("does not overwrite a note the reader has started writing", async () => {
+    /*
+     * The fetch clears the note box and then answers a moment later. A reader
+     * who begins writing in the meantime is on the SAME date, so `addressed`
+     * does not catch it — and the answer would land on top of their words.
+     */
+    const user = userEvent.setup();
+    const held = deferred<{ ok: true; entry: WeighInRow }>();
+
+    weighInOn.mockReturnValue(held.promise);
+
+    render(view(WINDOW, LONG_HISTORY));
+
+    await user.clear(dateBox());
+    await user.type(dateBox(), OLDEST.date);
+
+    await waitFor(() => expect(weighInOn).toHaveBeenCalledWith({ date: OLDEST.date }));
+
+    await user.type(screen.getByLabelText("Note"), "weighed before the run");
+
+    held.settle({ ok: true, entry: OLDEST });
+
+    await waitFor(() => expect(weightBox()).toHaveProperty("value", String(OLDEST.weightKg)));
+    expect(screen.getByLabelText("Note")).toHaveProperty("value", "weighed before the run");
+  });
+
+  test("does not drop a fetched note into a date the form has since left", async () => {
+    /*
+     * The reason `addressed` is a ref rather than the `date` state: the closure
+     * that started this fetch holds the date the reader has already left, and a
+     * note landing under someone else's weight is a note the next save writes
+     * there.
+     */
+    const user = userEvent.setup();
+    const held = deferred<{ ok: true; entry: WeighInRow }>();
+
+    weighInOn.mockReturnValue(held.promise);
+
+    render(view(WINDOW, LONG_HISTORY));
+
+    await user.clear(dateBox());
+    await user.type(dateBox(), OLDEST.date);
+
+    await waitFor(() => expect(weighInOn).toHaveBeenCalledWith({ date: OLDEST.date }));
+
+    await user.clear(dateBox());
+    await user.type(dateBox(), TODAY);
+
+    held.settle({ ok: true, entry: OLDEST });
+
+    await waitFor(() => expect(dateBox()).toHaveProperty("value", TODAY));
+    expect(screen.getByLabelText("Note")).toHaveProperty("value", "");
   });
 });

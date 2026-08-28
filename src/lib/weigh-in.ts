@@ -55,12 +55,72 @@ import { parseNote } from "./session-entry";
 export const MIN_KG = 20;
 export const MAX_KG = 400;
 
+/**
+ * How many weigh-ins `/weight` renders before the rest sit behind a step —
+ * FUEL-84.
+ *
+ * The screen used to render every row it had: 58 on the demo account, 4333px,
+ * six and a half screens of phone, and nothing bounding it. A year of daily
+ * weighing is roughly 365 rows and 27,000px, and the growth has no ceiling
+ * because the list had no limit.
+ *
+ * Ten, because of what the list is FOR. The chart above it carries the trend
+ * and the progress grid carries the arithmetic, so the rows are there to look
+ * up or correct ONE entry — and a correction is almost always to a recent one.
+ * Ten covers a daily logger's last week and a half and a weekly logger's last
+ * two months, in about 700px, with everything older one tap away.
+ *
+ * The same number is the page size of that tap, so there is one figure to
+ * reason about rather than an initial window and a step that drift apart.
+ */
+export const RECENT_WEIGH_INS = 10;
+
 /** A validated row's worth of weigh-in — what `recordWeighIn` takes. */
 export type WeighIn = {
   date: CalendarDate;
   weightKg: number;
   note: string | null;
 };
+
+/**
+ * One weigh-in, narrowed to what the browser is allowed to hold.
+ *
+ * `id` and `user_id` do not cross, and neither does `created_at`. The same rule
+ * `/`, `/plan` and `/training` apply, and here it is more than hygiene: the
+ * row's ADDRESS is its date — `weight_logs` is unique on `(user_id, date)` and
+ * every write names a date — so an id in the payload would be an identifier the
+ * client could hold, send back, and have ignored. A field that looks like it
+ * addresses something but does not is worse than one that is absent.
+ *
+ * `created_at` stays behind because nothing draws it. It says when the row was
+ * first written, which on a corrected weigh-in is not when the measurement was
+ * taken, and a date beside a date is a question the screen would have to answer.
+ *
+ * Structurally identical to `WeighIn` above, and kept separate anyway: that one
+ * is a validated WRITE and this one is a read that has crossed a boundary. They
+ * coincide because the date is the address, which is a fact about this table
+ * rather than a promise about these two types.
+ */
+export type WeighInRow = {
+  date: CalendarDate;
+  weightKg: number;
+  note: string | null;
+};
+
+/**
+ * Strips a stored weigh-in down to `WeighInRow`.
+ *
+ * In this module rather than in `app/(app)/weight/page.tsx`, where it started,
+ * because FUEL-84 gave the screen a SECOND way to receive rows: the actions
+ * hand back older entries when the history is expanded, and a narrowing written
+ * twice is a narrowing that will eventually be written once. The parameter is
+ * structural, so this file still imports nothing from the database and a client
+ * component can go on importing `MIN_KG` from it without dragging pg-core into
+ * the browser bundle.
+ */
+export function narrowWeighIn(entry: WeighInRow): WeighInRow {
+  return { date: entry.date, weightKg: entry.weightKg, note: entry.note };
+}
 
 /**
  * Digits, at most one separator, and digits — nothing else.
@@ -161,19 +221,41 @@ export function parseWeighInDate(
   value: unknown,
   today: CalendarDate,
 ): CalendarDate | undefined {
+  const date = parseHistoryDate(value);
+
+  if (date === undefined) return undefined;
+
+  return daysBetween(today, date) > 0 ? undefined : date;
+}
+
+/**
+ * A date this app will READ a weigh-in at, checked for shape and nothing else.
+ *
+ * Split out of `parseWeighInDate` for FUEL-84's two read paths — "the entries
+ * older than this date" and "the entry on this date". Neither has anything to
+ * say about the future: both name a row in the caller's OWN history, so a date
+ * beyond today matches nothing rather than meaning something forbidden, and a
+ * refusal there would be a rule invented for a request that cannot do harm.
+ *
+ * The shape check is shared rather than copied, so there is still one
+ * definition of a date this app will accept and the future rule sits on top of
+ * it rather than beside it — the arrangement `actions/weight.ts` argues for
+ * when it refuses a future date on the way out as well as on the way in.
+ */
+export function parseHistoryDate(value: unknown): CalendarDate | undefined {
   if (typeof value !== "string") return undefined;
 
   try {
     // Throws on a shape that is not 'YYYY-MM-DD' and on a date that does not
     // exist ('2026-02-30'). Caught rather than propagated: this function's
-    // contract is one answer for every refusal, and the action above it must
+    // contract is one answer for every refusal, and the actions above it must
     // never throw.
     parseCalendarDate(value);
   } catch {
     return undefined;
   }
 
-  return daysBetween(today, value) > 0 ? undefined : value;
+  return value;
 }
 
 /**
