@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+import { APP_ACTION_BAR } from "@/components/action-bar";
 import { RightNow } from "@/components/right-now";
 import type { LoggedEntry } from "@/lib/day-summary";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
@@ -1176,6 +1177,14 @@ describe("the actions", () => {
     // three parts of it: pinned to the bottom, still placed by `mt-auto` when
     // the content is short, and opaque so content passing beneath it does not
     // show through.
+    //
+    // "Opaque" has one deliberate hole in it since FUEL-83, and `bg-background`
+    // is still the right thing to assert: the fill is unchanged and the bar
+    // covers everything under it exactly as before. What changed is that the
+    // top 24px of that cover is masked below `lg`, so a line of type meeting
+    // the bar runs out instead of being cut through the x-height. The class
+    // carrying it is asserted with the rest, and `action-bar.test.tsx` owns
+    // what it does.
     const { container } = renderNow(active(0));
 
     const bar = container.querySelector('[data-variant="default"]')?.parentElement;
@@ -1184,6 +1193,19 @@ describe("the actions", () => {
     expect(bar?.className).toContain("bottom-0");
     expect(bar?.className).toContain("mt-auto");
     expect(bar?.className).toContain("bg-background");
+    expect(bar?.className).toContain("action-bar-fade");
+  });
+
+  test("is the shared bar, not a string of its own", () => {
+    // FUEL-83. `/`, `/training` and the `/` skeleton have to agree about the
+    // pinning — the skeleton exists so the primary does not move on swap-in —
+    // and they now agree by taking one constant rather than by three literals
+    // matching. Identity, so this screen cannot quietly add or drop a class.
+    const { container } = renderNow(active(0));
+
+    const bar = container.querySelector('[data-variant="default"]')?.parentElement;
+
+    expect(bar?.className).toBe(APP_ACTION_BAR);
   });
 
   test("no longer carries the safe-area inset, which the shell owns", () => {

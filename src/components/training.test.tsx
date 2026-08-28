@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { Week } from "@/components/dot-grid";
+import { APP_ACTION_BAR } from "@/components/action-bar";
 import type { TrainingItem } from "@/components/training";
 
 /**
@@ -444,6 +445,23 @@ describe("when the write is refused", () => {
     await user.click(screen.getByRole("button", { name: "Clear" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("Couldn’t clear that.");
+  });
+});
+
+describe("the action bar", () => {
+  test("is the shared bar, not a string of its own", () => {
+    // FUEL-83. This screen is where the hard edge was measured — at 375×667 the
+    // bar's top landed through the x-height of the first exercise's
+    // prescription — but the fix belongs to all three bars at once, so what is
+    // asserted here is that this one still takes the shared string rather than
+    // a copy of it. `action-bar.test.tsx` owns what the string does.
+    render(view());
+
+    // The primary is a direct child of the bar — `Training` renders it and the
+    // Partial/Skip row inside the one sticky container, with no wrapper between.
+    const bar = screen.getByRole("button", { name: "Mark done" }).parentElement;
+
+    expect(bar?.className).toBe(APP_ACTION_BAR);
   });
 });
 
