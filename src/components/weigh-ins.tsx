@@ -342,6 +342,18 @@ export function WeighIns({
 
   /** The older pages the reader has asked for, continuing `entries`. */
   const [earlier, setEarlier] = useState<readonly WeighInRow[]>([]);
+  /**
+   * Where the next page starts — the oldest date PAGING has reached, or `null`
+   * before the first step.
+   *
+   * Held rather than read off the last row on screen, which is what this was
+   * first written to do. A weigh-in logged for an old date sorts to the bottom
+   * of the list, and a cursor taken from there would ask for "older than
+   * January" while August was still unfetched — stranding every row between,
+   * counted as unlisted and reachable by nothing. A write must not be able to
+   * move the read's place in the history.
+   */
+  const [cursor, setCursor] = useState<CalendarDate | null>(null);
   /** A page that did not come back — § Feedback, beside the control that asked. */
   const [unreachable, setUnreachable] = useState(false);
   /*
@@ -370,8 +382,19 @@ export function WeighIns({
    */
   const addressed = useRef<CalendarDate>(today);
 
+  /**
+   * Whether the reader has typed in the note box since the form was addressed.
+   *
+   * The note prefill below waits on a fetch, and a reader who starts writing a
+   * note in the meantime is a reader whose words the answer would overwrite —
+   * on the same date, so `addressed` does not catch it. Cleared by `address`,
+   * because a form pointed at a new entry has no draft to protect.
+   */
+  const noteTouched = useRef(false);
+
   const address = (next: CalendarDate) => {
     addressed.current = next;
+    noteTouched.current = false;
     setDate(next);
   };
 
@@ -379,19 +402,24 @@ export function WeighIns({
    * What the screen has before optimism: the server's window, and every older
    * page the reader has asked for since.
    *
-   * Deduplicated on the date, which is not belt and braces. The window is the
-   * newest `RECENT_WEIGH_INS` and it MOVES — delete a recent weigh-in and the
-   * server's next window reaches one row further back, into a page this client
-   * already holds. Without the filter that row renders twice, under one React
-   * key.
+   * Deduplicated on the date and re-sorted, neither of which is belt and braces.
+   *
+   * The window is the newest `RECENT_WEIGH_INS` and it MOVES: delete a recent
+   * weigh-in and the server's next window reaches one row further back, into a
+   * page this client already holds. A weigh-in LOGGED for an old date lands in
+   * `earlier` through `reconcile` and is then returned again by the page that
+   * eventually reaches its date. Either way a row would render twice under one
+   * React key, so the dedupe is over the whole concatenation rather than
+   * between the two lists — the server's copy first, so it wins.
+   *
+   * The sort is for that same logged old date. It goes into `earlier` at the
+   * end, which is not where its date belongs once the pages between have been
+   * fetched, and a history list out of date order is a list you cannot read.
    */
-  const loaded =
-    earlier.length === 0
-      ? entries
-      : [
-          ...entries,
-          ...earlier.filter((row) => !entries.some((entry) => entry.date === row.date)),
-        ];
+  const seen = new Set<CalendarDate>();
+  const loaded = [...entries, ...earlier]
+    .filter((row) => !seen.has(row.date) && seen.add(row.date))
+    .sort(newestFirst);
 
   /*
    * What the screen says the history is, before the server has answered.
@@ -521,20 +549,26 @@ export function WeighIns({
    * one.
    */
   const showEarlier = () => {
-    const oldest = history.rows[history.rows.length - 1];
+    // Before the first step the window's own oldest row is the boundary, read
+    // fresh at the tap so a window the server has since moved is the one used.
+    const from = cursor ?? entries[entries.length - 1]?.date;
 
-    if (!oldest) return;
+    if (!from) return;
 
     setUnreachable(false);
 
     startLoading(async () => {
-      const result = await earlierWeighIns({ before: oldest.date });
+      const result = await earlierWeighIns({ before: from });
 
       if (!result.ok) {
         setUnreachable(true);
 
         return;
       }
+
+      const last = result.entries[result.entries.length - 1];
+
+      if (last) setCursor(last.date);
 
       setEarlier((current) => [...current, ...result.entries]);
     });
@@ -683,9 +717,13 @@ export function WeighIns({
                   return;
                 }
 
-                // The reader may have moved the form on while this was in
-                // flight — see `addressed`.
-                if (addressed.current === next) setNote(result.entry?.note ?? "");
+                // Two ways the answer can arrive too late to be wanted: the
+                // form has moved to another date, or the reader has started
+                // writing a note of their own on this one. Neither is a note
+                // this fetch may overwrite.
+                if (addressed.current === next && !noteTouched.current) {
+                  setNote(result.entry?.note ?? "");
+                }
               });
             }}
             // Today in the USER's zone, not the browser's. It is what stops a
@@ -750,7 +788,10 @@ export function WeighIns({
           <textarea
             id="weigh-in-note"
             value={note}
-            onChange={(event) => setNote(event.target.value)}
+            onChange={(event) => {
+              noteTouched.current = true;
+              setNote(event.target.value);
+            }}
             // The same bound `parseNote` refuses past, so the refusal is
             // unreachable through the screen and is only ever a forged request.
             maxLength={MAX_NOTE_LENGTH}

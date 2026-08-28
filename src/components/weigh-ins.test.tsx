@@ -720,7 +720,56 @@ describe("the bounded history", () => {
     expect(rows()).toHaveLength(LONG_HISTORY.length - 1);
   });
 
-  test("an entry that was paged in can still be edited", async () => {
+  test("a weigh-in logged for an old date does not divert where paging resumes", async () => {
+    /*
+     * The cursor used to be read off the last row on screen. Log a weigh-in for
+     * a date older than the window and it sorts to the bottom, so the next page
+     * would have been asked for as "older than THAT" — stranding every row
+     * between, still counted as unlisted and reachable by nothing.
+     */
+    const user = userEvent.setup();
+
+    render(view(WINDOW, LONG_HISTORY));
+
+    await user.clear(dateBox());
+    await user.type(dateBox(), "2026-08-05"); // older than every row in LONG_HISTORY
+    await user.type(weightBox(), "81.2");
+    await user.click(screen.getByRole("button", { name: "Log weigh-in" }));
+
+    await waitFor(() => expect(saveWeighIn).toHaveBeenCalled());
+    // It is on screen, at the foot of the list where its date belongs.
+    await waitFor(() => expect(rows().at(-1)?.textContent).toContain("Wed 5 Aug"));
+
+    await user.click(screen.getByRole("button", { name: "Show earlier" }));
+
+    // The window's own oldest row, not the one just written beneath it.
+    await waitFor(() =>
+      expect(earlierWeighIns).toHaveBeenCalledWith({ before: WINDOW[WINDOW.length - 1]?.date }),
+    );
+  });
+
+  test("keeps the list in date order when a page arrives after an old entry was logged", async () => {
+    const user = userEvent.setup();
+
+    render(view(WINDOW, LONG_HISTORY));
+
+    await user.clear(dateBox());
+    await user.type(dateBox(), "2026-08-05");
+    await user.type(weightBox(), "81.2");
+    await user.click(screen.getByRole("button", { name: "Log weigh-in" }));
+    await waitFor(() => expect(saveWeighIn).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: "Show earlier" }));
+    await waitFor(() => expect(rows().length).toBeGreaterThan(RECENT_WEIGH_INS + 1));
+
+    // The paged rows belong ABOVE the entry logged for the 5th, and the list is
+    // unreadable if they land under it.
+    const dates = rows().map((li) => li.querySelector("button")!.textContent ?? "");
+
+    expect(dates.at(-1)).toContain("Wed 5 Aug");
+  });
+
+  test("an entry that was paged in can still be edited", async () =>{
     // The criterion's other half: reachable is not enough, it has to be
     // editable — and the note has to come with it, or the edit replaces one.
     const user = userEvent.setup();
@@ -841,6 +890,32 @@ describe("addressing a weigh-in the list has not loaded", () => {
     await waitFor(() => expect(weightBox()).toHaveProperty("value", ""));
     expect(screen.getByLabelText("Note")).toHaveProperty("value", "");
     expect(weighInOn).not.toHaveBeenCalled();
+  });
+
+  test("does not overwrite a note the reader has started writing", async () => {
+    /*
+     * The fetch clears the note box and then answers a moment later. A reader
+     * who begins writing in the meantime is on the SAME date, so `addressed`
+     * does not catch it — and the answer would land on top of their words.
+     */
+    const user = userEvent.setup();
+    const held = deferred<{ ok: true; entry: WeighInRow }>();
+
+    weighInOn.mockReturnValue(held.promise);
+
+    render(view(WINDOW, LONG_HISTORY));
+
+    await user.clear(dateBox());
+    await user.type(dateBox(), OLDEST.date);
+
+    await waitFor(() => expect(weighInOn).toHaveBeenCalledWith({ date: OLDEST.date }));
+
+    await user.type(screen.getByLabelText("Note"), "weighed before the run");
+
+    held.settle({ ok: true, entry: OLDEST });
+
+    await waitFor(() => expect(weightBox()).toHaveProperty("value", String(OLDEST.weightKg)));
+    expect(screen.getByLabelText("Note")).toHaveProperty("value", "weighed before the run");
   });
 
   test("does not drop a fetched note into a date the form has since left", async () => {
