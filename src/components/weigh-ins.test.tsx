@@ -700,6 +700,26 @@ describe("the bounded history", () => {
     expect(screen.queryByRole("button", { name: "Show earlier" })).toBe(null);
   });
 
+  test("does not list a row twice when the server's window reaches into a loaded page", async () => {
+    /*
+     * The window is the newest `RECENT_WEIGH_INS` and it MOVES. Delete a recent
+     * weigh-in and the next server render reaches one row further back — into a
+     * page this client already fetched — and without the dedupe that row renders
+     * twice under one React key, which is a warning in the console and a list
+     * that is wrong on the screen.
+     */
+    const user = userEvent.setup();
+    const { rerender } = render(view(WINDOW, LONG_HISTORY));
+
+    await user.click(screen.getByRole("button", { name: "Show earlier" }));
+    await waitFor(() => expect(rows()).toHaveLength(LONG_HISTORY.length));
+
+    // The newest weigh-in gone, as `refresh()` would hand it back.
+    rerender(view(LONG_HISTORY.slice(1, RECENT_WEIGH_INS + 1), LONG_HISTORY.slice(1)));
+
+    expect(rows()).toHaveLength(LONG_HISTORY.length - 1);
+  });
+
   test("an entry that was paged in can still be edited", async () => {
     // The criterion's other half: reachable is not enough, it has to be
     // editable — and the note has to come with it, or the edit replaces one.
