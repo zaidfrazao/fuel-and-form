@@ -334,6 +334,34 @@ function WeekStack({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
     >
       <caption className="sr-only">{CAPTION}</caption>
 
+      {/*
+       * The column widths, and the only place they can be stated.
+       *
+       * `table-fixed` takes its widths from the FIRST ROW, and the first row of
+       * this table is a day heading spanning both columns — so a width on the
+       * slot `th` below is read from a row that no longer decides anything and
+       * is silently ignored. Measured at 375px before this was here: the slot
+       * column took 165.5px of 331, half the screen, against the 72px it asks
+       * for. That is worse than the 23% the wide grid spent on its pinned
+       * column, which is the thing this shape exists to stop spending.
+       *
+       * A `<col>` is read before any row, so it holds regardless of what the
+       * first row happens to be. It has no accessible meaning and adds none.
+       */}
+      <colgroup>
+        {/*
+         * 88px is "Breakfast" and nothing more: the longest slot label is
+         * 79.3px at `text-micro`'s 10.5px and 0.16em tracking, plus the 8px
+         * that separates it from the meal. The wide grid never had to say this
+         * — an auto table grows a column to its content, and its `w-[86px]`
+         * pinned column resolves to 99.3px in the browser for exactly that
+         * reason. A fixed table grows nothing, so a number that merely looked
+         * tight clipped the word instead.
+         */}
+        <col className="w-[88px]" />
+        <col />
+      </colgroup>
+
       {week.map((day) => (
         // One `tbody` per day. The grouping is the point: it is what gives the
         // day heading a `rowgroup` to scope over, so the five rows beneath it

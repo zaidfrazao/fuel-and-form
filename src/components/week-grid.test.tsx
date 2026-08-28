@@ -328,6 +328,26 @@ describe("the week, stacked", () => {
     expect(table.className).toContain("table-fixed");
   });
 
+  test("states its column widths where a fixed table will read them", () => {
+    grid();
+
+    // `table-fixed` takes its widths from the first row, and the first row here
+    // spans both columns — so a width on the slot `th` is read from a row that
+    // decides nothing and is ignored in silence. Measured at 375px before the
+    // `colgroup`: the slot column took 165.5px of 331 rather than 88, half the
+    // screen, which is worse than the pinned column this shape exists to stop
+    // paying for. Nothing about the DOM says so, which is why it is pinned here.
+    const cols = document.querySelectorAll('[data-shape="stacked"] colgroup col');
+
+    expect(cols).toHaveLength(2);
+    // 88px is the longest label, "Breakfast", at 79.3px plus its 8px gap —
+    // measured, not guessed. A fixed table grows no column to fit its content
+    // the way the wide grid's auto table does, so a tight number clips a word.
+    expect(cols[0]?.className).toContain("w-[88px]");
+    // The second takes what is left — the whole point of the shape.
+    expect(cols[1]?.className).toBe("");
+  });
+
   test("a fifty-character meal name is never truncated", () => {
     const long = "Steak with Garlic Butter, Chips & Peppercorn Sauce";
 
