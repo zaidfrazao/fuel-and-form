@@ -159,7 +159,9 @@ Two exceptions that outrank the aesthetic:
 - **Key/value grid:** two columns, 22px row gap, 16px column gap. Three columns for compact stats.
 - **Radius:** `sm` 6px (tags) · `md` 12px (buttons) · `lg` 14px (tiles) · `xl` 26px (sheets) · `full` 999px (tab pill, NOW pill).
 - **Hairlines:** 1px `border`, dropping to 0.5px at `min-resolution: 2dppx`.
-- **Max content width:** 640px — the reading measure, at every width. 1024px for the week grid at ≥768px. Above 1024px the measure sits in a centred frame beside the navigation rail rather than being centred on what is left of the screen; § Desktop owns that grid and this line defers to it.
+- **Max content width — the rule:** 640px, the reading measure, at every width. It does not grow; screens gain columns beside it.
+- **Max content width — the one exception:** 1024px for the week grid at ≥768px, which is a table rather than prose and so has no measure to keep.
+- **Above 1024px** the measure sits in a centred frame beside the navigation rail rather than being centred on what is left of the screen. § Desktop owns that grid and these three lines defer to it.
 - **Elevation:** none, except sheets — `0 -8px 34px rgba(0,0,0,0.12)`.
 
 ### The Week, Two Ways
@@ -262,7 +264,9 @@ The 544px void becomes the 28px gutter. The right-hand void becomes a column wit
 
 #### The breakpoints
 
-Two are in use and neither is declared; both are the framework's defaults. Named here with the job each does, for FUEL-67 to declare in `@theme`.
+Two are in use and neither is declared; `md` and `lg` are the framework's defaults, and both keep their default widths. Named here with the job each does, for FUEL-67 to declare in `@theme` — Tailwind v4 is CSS-first, so a breakpoint is a `--breakpoint-*` custom property and there is no config file to hold one.
+
+**`xl` is a redefinition and is called out as one.** Tailwind's default `xl` is 1280px; this sets it to **1272**, because the frame is a sum of its columns and 1280 would leave 8px belonging to no column. Nothing in `src/` uses an `xl:` utility today — the only `xl` in the codebase is `--radius-xl`, a different namespace — so the redefinition costs nothing now and is written down so that it is never later read as the default it resembles.
 
 | | Width | What changes at it | Why this width |
 |---|---|---|---|
@@ -374,7 +378,7 @@ Added in FUEL-35 and not in `BRAND_GUIDE.html`, which predates the chart. Record
 **The four:** **Now** `/` · **Plan** `/plan` · **Training** `/training` · **Weight** `/weight`.
 
 - **Mobile:** a centred pill — 1px `border`, 4px padding. Inactive items are 46×40px icon-only with an `aria-label`; the active item is an `ink` pill showing icon plus text label. The `aria-label` is the label, so the four names above are the only names these destinations have anywhere. It is **pinned to the bottom of the viewport**, overriding the mock — see below.
-- **Desktop:** the same four as a left sidebar at ≥1024px — the rail, and § Desktop places it. It is a left sidebar rather than a flush one: above 1272px it begins at the frame's edge, not the screen's.
+- **Desktop:** the same four as a left sidebar at ≥1024px — the rail, and § Desktop places it. It is a left sidebar but not one flush to the viewport edge: above 1272px it begins at the frame's edge, not the screen's.
 - **Depth:** two levels maximum. Anything deeper is a sheet.
 - **Presence:** every authenticated route carries the shell, with no carve-outs — including the day-complete state of `/`, which used to be one and is discussed below. `/login` and `/dev/*` are outside it entirely, and are held there by the route group rather than by a check the shell performs on itself.
 - **`/` never requires navigation to be useful.** PRD § P1, which now carries the one reading of what that means. This section defers to it rather than restating it.
