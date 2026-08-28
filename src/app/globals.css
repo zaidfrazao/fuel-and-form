@@ -368,13 +368,24 @@
  * primary's ring rises 4px above it, to 26px — inside the opaque part, and it
  * would not be if the ramp ran the full 30.
  *
- * `no-repeat` with 8px of overhang for the same reason at the other end. A mask
- * layer tiles by default, which would repeat the transparent head of the ramp
- * immediately below the bar's border box and erase the bottom row's focus ring
- * where it overflows. Sizing the layer past the box and switching off the
- * repeat leaves that overflow opaque. § Accessibility: the ring is "never
- * removed", and a mask removes without touching a single declaration that
- * mentions it.
+ * That 24 is measured rather than chosen: running the ramp the full 30 visibly
+ * dims the ring — 664 pixels of it at 375×667, the whole top arc — and the ring
+ * is the one thing on the screen § Accessibility says is never removed. A
+ * shorter head or a longer ramp reintroduces that, so `action-bar.test.tsx`
+ * reads both numbers back out and fails on the overlap rather than leaving it
+ * to be noticed.
+ *
+ * Nothing else is needed to make the mask safe, and two declarations that
+ * looked as though they were have been left out deliberately. A mask layer
+ * tiles by default, so the transparent head of the ramp looks as though it
+ * would repeat under the bar's border box and erase the bottom row's focus ring
+ * where that overflows — `mask-repeat: no-repeat` and an oversized `mask-size`
+ * were written here to prevent exactly that. Measured against a build, they
+ * prevent nothing: `mask-clip` is `border-box`, so the mask's effect stops at
+ * the box and the ring below it was never a candidate. Switching the repeat
+ * back on renders the screen byte-for-byte identically. They are gone rather
+ * than kept as insurance, because a declaration defending against an impossible
+ * failure is indistinguishable from one defending against a real one.
  *
  * Scoped below `lg`, where the bar is pinned over a scrolling page and this
  * edge exists. FUEL-72 may release the pinning at desktop widths, at which
@@ -383,7 +394,5 @@
 @media (width < 64rem) {
   .action-bar-fade {
     mask-image: linear-gradient(to bottom, transparent, black 24px);
-    mask-repeat: no-repeat;
-    mask-size: 100% calc(100% + 8px);
   }
 }

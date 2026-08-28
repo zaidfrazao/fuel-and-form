@@ -105,8 +105,10 @@ describe("the scroll edge", () => {
   test("finishes inside the bar's head, so the focus ring stays opaque", () => {
     // The load-bearing number, and the reason the ramp is not simply the full
     // 30px of padding. § Accessibility: a 2px ring at 2px offset, "never
-    // removed" — so the primary's ring rises 4px above it and a ramp running
-    // the whole head would fade the top of it. Read from the CSS rather than
+    // removed" — so the primary's ring rises 4px above it, and a ramp running
+    // the whole head fades the top of it. Not a deduction: at 375×667 a 30px
+    // ramp measurably dims 664 pixels of that ring against a 24px one, which is
+    // its whole top arc. Read from the CSS and the class string rather than
     // restated, so shortening the head or lengthening the ramp fails here
     // instead of dimming a focus ring nobody is looking at.
     const ramp = Number(declaration("mask-image").match(/(\d+)px/)?.[1]);
@@ -116,16 +118,6 @@ describe("the scroll edge", () => {
     expect(ramp).toBeGreaterThan(0);
     expect(head).toBeGreaterThan(0);
     expect(ramp + ring).toBeLessThanOrEqual(head);
-  });
-
-  test("does not tile, which would erase the ring below the bar", () => {
-    // A mask layer repeats by default, and the transparent head of the ramp
-    // would repeat immediately under the bar's border box — over exactly where
-    // the bottom row's focus ring overflows it. `no-repeat` plus a layer sized
-    // past the box leaves that overflow opaque. Asserted because the failure is
-    // a ring quietly not drawn, which no other test in this repo would notice.
-    expect(declaration("mask-repeat")).toBe("no-repeat");
-    expect(declaration("mask-size")).toContain("+ 8px");
   });
 
   test("is scoped to the widths where the bar is pinned over a scrolling page", () => {
