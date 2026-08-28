@@ -230,7 +230,32 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--pg-accent); out
 .grabber { width: 36px; height: 5px; border-radius: 999px; background: var(--text-3); opacity: .5; align-self: center; }
 
 /* ---------- week grid ---------- */
+/* The wide shape's scroller. Below 768px the week is drawn stacked instead —
+   see BRAND_GUIDE.md § The Week, Two Ways — and nothing scrolls sideways. */
 .wrapx { overflow-x: auto; }
+
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap; }
+
+/* ---------- week, stacked (the phone shape) ---------- */
+table.weekstack { border-collapse: collapse; width: 100%; font-size: 12.5px;
+  letter-spacing: -.005em; table-layout: fixed; }
+table.weekstack th, table.weekstack td { text-align: left; font-weight: 500; vertical-align: top; }
+table.weekstack .dayhead th { padding: 13px 0 6px; border-bottom: 1px solid var(--text-3);
+  font-size: 9.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--text-3); }
+table.weekstack tbody:first-of-type .dayhead th { padding-top: 2px; }
+table.weekstack .dayhead.now th { color: var(--accent); border-bottom-color: var(--accent); }
+table.weekstack tbody tr.slot th { width: 58px; padding: 8px 8px 8px 0;
+  font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text-3); border-bottom: 1px solid var(--border); }
+table.weekstack tbody tr.slot td { padding: 8px 0; border-bottom: 1px solid var(--border); }
+table.weekstack tbody tr.slot:last-child th,
+table.weekstack tbody tr.slot:last-child td { border-bottom: 0; }
+table.weekstack td .kcal { display: block; font-size: 9.5px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); margin-top: 2px; }
+table.weekstack td.sw { color: var(--accent); font-weight: 600; }
+table.weekstack td.flex { color: var(--text-3); }
 table.week { border-collapse: collapse; font-size: 12.5px; width: 100%; letter-spacing: -.005em; }
 table.week th, table.week td { border-bottom: 1px solid var(--border); padding: 9px 9px;
   text-align: left; white-space: nowrap; font-weight: 500; }
@@ -870,7 +895,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
       <!-- ===== 6 · WEEK PLAN ===== -->
       <div class="cell">
         <div class="stage">
-          <div class="ui device" data-mode="dark" role="img" aria-label="Weekly plan grid with Tuesday dinner swapped and weekend meals shown as untracked">
+          <div class="ui device" data-mode="dark" role="img" aria-label="Weekly plan on a phone: the week stacked as day sections, with Tuesday dinner swapped and an unplanned Wednesday breakfast">
             <div class="statusbar"><span>21:04</span>
               <span class="glyphs" aria-hidden="true">
                 <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.7" y="5" width="3" height="6" rx="1"/><rect x="9.4" y="2.5" width="3" height="8.5" rx="1"/><rect x="14" y="0" width="3" height="11" rx="1"/></svg>
@@ -882,20 +907,29 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
 
               <div class="u-title" style="font-size:34px;">Week 32</div>
 
-              <div class="wrapx">
-                <table class="week">
-                  <thead>
-                    <tr><th scope="col">Slot</th><th scope="col" class="now">Mon</th><th scope="col">Tue</th><th scope="col">Wed</th><th scope="col">Thu</th><th scope="col">Fri</th><th scope="col">Sat</th><th scope="col">Sun</th></tr>
-                  </thead>
-                  <tbody>
-                    <tr><th scope="row">Break</th><td>Oats · Cocoa</td><td>Oats · Berry</td><td>Oats · PB</td><td>Oats · Cocoa</td><td>Oats · Berry</td><td class="flex">Eggs</td><td class="flex">Eggs</td></tr>
-                    <tr><th scope="row">Snack</th><td>Yoghurt</td><td>Yoghurt</td><td>Yoghurt</td><td>Yoghurt</td><td>Yoghurt</td><td>Yoghurt</td><td>Yoghurt</td></tr>
-                    <tr><th scope="row">Lunch</th><td>Ciabatta</td><td>Ciabatta</td><td>Ciabatta</td><td>Ciabatta</td><td>Ciabatta</td><td class="flex">Flexible</td><td class="flex">Flexible</td></tr>
-                    <tr><th scope="row">Train</th><td>Circuit A</td><td>Intervals</td><td>Circuit B</td><td>Intervals</td><td>Circuit A</td><td>Walk</td><td>Walk</td></tr>
-                    <tr><th scope="row">Dinner</th><td>Chilli</td><td class="sw">Chilli</td><td>Chicken</td><td>Beef</td><td>Chicken</td><td class="flex">Flexible</td><td class="flex">Flexible</td></tr>
-                  </tbody>
-                </table>
-              </div>
+              <table class="weekstack">
+                <caption class="vh">The week&rsquo;s plan, by day and meal slot. Swapped meals are marked.</caption>
+                <tbody>
+                  <tr class="dayhead now"><th scope="rowgroup" colspan="2">Mon 10 Aug &middot; Today</th></tr>
+                  <tr class="slot"><th scope="row">Break</th><td>Overnight Oats &mdash; Cinnamon Apple<span class="kcal">412 kcal</span></td></tr>
+                  <tr class="slot"><th scope="row">Snack</th><td>Greek Yoghurt &amp; Honey<span class="kcal">180 kcal</span></td></tr>
+                  <tr class="slot"><th scope="row">Lunch</th><td>Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal</span></td></tr>
+                  <tr class="slot"><th scope="row">Train</th><td>Circuit A</td></tr>
+                  <tr class="slot"><th scope="row">Dinner</th><td>Steak with Garlic Butter, Chips &amp; Peppercorn Sauce<span class="kcal">820 kcal</span></td></tr>
+                </tbody>
+                <tbody>
+                  <tr class="dayhead"><th scope="rowgroup" colspan="2">Tue 11 Aug</th></tr>
+                  <tr class="slot"><th scope="row">Break</th><td>Overnight Oats &mdash; Vanilla Berry<span class="kcal">399 kcal</span></td></tr>
+                  <tr class="slot"><th scope="row">Snack</th><td>Greek Yoghurt &amp; Honey<span class="kcal">180 kcal</span></td></tr>
+                  <tr class="slot"><th scope="row">Lunch</th><td>Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal</span></td></tr>
+                  <tr class="slot"><th scope="row">Train</th><td>Intervals</td></tr>
+                  <tr class="slot"><th scope="row">Dinner</th><td class="sw">Smoky Paprika Chicken &amp; Rice &middot; Swapped<span class="kcal">611 kcal</span></td></tr>
+                </tbody>
+                <tbody>
+                  <tr class="dayhead"><th scope="rowgroup" colspan="2">Wed 12 Aug</th></tr>
+                  <tr class="slot"><th scope="row">Break</th><td class="flex" style="background-image:repeating-linear-gradient(-45deg,var(--border) 0 1px,transparent 1px 5px);">Not planned</td></tr>
+                </tbody>
+              </table>
 
               <div class="legend">
                 <i><span style="width:11px;height:11px;border-radius:3px;background:var(--accent-sub);"></span>Swapped</i>
@@ -930,9 +964,9 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
           </div>
         </div>
         <div class="cap">
-          <span class="tagline">P2 · /plan · dark</span>
+          <span class="tagline">P2 · /plan · dark · 375px</span>
           <h3>Weekly plan</h3>
-          <p>Untracked weekend meals are hatched — a flat two-tone pattern, not a texture. Today's column header is the one umber mark. Swapped cells take the tint, and stay one tap from reverting.</p>
+          <p>Below 768px the week turns ninety degrees: seven day sections, stacked, scrolling the way a phone already scrolls. Meal names run to fifty characters and are never clipped, which is the reason the seven-column shape is the desktop&rsquo;s alone &mdash; see &sect; The Week, Two Ways. Still one real table: the day is a row-group header, the slot a row header. Today&rsquo;s day heading is the one umber mark; unplanned slots are hatched.</p>
         </div>
       </div>
 
