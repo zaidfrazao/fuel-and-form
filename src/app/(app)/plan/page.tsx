@@ -9,8 +9,8 @@ import { WeekNav } from "@/components/week-nav";
 import { getSession } from "@/lib/auth/session";
 import { type CalendarDate, startOfWeek } from "@/lib/date";
 import { loadWeek } from "@/lib/db/queries/week";
-import { FRAME_MEASURE_AND_ASIDE } from "@/lib/frame";
 import type { Meal } from "@/lib/db/schema";
+import { FRAME_MEASURE_AND_ASIDE } from "@/lib/frame";
 import { weekLabel } from "@/lib/now-display";
 import { requestedWeek } from "@/lib/week-param";
 
@@ -167,10 +167,21 @@ export default async function PlanPage({
      * an aside; this is the one screen where the extra width goes to the content
      * instead, so its `<main>` runs from the measure's column to the frame's
      * last. At the frame's cap that is 640 + 28 + 356 = 1024 exactly, which is
-     * where the week grid stops scrolling sideways for the first time, and it is
      * why 1272 is a sum rather than a round number. Below the cap the span is
      * whatever the window leaves — 776px at 1024, the number `min-w-0` was
      * measured against.
+     *
+     * § Desktop goes one sentence further than the numbers do, and the
+     * difference is recorded here rather than left for the next reader to
+     * rediscover: it says the grid "stops scrolling sideways for the first
+     * time" at this width, and it does not. Those columns are BORDER-box
+     * widths — the notice bands' 640px inner box is the measure — so this
+     * element's own `px-7` sits inside the 1024 and leaves 968 for a table that
+     * measures 1023.3px. Measured at 1272 and at 1920. It scrolled by the same
+     * ~55px before the frame existed, so nothing here regressed; what is wrong
+     * is the guide's arithmetic, and reconciling it is a decision about whether
+     * this screen keeps the page's gutters — FUEL-78's, with § Desktop and
+     * § Spacing amended to match.
      *
      * The bottom padding clears the nav pill. Below `lg` the shell is pinned to
      * the viewport (FUEL-65) and floats over whatever is beneath it, and unlike
