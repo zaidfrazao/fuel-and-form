@@ -56,6 +56,19 @@ import { cn } from "@/lib/utils";
  *
  * So the portal wears the grid instead, and lands on the measure by construction
  * rather than by agreement. `lib/frame.ts` gains a fourth reader.
+ *
+ * **The consequence, stated: this sheet positions itself against the app's
+ * frame, on any page.** It brings the grid with it rather than reading one from
+ * an ancestor — it has to, being portalled to `<body>` where there is no
+ * ancestor to read — so above 1024px it stands in the measure's column whether
+ * or not the page behind it has one. Under `(app)` that is the whole point and
+ * the column is exactly `<main>`'s. On a frameless page it is not wrong so much
+ * as unanchored: the `/dev/*` specimens sit outside the route group by design
+ * (§ Navigation: "the others are specimens of it"), and a specimen showing the
+ * component where the app puts it is the more useful specimen. But anything new
+ * that renders a `Sheet` outside the frame should expect it there, and a sheet
+ * that genuinely needed to centre on its own page would be a second component
+ * rather than a prop on this one.
  */
 
 export type SheetProps = {
