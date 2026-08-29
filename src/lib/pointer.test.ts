@@ -55,7 +55,7 @@ function resolveStylesheet(id: string, base: string): string {
   if (id.endsWith(".css")) {
     const direct = join(NODE_MODULES, id);
     if (existsSync(direct)) return direct;
-    const [pkg, ...rest] = id.split("/");
+    const [pkg = id, ...rest] = id.split("/");
     const dist = join(NODE_MODULES, pkg, "dist", rest.join("/"));
     if (existsSync(dist)) return dist;
     return direct;

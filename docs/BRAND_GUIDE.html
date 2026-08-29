@@ -539,6 +539,14 @@ table.week td.sw .kcal { color: var(--accent); }
     color: var(--text); text-decoration-color: currentColor; }
   .dframe .cbx:hover { background: var(--hover-ground); border-color: var(--text-2); }
   .dframe table.week td.wcell:hover { background: var(--hover-ground); }
+  /* The lift. `text-2` reads 4.80:1 on the canvas and 4.26:1 on this ground,
+     against the 4.5 § Accessibility sets for small text, so the metadata inside
+     a grounded control comes up to `text` for as long as the pointer is there —
+     the same move `.railitem` and `.lnk` above already make for their own
+     labels. `:not(.sw)` because a swapped cell keeps its tint and its accent
+     rather than taking either. */
+  .dframe .list .row:hover .row-trail,
+  .dframe table.week td.wcell:not(.sw):hover .kcal { color: var(--text); }
 }
 
 /* The same states, held open so a still image can carry them. Every value comes
@@ -549,6 +557,7 @@ table.week td.sw .kcal { color: var(--accent); }
 .railitem.is-hover:not(.active) { background: var(--hover-ground); color: var(--text); }
 .railitem.active.is-hover { background: var(--hover-ink); }
 .row.is-hover { background: var(--hover-ground); }
+.row.is-hover .row-trail { color: var(--text); }
 .tile.stone.is-hover:not(.sel) { box-shadow: var(--hover-ring); }
 .tile.ink.is-hover { background: var(--hover-ink); }
 .lnk.is-hover { color: var(--text); text-decoration-color: currentColor; }
@@ -1970,6 +1979,12 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
         That ring is <code>text-3</code> and not <code>accent</code> on purpose: selection is the umber
         inset rule, and a hover borrowing it would say &ldquo;chosen&rdquo; of whatever the pointer
         happened to cross. The cursor is <code>pointer</code> on all of them.</p>
+      <p>Metadata inside a control that gains the ground comes up with it: <code>text-2</code>
+        reads 4.80:1 on the canvas and 4.26:1 on <code>surface</code>, under the 4.5 &sect;&nbsp;Accessibility
+        sets for small text, so it is lifted to <code>text</code> while the pointer is there. The
+        row below shows it. It is the same move the rail item and the link already make for their
+        own labels, and &sect;&nbsp;Accessibility settles it &mdash; &ldquo;where restraint and
+        contrast conflict, contrast wins&rdquo;.</p>
       <p>The first two grounds are what the app already reaches for in the eight <code>hover:</code>
         declarations it has, so this ratifies a convention rather than replacing one. The focus ring is
         untouched and says something else &mdash; &sect; Accessibility&rsquo;s 2px accent ring at 2px

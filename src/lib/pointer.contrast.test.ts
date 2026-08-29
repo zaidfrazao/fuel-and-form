@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, test } from "vitest";
 
 /**
@@ -9,55 +13,91 @@ import { describe, expect, test } from "vitest";
  * under text that was measured against a different one. § Color Palette states
  * every ratio "against that mode's canvas"; `surface` is not the canvas.
  *
- * The numbers are computed here rather than transcribed. `globals.tokens.test.ts`
- * pins these hex values to `globals.css`, so a token that moves fails there and
- * the ratios below are recomputed from the value that replaced it rather than
- * from a comment somebody forgot.
+ * The numbers are computed rather than transcribed, from tokens read out of
+ * `globals.css` rather than copied into this file. A token that moves is
+ * measured at its new value here on the next run, and § Color Palette's own
+ * ratios stay `globals.tokens.test.ts`'s business.
  *
  * § Accessibility: "≥4.5:1 body, ≥3:1 for large text and every control, tick,
  * dot and hairline that carries meaning." Everything a hover puts on a ground
  * in this app is small text, so 4.5 is the line throughout.
  */
 
+/**
+ * The palette, read out of `globals.css` rather than transcribed.
+ *
+ * `globals.tokens.test.ts` is the file allowed to write these values down —
+ * it is the fixture its own "no raw hex outside the token blocks" rule is
+ * checked against, and every other file in `src/` is forbidden a hex literal so
+ * that a colour cannot be stated twice and drift. That rule applies here, and
+ * it is the better arrangement anyway: a contrast ratio computed from a
+ * transcription measures the transcription.
+ */
+const CSS = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "../app/globals.css"),
+  "utf8",
+);
+
+/**
+ * The body of a top-level rule.
+ *
+ * Both ends are asserted, for `globals.tokens.test.ts`'s reason: an unfound
+ * terminator would make `slice` return the rest of the file, and a block that
+ * quietly swallowed the whole stylesheet would still find every token it was
+ * asked for — from the wrong theme.
+ */
+function tokens(selector: string): Record<string, string> {
+  const open = CSS.indexOf(`${selector} {`);
+  if (open === -1) throw new Error(`no ${selector} block in globals.css`);
+  const close = CSS.indexOf("\n}", open);
+  if (close === -1) throw new Error(`${selector} block is unterminated`);
+
+  const declared = CSS.slice(open, close).matchAll(
+    /--([a-z0-9-]+):\s*(#[0-9a-f]{3,8})\s*;/gi,
+  );
+  return Object.fromEntries(
+    [...declared].map((match) => [match[1], (match[2] ?? "").toLowerCase()]),
+  );
+}
+
 const PALETTE = {
-  light: {
-    canvas: "#ffffff",
-    surface: "#f4f1ec",
-    ink: "#1c1917",
-    "ink-fg": "#ffffff",
-    "accent-subtle": "#f3ebe3",
-    "text-primary": "#1c1917",
-    "text-secondary": "#78716c",
-    "text-tertiary": "#b5aea6",
-    error: "#a93226",
-  },
-  dark: {
-    canvas: "#0c0b0a",
-    surface: "#17150f",
-    ink: "#f5f3f0",
-    "ink-fg": "#1c1917",
-    "accent-subtle": "#251b14",
-    "text-primary": "#f5f3f0",
-    "text-secondary": "#a8a29e",
-    "text-tertiary": "#5c5650",
-    error: "#f0776b",
-  },
+  light: tokens(":root"),
+  dark: tokens(".dark"),
 } as const;
 
 type Theme = keyof typeof PALETTE;
-type Token = keyof (typeof PALETTE)["light"];
+type Token =
+  | "canvas"
+  | "surface"
+  | "ink"
+  | "ink-fg"
+  | "accent-subtle"
+  | "text-primary"
+  | "text-secondary"
+  | "text-tertiary"
+  | "error";
 type Rgb = readonly [number, number, number];
 
 const THEMES = Object.keys(PALETTE) as Theme[];
 
 const rgb = (hex: string): Rgb => {
   const channels = hex.slice(1).match(/../g);
-  if (!channels) throw new Error(`not a hex colour: ${hex}`);
-  const [r, g, b] = channels.map((pair) => parseInt(pair, 16));
+  if (channels?.length !== 3) throw new Error(`not a hex colour: ${hex}`);
+  const [r, g, b] = channels.map((pair) => parseInt(pair, 16)) as [
+    number,
+    number,
+    number,
+  ];
   return [r, g, b];
 };
 
-const colour = (theme: Theme, token: Token): Rgb => rgb(PALETTE[theme][token]);
+const colour = (theme: Theme, token: Token): Rgb => {
+  const value = PALETTE[theme][token];
+  // Named rather than allowed to become `rgb(undefined)`, which would throw
+  // somewhere further down and blame the wrong thing.
+  if (!value) throw new Error(`${theme} has no --${token} in globals.css`);
+  return rgb(value);
+};
 
 /** WCAG 2.1 relative luminance. */
 function luminance([r, g, b]: Rgb): number {
@@ -69,7 +109,10 @@ function luminance([r, g, b]: Rgb): number {
 }
 
 function ratio(a: Rgb, b: Rgb): number {
-  const [lighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  const one = luminance(a);
+  const other = luminance(b);
+  const lighter = Math.max(one, other);
+  const darker = Math.min(one, other);
   return (lighter + 0.05) / (darker + 0.05);
 }
 
@@ -82,8 +125,11 @@ function ratio(a: Rgb, b: Rgb): number {
  * ink tile, the active rail item — sits on the canvas, which is what makes the
  * two forms the same colour.
  */
-const over = (fg: Rgb, bg: Rgb, alpha: number): Rgb =>
-  [0, 1, 2].map((i) => alpha * fg[i] + (1 - alpha) * bg[i]) as unknown as Rgb;
+const over = (fg: Rgb, bg: Rgb, alpha: number): Rgb => [
+  alpha * fg[0] + (1 - alpha) * bg[0],
+  alpha * fg[1] + (1 - alpha) * bg[1],
+  alpha * fg[2] + (1 - alpha) * bg[2],
+];
 
 const AA_SMALL_TEXT = 4.5;
 
@@ -104,7 +150,7 @@ describe.each(THEMES)("%s", (theme) => {
     test.each([
       ["text-primary", "the label of any control, and every lifted span"],
       ["error", "a Destructive button's text, which keeps its own colour"],
-    ] as const)("%s — %s", (token) => {
+    ] as const)("%s — %s", (token, _why) => {
       expect(ratio(on(token), on("surface"))).toBeGreaterThanOrEqual(
         AA_SMALL_TEXT,
       );
