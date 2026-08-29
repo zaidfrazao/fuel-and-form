@@ -518,9 +518,15 @@ themes — 56 PNGs, committed under `tests/visual/__screenshots__/`, compared
 pixel by pixel against the next run. Testing Strategy § 2.3.
 
 ```bash
-npm run test:visual            # compare against the committed baselines
-npm run test:visual:update     # rewrite them
+npx playwright install chromium   # once per machine — npm install does not do this
+npm run test:visual               # compare against the committed baselines
+npm run test:visual:update        # rewrite them
 ```
+
+Chromium only: this is pixel comparison, not cross-browser behaviour, and a
+second engine would mean a second set of baselines that never agree with the
+first. `--with-deps` needs root; on a machine missing the shared libraries
+Chromium wants, run `sudo npx playwright install-deps chromium` separately.
 
 **Updating them is a deliberate act.** `--update-snapshots` overwrites the
 reference with whatever the app currently draws, so a run made to "get the suite
