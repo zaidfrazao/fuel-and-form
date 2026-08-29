@@ -148,6 +148,19 @@ export default defineConfig({
       testMatch: /demo\.setup\.ts/,
       use: { ...devices["Desktop Chrome"] },
     },
+    /**
+     * The frame's measurements — FUEL-70, and a project of its own for the
+     * reason `frame.spec.ts` sets out: it asks whether two boxes share a centre,
+     * which has no theme and wants one browser rather than eight. It sets its
+     * own viewport per assertion, so the `screens` matrix would run it eight
+     * times to learn the same thing.
+     */
+    {
+      name: "frame",
+      testMatch: /frame\.spec\.ts/,
+      dependencies: ["setup"],
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+    },
     ...screens,
   ],
 
