@@ -461,7 +461,8 @@ function WeekStack({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
  * constant. `table-fixed` with a `<colgroup>` makes the declared widths real,
  * the day columns declare no width at all and split whatever is left, and the
  * table is capped at § Spacing's 1024 rather than built up to it. At ≥1272 the
- * frame gives all 1024 and 938 ÷ 7 lands on FUEL-67's drawn 134px exactly;
+ * frame gives all 1024 and 924 ÷ 7 lands on 132px exactly — the width the day
+ * columns declared all along, arrived at rather than asserted;
  * below it the columns narrow instead of the week being cut off. Nothing
  * scrolls, so nothing can be lost by widening — fault 3 has nowhere to live.
  *
@@ -510,6 +511,22 @@ function WeekTable({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
      * is drawn at now, so the clip should never fire — which is precisely why
      * both halves of it stay. A containment that only matters when something
      * has already gone wrong is not worth deleting for two classes.
+     *
+     * ## Why the scroller survives but its fade did not
+     *
+     * These look inconsistent and are not. The fade said "there is more to the
+     * right", and at default type there is no longer anywhere to pan at any
+     * width from 320 to 1920 — so it had become the same dishonesty it was
+     * added to cure, pointing the other way. `overflow-x-auto` says something
+     * weaker and still true: if content ever does exceed this box, pan it here
+     * rather than dragging the page sideways.
+     *
+     * One case still reaches it, and it is stated rather than hidden: under
+     * text-only 200% the table overflows by 13px at 768 and 6px at 820, and
+     * that pan has no visual cue. Judged acceptable against re-adding a
+     * gradient the guide bans outside one recorded exception, for a 6-13px
+     * pan where the fade was written for 55px. § Accessibility carries the
+     * numbers.
      *
      * ## `lg:-mx-7` — the second of the two 28px gutters, given back
      *

@@ -248,8 +248,12 @@ describe("the table", () => {
 
     expect(cols).toHaveLength(8);
     expect(cols[0]?.className).toContain("w-[100px]");
+
+    // The invariant is "states no WIDTH", not "states no class" — asserted that
+    // way on purpose, so a later `<col>` carrying something harmless (a test
+    // hook, a debug marker) does not fail a check that is really about widths.
     for (const day of Array.from(cols).slice(1)) {
-      expect(day.className).toBe("");
+      expect(day.className).not.toMatch(/\bw-\[|\bmin-w-\[/);
     }
 
     // And no width survives on the cells themselves. A second number in that
