@@ -443,17 +443,28 @@ table.week thead th.now { color: var(--accent); border-bottom-color: var(--accen
 
 /* ---------- the wide week, at the width it was drawn for ----------
    § Desktop gives `/plan` the measure and the aside together, and the table is
-   drawn to exactly that 1024: an 86px slot column and seven 134px day columns.
+   drawn to exactly that 1024: an 86px slot column and seven day columns that
+   come out at 134px.
 
    `table-layout: fixed` with a `<colgroup>`, because a column width set on an
    auto table is a minimum the longest cell grows past — which is how a 1023px
    table ends up scrolling at every desktop width. Fixed, the names wrap inside
    their column, which is what § The Week, Two Ways already specifies the wide
-   shape does. */
-table.week.fixed { table-layout: fixed; width: 1024px; }
+   shape does.
+
+   The day columns declare NO width, and that is the rule rather than an
+   omission (FUEL-71). A fixed table splits what is left equally among the
+   columns that ask for nothing, so 1024 − 86 = 938, ÷ 7 = 134.0 — the number
+   arrives instead of being asserted. Stating 134 here would draw the same
+   picture while hiding the mechanism, and the app needs the mechanism: this
+   frame is a fixed 1272 and the app's is not, so below 1272 the same rule
+   narrows the columns where a stated 134 would put the sideways scroll back.
+
+   `max-width` rather than `width` for the same reason. The mock is always at
+   the cap; the app is not always. */
+table.week.fixed { table-layout: fixed; width: 100%; max-width: 1024px; }
 table.week.fixed th, table.week.fixed td { white-space: normal; vertical-align: top; }
 table.week.fixed .slotcol { width: 86px; }
-table.week.fixed .daycol { width: 134px; }
 /* The kcal line under the meal name, as the stacked shape already draws it —
    the rule existed only for `weekstack` because the wide shape had no markup
    in this file to carry it. */
@@ -1816,11 +1827,14 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
 
               <div class="u-title" style="font-size:34px;">Week 32</div>
 
-              <!-- 1024px, drawn to the pixel: 86 + 7 × 134. The measure and the
-                   aside spanned, no scroller, and the seventh day present. -->
+              <!-- 1024px, drawn to the pixel: 86 + 7 × 134, the second number
+                   derived rather than stated. The measure and the aside
+                   spanned, no scroller, and the seventh day present. -->
               <table class="week fixed">
                 <caption class="vh">The week&rsquo;s plan, by day and meal slot. Swapped meals are marked.</caption>
-                <colgroup><col class="slotcol"><col class="daycol"><col class="daycol"><col class="daycol"><col class="daycol"><col class="daycol"><col class="daycol"><col class="daycol"></colgroup>
+                <!-- The seven day columns declare nothing; the fixed table divides
+                     what is left, and 938 ÷ 7 = 134.0 arrives on its own. -->
+                <colgroup><col class="slotcol"><col><col><col><col><col><col><col></colgroup>
                 <thead>
                   <tr><th scope="col" class="slotcol"></th><th scope="col" class="now">Mon 10</th><th scope="col">Tue 11</th><th scope="col">Wed 12</th><th scope="col">Thu 13</th><th scope="col">Fri 14</th><th scope="col">Sat 15</th><th scope="col">Sun 16</th></tr>
                 </thead>

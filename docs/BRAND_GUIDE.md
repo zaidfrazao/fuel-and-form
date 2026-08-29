@@ -160,7 +160,7 @@ Two exceptions that outrank the aesthetic:
 - **Radius:** `sm` 6px (tags) · `md` 12px (buttons) · `lg` 14px (tiles) · `xl` 26px (sheets) · `full` 999px (tab pill, NOW pill).
 - **Hairlines:** 1px `border`, dropping to 0.5px at `min-resolution: 2dppx`.
 - **Max content width — the rule:** 640px, the reading measure, at every width. It does not grow; screens gain columns beside it.
-- **Max content width — the one exception:** 1024px for the week grid at ≥768px, which is a table rather than prose and so has no measure to keep.
+- **Max content width — the one exception:** 1024px for the week grid at ≥768px, which is a table rather than prose and so has no measure to keep. It is a **ceiling the grid reaches, not a width it insists on** — below the width that affords it the seven day columns share what there is rather than the week losing days off its right edge (§ The Week, Two Ways). The grid is also the one element exempt from the screen gutter above: at ≥1024px it bleeds back through `main`'s 28px, because the frame already spends one gutter beside its column and the table cannot afford to pay twice. Everything else on the screen keeps the inset and stays on the measure's x.
 - **Above 1024px** the measure sits in a centred frame beside the navigation rail rather than being centred on what is left of the screen. § Desktop owns that grid and these three lines defer to it.
 - **Elevation:** none, except sheets — `0 -8px 34px rgba(0,0,0,0.12)`. The stone tile's hover ring is drawn with `box-shadow: inset` and is not elevation: it is a hairline inside the element's own edge, lifting nothing. § Desktop argues it.
 
@@ -172,8 +172,15 @@ Two exceptions that outrank the aesthetic:
 |---|---|---|
 | Shape | Seven day sections, stacked | Seven day columns × five slot rows |
 | Long axis | Vertical | Horizontal |
-| Sideways scroll | None | Yes, to 1024px — by design. None at ≥1272px, where the frame is wide enough to hold all 1024 (§ Desktop) |
+| Sideways scroll | None | None |
+| Day column | — | Whatever the page affords: 134px at ≥1272px, down to 89px at 768px |
 | Meal name | Full width, wraps, never clipped | Column width, wraps |
+
+**Neither shape scrolls sideways, and the wide one had to be made to stop.** It scrolled at every desktop width it was ever drawn at, 1920 included, which is the thing this section used to describe as "by design" and it was not a design — it was three faults agreeing. The columns were declared on an *auto* table, where a width is a floor the longest meal name grows past, so 86 + 7 × 132 measured 1023.3px. The 28px screen gutter was spent twice, once as the frame's own and once as `main`'s padding inside it, leaving 968px for that 1023.3. And the columns were fixed, so when the navigation rail arrived at 1024px and took 248px, the week could give nothing back and simply lost 1.87 days — widening the window made the week smaller.
+
+The rule that replaces it: **the day column is a consequence, not a constant.** The table is fixed-layout with a `<colgroup>`; the slot column states 86px; the seven day columns state nothing and split what is left. At the 1024px cap that division lands on 134px exactly, which is the width the mock draws. Below it the columns narrow — 126px at 1023, 99px at 1024, 89px at 768 — and all seven days stay on screen at every one of them. A meal name wraps taller in a narrower column, which is the same trade the stacked shape makes and the one this guide has always preferred to truncation.
+
+**Which is why there is no scroll affordance.** The wide grid carried a right-edge fade, and it was honest while the grid scrolled. A cue for a scroll that can no longer happen is the same lie pointing the other way, so it is gone.
 
 **Why they diverge.** A meal's name is up to fifty characters — `Steak with Garlic Butter, Chips & Peppercorn Sauce` — and the grid never truncates one, because a half-read meal name is not a meal you can recognise. Seven columns carrying that at 375px gives each about 45px, and narrower columns do not fit more of the week: they wrap the same text taller. The horizontal shape fails on a phone for a reason no amount of CSS reaches, so below 768px the week turns ninety degrees and scrolls the way a phone already scrolls.
 
@@ -243,7 +250,9 @@ Everything above this line was drawn at 375px and grown outward, and above 1024p
 | Gutter | 28px | |
 | Aside | 356px | The second column, on the screens that have one |
 
-**1272 is a sum rather than a round number:** the rail, a gutter, and the 1024px § Spacing already fixes as the week grid's maximum. The measure and the aside together come to exactly that 1024 — so `/plan`'s grid spans them both and, at this width and above, stops scrolling sideways for the first time.
+**1272 is a sum rather than a round number:** the rail, a gutter, and the 1024px § Spacing already fixes as the week grid's maximum. The measure and the aside together come to exactly that 1024 — so `/plan`'s grid spans them both and, at this width and above, is drawn at the full 1024 the sum promises.
+
+**The sum is only true if the column is not paid for twice, and at first it was.** These are border-box columns, so `main`'s own 28px padding sat *inside* the 1024 and left the grid 968 — a number this arithmetic never mentions, and 55px short of the table. The gutter between two columns is the grid's own, which is why the mock draws the frame with no horizontal padding at all. The resolution is stated in § Spacing and is narrow on purpose: the **grid alone** bleeds back out through that padding at ≥1024px, because it is the only element on the screen that cannot be inset and still be right. `/plan`'s heading, week nav and totals keep the inset and stay on the measure's x with the notice bands above them, which is what this section requires of them.
 
 At 1920 the three measurements resolve together:
 
@@ -273,7 +282,7 @@ Two are in use and neither is declared; `md` and `lg` are the framework's defaul
 | — | < 768 | The phone. Pinned pill, 22px gutter, merged macro grid, stacked week, phone ruler | The case the PRD is written for |
 | `md` | 768 | Gutter 22 → 28. The week becomes seven columns; `/` splits its macro grid and takes the wide ruler | Already load-bearing — § The Week, Two Ways and § The Day's Numbers on a Phone both turn here. Not moved, because moving it re-opens two settled sections |
 | `lg` | 1024 | The pill becomes the rail. The action bars stop being sticky. The frame appears, fluid | Where the sidebar already is, and the width `min-w-0` was paid for |
-| `xl` | 1272 | The frame caps and centres. The aside appears. `/plan`'s week grid stops scrolling | Rail + gutter + the 1024px week grid |
+| `xl` | 1272 | The frame caps and centres. The aside appears. `/plan`'s week grid reaches its full 1024 and its 134px day columns | Rail + gutter + the 1024px week grid |
 
 **768 to 1023 is a real band and it now has a rule.** Today it is a phone with a wide week grid: an iPad in portrait at 820px gets a floating pill on a 1180px-tall screen. The ruling is that this band takes the **phone's navigation and the desktop's content shapes** — the pill stays, because a 220px rail at 768px is a fifth of the width spent on four items, while the wide week and the split macro grid have the room they were drawn for. It is the one band nobody had looked at, and it is stated here rather than left to fall out of two breakpoints that were never chosen together.
 
@@ -294,7 +303,7 @@ The mock's seven, which are four routes, one sheet and two states of `/`:
 | **Meal detail** | a state of `/` | The same column with more air — one object, read top to bottom, with nothing to set beside it |
 | **Training** | `/training` | Two columns — the measure keeps the session and the exercise list; the aside takes the dot grid and recent sessions, which are below the fold at every width today |
 | **Weight** | `/weight` | Two columns — the measure keeps the chart and the entry control; the aside takes the weigh-in history FUEL-84 bounded |
-| **Weekly plan** | `/plan` | One column at 1024px — the measure and the aside spanned, the grid at its natural width and no sideways scroll. The only screen where the extra width goes to the content rather than beside it |
+| **Weekly plan** | `/plan` | One column at 1024px — the measure and the aside spanned, the grid at its full width and no sideways scroll at this or any width. The only screen where the extra width goes to the content rather than beside it, and the only one whose grid bleeds through the screen gutter to take all of it |
 | **Day complete** | a state of `/` | The same column, with more air. Crop marks close the day, and a second column would set something beside a screen whose whole argument is that there is nothing left |
 
 **The three the mock never drew.** `/shopping`, `/plan/template` and `/settings` are each a single list or form, and each is the measure with more air. Written down rather than left to whichever ticket meets them first: the mock's seven are not the app's seven, and a screen with no ruling is a screen that gets argued about.

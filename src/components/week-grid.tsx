@@ -412,11 +412,40 @@ function WeekStack({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
 /**
  * The week as seven day columns — the shape at 768px and up.
  *
+ * ## All seven days, at every width this shape runs at — FUEL-71
+ *
+ * This table used to scroll sideways at EVERY desktop width, 1920 included, and
+ * the cause was three faults that each looked like someone else's:
+ *
+ *   1. **It was an auto table.** `w-[86px]` and `w-[132px]` are minimums a
+ *      column grows past, so the slot column resolved to 99.3px and the table to
+ *      ~1023.3px. It was never the width its own columns said it was.
+ *   2. **The 28px gutter was counted twice.** § Desktop's frame already spends
+ *      one between its columns — the mock draws `.dbody` with no horizontal
+ *      padding for exactly this reason, "the two 28px gutters are the grid's own
+ *      rather than a box's padding" — and `PageMain` then spent another one
+ *      INSIDE the column as `px-7`. 1024 − 56 = 968 against a 1023.3px table is
+ *      the ~55px of overflow that no viewport width could remove.
+ *   3. **The rail's 248px was unabsorbed.** Fixed columns cannot give anything
+ *      back, so crossing 1024px — where the pill becomes the rail — took the
+ *      scroller from 967px to 720px and cost 1.87 days of the week. Widening the
+ *      window made the week smaller.
+ *
+ * All three answer to one change: the width is a CONSEQUENCE now, not a
+ * constant. `table-fixed` with a `<colgroup>` makes the declared widths real,
+ * the day columns declare no width at all and split whatever is left, and the
+ * table is capped at § Spacing's 1024 rather than built up to it. At ≥1272 the
+ * frame gives all 1024 and 938 ÷ 7 lands on FUEL-67's drawn 134px exactly;
+ * below it the columns narrow instead of the week being cut off. Nothing
+ * scrolls, so nothing can be lost by widening — fault 3 has nowhere to live.
+ *
  * ## The pinned column, and the one fill that makes it work
  *
- * Seven days do not fit every width this shape runs at, so the table scrolls
- * inside its own container and the slot column is `sticky left-0`, which keeps
- * the question ("which meal is this?") on screen while the answer scrolls past.
+ * The slot column is `sticky left-0`, which kept the question ("which meal is
+ * this?") on screen while the answer scrolled past. Nothing scrolls now, so it
+ * holds nothing in place — it is kept because the scroll container is kept, and
+ * for the same reason: both are cheap, and both are what stands between an
+ * unforeseen overflow and the silent failures below.
  *
  * Two mechanics that are easy to get wrong and fail quietly:
  *
@@ -451,45 +480,68 @@ function WeekTable({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
      *
      * The measurement above is a phone width this shape no longer runs at, and
      * the reasoning is kept anyway: the escape is a property of an unpositioned
-     * scroll container, not of 375px, and this one still scrolls below ~1074px.
+     * scroll container, not of 375px. The table fits at every width this shape
+     * is drawn at now, so the clip should never fire — which is precisely why
+     * both halves of it stay. A containment that only matters when something
+     * has already gone wrong is not worth deleting for two classes.
+     *
+     * ## `lg:-mx-7` — the second of the two 28px gutters, given back
+     *
+     * `PageMain` insets its content by `px-7`, and at `lg` that inset sits
+     * INSIDE a frame column that already has a 28px gutter beside it. The grid
+     * is the one element that cannot afford to pay twice: 1024 − 56 leaves 968,
+     * and 968 is not a number § Desktop's arithmetic ever mentions.
+     *
+     * So the grid alone bleeds back out, exactly as the phone's full-bleed
+     * scroller does — this is the same device at the other end of the scale.
+     * The header, the week nav and the totals keep the inset and stay aligned
+     * with the notice bands above them, which is what § Desktop requires of
+     * them; only the table spans its full column. That is what makes "1272 is a
+     * sum rather than a round number" true at the pixel instead of nearly.
      */
-    <div className="relative hidden overflow-x-auto md:block">
-      {/*
-       * That it scrolls, said visibly — FUEL-81's "no fade, shadow, or
-       * affordance" finding. A fade at the right edge is the whole cue: content
-       * passing under it rather than ending at it.
-       *
-       * Unbounded, because this grid overflows at EVERY width it is shown at.
-       * That is not obvious and was got wrong once: the arithmetic looks like
-       * 86px + 7 × 132px against a 1024px page and comes out fitting, so the
-       * fade was first bounded to widths below ~1074px. Measured at 1440 it
-       * still had 55px left to scroll and the fade was gone — the affordance
-       * absent exactly where the pan was still real.
-       *
-       * The 86px is a minimum, not a width. An auto table grows a column to
-       * its content and "Breakfast" is 79.3px at `text-micro`, so the pinned
-       * column resolves to 99.3px and the table to ~1023px. § Spacing caps the
-       * page at 1024px with a 28px gutter each side, which leaves 968px. 1023
-       * against 968 is 55px of overflow that no viewport width removes.
-       *
-       * So the fade is honest wherever the wide shape is drawn. FUEL-71 is the
-       * ticket that gives this grid the width it needs; when it does, this is
-       * the comment that has to be revisited rather than a number buried in a
-       * variant.
-       *
-       * `z-20` clears the `z-10` on the pinned column, which is a scrolling
-       * sibling and would otherwise paint over it at the moment it matters.
-       */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 right-0 z-20 w-10 bg-gradient-to-l from-background to-transparent"
-      />
-
+    <div className="relative hidden overflow-x-auto md:block lg:-mx-7">
       <table
         data-shape="wide"
-        className="w-max min-w-full border-separate border-spacing-0 text-left"
+        /*
+         * `table-fixed` is what makes every number here real, and `max-w`
+         * rather than `w` is what keeps them reachable. See the header comment:
+         * an auto table treats a column width as a floor and grows past it, so
+         * this table measured 1023.3px while its columns summed to 1010 and the
+         * page offered 968. Fixed, it is what it says.
+         *
+         * The cap is § Spacing's 1024 — the one max-content-width exception in
+         * the guide, because a table has no reading measure to keep. Below the
+         * width that allows it, `w-full` means the columns share less rather
+         * than the week losing days off its right edge.
+         */
+        className="w-full max-w-[1024px] table-fixed border-separate border-spacing-0 text-left"
       >
         <caption className="sr-only">{CAPTION}</caption>
+
+        {/*
+         * The column widths, and — as in the stacked shape — the only place they
+         * can be stated. A `<col>` is read before any row, so it holds whatever
+         * the first row turns out to be; a width on a `th` is read from the
+         * first row alone and is dead the moment a later row disagrees.
+         *
+         * 86px is the slot column, from FUEL-67's drawing. It is honest here in
+         * a way it never was on the auto table, where "Breakfast" at 79.3px plus
+         * padding grew it to 99.3px and quietly took 13px off the week.
+         *
+         * The seven day columns declare NO width, and that is the whole
+         * mechanism rather than an omission. A fixed table splits what is left
+         * equally among the columns that ask for nothing, so the day column is
+         * whatever the page can afford: 938 ÷ 7 = 134.0px at the 1024px cap,
+         * which is FUEL-67's number arrived at rather than asserted, and less
+         * than that below without a day ever leaving the screen. Naming 134
+         * here would put the ceiling back and bring the sideways scroll with it.
+         */}
+        <colgroup>
+          <col className="w-[86px]" />
+          {week.map((day) => (
+            <col key={day.date} />
+          ))}
+        </colgroup>
 
         <thead>
           <tr>
@@ -498,7 +550,12 @@ function WeekTable({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
                 would otherwise announce a blank header for every row. */}
             <th
               scope="col"
-              className="sticky left-0 z-10 w-[86px] min-w-[86px] border-b border-border bg-surface px-2.5 py-2"
+              // No width here on purpose — the `colgroup` above states it. The
+              // `min-w-` that used to sit beside it was worse than redundant:
+              // on a fixed table a minimum is not a thing a column can have, and
+              // on the auto table it replaced it was the floor the column grew
+              // off. Stating it twice is how the two numbers came to disagree.
+              className="sticky left-0 z-10 border-b border-border bg-surface px-2.5 py-2"
             >
               <span className="sr-only">Meal slot</span>
             </th>
@@ -507,7 +564,7 @@ function WeekTable({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
               <th
                 key={day.date}
                 scope="col"
-                className={`w-[132px] min-w-[132px] border-b border-l border-border px-2.5 py-2 text-micro uppercase ${
+                className={`border-b border-l border-border px-2.5 py-2 text-micro uppercase ${
                   day.isToday ? "text-accent" : "text-text-secondary"
                 }`}
               >
