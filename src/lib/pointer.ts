@@ -88,11 +88,15 @@ export const HOVER_FILL = "hover:bg-ink/90";
  * own edge, casting nothing, occupying no space and lifting the tile off
  * nothing", which is neither depth nor a material.
  *
- * Written as an arbitrary value with every space escaped as an underscore.
- * `tile.tsx` and `day-ruler.tsx` both record why that matters: an unescaped
- * space in an arbitrary value fails *silently* — a missing ring, not a build
- * error — so `pointer.test.ts` compiles this string and asserts the rule comes
- * out rather than trusting that it reads correctly.
+ * Written as an arbitrary value with every space escaped as an underscore,
+ * which is what `tile.tsx` and `day-ruler.tsx` write and why. Their stated
+ * reason no longer holds on its own terms — those comments say an unescaped
+ * space "fails *silently*", and Tailwind v4.3.3 in fact accepts the space and
+ * escapes it into the selector; `pointer.test.ts` compiles both forms and
+ * records it. The underscore stays as the house style. What does still hold is
+ * the shape of the risk: a utility Tailwind declines to generate is a missing
+ * ring rather than a build error, so this string is compiled and asserted
+ * rather than read.
  */
 export const HOVER_RING =
   "hover:shadow-[inset_0_0_0_1.5px_var(--text-tertiary)]";
