@@ -85,7 +85,18 @@ for (const width of WIDTHS) {
     await page.setViewportSize({ width, height: 900 });
 
     const sheet = await openSwapSheet(page);
-    const main = await boxOf(page.getByRole("main"));
+
+    /**
+     * `locator("main")` and not `getByRole("main")`, which finds nothing here.
+     *
+     * The sheet is `aria-modal`, so Radix marks everything outside it
+     * `aria-hidden` — the page is gone from the accessibility tree for as long
+     * as the sheet is up, which is the behaviour that stops a screen reader
+     * wandering into the list behind. A role query respects that and waits for a
+     * landmark that is deliberately no longer there; a CSS selector still finds
+     * the box, which is all this needs.
+     */
+    const main = await boxOf(page.locator("main"));
     const box = await boxOf(sheet);
 
     /**
@@ -174,13 +185,43 @@ test("the scrim still covers the whole window", async ({ page }) => {
   await openSwapSheet(page);
 
   const scrim = await boxOf(page.locator(".bg-scrim"));
-  const window = await page.evaluate(() => ({
-    width: globalThis.innerWidth,
-    height: globalThis.innerHeight,
+  const viewport = await page.evaluate(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
   }));
 
   expect(scrim.x).toBe(0);
   expect(scrim.y).toBe(0);
-  expect(Math.abs(scrim.width - window.width)).toBeLessThan(1);
-  expect(Math.abs(scrim.height - window.height)).toBeLessThan(1);
+  expect(Math.abs(scrim.width - viewport.width)).toBeLessThan(1);
+  expect(Math.abs(scrim.height - viewport.height)).toBeLessThan(1);
+});
+
+test("takes the page out of the accessibility tree while it is up", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  const sheet = await openSwapSheet(page);
+
+  /**
+   * Found while writing the measurement above, and worth holding rather than
+   * merely working around: `aria-modal` is only as good as what it hides, and a
+   * reader who can still reach the meal list behind the picker by swiping is in
+   * exactly the position the focus trap exists to prevent.
+   *
+   * The landmark is present in the DOM and absent from the tree, and the two
+   * assertions are not the same one twice. `<main>` does not itself carry
+   * `aria-hidden` — Radix marks the portal's siblings at the top of the body, so
+   * what is hidden is an ANCESTOR of main, and asserting the attribute on main
+   * fails against an element that is correctly hidden. The role query is the
+   * only one of the three that asks the question a screen reader asks.
+   */
+  await expect(page.getByRole("main")).toHaveCount(0);
+  await expect(page.locator("main")).toBeVisible();
+  expect(await page.locator('body > [aria-hidden="true"]').count()).toBeGreaterThan(0);
+
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+
+  // And it comes back. A dialog that left the page hidden would be the worse
+  // half of the same bug, invisible until someone closed one.
+  await expect(page.getByRole("main")).toBeVisible();
 });
