@@ -16,6 +16,7 @@ import { recentSessions } from "@/lib/adherence";
 import { addDays, type CalendarDate } from "@/lib/date";
 import type { WorkoutLogStatus } from "@/lib/db/schema";
 import { dayLabel } from "@/lib/now-display";
+import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { MAX_NOTE_LENGTH } from "@/lib/session-entry";
 
 /**
@@ -135,7 +136,7 @@ function DateNav({ date, today }: { date: CalendarDate; today: CalendarDate }) {
       <Link
         href={`/training?date=${previous}`}
         aria-label={`Previous day, ${dayLabel(previous)}`}
-        className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
+        className={`text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
       >
         <span aria-hidden="true">&lsaquo; Prev</span>
       </Link>
@@ -167,7 +168,7 @@ function DateNav({ date, today }: { date: CalendarDate; today: CalendarDate }) {
         <Link
           href={`/training?date=${next}`}
           aria-label={`Next day, ${dayLabel(next)}`}
-          className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
+          className={`text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
         >
           <span aria-hidden="true">Next &rsaquo;</span>
         </Link>

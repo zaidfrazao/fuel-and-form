@@ -10,6 +10,7 @@ import { addDays, type CalendarDate } from "@/lib/date";
 import type { MealSlot } from "@/lib/db/schema";
 import type { MacroTarget } from "@/lib/macros";
 import { dayLabel, slotLabel } from "@/lib/now-display";
+import { HOVER_GROUND, HOVER_LIFT, HOVER_RING, POINTER } from "@/lib/pointer";
 import { SLOT_ORDER } from "@/lib/resolve-plan";
 import { type GridCell, type GridColumn, type PlannedDay, weekGrid } from "@/lib/week-grid";
 import { weekTotals } from "@/lib/week-totals";
@@ -246,8 +247,26 @@ function GridButton({
         cell.meal ? cell.meal.name : "not planned"
       }${swapped ? ", swapped" : ""}`}
       style={cell.meal ? undefined : HATCH}
-      className={`flex h-full min-h-11 w-full flex-col justify-center gap-0.5 px-2.5 py-2 text-left transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
-        swapped ? "bg-accent-subtle" : "hover:bg-surface"
+      /*
+       * The pointer — Brand Guide § Desktop, "Pointer states". A week cell is
+       * named in the first row of the table and takes the `surface` ground.
+       *
+       * **A swapped cell takes the ring instead, and keeps its ground.** It is
+       * the one control here whose rest state is a tinted fill, and neither of
+       * the other two rows works on it. The second row — "that fill at 90%" —
+       * is arithmetic that answers nothing: `accent-subtle` sits within a few
+       * units of the canvas in both themes, so 90% of it over the canvas is a
+       * colour change of about one step per channel, which is a control that
+       * does not respond. And replacing the ground with `surface`, which is
+       * what the mock's specificity does, would take the swap mark away under
+       * the pointer — § Desktop rejects exactly that move for a selected tile,
+       * "reporting the opposite of what had happened", and the mock can afford
+       * it only because it also draws swapped cells in `accent` text, which
+       * this app does not. So the third row's device applies for the third
+       * row's stated reason: the ground cannot answer, so the ring does.
+       */
+      className={`group flex h-full min-h-11 w-full flex-col justify-center gap-0.5 px-2.5 py-2 text-left transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${POINTER} ${
+        swapped ? `bg-accent-subtle ${HOVER_RING}` : HOVER_GROUND
       }`}
     >
       {/* An empty cell says what it is, not nothing — § Tone of Voice asks an
@@ -267,14 +286,17 @@ function GridButton({
         className={
           cell.meal
             ? "text-slash font-medium break-words text-text-primary"
-            : "text-slash break-words text-text-tertiary"
+            : `text-slash break-words text-text-tertiary ${HOVER_LIFT}`
         }
       >
         {cell.meal ? cell.meal.name : "Not planned"}
       </span>
 
       {cell.meal && (
-        <span aria-hidden="true" className="text-micro uppercase text-text-secondary tabular-nums">
+        <span
+          aria-hidden="true"
+          className={`text-micro uppercase text-text-secondary tabular-nums ${HOVER_LIFT}`}
+        >
           {cell.meal.kcal} kcal
         </span>
       )}

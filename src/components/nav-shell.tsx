@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { DESTINATIONS, type DestinationId, resolveActive } from "@/lib/nav";
+import { HOVER_FILL, HOVER_GROUND, HOVER_LINK } from "@/lib/pointer";
 import { cn } from "@/lib/utils";
 
 /**
@@ -240,10 +241,37 @@ export function NavShell({
                   "after:absolute after:inset-x-0 after:-top-0.5 after:-bottom-0.5 after:content-[''] lg:after:hidden",
                   // A row in a column, left-aligned, and tall enough on its own.
                   "lg:h-11 lg:w-full lg:justify-start lg:px-[13px]",
+                  /*
+                   * The pointer — Brand Guide § Desktop, "Pointer states".
+                   *
+                   * The reason that section exists: "the rail is the first
+                   * control in this app that a pointer is the only way to use,
+                   * and it is currently the one control that answers a mouse
+                   * with nothing at all."
+                   *
+                   * Both states come straight off the table, keyed to what each
+                   * one rests as rather than to what it is — an inactive item
+                   * rests as nothing and gains `surface`, the active item is an
+                   * `ink` fill and goes to that fill at 90%. The inactive item
+                   * also raises its label to `text-primary`, which is the mock's
+                   * own `.railitem:not(.active):hover { color: var(--text) }`
+                   * and is load-bearing rather than decorative: `text-secondary`
+                   * measures 4.26:1 on `surface` against § Accessibility's 4.5,
+                   * and 15.52:1 once lifted.
+                   *
+                   * This is also what covers the mobile pill, and § Desktop says
+                   * why the table is written to the drawing for exactly this
+                   * reason: "a hybrid laptop below 1024px has a pointer and the
+                   * pill, so 'desktop rules apply above 1024px' would have left
+                   * the app's most-used control unhovered on a real device."
+                   * The classes are unconditional; Tailwind gates them on
+                   * `@media (hover: hover)`, which asks the device rather than
+                   * the width.
+                   */
                   isActive
-                    ? "w-auto bg-ink pr-[15px] pl-[13px] text-ink-fg"
+                    ? `w-auto bg-ink pr-[15px] pl-[13px] text-ink-fg ${HOVER_FILL}`
                     : // `text-secondary`, not the mock's `text-3` — see the header.
-                      "w-[46px] text-text-secondary",
+                      `w-[46px] text-text-secondary ${HOVER_GROUND} hover:text-text-primary`,
                 )}
               >
                 <NavIcon id={destination.id} />
@@ -309,7 +337,12 @@ export function NavShell({
            * the header, and the underline is left in `text-tertiary` so the two
            * still read as the same kind of link.
            */
-          className="text-slash text-text-secondary underline decoration-text-tertiary underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className={cn(
+            "text-slash text-text-secondary underline decoration-text-tertiary underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            // The mock draws this one by name — `.railfoot a:hover` takes the
+            // same colour change as `.lnk:hover`, which is what HOVER_LINK is.
+            HOVER_LINK,
+          )}
         >
           Settings
         </Link>

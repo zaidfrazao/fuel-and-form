@@ -3,6 +3,7 @@
 import { useTheme } from "next-themes";
 import { useSyncExternalStore } from "react";
 
+import { HOVER_FILL, HOVER_GROUND, POINTER } from "@/lib/pointer";
 import { cn } from "@/lib/utils";
 
 const OPTIONS = [
@@ -58,13 +59,19 @@ export function ThemeToggle() {
             onClick={() => setTheme(option.value)}
             className={cn(
               // 44px minimum touch target, per the Brand Guide and WCAG.
-              "min-h-11 min-w-11 rounded-full px-4 text-micro uppercase",
+              `min-h-11 min-w-11 rounded-full px-4 text-micro uppercase ${POINTER}`,
               "transition-colors duration-150 ease-out",
               // Focus: 2px accent ring, 2px offset, never removed.
               "outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
+              // Brand Guide § Desktop. This was the eighth of the app's
+              // pre-§ Desktop `hover:` declarations and the only one that
+              // reached for a colour rather than a ground — a ninth convention
+              // in a file nobody outside `/dev/*` renders. It answers like
+              // every other segmented control now: nothing rests as nothing and
+              // gains `surface`, a solid fill goes to that fill at 90%.
               active
-                ? "bg-ink text-ink-fg"
-                : "text-text-secondary hover:text-text-primary",
+                ? `bg-ink text-ink-fg ${HOVER_FILL}`
+                : `text-text-secondary ${HOVER_GROUND} hover:text-text-primary`,
             )}
           >
             {option.label}

@@ -5,6 +5,7 @@ import { PickerSpecimen } from "./specimen";
 import type { PickableMeal } from "@/components/meal-picker";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { motifFor } from "@/lib/meal-motif";
+import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 
 /**
  * The meal picker specimen.
@@ -100,7 +101,10 @@ export default function MealPickerSpecimenPage() {
         </ul>
       </section>
 
-      <Link href="/dev/primitives" className="text-slash underline decoration-text-tertiary">
+      <Link
+        href="/dev/primitives"
+        className={`text-slash underline decoration-text-tertiary ${HOVER_LINK} ${FOCUS_RING}`}
+      >
         The tile on its own → /dev/primitives
       </Link>
     </main>

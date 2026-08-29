@@ -16,6 +16,7 @@ import {
 import type { CalendarDate } from "@/lib/date";
 import { figure } from "@/lib/format";
 import { entryLabel } from "@/lib/now-display";
+import { HOVER_GROUND, HOVER_LIFT, POINTER } from "@/lib/pointer";
 import { MAX_NOTE_LENGTH } from "@/lib/session-entry";
 import {
   MAX_KG,
@@ -957,18 +958,34 @@ export function WeighIns({
                    * edited, which is the one thing it is for.
                    */
                   aria-current={row.date === date ? "true" : undefined}
-                  className="flex min-h-[54px] min-w-0 flex-1 flex-col justify-center gap-1 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  /*
+                   * The ground covers the edit control, not the whole `<li>`.
+                   *
+                   * § Desktop grounds a list row, and the mock's `.list .row`
+                   * is a row with one target. This one has two: the edit
+                   * button below and Delete beside it, pushed to opposite
+                   * edges. Grounding the `<li>` on hovering either would draw
+                   * one shape over two targets and say the Delete was part of
+                   * what the pointer was about to press — so each control
+                   * grounds exactly what it activates, and Delete takes the
+                   * same first-row ground from its own Destructive variant.
+                   */
+                  className={`group flex min-h-[54px] min-w-0 flex-1 flex-col justify-center gap-1 py-3 text-left transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${HOVER_GROUND} ${POINTER}`}
                 >
                   <span className="flex items-baseline gap-2">
                     <span className="text-value tabular-nums text-text-primary">
                       {kilograms(row.weightKg)}
                     </span>
-                    <span className="truncate text-slash text-text-tertiary">
+                    <span
+                      className={`truncate text-slash text-text-tertiary ${HOVER_LIFT}`}
+                    >
                       {entryLabel(row.date, today)}
                     </span>
                   </span>
                   {row.note && (
-                    <span className="truncate text-slash text-text-tertiary">
+                    <span
+                      className={`truncate text-slash text-text-tertiary ${HOVER_LIFT}`}
+                    >
                       / {row.note}
                     </span>
                   )}

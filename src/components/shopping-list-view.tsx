@@ -5,6 +5,7 @@ import { startTransition, useOptimistic, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { setChecked } from "@/app/actions/shopping";
 import type { CalendarDate } from "@/lib/date";
+import { HOVER_GROUND, HOVER_LIFT, POINTER } from "@/lib/pointer";
 import type { ShoppingGroup, ShoppingLine } from "@/lib/shopping-list";
 import { quantity, shoppingText } from "@/lib/shopping-text";
 
@@ -115,7 +116,22 @@ function Row({
        * above and below. `min-h-[46px]` stays as the floor that guarantees
        * § Touch Targets even if that arithmetic ever stops being true.
        */}
-      <label className="flex min-h-[46px] cursor-pointer items-start gap-3 py-[11.5px]">
+      {/*
+       * The pointer — Brand Guide § Desktop, "Pointer states". § Desktop's
+       * first row names both "list rows" and "checkboxes", and this control is
+       * both: a 46px row whose whole area is the label for the box inside it.
+       * The ground goes on the row, because that is what the pointer presses;
+       * the box takes the border darkening the mock draws for `.cbx:hover` and
+       * not a second ground, which on a row already grounded would be `surface`
+       * over `surface` — "a control that does not answer".
+       *
+       * `cursor-pointer` was the app's ONLY one before FUEL-75, and it was
+       * already here rather than anywhere it was needed. It is now the constant
+       * every other control uses.
+       */}
+      <label
+        className={`group flex min-h-[46px] items-start gap-3 py-[11.5px] transition-colors duration-150 ${HOVER_GROUND} ${POINTER}`}
+      >
         <input
           type="checkbox"
           className="peer sr-only"
@@ -143,7 +159,7 @@ function Row({
           // SIBLING combinator, and the svg is a CHILD of this span rather than
           // a sibling of the input, so `peer-checked:opacity-100` on it would
           // never match and the box would fill with an invisible tick in it.
-          className="mt-[2.5px] flex size-[18px] shrink-0 items-center justify-center rounded-[4px] border border-border [&>svg]:opacity-0 peer-checked:border-ink peer-checked:bg-ink peer-checked:[&>svg]:opacity-100 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+          className={`mt-[2.5px] flex size-[18px] shrink-0 items-center justify-center rounded-[4px] border border-border [&>svg]:opacity-0 group-hover:border-text-secondary peer-checked:border-ink peer-checked:bg-ink peer-checked:[&>svg]:opacity-100 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}
         >
           <svg viewBox="0 0 12 12" className="size-[10px] text-ink-fg">
             <path
@@ -209,7 +225,7 @@ function Row({
           <span
             className={
               checked
-                ? "min-w-0 break-words text-body text-text-tertiary line-through"
+                ? `min-w-0 break-words text-body text-text-tertiary line-through ${HOVER_LIFT}`
                 : "min-w-0 break-words text-body text-text-primary"
             }
           >
@@ -225,7 +241,9 @@ function Row({
            * `shopping-text.ts` argues it: for salt, the name IS the instruction.
            */}
           {amount && (
-            <span className="ml-auto min-w-0 break-words text-slash tabular-nums text-text-secondary">
+            <span
+              className={`ml-auto min-w-0 break-words text-slash tabular-nums text-text-secondary ${HOVER_LIFT}`}
+            >
               {amount}
             </span>
           )}

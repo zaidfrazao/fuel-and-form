@@ -2,6 +2,7 @@ import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"
 
+import { HOVER_FILL, HOVER_GROUND, POINTER } from "@/lib/pointer"
 import { cn } from "@/lib/utils"
 
 /*
@@ -16,24 +17,34 @@ import { cn } from "@/lib/utils"
  * the caller doesn't name a size — see `resolvedSize` below. No size drops
  * below the 44px touch minimum; shadcn's defaults start at 24px.
  */
-const OUTLINED = "border-border text-foreground hover:bg-surface"
+const OUTLINED = `border-border text-foreground ${HOVER_GROUND}`
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-body font-medium whitespace-nowrap transition-colors duration-150 outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  `group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-body font-medium whitespace-nowrap transition-colors duration-150 outline-none select-none ${POINTER} focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4`,
   {
     variants: {
       variant: {
         // Primary — the one action the screen exists for. One per screen.
-        default: "bg-ink text-ink-fg font-semibold hover:bg-ink/90",
+        default: `bg-ink text-ink-fg font-semibold ${HOVER_FILL}`,
         // Secondary — real actions that aren't the main one: Swap, Skip, Partial.
         // The guide has one outlined variant; shadcn ships two names for it.
         secondary: OUTLINED,
         outline: OUTLINED,
-        ghost: "text-foreground hover:bg-surface",
-        // Destructive — no fill; it is filled only inside a confirmation sheet.
-        destructive: "text-destructive hover:bg-destructive/10",
+        ghost: `text-foreground ${HOVER_GROUND}`,
+        /*
+         * Destructive — no fill; it is filled only inside a confirmation sheet.
+         *
+         * Hovers to `surface` like every other ghost, and § Desktop names this
+         * as the one place its rules do NOT ratify what was already here: this
+         * variant used to hover to `hover:bg-destructive/10`, "a tinted ground
+         * no other control has", where the mock draws `surface`. The ground a
+         * hover uses "is not the place to restate what the control does — the
+         * `error` text already does that". The filled half of the variant keeps
+         * its own fill at 90%, written at its one call site in `weigh-ins.tsx`.
+         */
+        destructive: `text-destructive ${HOVER_GROUND}`,
         // Text — tertiary actions: Revert, Repeat for 2 days.
-        link: "text-foreground underline decoration-text-tertiary underline-offset-4",
+        link: `text-foreground underline decoration-text-tertiary underline-offset-4 ${HOVER_GROUND}`,
       },
       size: {
         default: "h-13 gap-2 px-5",

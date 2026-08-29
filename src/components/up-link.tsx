@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { HOVER_LINK } from "@/lib/pointer";
+
 import type { CalendarDate } from "@/lib/date";
 import { resolveParent } from "@/lib/nav";
 
@@ -116,10 +118,13 @@ export function UpLink({
        * this is now the one place the up-link is styled; the other links that
        * share the omission are named below.
        *
-       * Still outstanding, and not this component's to fix: `week-nav.tsx`'s
-       * prev/next and the "Back to this week" resets are in the same position.
+       * Settled by FUEL-75 rather than still outstanding: `week-nav.tsx`'s
+       * prev/next and the "Back to this week" resets were in the same position,
+       * and a sweep that gave them a hover could not leave them without the
+       * ring — § Desktop: "a control drawn with only the hover leaves the
+       * keyboard with nothing." They import `FOCUS_RING`, which is this string.
        */
-      className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className={`text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${HOVER_LINK}`}
     >
       {/*
        * Hidden whole, as `week-nav.tsx` hides its own.

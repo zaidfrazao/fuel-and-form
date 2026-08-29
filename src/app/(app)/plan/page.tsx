@@ -12,6 +12,7 @@ import { loadWeek } from "@/lib/db/queries/week";
 import type { Meal } from "@/lib/db/schema";
 import { FRAME_MEASURE_AND_ASIDE } from "@/lib/frame";
 import { weekLabel } from "@/lib/now-display";
+import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { requestedWeek } from "@/lib/week-param";
 
 /**
@@ -88,7 +89,7 @@ function WeekDownload({ monday }: { monday: CalendarDate }) {
     <a
       href={`/api/export/week?week=${monday}`}
       aria-label={`Download ${weekLabel(monday)} as CSV`}
-      className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
+      className={`text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
     >
       Download this week (CSV)
     </a>
@@ -270,7 +271,10 @@ export default async function PlanPage({
 
       {elsewhere && (
         <p className="text-slash text-text-secondary">
-          <Link href="/plan" className="underline decoration-text-tertiary underline-offset-4">
+          <Link
+            href="/plan"
+            className={`underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
+          >
             Back to this week
           </Link>
         </p>
@@ -297,14 +301,14 @@ export default async function PlanPage({
          */}
         <Link
           href={`/shopping?week=${plan.monday}`}
-          className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
+          className={`text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
         >
           Shopping list
         </Link>
 
         <Link
           href="/plan/template"
-          className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
+          className={`text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
         >
           Weekly template
         </Link>
