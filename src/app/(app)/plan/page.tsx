@@ -171,17 +171,21 @@ export default async function PlanPage({
      * whatever the window leaves — 776px at 1024, the number `min-w-0` was
      * measured against.
      *
-     * § Desktop goes one sentence further than the numbers do, and the
-     * difference is recorded here rather than left for the next reader to
-     * rediscover: it says the grid "stops scrolling sideways for the first
-     * time" at this width, and it does not. Those columns are BORDER-box
-     * widths — the notice bands' 640px inner box is the measure — so this
-     * element's own `px-7` sits inside the 1024 and leaves 968 for a table that
-     * measures 1023.3px. Measured at 1272 and at 1920. It scrolled by the same
-     * ~55px before the frame existed, so nothing here regressed; what is wrong
-     * is the guide's arithmetic, and reconciling it is a decision about whether
-     * this screen keeps the page's gutters — FUEL-78's, with § Desktop and
-     * § Spacing amended to match.
+     * § Desktop went one sentence further than the numbers did, and FUEL-71
+     * settled it here rather than deferring it again. The guide said the grid
+     * "stops scrolling sideways for the first time" at this width and it did
+     * not: these columns are BORDER-box widths — the notice bands' 640px inner
+     * box is the measure — so this element's own `px-7` sat inside the 1024 and
+     * left 968 for a table that measured 1023.3px, at 1272 and at 1920 alike.
+     *
+     * The resolution is not here, and the reason it is not is worth the line.
+     * This screen KEEPS the page's gutters, because its header, week nav and
+     * totals have to stay on the measure's x with the notice bands above them —
+     * § Desktop's whole argument. It is the grid alone that cannot afford to pay
+     * the 28px twice, so the grid alone bleeds back out of it (`lg:-mx-7`, in
+     * `week-grid.tsx`), which is the same full-bleed device the phone already
+     * used one scale down. Everything on this screen but the table is inset;
+     * the table spans its column; the guide's sentence is now true.
      *
      * The bottom padding clears the nav pill. Below `lg` the shell is pinned to
      * the viewport (FUEL-65) and floats over whatever is beneath it, and unlike

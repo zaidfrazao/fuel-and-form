@@ -182,7 +182,7 @@ describe("the table", () => {
     expect(cell("Sun 15 Mar lunch: not planned")).toBeTruthy();
   });
 
-  test("keeps the slot column pinned over the scrolling days", () => {
+  test("keeps the slot column pinned, and its container able to scroll", () => {
     const { container } = grid();
 
     const [corner] = shape("wide").getAllByRole("columnheader");
@@ -197,8 +197,10 @@ describe("the table", () => {
       expect(pinned?.className).toContain("bg-surface");
     }
 
-    // One scrolling container, and it is not the page body. § Accessibility
-    // excepts this grid from the no-horizontal-scroll rule by name.
+    // Kept after FUEL-71 made the table fit, and deliberately: the container is
+    // also the `relative` clip that stops FUEL-65's `sr-only` cells escaping to
+    // pan the whole page. Both halves earn their place when something has
+    // already gone wrong, which is not a reason to remove either.
     expect(container.querySelector(".overflow-x-auto")).toBeTruthy();
 
     // `border-separate`, because a collapsed table hands its borders to the
@@ -208,32 +210,58 @@ describe("the table", () => {
     ).toContain("border-separate");
   });
 
-  test("says that it scrolls, at the widths where it does", () => {
+  test("fits the whole week — fixed layout, a colgroup, and no scroll cue", () => {
     const { container } = grid();
+    const table = container.querySelector('[data-shape="wide"]')!;
 
-    // FUEL-81: the only cue that the grid scrolled used to be Wednesday being
-    // sliced at the right edge. A fade is the affordance — content passing
-    // under it rather than ending at it.
-    const fade = container.querySelector(".bg-gradient-to-l");
+    // FUEL-71. The wide grid used to scroll at EVERY width it was drawn at,
+    // 1920 included, and the fade at its right edge was the honest affordance
+    // for that. It fits now, so the affordance is gone — a cue for a scroll
+    // that cannot happen is a lie in the other direction.
+    expect(container.querySelector(".bg-gradient-to-l")).toBeNull();
 
-    expect(fade).toBeTruthy();
-    expect(fade?.getAttribute("aria-hidden")).toBe("true");
-
-    // NOT bounded to a width range, because this grid overflows at every width
-    // it is drawn at. That was got wrong once: 86px + 7 × 132px against a
-    // 1024px page looks like it fits above ~1074px, so the fade was bounded
-    // there — and at 1440 the scroller still had 55px to go with no fade on it.
+    // Why it fits, in the three assertions that each replace a fault:
     //
-    // The 86px is a minimum. An auto table grows a column to its content, so
-    // the pinned column resolves to 99.3px and the table to ~1023px against the
-    // 968px the page cap leaves. The fade lives inside the `md:block` scroller,
-    // which is the only bound it needs.
-    expect(fade?.className).not.toContain("1074");
-    expect(fade?.closest(".overflow-x-auto")?.className).toContain("md:block");
+    // `table-fixed`, because an auto table treats a column width as a floor and
+    // grows past it — which is how 86 + 7 × 132 measured 1023.3px and why the
+    // arithmetic that said it fit was wrong every time it was done.
+    expect(table.className).toContain("table-fixed");
 
-    // Above the pinned column, which is a scrolling sibling at `z-10` and would
-    // otherwise paint over the fade at the moment it matters.
-    expect(fade?.className).toContain("z-20");
+    // `max-w` and not `w`, so § Spacing's 1024 is a ceiling the columns reach
+    // rather than a width the table insists on. This is what absorbs the rail:
+    // crossing 1024px used to take the scroller from 967px to 720px and cost
+    // 1.87 days of the week, and a table that can be narrower loses none.
+    expect(table.className).toContain("w-full");
+    expect(table.className).toContain("max-w-[1024px]");
+
+    // The widths live in a `colgroup`, which is read before any row — the same
+    // reason the stacked shape has one. The slot column states 100px; the seven
+    // day columns state NOTHING, because a fixed table splits what is left
+    // equally among them, and that is what makes the day column 132px at the
+    // cap and narrower below instead of clipping Sunday.
+    //
+    // 100 and not the mock's 86: a fixed table grows nothing, and "Breakfast"
+    // needs 99.3px here — 79.3px at `text-micro` plus the cell's 20px of
+    // padding. At 86 it spilled over the hairline into Monday. Measured, after
+    // 86 was tried and shipped nothing.
+    const cols = table.querySelectorAll("colgroup col");
+
+    expect(cols).toHaveLength(8);
+    expect(cols[0]?.className).toContain("w-[100px]");
+
+    // The invariant is "states no WIDTH", not "states no class" — asserted that
+    // way on purpose, so a later `<col>` carrying something harmless (a test
+    // hook, a debug marker) does not fail a check that is really about widths.
+    for (const day of Array.from(cols).slice(1)) {
+      expect(day.className).not.toMatch(/\bw-\[|\bmin-w-\[/);
+    }
+
+    // And no width survives on the cells themselves. A second number in that
+    // spot is dead the moment it disagrees with the `colgroup`, which is how
+    // 86px and 99.3px came to be the same column.
+    for (const cell of table.querySelectorAll("th")) {
+      expect(cell.className).not.toMatch(/\bw-\[|\bmin-w-\[/);
+    }
   });
 });
 
