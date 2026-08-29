@@ -235,14 +235,19 @@ describe("the table", () => {
     expect(table.className).toContain("max-w-[1024px]");
 
     // The widths live in a `colgroup`, which is read before any row — the same
-    // reason the stacked shape has one. The slot column states 86px; the seven
+    // reason the stacked shape has one. The slot column states 100px; the seven
     // day columns state NOTHING, because a fixed table splits what is left
-    // equally among them, and that is what makes the day column 134px at the
+    // equally among them, and that is what makes the day column 132px at the
     // cap and narrower below instead of clipping Sunday.
+    //
+    // 100 and not the mock's 86: a fixed table grows nothing, and "Breakfast"
+    // needs 99.3px here — 79.3px at `text-micro` plus the cell's 20px of
+    // padding. At 86 it spilled over the hairline into Monday. Measured, after
+    // 86 was tried and shipped nothing.
     const cols = table.querySelectorAll("colgroup col");
 
     expect(cols).toHaveLength(8);
-    expect(cols[0]?.className).toContain("w-[86px]");
+    expect(cols[0]?.className).toContain("w-[100px]");
     for (const day of Array.from(cols).slice(1)) {
       expect(day.className).toBe("");
     }

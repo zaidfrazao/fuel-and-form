@@ -38,9 +38,16 @@ import { weekTotals } from "@/lib/week-totals";
  * FUEL-81 decided this, and the reason is the text rather than the layout: a
  * meal name reaches fifty characters and this screen never truncates one, so
  * seven columns at 375px give each about 45px and a narrower column only wraps
- * the same name taller. § Dynamic Type used to except "the week grid" from the
- * no-horizontal-scroll rule without qualifying the width; it now excepts the
- * wide shape only, and below 768px this screen scrolls sideways nowhere.
+ * the same name taller.
+ *
+ * § Dynamic Type used to except "the week grid" from the no-horizontal-scroll
+ * rule outright. FUEL-71 withdrew that: neither shape scrolls sideways at any
+ * width from 320 to 1920. What replaced it is one measured case rather than a
+ * blanket permission — under TEXT-ONLY 200%, where the root font size doubles
+ * and the `px` boxes do not follow, the wide shape overflows by 27px at 820 and
+ * 18px at 1024, because a fixed table cannot grow its 100px slot column to the
+ * 179px "Breakfast" then needs. Ordinary browser zoom scales the boxes too and
+ * is therefore just a narrower viewport, where nothing overflows at all.
  *
  * What survives the rotation is the association: the stacked shape makes the
  * day a `<th scope="rowgroup">` and keeps the slot a `<th scope="row">`, so the
@@ -352,11 +359,17 @@ function WeekStack({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
         {/*
          * 88px is "Breakfast" and nothing more: the longest slot label is
          * 79.3px at `text-micro`'s 10.5px and 0.16em tracking, plus the 8px
-         * that separates it from the meal. The wide grid never had to say this
-         * — an auto table grows a column to its content, and its `w-[86px]`
-         * pinned column resolves to 99.3px in the browser for exactly that
-         * reason. A fixed table grows nothing, so a number that merely looked
-         * tight clipped the word instead.
+         * that separates it from the meal. A fixed table grows nothing, so a
+         * number that merely looked tight clipped the word instead.
+         *
+         * The wide grid did not have to say this while it was an auto table —
+         * it grew its own pinned column to 99.3px for exactly this reason, and
+         * the `w-[86px]` on it was decorative. FUEL-71 made that table fixed
+         * too, and the first thing it cost was this: 86 stopped being a number
+         * the browser quietly corrected and started clipping, so the wide slot
+         * column is now 100px, set from the same measurement as this one. The
+         * two differ because the cells differ — 20px of `px-2.5` there against
+         * the 8px separation here — not because the word does.
          */}
         <col className="w-[88px]" />
         <col />
@@ -524,20 +537,31 @@ function WeekTable({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
          * the first row turns out to be; a width on a `th` is read from the
          * first row alone and is dead the moment a later row disagrees.
          *
-         * 86px is the slot column, from FUEL-67's drawing. It is honest here in
-         * a way it never was on the auto table, where "Breakfast" at 79.3px plus
-         * padding grew it to 99.3px and quietly took 13px off the week.
+         * 100px is the slot column, and it is 100 rather than FUEL-67's 86 for
+         * a reason worth stating, because 86 was tried first and was wrong.
+         *
+         * A fixed table grows nothing. "Breakfast" measures 79.3px at
+         * `text-micro`'s 10.5px and 0.16em tracking, and this cell spends 20px
+         * on `px-2.5`, so the label needs 99.3px — and at 86 it spilled 3px over
+         * the hairline into Monday. Which means the auto table's 99.3px pinned
+         * column was never the bloat it was read as: it was the column fitting
+         * its own content, the one thing an auto table does well. The mock's 86
+         * is honest THERE — it draws this table at 9.5px with 9px of padding,
+         * where the same word needs 71px. Two type scales, two answers, and the
+         * app has to use the app's.
          *
          * The seven day columns declare NO width, and that is the whole
          * mechanism rather than an omission. A fixed table splits what is left
          * equally among the columns that ask for nothing, so the day column is
-         * whatever the page can afford: 938 ÷ 7 = 134.0px at the 1024px cap,
-         * which is FUEL-67's number arrived at rather than asserted, and less
-         * than that below without a day ever leaving the screen. Naming 134
-         * here would put the ceiling back and bring the sideways scroll with it.
+         * whatever the page can afford: 924 ÷ 7 = 132.0px at the 1024px cap,
+         * and less than that below without a day ever leaving the screen.
+         * Naming 132 here would put the ceiling back and bring the sideways
+         * scroll with it — and note what 132 is. It is the width the day columns
+         * declared all along. That number was never the fault; the 86 that was
+         * really 99.3, and the gutter that was paid for twice, were.
          */}
         <colgroup>
-          <col className="w-[86px]" />
+          <col className="w-[100px]" />
           {week.map((day) => (
             <col key={day.date} />
           ))}

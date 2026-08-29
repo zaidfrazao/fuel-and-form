@@ -443,8 +443,8 @@ table.week thead th.now { color: var(--accent); border-bottom-color: var(--accen
 
 /* ---------- the wide week, at the width it was drawn for ----------
    § Desktop gives `/plan` the measure and the aside together, and the table is
-   drawn to exactly that 1024: an 86px slot column and seven day columns that
-   come out at 134px.
+   drawn to exactly that 1024: a 100px slot column and seven day columns that
+   come out at 132px.
 
    `table-layout: fixed` with a `<colgroup>`, because a column width set on an
    auto table is a minimum the longest cell grows past — which is how a 1023px
@@ -454,17 +454,26 @@ table.week thead th.now { color: var(--accent); border-bottom-color: var(--accen
 
    The day columns declare NO width, and that is the rule rather than an
    omission (FUEL-71). A fixed table splits what is left equally among the
-   columns that ask for nothing, so 1024 − 86 = 938, ÷ 7 = 134.0 — the number
-   arrives instead of being asserted. Stating 134 here would draw the same
+   columns that ask for nothing, so 1024 − 100 = 924, ÷ 7 = 132.0 — the number
+   arrives instead of being asserted. Stating 132 here would draw the same
    picture while hiding the mechanism, and the app needs the mechanism: this
    frame is a fixed 1272 and the app's is not, so below 1272 the same rule
-   narrows the columns where a stated 134 would put the sideways scroll back.
+   narrows the columns where a stated 132 would put the sideways scroll back.
+
+   The slot column is 100px and was 86px until FUEL-71 measured it. A fixed
+   table grows nothing, and in the APP — `text-micro` at 10.5px, 0.16em
+   tracking, 10px of cell padding each side — "Breakfast" needs 99.3px and at
+   86 it spilled over the hairline into Monday. This drawing is at 9.5px with
+   9px padding and would have got away with 86, which is exactly why the number
+   is set from the app's type here rather than from this file's: the mock is the
+   source of truth for appearance, and a column that fits its label in the
+   drawing and not in the product is not an appearance anyone can ship.
 
    `max-width` rather than `width` for the same reason. The mock is always at
    the cap; the app is not always. */
 table.week.fixed { table-layout: fixed; width: 100%; max-width: 1024px; }
 table.week.fixed th, table.week.fixed td { white-space: normal; vertical-align: top; }
-table.week.fixed .slotcol { width: 86px; }
+table.week.fixed .slotcol { width: 100px; }
 /* The kcal line under the meal name, as the stacked shape already draws it —
    the rule existed only for `weekstack` because the wide shape had no markup
    in this file to carry it. */
@@ -1394,7 +1403,9 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
           <h3>1272 is a sum</h3>
           <p>The rail, a gutter, and the 1024px &sect; Spacing already fixes for the week grid. Which
             means the measure and the aside together <i>are</i> that 1024, so <code>/plan</code>&rsquo;s
-            grid spans them both and stops scrolling sideways for the first time. The frame is centred
+            grid spans them both and is drawn at the full 1024 &mdash; but only because the grid bleeds
+            back through <code>main</code>&rsquo;s 28px padding, which otherwise sits inside this
+            column and leaves it 968 (FUEL-71). The frame is centred
             and its content is left-aligned inside it &mdash; a rail, a 640px measure and a 1920px
             screen cannot all be symmetric, and this is where the asymmetry is spent.</p>
           <p class="mono" style="color:var(--pg-text-2);">At 1920 &nbsp;324 &middot; 220 &middot; 28
@@ -1827,13 +1838,13 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
 
               <div class="u-title" style="font-size:34px;">Week 32</div>
 
-              <!-- 1024px, drawn to the pixel: 86 + 7 × 134, the second number
+              <!-- 1024px, drawn to the pixel: 100 + 7 × 132, the second number
                    derived rather than stated. The measure and the aside
                    spanned, no scroller, and the seventh day present. -->
               <table class="week fixed">
                 <caption class="vh">The week&rsquo;s plan, by day and meal slot. Swapped meals are marked.</caption>
                 <!-- The seven day columns declare nothing; the fixed table divides
-                     what is left, and 938 ÷ 7 = 134.0 arrives on its own. -->
+                     what is left, and 924 ÷ 7 = 132.0 arrives on its own. -->
                 <colgroup><col class="slotcol"><col><col><col><col><col><col><col></colgroup>
                 <thead>
                   <tr><th scope="col" class="slotcol"></th><th scope="col" class="now">Mon 10</th><th scope="col">Tue 11</th><th scope="col">Wed 12</th><th scope="col">Thu 13</th><th scope="col">Fri 14</th><th scope="col">Sat 15</th><th scope="col">Sun 16</th></tr>
@@ -1874,7 +1885,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
         <div class="cap">
           <span class="tagline">P2 · /plan · dark · 1024px</span>
           <h3>Weekly plan</h3>
-          <p>The one screen where the extra width goes to the content rather than beside it. The measure and the aside are spanned, and the table is drawn to exactly that 1024: an <b>86px slot column and seven 134px day columns</b>, which is the target FUEL-71 builds to. Fixed columns with a <code>colgroup</code>, not minimums &mdash; a width set on an auto table is a floor the longest meal name grows past, which is how a 1023px table ends up scrolling at 1920. The names wrap inside their column, which &sect; The Week, Two Ways already specifies, and the seventh day is present for the first time.</p>
+          <p>The one screen where the extra width goes to the content rather than beside it. The measure and the aside are spanned, and the table is drawn to exactly that 1024: a <b>100px slot column and seven 132px day columns</b>, the second number divided out rather than stated. Fixed columns with a <code>colgroup</code>, not minimums &mdash; a width set on an auto table is a floor the longest meal name grows past, which is how a 1023px table ended up scrolling at 1920. The day columns declare nothing and share what is left, so below this width they narrow instead of the week losing days. The names wrap inside their column, which &sect; The Week, Two Ways already specifies, and the seventh day is present at every width.</p>
         </div>
       </div>
 
