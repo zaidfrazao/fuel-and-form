@@ -191,9 +191,11 @@ Four flows, chosen because each is a place where a break would be invisible to u
 | **Swap with preview** | Open swap → see resulting day totals → confirm → weekly grid shows the override → revert in one tap | P2 + P4; the override must not touch the template |
 | **Export** | Trigger export → file downloads → JSON parses → contains planned, actual and swapped-with columns | P6 acceptance criteria |
 
-**Note on the meantime:** Playwright is available as an MCP server in this environment, so the real app can be driven interactively for verification during the weekend build without a spec suite existing. That is manual verification with a good tool — it is not a substitute for the suite, and it leaves no artefact in CI.
+**Note on the meantime — partly spent.** FUEL-69 installed `@playwright/test` and built the harness: `playwright.config.ts` at the root, a demo-provisioning setup project, a frozen clock, and the § 2.3 baselines. **The four flows above are still unwritten** and belong to FUEL-48, which should build on that install rather than duplicate it — `tests/e2e/README.md` records what is already there to reuse.
 
-**Dev server:** `npm run dev` on port `3000`.
+Playwright also remains available as an MCP server for driving the app interactively. That is manual verification with a good tool; it is not a substitute for the specs, and it leaves no artefact.
+
+**Server:** the flow specs should follow § 2.3 and run against `next start` on port `3100` with `DATABASE_URL` pointed at the test branch — not `npm run dev` on `3000`. `next dev` refuses a second instance and exits 0 pointing at the running one, so a suite aimed at it reports green against whatever that server happened to be serving.
 
 ### 2.2 Accessibility
 
@@ -217,9 +219,24 @@ Contrast ratios are already measured and recorded in the Brand Guide; re-verify 
 
 ### 2.3 Visual regression
 
-Playwright screenshots at 375px and 1280px, light and dark, for the seven screens. Baselines in `tests/visual/__screenshots__/`, updated by an explicit `--update-snapshots` run referenced in the PR description.
+Playwright screenshots at **375, 820, 1272 and 1920px**, light and dark, for the seven screens — 56 baselines in `tests/visual/__screenshots__/`, updated by an explicit `--update-snapshots` run referenced in the PR description. Built by FUEL-69; `npm run test:visual`, and README → Visual baselines for the operating detail.
 
-Low priority: with one user and no design team, drift is unlikely and cheap to spot.
+**Four widths, not the two this section first named.** The two were 375 and 1280, written before the Brand Guide had a § Desktop. It now has one, and it names four bands rather than two: the phone below 768, `md` at 768, `lg` at 1024, and `xl` at 1272. One width is taken from each band — 375 and 1272 because `BRAND_GUIDE.html` draws at exactly those and a diff is therefore comparable against the drawing, 820 because § Desktop names iPad portrait by hand when it claims the 768–1023 band, and 1920 because that is where § Desktop measured the faults the Desktop Version milestone exists to fix.
+
+**1272 replaces the 1280 written here originally.** § Desktop redefines Tailwind's `xl` from 1280 to 1272, "because the frame is a sum of its columns and 1280 would leave 8px belonging to no column". A baseline at 1280 would photograph the frame with 8px of slack beside it and enshrine that as the reference.
+
+**The gaps, stated rather than left to be discovered:**
+
+- **1024–1271** — the rail present, the action bars unstuck, the frame still fluid — has no baseline. Four widths cannot cover five bands.
+- **Three of the seven screens in § 2.2** are states, not addresses: the meal picker sheet, the meal detail and the day-complete summary. The seven baselined here are the seven *routes* — the set FUEL-77 and FUEL-78 recompose, which is what these baselines exist to hold still. The three states belong to FUEL-48's flow specs, where the fixtures to reach them have to exist anyway.
+- **Sticky positioning.** Full-page captures draw a sticky bar at its resting place, not pinned.
+- **Any machine but the one that took them.** There is no webfont, so glyphs are rasterised through the local fontconfig. The committed set is from Linux; a macOS run fails against all 56. `{platform}` is deliberately absent from the snapshot path, so that such a run fails loudly instead of writing its own set and reporting green.
+
+**Not in CI.** Nothing runs this automatically — that is § 2.4 and FUEL-51. Until then it is enforced by whoever runs it, like the coverage gate.
+
+**Determinism is the whole of the work.** The demo's history is generated relative to now, so an unfrozen suite fails every morning — structurally, not just in its labels: the week grid's today column, the day ruler's NOW mark and the weight chart's twelve weeks all move. The server's clock is frozen to Wednesday 17 June 2026, 18:54 BST (`tests/visual/freeze-clock.mjs`) and the browser's to the same instant. That produces identical pixels only because `src/lib/seed/history.ts` calls no `Math.random()` — if that ever changes, these baselines start flapping and that is the first place to look.
+
+Low priority as a *risk* — one user, no design team, drift unlikely and cheap to spot. High priority as *scaffolding*: FUEL-70 through FUEL-79 each change appearance at widths nothing else in this repository can assert, and the unit suite runs in jsdom, which applies no CSS.
 
 ### 2.4 CI — GitHub Actions
 
@@ -284,7 +301,7 @@ No real credentials in any test file. The owner test password comes from a `.env
 
 **Device**
 - [ ] 375px one-handed — primary actions in the bottom third, within thumb reach
-- [ ] 768px · 1280px
+- [ ] 820px · 1272px · 1920px — the other three widths § 2.3 baselines, so the manual pass and the suite look at the same screens
 
 **Appearance**
 - [ ] Light and dark both correct; umber appears exactly once per screen and always means "now"
