@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { getSession } from "@/lib/auth/session";
 import { loadWalkReminder } from "@/lib/db/queries/walk-reminder";
+import { FRAME, FRAME_MEASURE } from "@/lib/frame";
 import { REMINDER_LINK, reminderStatement } from "@/lib/walk-reminder";
 
 /**
@@ -71,36 +72,43 @@ export async function WalkReminder() {
       {/* The demo banner's container, minus its `justify-between`: that one has
           a dismiss button to push to the far edge and this one has nothing to
           separate. The width and padding match every page's `main`, so the
-          sentence lines up with the content beneath it. */}
-      <div className="mx-auto flex w-full max-w-[640px] items-center gap-3 px-[22px] py-1.5 md:px-7">
-        {/*
-         * The canvas, a hairline, and `/ `-scale secondary text — the same
-         * material as the demo banner and for the reasons set out there.
-         * § Color Palette reserves `accent` for "now" and `surface` for stone
-         * tiles and the chart's plot area, so a tinted strip is not available
-         * however conventional it would be. A reminder that shouted would be
-         * competing with the one dominant card `/` exists to show, which is the
-         * screen it is most often seen above.
-         */}
-        <p className="text-slash text-text-secondary">
-          {reminderStatement(reminder.at)}{" "}
+          sentence lines up with the content beneath it — which, above 1024px,
+          only became true with FUEL-70. Both bands and every `<main>` now wear
+          Brand Guide § Desktop's frame and take the same column of it; the
+          argument is in `lib/frame.ts` and the measurements in globals.css. */}
+      <div className={FRAME}>
+        <div
+          className={`${FRAME_MEASURE} flex items-center gap-3 px-[22px] py-1.5 md:px-7`}
+        >
           {/*
-           * To `/`, always, and not to `/training`.
-           *
-           * Both screens carry a walk row. `/` is the one the app opens on and
-           * the one the walk's row was designed into — `walk.ts` calls it "the
-           * walk's own row" — so it is where a tap on this sentence should land
-           * from any of the other six screens. From `/` itself the link is a
-           * no-op navigation to the page already open, which is harmless: the
-           * row it points at is a few centimetres below it.
+           * The canvas, a hairline, and `/ `-scale secondary text — the same
+           * material as the demo banner and for the reasons set out there.
+           * § Color Palette reserves `accent` for "now" and `surface` for stone
+           * tiles and the chart's plot area, so a tinted strip is not available
+           * however conventional it would be. A reminder that shouted would be
+           * competing with the one dominant card `/` exists to show, which is the
+           * screen it is most often seen above.
            */}
-          <Link
-            className="text-text-primary underline decoration-text-tertiary underline-offset-4"
-            href="/"
-          >
-            {REMINDER_LINK}
-          </Link>
-        </p>
+          <p className="text-slash text-text-secondary">
+            {reminderStatement(reminder.at)}{" "}
+            {/*
+             * To `/`, always, and not to `/training`.
+             *
+             * Both screens carry a walk row. `/` is the one the app opens on and
+             * the one the walk's row was designed into — `walk.ts` calls it "the
+             * walk's own row" — so it is where a tap on this sentence should land
+             * from any of the other six screens. From `/` itself the link is a
+             * no-op navigation to the page already open, which is harmless: the
+             * row it points at is a few centimetres below it.
+             */}
+            <Link
+              className="text-text-primary underline decoration-text-tertiary underline-offset-4"
+              href="/"
+            >
+              {REMINDER_LINK}
+            </Link>
+          </p>
+        </div>
       </div>
     </aside>
   );

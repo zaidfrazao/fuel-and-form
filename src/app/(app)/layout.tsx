@@ -1,5 +1,6 @@
 import { NavShellMount } from "@/components/nav-shell-mount";
 import { RouteFocus } from "@/components/route-focus";
+import { FRAME, FRAME_RAIL } from "@/lib/frame";
 
 /**
  * The authenticated app's frame — Brand Guide § Navigation, mounted.
@@ -64,13 +65,14 @@ import { RouteFocus } from "@/components/route-focus";
  *
  * ## Desktop: the same nav, reordered rather than re-rendered
  *
- * At ≥1024px `NavShell` reflows from a centred pill into a column, and the
- * wrapper becomes a row to give it a left edge to sit against. The shell stays
- * LAST in the DOM at every width and is moved with `lg:order-first`, so the
- * reading order is content-then-navigation on the phone and on the desktop
- * alike. A landmark that a screen reader meets in a different place depending on
- * the window width is the kind of inconsistency § Navigation exists to remove,
- * and there is nothing above the content to skip past to reach it.
+ * At ≥1024px `NavShell` reflows from a centred pill into a column and this
+ * wrapper becomes the frame, which gives it a left edge to sit against. The
+ * shell stays LAST in the DOM at every width — it is placed in the frame's first
+ * column rather than moved there by source order — so the reading order is
+ * content-then-navigation on the phone and on the desktop alike. A landmark that
+ * a screen reader meets in a different place depending on the window width is
+ * the kind of inconsistency § Navigation exists to remove, and there is nothing
+ * above the content to skip past to reach it.
  *
  * That argument is about the shell and it still holds; it was once written here
  * as "no skip link is owed", which was too broad. FUEL-61 found the part it does
@@ -81,11 +83,36 @@ import { RouteFocus } from "@/components/route-focus";
  * the first focusable element — and it targets the `<main>` that `PageMain`
  * renders here. Nothing about it changes the shell's place in the DOM.
  *
- * `self-start` before `sticky`: a flex item in a row stretches to its
- * container's full height by default, and an element as tall as its container
- * has no room to stick — it would scroll away with the page. `self-start` gives
- * it its natural height back, and `top-0` then holds it while a long screen
- * moves past.
+ * `self-start` before `sticky`: an item in a row stretches to its container's
+ * full height by default — a flex item did and a grid item does — and an element
+ * as tall as its container has no room to stick, so it would scroll away with
+ * the page. `self-start` gives it its natural height back, and `top-0` then
+ * holds it while a long screen moves past.
+ *
+ * ## The frame, which is where the row went — FUEL-70
+ *
+ * The row is now a three-column grid: the rail, the measure, and what is left.
+ * § Desktop's whole argument for it is that the two notice bands the ROOT layout
+ * renders above `children` have to land on the measure's centre, and they cannot
+ * be moved into this file to do it — `skip-link.tsx` requires them to stay above
+ * `children`, and above the skip link nothing is focusable. So they read the
+ * same template from `globals.css` and take the same column index instead. The
+ * classes are in `lib/frame.ts`; the measurements and the diagram are in
+ * globals.css beside the declaration.
+ *
+ * Three things this replaced rather than dropped:
+ *
+ *   - **`lg:order-first`.** The shell now says `lg:col-start-1`. The DOM order
+ *     it was written to protect is unchanged and the paragraph above still
+ *     describes it; what changed is that the position is stated rather than
+ *     produced by shuffling siblings.
+ *   - **`lg:w-[220px] lg:shrink-0`.** The rail's width is the frame's first
+ *     track, so the sidebar is 220px because the frame says so. That is the
+ *     point — a sidebar that declared its own width is a second declaration of
+ *     the number the bands have to agree with.
+ *   - **`lg:gap-7`.** The 28px between rail and content is the frame's gutter,
+ *     which is § Spacing's ≥768px gutter doing the same job between columns.
+ *     § Desktop: "the 544px void becomes the 28px gutter".
  *
  * ## The pages carry `min-w-0`, and it is not decoration
  *
@@ -100,12 +127,17 @@ import { RouteFocus } from "@/components/route-focus";
  * `overflow-x-auto` box, and does so again once main can shrink to contain it.
  * Anything that removes `min-w-0` as redundant re-breaks `/plan` at exactly one
  * breakpoint and nowhere else.
+ *
+ * A CSS grid does not retire that. `min-width: auto` is a property of the item
+ * in both layout modes, and a fixed track does not grow to fit an item that
+ * refuses to shrink — it overflows the track instead, which at 1024px is the
+ * same 248px off the same edge.
  */
 export default function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <div className="flex min-h-dvh flex-col lg:flex-row lg:gap-7">
+    <div className={`${FRAME} flex min-h-dvh flex-col`}>
       {/*
        * Renders nothing. It moves focus into the new screen's `<main>` on a
        * navigation between destinations, and deliberately not on the `?date=`
@@ -118,15 +150,17 @@ export default function AppLayout({
 
       <NavShellMount
         className={
-          // 220px is the width `/dev/nav-shell` capped its sidebar specimens at,
-          // where it is described as "a sidebar's width" — wide enough for the
-          // longest label beside its mark, narrow enough that the active item's
-          // full-width fill reads as a row rather than a banner.
+          // The rail is the frame's first column, and its 220px is declared
+          // there — `/dev/nav-shell` capped its sidebar specimens at the same
+          // number, where it is described as "a sidebar's width": wide enough
+          // for the longest label beside its mark, narrow enough that the active
+          // item's full-width fill reads as a row rather than a banner.
           //
           // `pl-7` matches the 28px gutter every page takes at `md:` and above,
-          // so the sidebar's left edge lines up with the content's; `py-8` is
-          // `/plan`, `/settings` and `/plan/template`'s own top padding.
-          "lg:sticky lg:top-0 lg:order-first lg:w-[220px] lg:shrink-0 lg:self-start lg:py-8 lg:pl-7"
+          // so the sidebar's items line up with the content's left edge the way
+          // the measure's own padding lines its text up; `py-8` is `/plan`,
+          // `/settings` and `/plan/template`'s own top padding.
+          `${FRAME_RAIL} lg:sticky lg:top-0 lg:self-start lg:py-8 lg:pl-7`
         }
       />
     </div>

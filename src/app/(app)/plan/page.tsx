@@ -9,6 +9,7 @@ import { WeekNav } from "@/components/week-nav";
 import { getSession } from "@/lib/auth/session";
 import { type CalendarDate, startOfWeek } from "@/lib/date";
 import { loadWeek } from "@/lib/db/queries/week";
+import { FRAME_MEASURE_AND_ASIDE } from "@/lib/frame";
 import type { Meal } from "@/lib/db/schema";
 import { weekLabel } from "@/lib/now-display";
 import { requestedWeek } from "@/lib/week-param";
@@ -161,6 +162,16 @@ export default async function PlanPage({
      * 1024px, not 640px — § Spacing: "max content width: 640px single-column;
      * 1024px for the week grid at ≥768px".
      *
+     * At `lg` that 1024 is a span rather than a centring — Brand Guide
+     * § Desktop, FUEL-70. The frame gives every screen a measure and, beside it,
+     * an aside; this is the one screen where the extra width goes to the content
+     * instead, so its `<main>` runs from the measure's column to the frame's
+     * last. At the frame's cap that is 640 + 28 + 356 = 1024 exactly, which is
+     * where the week grid stops scrolling sideways for the first time, and it is
+     * why 1272 is a sum rather than a round number. Below the cap the span is
+     * whatever the window leaves — 776px at 1024, the number `min-w-0` was
+     * measured against.
+     *
      * The bottom padding clears the nav pill. Below `lg` the shell is pinned to
      * the viewport (FUEL-65) and floats over whatever is beneath it, and unlike
      * `/` and `/training` this screen has no sticky action bar to stop at
@@ -170,7 +181,9 @@ export default async function PlanPage({
      * and un-tappable. At `lg` the shell becomes a sidebar and takes no
      * horizontal strip of the page's bottom, so the padding goes back to 8.
      */
-    <PageMain className="max-w-[1024px] gap-7 pt-8 pb-[calc(var(--nav-shell-h)+--spacing(8))] lg:pb-8">
+    <PageMain
+      className={`${FRAME_MEASURE_AND_ASIDE} max-w-[1024px] gap-7 pt-8 pb-[calc(var(--nav-shell-h)+--spacing(8))] lg:pb-8`}
+    >
       <header className="flex flex-col gap-2">
         {/*
          * No `week` — the parent is `/`, which takes no `searchParams` and has

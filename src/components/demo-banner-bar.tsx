@@ -6,6 +6,7 @@ import { useOptimistic } from "react";
 import { dismissDemoBanner } from "@/app/actions/demo-banner";
 import { Button } from "@/components/ui/button";
 import { BANNER_COPY, REPOSITORY_URL } from "@/lib/demo-banner";
+import { FRAME, FRAME_MEASURE } from "@/lib/frame";
 
 /**
  * The banner itself — FUEL-42, PRD § P7, Brand Guide § UI Copy.
@@ -30,6 +31,13 @@ import { BANNER_COPY, REPOSITORY_URL } from "@/lib/demo-banner";
  *
  * The container's width and padding match every page's `main`, so the sentence
  * lines up with the content beneath it instead of floating over a wider band.
+ * That was true on a phone and false above 1024px until FUEL-70: this bar is
+ * rendered by the ROOT layout, above `children`, so it never entered the app
+ * layout's row and centred on the viewport while `main` centred on what was left
+ * beside the sidebar — 124px apart at 1920. It now wears Brand Guide § Desktop's
+ * frame and takes the measure's column, which is the same constant `page-main.tsx`
+ * wears. The `aside` stays full-bleed: § Desktop keeps the hairline edge to edge
+ * and moves only the inner box.
  *
  * ## The dismiss control is an icon with no visible label
  *
@@ -59,86 +67,90 @@ export function DemoBannerBar() {
     // it sits above, and the landmark lets a screen-reader user skip it once
     // per screen rather than hearing it before every one.
     <aside aria-label="Demo session" className="border-b border-border">
-      <div className="mx-auto flex w-full max-w-[640px] items-center justify-between gap-3 px-[22px] py-1.5 md:px-7">
-        <p className="text-slash text-text-secondary">
-          {BANNER_COPY.statement}{" "}
-          {/*
-           * A new tab, so reading the source does not end the demo. Two hours
-           * is the session's whole life and a visitor who navigated away would
-           * come back to a page they have to start again.
-           *
-           * `rel="noreferrer"` covers `noopener` in every browser that supports
-           * it, and both matter for a link this page does not control the
-           * destination of.
-           */}
-          <a
-            className="text-text-primary underline decoration-text-tertiary underline-offset-4"
-            href={REPOSITORY_URL}
-            rel="noreferrer"
-            target="_blank"
-          >
-            {BANNER_COPY.link}
-          </a>
-        </p>
-
-        {/*
-         * A form, so the button works with no JavaScript running — the action
-         * writes the cookie and calls `refresh()`, and the banner is gone on the
-         * render that follows. React wraps a form action in a transition of its
-         * own, which is what lets `hide()` be called here rather than inside a
-         * `startTransition` of ours.
-         */}
-        <form
-          action={async () => {
-            hide(true);
-
-            // The `try` covers the CALL, not the action: `dismissDemoBanner`
-            // catches everything itself, but reaching it is a network request
-            // that can fail on its own — no signal, a dropped connection, a
-            // cold start that times out. Those reject, and an escaping
-            // rejection would be an unhandled error from a decorative button.
-            // Swallowed, the transition simply ends and the optimistic hide
-            // resets, which puts the banner back — the honest outcome, since
-            // no cookie was written. `walk-row.tsx` carries the same wrapper.
-            try {
-              await dismissDemoBanner();
-            } catch {
-              // Nothing to report: the banner returning IS the report.
-            }
-          }}
+      <div className={FRAME}>
+        <div
+          className={`${FRAME_MEASURE} flex items-center justify-between gap-3 px-[22px] py-1.5 md:px-7`}
         >
+          <p className="text-slash text-text-secondary">
+            {BANNER_COPY.statement}{" "}
+            {/*
+             * A new tab, so reading the source does not end the demo. Two hours
+             * is the session's whole life and a visitor who navigated away would
+             * come back to a page they have to start again.
+             *
+             * `rel="noreferrer"` covers `noopener` in every browser that supports
+             * it, and both matter for a link this page does not control the
+             * destination of.
+             */}
+            <a
+              className="text-text-primary underline decoration-text-tertiary underline-offset-4"
+              href={REPOSITORY_URL}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {BANNER_COPY.link}
+            </a>
+          </p>
+
           {/*
-           * A 24px mark with a 44px target — FUEL-82.
-           *
-           * `size-11` made the button itself 44px, and at 6px of band padding
-           * that set the whole banner's height: the paragraph beside it is 34px,
-           * so the control, not the copy, was what made this 57px. On a 667px
-           * phone the four chrome bands come to 313px — 46.9% — and this was the
-           * cheapest 10px of it to give back.
-           *
-           * § Touch Targets asks for "44×44px minimum", which is a requirement
-           * about the area that responds to a thumb, not about the size of the
-           * mark drawn inside it. The `after` pseudo-element is that area,
-           * centred on the icon and part of the button, so a tap anywhere in it
-           * submits; the X shrinks to 24px and the band closes to 47px.
-           *
-           * The 44px area is 10px taller than the band it sits in, which is
-           * deliberate and harmless: it overhangs into the hairline and the top
-           * of whatever follows, where there is nothing else to press. It is the
-           * far right of a full-width row, and both things that can follow — the
-           * walk reminder's sentence and the page's own content column — start
-           * at the left.
+           * A form, so the button works with no JavaScript running — the action
+           * writes the cookie and calls `refresh()`, and the banner is gone on the
+           * render that follows. React wraps a form action in a transition of its
+           * own, which is what lets `hide()` be called here rather than inside a
+           * `startTransition` of ours.
            */}
-          <Button
-            aria-label="Dismiss"
-            className="relative size-6 rounded-sm after:absolute after:left-1/2 after:top-1/2 after:size-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']"
-            size="icon-xs"
-            type="submit"
-            variant="ghost"
+          <form
+            action={async () => {
+              hide(true);
+
+              // The `try` covers the CALL, not the action: `dismissDemoBanner`
+              // catches everything itself, but reaching it is a network request
+              // that can fail on its own — no signal, a dropped connection, a
+              // cold start that times out. Those reject, and an escaping
+              // rejection would be an unhandled error from a decorative button.
+              // Swallowed, the transition simply ends and the optimistic hide
+              // resets, which puts the banner back — the honest outcome, since
+              // no cookie was written. `walk-row.tsx` carries the same wrapper.
+              try {
+                await dismissDemoBanner();
+              } catch {
+                // Nothing to report: the banner returning IS the report.
+              }
+            }}
           >
-            <XIcon />
-          </Button>
-        </form>
+            {/*
+             * A 24px mark with a 44px target — FUEL-82.
+             *
+             * `size-11` made the button itself 44px, and at 6px of band padding
+             * that set the whole banner's height: the paragraph beside it is 34px,
+             * so the control, not the copy, was what made this 57px. On a 667px
+             * phone the four chrome bands come to 313px — 46.9% — and this was the
+             * cheapest 10px of it to give back.
+             *
+             * § Touch Targets asks for "44×44px minimum", which is a requirement
+             * about the area that responds to a thumb, not about the size of the
+             * mark drawn inside it. The `after` pseudo-element is that area,
+             * centred on the icon and part of the button, so a tap anywhere in it
+             * submits; the X shrinks to 24px and the band closes to 47px.
+             *
+             * The 44px area is 10px taller than the band it sits in, which is
+             * deliberate and harmless: it overhangs into the hairline and the top
+             * of whatever follows, where there is nothing else to press. It is the
+             * far right of a full-width row, and both things that can follow — the
+             * walk reminder's sentence and the page's own content column — start
+             * at the left.
+             */}
+            <Button
+              aria-label="Dismiss"
+              className="relative size-6 rounded-sm after:absolute after:left-1/2 after:top-1/2 after:size-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']"
+              size="icon-xs"
+              type="submit"
+              variant="ghost"
+            >
+              <XIcon />
+            </Button>
+          </form>
+        </div>
       </div>
     </aside>
   );

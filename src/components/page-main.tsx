@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { FRAME_MEASURE } from "@/lib/frame";
 import { cn } from "@/lib/utils";
 
 /**
@@ -72,9 +73,20 @@ export const MAIN_ID = "main";
  * and both were paid for once already. Routed through here they cannot be
  * omitted by a page that forgets them.
  *
- * `max-w-[640px]` is the app's column and the default rather than a per-screen
- * decision. `/plan` overrides it to 1024px for the week grid and is the only
- * screen that does; `cn` resolves the conflict in the caller's favour.
+ * ## The column is the frame's, not this file's — FUEL-70
+ *
+ * `FRAME_MEASURE` is where the 640px went, and it carries two things rather than
+ * one: the width, and — at `lg` and above — the column of Brand Guide § Desktop's
+ * grid that the width belongs to. The same constant is worn by the demo banner's
+ * inner box and the walk reminder's, which is the whole of how three elements in
+ * two different layouts arrive at one centre. Below `lg` it is the `mx-auto` and
+ * the `max-w` this component always had, unchanged.
+ *
+ * Still the default rather than a per-screen decision, and still overridable:
+ * `/plan` widens it to 1024px for the week grid and spans it across the aside to
+ * get there, and is the only screen that does either. `cn` resolves the conflict
+ * in the caller's favour — a plain string join would leave both max-widths
+ * standing and let source order decide.
  */
 export function PageMain({
   className,
@@ -88,7 +100,8 @@ export function PageMain({
       id={MAIN_ID}
       tabIndex={-1}
       className={cn(
-        "mx-auto flex w-full min-w-0 max-w-[640px] flex-1 flex-col px-[22px] outline-none md:px-7",
+        FRAME_MEASURE,
+        "flex min-w-0 flex-1 flex-col px-[22px] outline-none md:px-7",
         className,
       )}
     >

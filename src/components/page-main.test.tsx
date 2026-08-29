@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 
 import { MAIN_ID, PageMain } from "@/components/page-main";
+import { FRAME_MEASURE } from "@/lib/frame";
 
 /**
  * The content column — FUEL-61.
@@ -54,6 +55,21 @@ describe("PageMain", () => {
     expect(className).toContain("flex-1");
   });
 
+  test("stands in the frame's measure column", () => {
+    // FUEL-70. The 640px is no longer this file's — it is one column of Brand
+    // Guide § Desktop's grid, and the two notice bands take the same one. That
+    // three components share it is `lib/frame.test.tsx`'s assertion; this is
+    // just the half of it `PageMain` is answerable for, so a page cannot lose
+    // the column by passing a `className` that drops it.
+    render(<PageMain>content</PageMain>);
+
+    const className = screen.getByRole("main").className;
+
+    for (const invariant of FRAME_MEASURE.split(" ")) {
+      expect(className).toContain(invariant);
+    }
+  });
+
   test("lets one screen widen the column, which only /plan does", () => {
     // `/plan`'s week grid is 1023px and needs the room. This asserts the
     // override actually wins rather than sitting beside the default and losing
@@ -63,6 +79,6 @@ describe("PageMain", () => {
     const className = screen.getByRole("main").className;
 
     expect(className).toContain("max-w-[1024px]");
-    expect(className).not.toContain("max-w-[640px]");
+    expect(className).not.toContain("max-w-[var(--frame-measure)]");
   });
 });

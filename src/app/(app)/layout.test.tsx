@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 
 import AppLayout from "@/app/(app)/layout";
+import { FRAME } from "@/lib/frame";
 
 /**
  * The app's frame — FUEL-58.
@@ -51,6 +52,24 @@ describe("the app frame", () => {
     const { container } = layout();
 
     expect(container.firstElementChild?.className).toContain("min-h-dvh");
+  });
+
+  test("is the frame, and the shell is its first column", () => {
+    // FUEL-70. Three of this layout's properties used to be flex ones and two
+    // of those are gone — the row and the shell's own 220px width — because the
+    // frame declares both. What replaced them has to be asserted here rather
+    // than left to the baselines: a wrapper that is not the frame puts `<main>`
+    // back on a centre of its own, which is the 124px the notice bands were out
+    // by and which nothing below `lg` would show.
+    const { container } = layout();
+
+    for (const invariant of FRAME.split(" ")) {
+      expect(container.firstElementChild?.className).toContain(invariant);
+    }
+
+    expect(screen.getByRole("navigation", { name: "Primary" }).className).toContain(
+      "lg:col-start-1",
+    );
   });
 
   test("renders exactly one Primary landmark", () => {
