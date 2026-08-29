@@ -4,6 +4,7 @@ import { useState } from "react";
 import { describe, expect, test } from "vitest";
 
 import { MealPicker } from "@/components/meal-picker";
+import { FRAME, FRAME_MEASURE } from "@/lib/frame";
 import type { Meal, PlanTemplateEntry } from "@/lib/db/schema";
 import { resolveDay } from "@/lib/resolve-plan";
 
@@ -72,8 +73,12 @@ function Harness({
   // and the focus-restore case has to start closed so there is a real opening
   // to restore to.
   initialOpen = true,
+  // Rerendered as `true` by one case, to unmount the opener while the sheet is
+  // over it. Done through React rather than by calling `.remove()` on the node,
+  // which React then fails to remove itself at cleanup.
+  hideTrigger = false,
   ...rest
-}: Overrides & { initialOpen?: boolean }) {
+}: Overrides & { initialOpen?: boolean; hideTrigger?: boolean }) {
   const [selected, setSelected] = useState<string | null>(currentMealId ?? null);
   const [open, setOpen] = useState(initialOpen);
 
@@ -81,9 +86,11 @@ function Harness({
     <>
       {/* The trigger the real screen has. Only the reopen case uses it, and it
           needs to be outside the sheet to survive the close. */}
-      <button type="button" onClick={() => setOpen(true)}>
-        Swap
-      </button>
+      {!hideTrigger && (
+        <button type="button" onClick={() => setOpen(true)}>
+          Swap
+        </button>
+      )}
 
       <MealPicker
         open={open}
@@ -100,7 +107,7 @@ function Harness({
   );
 }
 
-function Picker(overrides: Overrides & { initialOpen?: boolean } = {}) {
+function Picker(overrides: Overrides & { initialOpen?: boolean; hideTrigger?: boolean } = {}) {
   return render(<Harness {...overrides} />);
 }
 
@@ -326,5 +333,105 @@ describe("the sheet", () => {
     // in a browser rather than here, which is why the assertion is on the
     // element and not merely on "something is focused".
     expect(document.activeElement).toBe(trigger);
+  });
+
+  test("gives focus to the body when the opener has gone", async () => {
+    const user = userEvent.setup();
+    const { rerender } = Picker({ initialOpen: false });
+
+    await user.click(screen.getByRole("button", { name: "Swap" }));
+
+    // The case `onCloseAutoFocus` checks `isConnected` for: a control that was
+    // unmounted while the sheet was over it — a week-grid cell behind a
+    // re-render.
+    //
+    // **This holds the outcome and not the branch, and the difference is worth
+    // stating.** Removing `?.isConnected` from `sheet.tsx` leaves this test
+    // passing — planted and run, not assumed. Both routes end on `<body>`:
+    // taking the event over and focusing a detached node does nothing silently,
+    // and leaving it alone gives Radix's own handler the same detached node to
+    // fail on. So the guard is a statement of intent rather than a load-bearing
+    // line, and no assertion available here can tell the two apart. What this
+    // does hold is the acceptance criterion — focus lands on `<body>` when the
+    // opener has gone, rather than nowhere, on the wrong control, or in a throw.
+    //
+    // A rerender rather than a second `render`: the sheet's `open` lives in the
+    // harness and has to survive the opener going away.
+    rerender(<Harness initialOpen={false} hideTrigger />);
+
+    await user.keyboard("{Escape}");
+
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  test("is dismissed by the scrim", async () => {
+    const user = userEvent.setup();
+    Picker();
+
+    // The overlay carries no role — it is `aria-hidden` scenery — so it is
+    // reached by the one class that is its whole purpose.
+    const scrim = document.querySelector(".bg-scrim");
+
+    expect(scrim).not.toBeNull();
+
+    await user.click(scrim as Element);
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+/**
+ * Where the sheet stands — Brand Guide § Desktop, "Sheets, against a pointer".
+ *
+ * jsdom applies no stylesheet, so nothing here is a claim about pixels; these
+ * hold the two structural properties the fix depends on, and
+ * `tests/visual/sheet.spec.ts` measures the result in a browser.
+ */
+describe("the measure's column", () => {
+  test("is one dialog that reflows, not a phone one and a desktop one", () => {
+    Picker();
+
+    // The whole of the "reflow, do not duplicate" rule `nav-shell.tsx` sets out:
+    // two elements toggled by `hidden`/`lg:block` would both be in the tree
+    // here, CSS being what hides one, and this query would throw on the pair.
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
+
+  test("takes its place from the frame rather than restating it", () => {
+    Picker();
+
+    const sheet = screen.getByRole("dialog");
+    const frame = sheet.parentElement;
+    const layer = frame?.parentElement;
+
+    // The column index, which is the desktop change in one utility. Read off
+    // `FRAME_MEASURE` rather than written out, so that a change to the frame
+    // moves this assertion with it instead of leaving it asserting a string
+    // nothing renders any more.
+    expect(sheet.className).toContain(FRAME_MEASURE);
+    expect(frame?.className).toBe(FRAME);
+
+    // Not a second declaration of the grid. `globals.css` holds the numbers and
+    // `lib/frame.ts` the classes; a `left: calc(...)` here would be the fourth
+    // statement of a template that exists to have exactly one.
+    expect(layer?.className).not.toMatch(/calc\(.*(100vw|1272)/);
+  });
+
+  test("places the sheet without lifting the layer that places it", () => {
+    Picker();
+
+    const sheet = screen.getByRole("dialog");
+
+    // § Materials gives the system one shadow and it belongs to the sheet. The
+    // sibling assertion in "the only element carrying a shadow" looks down the
+    // tree; the positioning layer and the frame are ABOVE the dialog, so they
+    // are outside it and are checked here instead.
+    for (
+      let node = sheet.parentElement;
+      node && node !== document.body;
+      node = node.parentElement
+    ) {
+      expect(node.className.toString()).not.toMatch(/(^|\s)shadow-/);
+    }
   });
 });

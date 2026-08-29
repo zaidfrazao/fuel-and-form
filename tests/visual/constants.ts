@@ -94,6 +94,14 @@ export const THEMES = ["light", "dark"] as const;
  * states regardless, and adding them there costs a fixture rather than a second
  * harness.
  *
+ * **The sheet's half of that is now spent, and `sheet-open.spec.ts` holds it.**
+ * FUEL-73 redrew the sheet — it stands in the measure's column above 1024px
+ * rather than centring on the window — so the state this list deferred as "about
+ * to be redrawn" has been, and it is baselined by the same eight projects
+ * against this same list of widths. The day-complete summary is still FUEL-48's,
+ * and so is the meal detail, which is a screen the mock draws and the app has no
+ * route for.
+ *
  * `slug` is the baseline's filename and must stay stable — renaming one orphans
  * eight committed PNGs.
  *

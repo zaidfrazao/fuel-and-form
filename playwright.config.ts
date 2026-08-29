@@ -50,7 +50,15 @@ if (!databaseUrl) {
 const screens = WIDTHS.flatMap(({ width, height }) =>
   THEMES.map((theme) => ({
     name: `${width}-${theme}`,
-    testMatch: /screens\.spec\.ts/,
+    /**
+     * Two files, because the sheet is drawn by the same matrix and not by the
+     * same loop: `screens.spec.ts` iterates SCREENS, and a sheet is a state on a
+     * screen rather than a route. Named rather than left to a substring — the
+     * regex `/screens\.spec\.ts/` is unanchored and would have matched a file
+     * called `sheet-screens.spec.ts` by accident, which is not a wiring anyone
+     * should have to notice to keep working.
+     */
+    testMatch: /(screens|sheet-open)\.spec\.ts/,
     dependencies: ["setup"],
     use: {
       ...devices["Desktop Chrome"],
@@ -168,6 +176,18 @@ export default defineConfig({
      * assertion, including 1023, 1024 and 1440 — three widths the `screens`
      * matrix does not have and would not gain by running this eight times.
      */
+    /**
+     * The sheet's column across the `lg` breakpoint — FUEL-73, and a project for
+     * the same reason the two above are. It asks whether the sheet and the
+     * content share a left edge, which has no theme; and it needs 1023, 1024 and
+     * 1440, which the `screens` matrix does not have.
+     */
+    {
+      name: "sheet",
+      testMatch: /sheet\.spec\.ts/,
+      dependencies: ["setup"],
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+    },
     {
       name: "action-bar",
       testMatch: /action-bar\.spec\.ts/,
