@@ -36,6 +36,8 @@ npm run dev          # http://localhost:3000
 | `npm run test` | Vitest — unit suite, no database required |
 | `npm run test:coverage` | Unit suite with the 100% gate on the scope layer |
 | `npm run test:integration` | Vitest against the test branch (see [Database](#database)) |
+| `npm run test:visual` | Playwright — the 56 visual baselines (see [Visual baselines](#visual-baselines)) |
+| `npm run test:visual:update` | Rewrite those baselines |
 | `npm run db:seed` | Load the owner account, libraries and weekly plan (see [Seeding](#seeding)) |
 | `npm run db:generate` | Diff the schema and write SQL to `drizzle/` |
 | `npm run db:migrate` | Apply pending migrations |
@@ -508,6 +510,74 @@ persists.
 § 1.4, and the PRD's promise that no session can reach another user's rows. It
 runs against the real tables. Treat a failure there as a release blocker, and
 check the run said **passed** rather than **skipped** before trusting it.
+
+### Visual baselines
+
+`npm run test:visual` photographs the seven screens at four widths in both
+themes — 56 PNGs, committed under `tests/visual/__screenshots__/`, compared
+pixel by pixel against the next run. Testing Strategy § 2.3.
+
+```bash
+npm run test:visual            # compare against the committed baselines
+npm run test:visual:update     # rewrite them
+```
+
+**Updating them is a deliberate act.** `--update-snapshots` overwrites the
+reference with whatever the app currently draws, so a run made to "get the suite
+green" launders a regression into the baseline. Reference the update run in the
+pull request description — that is the convention § 2.3 asks for, and it is the
+only thing standing between a considered redesign and an accidental one.
+
+#### What the run does
+
+1. Builds the app and starts it on port **3100** — never `next dev`, which exits
+   0 pointing at an already-running instance and would make a green run
+   meaningless. The build happens inside the same command, so the binary being
+   photographed is the working tree's.
+2. Points `DATABASE_URL` at **`DATABASE_URL_TEST`** for that server only, then
+   empties the branch and provisions one demo account through the real
+   "Try the demo" button. It refuses to start without `DATABASE_URL_TEST`: a run
+   that fell back to `DATABASE_URL` would write ~200 rows into the live
+   database, which is one value in Vercel serving all three environments.
+3. Freezes the server's clock to **Wednesday 17 June 2026, 18:54 BST**.
+
+Expect roughly two to three minutes, most of it the build.
+
+#### Why the clock is frozen
+
+The demo's history is generated relative to now, so an unfrozen suite fails
+every morning — and not merely in its labels. A Wednesday run and a Saturday run
+put the week grid's today column in a different place, the day ruler's NOW mark
+in a different place, and a different twelve weeks in the weight chart. Masking
+the dates would hide the text and leave the geometry drifting.
+
+`tests/visual/freeze-clock.mjs` pins the clock for the server process, and the
+specs pin the browser's to the same instant. It works because
+`src/lib/seed/history.ts` calls no `Math.random()` — every value it generates is
+a pure function of the date, so holding the date still makes the whole demo
+library byte-identical between runs.
+
+#### What this does *not* cover
+
+- **CI.** Nothing runs this automatically. Wiring it up is FUEL-51; until then it
+  is enforced by whoever remembers to run it, exactly like `test:coverage`.
+- **Other machines.** There is no webfont — `--font-sans` is a system stack — so
+  text is rasterised with whatever fontconfig resolves locally. The committed
+  baselines were taken on Linux and a macOS run will fail against every one of
+  them. That failure is deliberate: `{platform}` is kept out of the snapshot path
+  so an unfamiliar machine cannot quietly write its own set and report green.
+  FUEL-51 pinning a container is what fixes this properly.
+- **Three of the Brand Guide's seven screens.** The meal picker sheet, the meal
+  detail and the day-complete summary are states rather than addresses. The seven
+  routes covered here are the ones FUEL-77 and FUEL-78 recompose; FUEL-48's flow
+  specs are where the three states get theirs.
+- **The 1024–1271px band**, where the rail has appeared but the frame is still
+  fluid. Four widths, five bands.
+- **Sticky positioning.** These are full-page captures, so a sticky bar is drawn
+  at its resting place rather than pinned.
+
+`tests/e2e/` is the other half of the harness and is FUEL-48's — see the README
+in that directory.
 
 ## Export
 
