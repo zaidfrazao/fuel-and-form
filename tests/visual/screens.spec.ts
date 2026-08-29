@@ -59,6 +59,42 @@ for (const screen of SCREENS) {
     await page.evaluate(() => document.fonts.ready);
 
     /**
+     * Wait for the document to stop growing before capturing it.
+     *
+     * `fullPage` asks the browser for the whole scroll height, and that number is
+     * not final the moment `<main>` becomes visible. `/plan/template` at 1920
+     * caught this on `main`: one frame came back 1920×1120 — the viewport plus a
+     * notice band — where the settled page is 1920×2776. The *content* in that
+     * frame was correct and the final capture matched the baseline byte for
+     * byte; only the height Playwright measured was wrong, so it could not find
+     * two consecutive stable frames and timed out.
+     *
+     * It surfaced on a fast run rather than a slow one, which is what makes this
+     * worth an explicit wait rather than a longer timeout: on a quiet machine the
+     * capture starts sooner and is more likely to beat the layout, so the
+     * failure gets *more* likely as the machine gets better.
+     *
+     * Three matching samples at 100ms is 300ms of a genuinely stationary height.
+     */
+    await page.waitForFunction(
+      () => {
+        const store = window as unknown as { __h?: number; __same?: number };
+        const height = document.documentElement.scrollHeight;
+
+        if (store.__h === height) {
+          store.__same = (store.__same ?? 0) + 1;
+        } else {
+          store.__h = height;
+          store.__same = 0;
+        }
+
+        return (store.__same ?? 0) >= 3;
+      },
+      undefined,
+      { polling: 100, timeout: 15_000 },
+    );
+
+    /**
      * `fullPage`, because this milestone is about composition — what gains a
      * column, what stays at the measure, what the frame does with the width left
      * over — and half of that is below the fold at 375px.
@@ -69,6 +105,12 @@ for (const screen of SCREENS) {
      * it are where the sticky behaviour is unchanged and already covered by the
      * unit suite's DOM assertions.
      */
-    await expect(page).toHaveScreenshot(`${slug}.png`, { fullPage: true });
+    /**
+     * 15s rather than the default 5s, for the stability comparison rather than
+     * for a slow page. `toHaveScreenshot` captures repeatedly until two
+     * consecutive frames match; the height wait above makes an unstable frame
+     * unlikely, and this keeps one from failing the run outright.
+     */
+    await expect(page).toHaveScreenshot(`${slug}.png`, { fullPage: true, timeout: 15_000 });
   });
 }
