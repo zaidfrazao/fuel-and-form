@@ -733,7 +733,30 @@ export function WeighIns({
             max={today}
             aria-invalid={problem.date ? true : undefined}
             aria-describedby={problem.date ? "weigh-in-date-error" : undefined}
-            className={field}
+            /*
+             * Its own width rather than the column's — FUEL-74.
+             *
+             * A date is a fixed-length value, not prose. Every other control in
+             * this app that holds one already says so by its size: Weight below
+             * is `w-32`, and `/settings`' seven time inputs are `shrink-0`
+             * against their labels. This field was the last one taking the
+             * measure's width for a value that can never use it, and it did so
+             * by omission — `field` carries no width, so the parent's
+             * `flex-col` stretch decided it.
+             *
+             * 176px is measured rather than chosen. The control's intrinsic
+             * width at § Typography's 17px body is 165px, and 176 is the scale
+             * step above it: enough headroom that a locale spelling the
+             * placeholder differently does not clip, without the width being a
+             * number this file invented. An explicit width rather than `w-fit`
+             * because the intrinsic one is the browser's, and a zero-tolerance
+             * baseline should not rest on something a Chromium release may
+             * revise.
+             *
+             * `h-11` is untouched, so § Touch Targets' 44×44 minimum holds —
+             * the box is 176×44.
+             */
+            className={`${field} w-44`}
           />
           {problem.date && (
             <span id="weigh-in-date-error" role="alert" className="text-slash text-error">
@@ -797,6 +820,17 @@ export function WeighIns({
             maxLength={MAX_NOTE_LENGTH}
             rows={2}
             placeholder="Optional — before breakfast, after the walk"
+            /*
+             * This one keeps the measure, and that is the decision rather than
+             * the leftover — FUEL-74 narrowed the date beside it.
+             *
+             * A note is prose, and the measure is the width § Typography sets
+             * for prose. The rule the date field answers to is that a control
+             * takes the width of the value it holds; this value has no length,
+             * so the column is its size. Written down because a reader who sees
+             * the date shrink will otherwise read this as the change not
+             * finished.
+             */
             className="rounded-md border border-border bg-surface px-3 py-2 text-body text-text-primary outline-none placeholder:text-text-tertiary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           />
         </div>
@@ -826,6 +860,25 @@ export function WeighIns({
             "Log", never "Save" or "Add" — and it is the same word whether the
             date is empty or already has a reading, because the write is the
             same write. */}
+        {/*
+         * `w-full` at every width, desktop included — and FUEL-74 checked this
+         * rather than left it.
+         *
+         * The ticket asked for a narrower primary above 1024px "per § Desktop".
+         * § Desktop has no width rule for a button, and `BRAND_GUIDE.html` —
+         * authoritative at 1272 since FUEL-67 drew the frames — draws this exact
+         * control full-measure: `.dactions` sets no width and `.btn` is
+         * `width: 100%`, in markup identical to the 375px frame's. The mock
+         * marks the buttons that do NOT fill with an explicit `width:auto`, so
+         * the silence here is a decision and not an omission.
+         *
+         * The ticket's evidence — "584px of button" — measures something else.
+         * `page-main.tsx` is `max-w-[640px]` with `px-[22px] md:px-7`, so the
+         * measure is charged twice and the content is 640 − 56. That is the
+         * fault § Desktop names and FUEL-71 fixed for `/plan` alone; the button
+         * is not too wide, the column is too narrow. Left to FUEL-77/78, which
+         * own the other six screens.
+         */}
         <Button className="w-full" onClick={log}>
           Log weigh-in
         </Button>
