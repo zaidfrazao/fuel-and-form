@@ -44,10 +44,15 @@ import { weekTotals } from "@/lib/week-totals";
  * rule outright. FUEL-71 withdrew that: neither shape scrolls sideways at any
  * width from 320 to 1920. What replaced it is one measured case rather than a
  * blanket permission — under TEXT-ONLY 200%, where the root font size doubles
- * and the `px` boxes do not follow, the wide shape overflows by 27px at 820 and
- * 18px at 1024, because a fixed table cannot grow its 100px slot column to the
- * 179px "Breakfast" then needs. Ordinary browser zoom scales the boxes too and
- * is therefore just a narrower viewport, where nothing overflows at all.
+ * and the `px` boxes do not follow, the wide shape still overflows by 13px at
+ * 768 and 6px at 820. None at 1024 and above. Ordinary browser zoom scales the
+ * boxes too and is therefore just a narrower viewport, where nothing overflows
+ * at all.
+ *
+ * `break-words` on the labels is most of why that residue is small: a fixed
+ * table cannot grow its 100px slot column to the 179px "Breakfast" needs at
+ * 200%, so the word wraps inside the column instead of forcing the table wide.
+ * Without it the same measurement was 27px at 820 and 18px at 1024.
  *
  * What survives the rotation is the association: the stacked shape makes the
  * day a `<th scope="rowgroup">` and keeps the slot a `<th scope="row">`, so the
@@ -251,10 +256,18 @@ function GridButton({
           label already says it, and saying it twice is worse than not at all. */}
       <span
         aria-hidden="true"
+        // `break-words` because neither shape can grow. Both tables are
+        // `table-fixed` now, so a token wider than the column no longer widens
+        // it — it spills over the hairline into the next day. The margin is
+        // thin rather than theoretical: at 768px the day column is 87.4px, or
+        // 67.4px of content, and "Peppercorn" already renders at 64.6px. This
+        // wraps the word instead, which is what § The Week, Two Ways specifies
+        // ("Column width, wraps") and is still not a truncation — the rule the
+        // whole two-shape design exists to keep.
         className={
           cell.meal
-            ? "text-slash font-medium text-text-primary"
-            : "text-slash text-text-tertiary"
+            ? "text-slash font-medium break-words text-text-primary"
+            : "text-slash break-words text-text-tertiary"
         }
       >
         {cell.meal ? cell.meal.name : "Not planned"}
@@ -603,7 +616,7 @@ function WeekTable({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
             <tr key={slot}>
               <th
                 scope="row"
-                className="sticky left-0 z-10 border-b border-border bg-surface px-2.5 py-2 align-middle text-micro font-semibold uppercase text-text-secondary"
+                className="sticky left-0 z-10 border-b border-border bg-surface px-2.5 py-2 align-middle text-micro font-semibold uppercase break-words text-text-secondary"
               >
                 {slotLabel(slot)}
               </th>
