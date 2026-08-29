@@ -232,6 +232,8 @@ Playwright screenshots at **375, 820, 1272 and 1920px**, light and dark, for the
 - **Sticky positioning.** Full-page captures draw a sticky bar at its resting place, not pinned.
 - **Any machine but the one that took them.** There is no webfont, so glyphs are rasterised through the local fontconfig. The committed set is from Linux; a macOS run fails against all 56. `{platform}` is deliberately absent from the snapshot path, so that such a run fails loudly instead of writing its own set and reporting green.
 
+**The suite also measures, and `npm run test:visual` is therefore 60 tests rather than 57** — the 56 baselines and the demo-provisioning setup project, plus three. FUEL-70 added `tests/visual/frame.spec.ts` and a Playwright project of its own for it: three assertions about where boxes land — the notice band and the content column sharing a centre at 1024, 1280, 1440 and 1920; the rail-to-content gap being the frame's 28px gutter rather than leftover space; and `/plan` putting nothing off the right edge at 1024. They belong beside the baselines because they need the same server, the same frozen clock and the same demo session, and they are separate from them because a screenshot reports a fault as "some pixels differ" where § Desktop states its requirements as numbers. It carries no baseline of its own, so it is not part of an `--update-snapshots` run.
+
 **Not in CI.** Nothing runs this automatically — that is § 2.4 and FUEL-51. Until then it is enforced by whoever runs it, like the coverage gate.
 
 **Determinism is the whole of the work.** The demo's history is generated relative to now, so an unfrozen suite fails every morning — structurally, not just in its labels: the week grid's today column, the day ruler's NOW mark and the weight chart's twelve weeks all move. The server's clock is frozen to Wednesday 17 June 2026, 18:54 BST (`tests/visual/freeze-clock.mjs`) and the browser's to the same instant. That produces identical pixels only because `src/lib/seed/history.ts` calls no `Math.random()` — if that ever changes, these baselines start flapping and that is the first place to look.
@@ -320,6 +322,7 @@ No real credentials in any test file. The owner test password comes from a `.env
 
 ## Document History
 
+- **Updated:** 2026-08-29 — § 2.3 gains the frame measurements (FUEL-70), which take `test:visual` from 57 tests to 60.
 - **Updated:** 2026-08-19 — added § 1.6 (`lib/repeat.ts`) during FUEL-24, and renumbered the Tier 1 gate to § 1.7.
 - **Created:** 2026-08-10
 - **Derived from:** `docs/PRD.md` (2026-08-10), `docs/BRAND_GUIDE.md` v3 (2026-08-10)
