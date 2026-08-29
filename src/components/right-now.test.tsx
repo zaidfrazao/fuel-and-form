@@ -1185,12 +1185,23 @@ describe("the actions", () => {
     // the bar runs out instead of being cut through the x-height. The class
     // carrying it is asserted with the rest, and `action-bar.test.tsx` owns
     // what it does.
+    //
+    // "Pinned to the bottom" was written as `toContain("bottom-0")` until
+    // FUEL-72, and it was checking the wrong class the whole time. The phone's
+    // offset is not 0 and has not been since FUEL-65 — it is the shell's height
+    // — so the only `bottom-0` in the string was `lg:bottom-0`, the DESKTOP
+    // release. The line labelled "pinned" passed on the class whose entire job
+    // was to stop pinning it, and would have gone on passing if the phone's
+    // offset had been deleted. Matched by shape now: what this test can claim is
+    // that the bar carries an inset at all. The value is barred from this file
+    // by `action-bar.test.tsx`'s scan, which is where it belongs and where the
+    // number is checked.
     const { container } = renderNow(active(0));
 
     const bar = container.querySelector('[data-variant="default"]')?.parentElement;
 
     expect(bar?.className).toContain("sticky");
-    expect(bar?.className).toContain("bottom-0");
+    expect(bar?.className).toMatch(/(?<!lg:)bottom-\[/);
     expect(bar?.className).toContain("mt-auto");
     expect(bar?.className).toContain("bg-background");
     expect(bar?.className).toContain("action-bar-fade");
