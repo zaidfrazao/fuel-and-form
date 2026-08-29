@@ -161,6 +161,19 @@ export default defineConfig({
       dependencies: ["setup"],
       use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
     },
+    /**
+     * The action bar across the `lg` breakpoint — FUEL-72, and a project for the
+     * same reason `frame` is one. It asks where a control sits relative to the
+     * content beneath it, which has no theme; and it sets its own viewport per
+     * assertion, including 1023, 1024 and 1440 — three widths the `screens`
+     * matrix does not have and would not gain by running this eight times.
+     */
+    {
+      name: "action-bar",
+      testMatch: /action-bar\.spec\.ts/,
+      dependencies: ["setup"],
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+    },
     ...screens,
   ],
 
