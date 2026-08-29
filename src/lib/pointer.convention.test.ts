@@ -64,8 +64,15 @@ const ALLOWED = new Map([
     "group-hover:border-text-secondary",
     "The mock's `.cbx:hover { border-color: var(--text-2) }` — the shopping " +
       "row's tick box darkening its edge while the row it sits in takes the " +
-      "ground. `peer-checked:border-ink` outranks it, so a ticked box keeps " +
-      "its ink edge under the pointer.",
+      "ground.",
+  ],
+  [
+    "peer-checked:group-hover:border-ink",
+    "A ticked box keeping its ink edge under the pointer. A compound rather " +
+      "than a reliance on `peer-checked:` outranking `group-hover:`, which it " +
+      "does not: Tailwind wraps both variants' arguments in `:where()`, so " +
+      "the two compile to equal specificity and only emission order separates " +
+      "them. Two `:is()`es settle it on specificity instead.",
   ],
 ]);
 
@@ -156,7 +163,18 @@ describe("the scan can fail", () => {
    * returns nothing. So the scan is shown to see real code first.
    */
   test("it reads the source files", () => {
-    expect(SOURCES.length).toBeGreaterThan(50);
+    /*
+     * Named rather than counted. A floor like "more than fifty files" guards
+     * the same thing but fails on a legitimate reorganisation, and a guard that
+     * fails for reasons unrelated to what it guards is one people learn to
+     * weaken. Asserting that a file which certainly carries controls is in the
+     * scan says the walk reached the real source tree, and stays true however
+     * the rest of it is arranged.
+     */
+    const scanned = SOURCES.map(({ rel }) => rel);
+
+    expect(scanned).toContain(join("components", "ui", "button.tsx"));
+    expect(scanned).toContain(join("components", "nav-shell.tsx"));
   });
 
   test("it finds the allowlisted literals, and would find an unlisted one", () => {

@@ -187,7 +187,10 @@ describe("the states emit the declarations § Desktop specifies", () => {
   test("a link darkens its text and brings the underline with it", async () => {
     const css = await build(utilities(HOVER_LINK));
     expect(css).toContain("color: var(--text-primary)");
-    expect(css).toContain("text-decoration-color: currentcolor");
+    // Case-insensitive: the CSS-wide keyword is `currentColor` and serializers
+    // differ on how they fold it. The assertion is about the declaration, not
+    // about which of the two spellings this version of the compiler emits.
+    expect(css).toMatch(/text-decoration-color:\s*currentcolor/i);
   });
 
   test("every control that is not an `<a href>` gets the cursor", async () => {

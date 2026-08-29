@@ -125,6 +125,17 @@ function Row({
        * not a second ground, which on a row already grounded would be `surface`
        * over `surface` — "a control that does not answer".
        *
+       * A ticked box keeps its ink edge under the pointer, and the compound
+       * `peer-checked:group-hover:` is what makes that a rule rather than a
+       * coincidence. The obvious reading is that `peer-checked:` simply
+       * outranks `group-hover:`, and it does not: Tailwind v4 compiles both to
+       * a single class plus one `:is()` whose argument is wrapped in
+       * `:where()`, so `.peer` and `.group` contribute nothing and the two land
+       * on the same specificity. Today the ink wins only because Tailwind emits
+       * `peer-checked` second. The compound carries two `:is()`es and wins on
+       * specificity instead, so a change to the variant sort order cannot turn
+       * a ticked box grey.
+       *
        * `cursor-pointer` was the app's ONLY one before FUEL-75, and it was
        * already here rather than anywhere it was needed. It is now the constant
        * every other control uses.
@@ -159,7 +170,7 @@ function Row({
           // SIBLING combinator, and the svg is a CHILD of this span rather than
           // a sibling of the input, so `peer-checked:opacity-100` on it would
           // never match and the box would fill with an invisible tick in it.
-          className={`mt-[2.5px] flex size-[18px] shrink-0 items-center justify-center rounded-[4px] border border-border [&>svg]:opacity-0 group-hover:border-text-secondary peer-checked:border-ink peer-checked:bg-ink peer-checked:[&>svg]:opacity-100 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}
+          className={`mt-[2.5px] flex size-[18px] shrink-0 items-center justify-center rounded-[4px] border border-border [&>svg]:opacity-0 group-hover:border-text-secondary peer-checked:border-ink peer-checked:group-hover:border-ink peer-checked:bg-ink peer-checked:[&>svg]:opacity-100 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}
         >
           <svg viewBox="0 0 12 12" className="size-[10px] text-ink-fg">
             <path

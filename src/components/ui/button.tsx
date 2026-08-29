@@ -10,6 +10,19 @@ import { cn } from "@/lib/utils"
  * override 4: `default` is an ink fill, never the accent — the accent means
  * "now" and is not an action colour. `secondary` is outlined, not filled.
  *
+ * ## A disabled button does not need a `cursor` of its own
+ *
+ * The base string sets `cursor-pointer` unconditionally, `disabled:` included,
+ * and that is correct rather than an oversight: `disabled:pointer-events-none`
+ * takes the element out of hit-testing, so it is never what the pointer is
+ * over and its own `cursor` is never consulted. Measured rather than reasoned
+ * — with a disabled button under the pointer, `elementFromPoint` returns the
+ * PARENT and the cursor drawn is the parent's `default`, while the button's
+ * computed style still reads `pointer`. That gap is why the question keeps
+ * getting asked: reading the class list, or the computed style, suggests a bug
+ * that the browser does not have. A `disabled:cursor-*` override would be a
+ * class that can never apply.
+ *
  * The guide couples height to variant (Primary 52px, everything else 46px),
  * but the height classes have to live on `size`: cva emits variant classes
  * before size classes, so a height set on the variant loses every twMerge
