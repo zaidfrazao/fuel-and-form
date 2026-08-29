@@ -44,11 +44,13 @@ import { FRAME, FRAME_RAIL } from "@/lib/frame";
  *
  * ## The shell is `<main>`'s sibling, and the bars clear it by its own height
  *
- * `/`'s action bar and `/training`'s are `sticky` inside `<main>`, and the shell
- * is main's SIBLING rather than its child. That sibling relationship was once
- * the whole resolution to the collision between them: a sticky box is clamped to
- * its own parent, so a bar at `bottom: 0` could only reach main's bottom edge,
- * which was exactly where the shell began.
+ * `/`'s action bar and `/training`'s are `sticky` inside `<main>` below 1024px —
+ * FUEL-72 releases them above it, and everything in this section is about the
+ * widths where they are still pinned — and the shell is main's SIBLING rather
+ * than its child. That sibling relationship was once the whole resolution to the
+ * collision between them: a sticky box is clamped to its own parent, so a bar at
+ * `bottom: 0` could only reach main's bottom edge, which was exactly where the
+ * shell began.
  *
  * FUEL-65 pinned the shell to the viewport below `lg`, which ends that: a shell
  * that floats up over the page reaches the strip the bars occupy. The sibling
@@ -62,6 +64,13 @@ import { FRAME, FRAME_RAIL } from "@/lib/frame";
  * push it to the bottom of a short page either way, but a content-sized `<main>`
  * ends above the fold, and the bar clamped to it ends there too — detached from
  * the bottom third, floating in the middle of the screen with a gap beneath.
+ *
+ * `flex-1` is the one line in this section that outlived the pinning. FUEL-72's
+ * desktop bar is `static` and lands wherever `mt-auto` puts it, which is the
+ * foot of THIS box — so a content-sized `<main>` would strand it mid-screen at
+ * 1920 exactly as it once did at 375, with no thumb-reach argument left to
+ * explain what went wrong. The bar stopped needing a bottom to stick to; it did
+ * not stop needing a bottom.
  *
  * ## Desktop: the same nav, reordered rather than re-rendered
  *

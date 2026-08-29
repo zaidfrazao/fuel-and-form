@@ -410,6 +410,15 @@ function Anytime({
  * The action bar — § Touch Targets: "primary actions sit in the bottom third,
  * within thumb reach".
  *
+ * Everything under that heading is a phone's, and since FUEL-72 it is scoped to
+ * one: below 1024px the bar is pinned, for the reasons argued at length below.
+ * At and above it the bar is `static` and sits at the end of its column, because
+ * § Desktop's carry-over rule retires the sentence this section is built on — a
+ * mobile decision carries to desktop unless its written rationale names the
+ * phone, and "within thumb reach" names it. `action-bar.ts` carries that half.
+ * The 44×44 minimum in the same section names no posture, so it carries and the
+ * primary below is the same 52px at every width.
+ *
  * ## Sticky as well as `mt-auto`, because `mt-auto` alone was not enough
  *
  * `mt-auto` on a `min-h-dvh` column puts the bar at the foot of the viewport
@@ -446,9 +455,14 @@ function Anytime({
  * instead, the shell's own height, declared once in globals.css and read here
  * and in `training.tsx` and `loading.tsx`.
  *
- * `lg:bottom-0` because above 1024px the shell is a sidebar to the left and
- * there is nothing under this bar to clear. Offsetting there would float it
- * 86px off the foot of a desktop window for no reason.
+ * That offset is the phone's problem and it ends where the phone does. Above
+ * 1024px the shell is a sidebar to the left, so there is nothing under this bar
+ * to clear — but the answer to that is not a different offset. `lg:bottom-0` was
+ * written here first and was one: it released the shell's height while leaving
+ * the bar pinned, which at 1440×900 held the bottom ~130px of the viewport over
+ * content nobody could then read. FUEL-72 released the pinning instead —
+ * `lg:static`, in `action-bar.ts` — and the inset above goes inert with it,
+ * since an inset does nothing to a static box.
  *
  * Swap is offered for a meal and not for a session: a swap substitutes one meal
  * for another from the library (PRD § P2), and there is no equivalent for a
@@ -632,10 +646,18 @@ function SwapNote({
  * overflow. This fills what is left instead. The argument for the DYNAMIC unit
  * over `100vh` moved to the layout with the class that acts on it.
  *
- * `flex-1` and not merely `flex` — `Actions` below is `sticky bottom-0 mt-auto`
+ * `flex-1` and not merely `flex` — `Actions` below is pinned and `mt-auto`
  * inside this box, and a content-sized `<main>` on a short day ends above the
  * fold with the bar clamped to it, floating mid-screen instead of in the thumb's
  * reach.
+ *
+ * That is still the argument at ≥1024px, where FUEL-72 unpinned the bar, and it
+ * is the reason unpinning it was not the same as untethering it. `mt-auto` is
+ * unscoped: it puts the bar at the foot of this box on a short day at every
+ * width. What `flex-1` decides is where that foot is — the bottom of the screen
+ * rather than the bottom of the content. Drop it and the desktop bar lands mid-
+ * screen with a gap beneath, which is the phone's old failure with no thumb to
+ * explain it.
  *
  * The bottom gutter is not here and is not on the action bar either — it is on
  * the § Navigation shell, which sits below this column and is the only thing

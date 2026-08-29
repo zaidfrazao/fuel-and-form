@@ -547,10 +547,11 @@ export function Training({
 
       {/*
        * § Touch Targets: "primary actions sit in the bottom third, within thumb
-       * reach". `sticky` on a `mt-auto` box keeps the bar inside the viewport
-       * while the exercise list is long, and lets it settle at the end of the
-       * column when it is not — `right-now.tsx` carries the measurement that
-       * made this necessary rather than tidy. The safe-area inset is NOT here:
+       * reach" — below 1024px, which is the width that sentence is about.
+       * `sticky` on a `mt-auto` box keeps the bar inside the viewport while the
+       * exercise list is long, and lets it settle at the end of the column when
+       * it is not — `right-now.tsx` carries the measurement that made this
+       * necessary rather than tidy. The safe-area inset is NOT here:
        * FUEL-58 moved it to the § Navigation shell, which is the last thing in
        * the page column and the only one with the home indicator beneath it.
        *
@@ -562,9 +563,19 @@ export function Training({
        * FUEL-83 gave the three one class string in `action-bar.ts` rather than
        * three copies kept in step by hand.
        *
+       * At ≥1024px it stops at nothing, because it is no longer pinned at all —
+       * FUEL-72, `lg:static`, and `action-bar.ts` carries the argument. This is
+       * the screen that argument was measured on: at 1440×900 the pinned bar
+       * held the bottom ~130px of the viewport in opaque `bg-background`, and
+       * what it covered was the Recent list a dozen lines above, permanently and
+       * mid-row. Released, the bar falls where the DOM already puts it — after
+       * Recent — so the list ends above it rather than behind it.
+       *
        * This screen is where the edge that string's `action-bar-fade` exists to
-       * fix was measured: at 375×667 the bar's top landed through the x-height
-       * of the first exercise's prescription. See globals.css.
+       * fix was measured too: at 375×667 the bar's top landed through the
+       * x-height of the first exercise's prescription. See globals.css — and
+       * note that the rule is scoped below `lg` for the reason above, since a
+       * bar with nothing passing under it has no edge to soften.
        */}
       {session ? (
         <div className={APP_ACTION_BAR}>

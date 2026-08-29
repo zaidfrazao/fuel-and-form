@@ -78,7 +78,14 @@ export default function Loading() {
           bar cleared `--nav-shell-h` would put its primary 86px lower and the
           swap-in would jump. FUEL-83 made it the same string: `APP_ACTION_BAR`,
           which both take, so the two cannot disagree about the pinning or about
-          the fade over the bar's top. */}
+          the fade over the bar's top.
+
+          FUEL-72 is what that mechanism was for. It unpinned the bar at ≥1024px
+          — `lg:static` — and this skeleton needed the change as much as the real
+          bar did, since a skeleton still pinned to the viewport while the bar it
+          stands in for sat at the end of its column would jump by whatever the
+          two were apart. Nothing was edited here to get that: the release is in
+          the shared string, so the skeleton took it by taking the string. */}
       <div
         aria-hidden
         className={APP_ACTION_BAR}

@@ -78,8 +78,54 @@ describe("no second copy of the string", () => {
     // the frame. That is the one difference between the four, and it is a
     // difference in what is ADDED — the specimen cannot drift in the parts it
     // shares without this failing.
-    expect(APP_ACTION_BAR).toBe(`${ACTION_BAR} lg:bottom-0`);
+    expect(APP_ACTION_BAR).toBe(`${ACTION_BAR} lg:static`);
     expect(ACTION_BAR).not.toContain("lg:");
+  });
+});
+
+describe("the desktop release — FUEL-72", () => {
+  /**
+   * The half of this string no test could see, and the reason it gets a block
+   * rather than a line.
+   *
+   * `right-now.test.tsx` asserts the bar `toContain("sticky")`, which is true
+   * and stayed true through this change: `sticky` is the shared base and the
+   * release is a variant on top of it. So the suite that looks most like it is
+   * checking the pinning is checking only the phone's half, and would have gone
+   * on passing if the desktop half were reverted, dropped, or never written.
+   *
+   * jsdom applies no stylesheet, so nothing here can observe a media query — the
+   * measurement lives in `tests/visual/action-bar.spec.ts`, which drives a real
+   * browser across the breakpoint. What this block holds is the contract that
+   * spec is measuring: the string says `static` at `lg`, and says it in a form
+   * that cannot be satisfied by re-offsetting a box that is still pinned.
+   */
+  test("is `lg:static`, so the bar stops being positioned at all", () => {
+    // Brand Guide § Desktop: "The primary action sits at the end of its column."
+    // A column position is what `static` means; every other value keeps the bar
+    // in a layer of its own with the page running underneath it.
+    expect(APP_ACTION_BAR).toContain("lg:static");
+  });
+
+  test("and not a second offset, which is the defect rather than the fix", () => {
+    // `lg:bottom-0` stood here until FUEL-72 and looked like the desktop answer.
+    // It is not: it releases the SHELL's offset — real below `lg`, which is what
+    // `--nav-shell-h` is for — while leaving the bar pinned, so at 1440×900 it
+    // still held the bottom ~130px of the viewport over `/training`'s Recent
+    // list. Anything of the shape `lg:bottom-*` is that mistake returning, so it
+    // is barred by shape rather than by the one value that was there.
+    expect(APP_ACTION_BAR).not.toMatch(/\blg:bottom-/);
+  });
+
+  test("while `mt-auto` stays, so a short page does not strand it mid-screen", () => {
+    // Released and un-pushed are different bugs with the same look. `mt-auto` is
+    // what puts the bar at the foot of `<main>` when the content does not reach
+    // it — `app/(app)/layout.tsx` bought `flex-1` for the same sentence — and it
+    // is NOT scoped to a width. Asserted here because the natural way to write
+    // this change is to strip the phone's positioning wholesale and take this
+    // with it.
+    expect(ACTION_BAR).toContain("mt-auto");
+    expect(APP_ACTION_BAR).not.toMatch(/\blg:mt-/);
   });
 });
 
