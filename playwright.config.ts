@@ -195,6 +195,19 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
     },
     /**
+     * The weight chart's type scale — FUEL-76, and a project for the reason the
+     * three above are. It asks whether a font-size, a stroke and a disc stay the
+     * size they are declared at while the column around them grows, which has no
+     * theme and wants one browser resizing itself rather than eight each seeing
+     * one width.
+     */
+    {
+      name: "chart-scale",
+      testMatch: /chart-scale\.spec\.ts/,
+      dependencies: ["setup"],
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+    },
+    /**
      * The pointer states — FUEL-75. Two projects rather than eight, and rather
      * than one.
      *
