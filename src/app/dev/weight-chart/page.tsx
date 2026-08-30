@@ -21,6 +21,19 @@ import type { Reading } from "@/lib/weight-chart";
  * otherwise divide by zero, which is the whole reason `lib/weight-chart.ts`
  * exists as its own module.
  *
+ * ## The widths, added by FUEL-76
+ *
+ * Every fixture below is boxed at 331px — 375px less § Spacing & Layout's
+ * gutters — which is the width FUEL-35's criterion names and also the width at
+ * which this specimen could not show FUEL-76's fault at all: the viewBox is 320
+ * units, so at 331px it is drawn at 1.03× and everything in it is very nearly
+ * the size it says it is. The bug was a desktop bug and the specimen was a phone
+ * specimen, which is why it survived a browser check.
+ *
+ * So the first section is the same chart at four column widths. What to look at
+ * is not the chart, which is meant to change — it is the labels, the trend and
+ * the umber mark, which are not. They should be the same size in all four.
+ *
  * Not a product screen. Delete it once `/weight` covers the same ground, as with
  * /dev/tokens, /dev/day-ruler and /dev/dot-grid.
  */
@@ -47,6 +60,20 @@ function weekly(weights: number[], from = "2026-08-17"): Reading[] {
   }));
 }
 
+/**
+ * The column widths the chart is drawn at, and where each comes from.
+ *
+ * 331 is the phone's content width; 584 is the 640px measure less `main`'s
+ * gutters, which is the column FUEL-76 measured its 1.825× scale factor in; 640
+ * is the measure itself, for the screens that bleed; 1272 is § Desktop's frame,
+ * far wider than the chart is ever given and here as the case that would show
+ * any drift soonest.
+ */
+const WIDTHS = [331, 584, 640, 1272] as const;
+
+/** The ordinary case, shared with the fixture list below so the two agree. */
+const SCALE_FIXTURE = weekly([84.2, 83.6, 83.1, 82.4, 82.6, 81.9, 81.6, 81.2, 80.9, 80.4, 80.1, 79.6]);
+
 const CASES: {
   label: string;
   note: string;
@@ -64,7 +91,7 @@ const CASES: {
   {
     label: "Twelve weeks",
     note: "The ordinary case, and the one the demo persona renders. Narrow to 375px: the trend, both reference labels and the two date labels must all still be readable.",
-    entries: weekly([84.2, 83.6, 83.1, 82.4, 82.6, 81.9, 81.6, 81.2, 80.9, 80.4, 80.1, 79.6]),
+    entries: SCALE_FIXTURE,
   },
   {
     label: "One reading",
@@ -145,6 +172,42 @@ export default function WeightChartSpecimen() {
         </p>
         <ThemeToggle />
       </header>
+
+      {/* FUEL-76. Wider than the specimen's own measure on purpose: the 1272px
+          case is drawn inside a horizontally scrolling strip so the page itself
+          does not scroll sideways, which § Accessibility forbids and which the
+          200% zoom check at the top of this page is about. */}
+      <section className="flex flex-col gap-[14px]">
+        <span className="flex flex-col gap-1">
+          <span className="text-micro text-text-tertiary uppercase">
+            One chart, four column widths
+          </span>
+          <span className="text-slash text-text-secondary">
+            / FUEL-76. The plot fills each column; the labels, the trend and the
+            umber mark do not grow with it. Measure the Micro labels in all four:
+            10.5px in every one. Before FUEL-76 the last of them painted at 41px.
+          </span>
+        </span>
+        <div className="overflow-x-auto">
+          <ul className="flex w-max flex-col gap-[22px]">
+            {WIDTHS.map((width) => (
+              <li key={width} className="flex flex-col gap-1">
+                <span className="text-micro text-text-tertiary uppercase">
+                  {width}px
+                </span>
+                <div style={{ width }}>
+                  <WeightChart
+                    entries={SCALE_FIXTURE}
+                    today={TODAY}
+                    startWeightKg={START_KG}
+                    targetWeightKg={TARGET_KG}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
 
       <ul className="flex flex-col gap-[30px]">
         {CASES.map(({ label, note, entries, startWeightKg, targetWeightKg }) => (

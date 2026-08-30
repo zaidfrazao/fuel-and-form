@@ -410,9 +410,12 @@ describe("the reference lines", () => {
       node.textContent?.startsWith("Start"),
     );
 
-    // Below its own rule, and inside the box either way — which is the claim
-    // that actually matters, since a negative baseline is the clipped case.
-    expect(Number(start?.getAttribute("y"))).toBeGreaterThan(0);
+    // The rule's own height, as a percentage of the box, and then a positive
+    // offset from it: a `dy` below the baseline is the flip, and a negative one
+    // would be the lift that gets clipped. Since FUEL-76 the two are in separate
+    // attributes because they are in separate units — see `labelOffset`.
+    expect(start?.getAttribute("y")).toMatch(/^\d+(\.\d+)?%$/);
+    expect(Number(start?.getAttribute("dy"))).toBeGreaterThan(0);
   });
 
   /**
@@ -494,6 +497,136 @@ describe("the edge states", () => {
 });
 
 /**
+ * FUEL-76 — the type scale does not inflate with the column.
+ *
+ * The chart's viewBox scales with its container, and everything drawn inside it
+ * used to scale too: on a 584px column the factor is 1.825, so the 10.5px Micro
+ * labels painted at 19.2px — larger than Body, on a screen whose § Typography
+ * opens with "the ratio is the rule". The fix is structural rather than a set of
+ * numbers, so it is tested structurally: the words and the mark are drawn in a
+ * layer that has no viewBox to scale them, and they are positioned in
+ * percentages so they still land on the geometry that does scale.
+ *
+ * The pixel claims themselves — 10.5px at 375, 1280 and 1920 — are measured in
+ * `tests/visual/chart-scale.spec.ts`, because jsdom applies no CSS and lays
+ * nothing out. What is asserted here is the structure those measurements depend
+ * on, which is the part a later edit could quietly undo.
+ */
+describe("the two layers", () => {
+  /** Every word on the chart, wherever it is drawn. */
+  function words(container: HTMLElement) {
+    return [...container.querySelectorAll("text")];
+  }
+
+  test("the words and the mark are drawn in a layer with nothing to scale them", () => {
+    const { container } = draw();
+
+    const unscaled = [...words(container), container.querySelector("circle")].map(
+      (node) => node?.closest("svg"),
+    );
+
+    expect(unscaled.length).toBeGreaterThan(1);
+    for (const layer of unscaled) {
+      // No viewBox is the whole claim: the layer's user units are CSS pixels, so
+      // a 10.5px label is 10.5px and a 4px disc is 4px however wide the column
+      // gets. The geometry's layer has one, which is what lets it scale.
+      expect(layer?.getAttribute("viewBox")).toBeNull();
+    }
+  });
+
+  /**
+   * The layer itself carries the `aria-hidden`, and that is the claim rather
+   * than each word carrying one.
+   *
+   * "No word is read twice" is asserted above by looking for an `aria-hidden`
+   * ancestor on every `<text>`, which a future edit could satisfy by wrapping
+   * the words in an aria-hidden group while leaving the layer around them
+   * exposed — and then anything ADDED to the layer would be read. The layer is
+   * the boundary, so the layer is what is pinned.
+   */
+  test("the unscaled layer is hidden whole, not word by word", () => {
+    const { container } = draw();
+    const layer = container.querySelector("circle")?.closest("svg");
+
+    expect(layer?.getAttribute("viewBox")).toBeNull();
+    expect(layer?.getAttribute("aria-hidden")).toBe("true");
+    // And it is not the layer carrying the summary — that one stays the image.
+    expect(layer?.getAttribute("role")).toBeNull();
+  });
+
+  test("the geometry is still drawn in a layer that does scale", () => {
+    const { container } = draw();
+
+    const geometry = container.querySelector("polyline")?.closest("svg");
+
+    expect(geometry?.getAttribute("viewBox")).toBe("0 0 320 170");
+    // The plate and every rule belong to it too — the shapes ARE the data, and
+    // a chart that stopped filling its column would be a worse bug than the one
+    // FUEL-76 fixed.
+    expect(geometry?.querySelectorAll("line").length).toBeGreaterThan(0);
+    expect(geometry?.querySelector("rect")).not.toBeNull();
+  });
+
+  /**
+   * The unscaled layer would drift off the geometry if it were positioned in
+   * anything but percentages — they are what makes the two agree at every width
+   * without either of them being measured.
+   */
+  test("everything in the unscaled layer is positioned as a percentage", () => {
+    const { container } = draw();
+    const layer = container.querySelector("circle")?.closest("svg");
+
+    const placed = [...(layer?.querySelectorAll("text, circle") ?? [])];
+
+    expect(placed).toHaveLength(5); // Two references, two dates, one mark.
+    for (const node of placed) {
+      for (const attribute of ["x", "y", "cx", "cy"]) {
+        const value = node.getAttribute(attribute);
+        if (value !== null) expect(value).toMatch(/%$/);
+      }
+    }
+  });
+
+  /**
+   * § Data Display gives the mark "a 4px disc with a 2px ring", and those are
+   * the numbers the overlay draws because they are pixels in it. In the scaled
+   * layer the same two numbers painted at 7.3px and 3.65px on a 584px column.
+   */
+  test("the mark is the specified disc and ring", () => {
+    const { container } = draw();
+    const mark = container.querySelector("circle");
+
+    expect(mark?.getAttribute("r")).toBe("4");
+    expect(mark?.getAttribute("stroke-width")).toBe("2");
+  });
+
+  /**
+   * § Materials' hairlines, held to their width at every column width. This was
+   * already true before FUEL-76 and is pinned here because the ticket that fixed
+   * the labels is also the one that would have removed it: a rule drawn at 1 unit
+   * in a box scaled 1.825× is not a hairline, and `vector-effect` is the only
+   * thing standing between the two.
+   */
+  test("every rule is a hairline that does not thicken with the column", () => {
+    const { container } = draw();
+    const rules = [...container.querySelectorAll("line")];
+
+    expect(rules.length).toBeGreaterThan(0);
+    for (const rule of rules) {
+      expect(rule.getAttribute("stroke-width")).toBe("1");
+      expect(rule.getAttribute("vector-effect")).toBe("non-scaling-stroke");
+    }
+  });
+
+  /** § Color Palette's trend line, at the width it is specified at. */
+  test("the trend is drawn at two pixels", () => {
+    const { container } = draw();
+
+    expect(container.querySelector("polyline")?.getAttribute("stroke-width")).toBe("2");
+  });
+});
+
+/**
  * § Animation & Motion and § Accessibility: the chart draws in over 400ms, and
  * `prefers-reduced-motion: reduce` "drops the chart and ruler draw-in".
  *
@@ -524,15 +657,25 @@ describe("the draw-in", () => {
   });
 
   /**
-   * `pathLength="1"` is what makes the draw-in pure CSS: it normalises the
-   * line's length, so a dash of 1 covers it exactly and nothing has to measure
-   * the path in a browser. Without it the animation runs against the line's real
-   * length in user units and reveals a fraction of a percent of it.
+   * The draw-in is a clip wipe, and the two halves of that are asserted
+   * together because neither is safe without the other — FUEL-76.
+   *
+   * `vector-effect="non-scaling-stroke"` is what holds the trend to 2px at every
+   * column width, and it is also what made a dash reveal impossible: under it a
+   * browser normalises `pathLength="1"` against the path in user units and then
+   * paints that as CSS pixels, which on a 584px column covered 55% of the line
+   * and left the trend permanently half-drawn. So `pathLength` is gone, and its
+   * return alongside the vector-effect would be the half-drawn line again.
    */
-  test("the trend line's length is normalised so the dash can cover it", () => {
+  test("the trend is wiped in rather than dashed in, because its stroke does not scale", () => {
     const { container } = draw();
+    const trend = container.querySelector("polyline");
 
-    expect(container.querySelector("polyline")?.getAttribute("pathLength")).toBe("1");
+    expect(trend?.getAttribute("vector-effect")).toBe("non-scaling-stroke");
+    expect(trend?.getAttribute("pathLength")).toBeNull();
+    expect(CSS).toMatch(
+      /@keyframes weight-chart-draw\s*\{[^@]*clip-path:\s*inset\(0 100% 0 0\)/,
+    );
   });
 
   test("globals.css declares the draw-in at the guide's 400ms and easing", () => {
@@ -550,14 +693,14 @@ describe("the draw-in", () => {
    * The specific way suppressing this animation could go wrong, and the reason
    * the reduced-motion block is more than two `animation: none` lines.
    *
-   * The trend carries `stroke-dasharray: 1` so the dash has something to cover;
-   * left in place with the animation gone, the line stays permanently
-   * half-drawn. The mark's animation carries `both`, which without an override
-   * holds it at its `from` opacity of nought — hiding the one mark the chart
-   * has. Suppressing an animation must not remove the thing it was animating.
+   * The trend is revealed by a `clip-path` that starts fully closed; left in
+   * place with the animation gone, the line stays permanently part-drawn. The
+   * mark's animation carries `both`, which without an override holds it at its
+   * `from` opacity of nought — hiding the one mark the chart has. Suppressing an
+   * animation must not remove the thing it was animating.
    */
   test("reduced motion leaves the trend whole and the mark visible", () => {
-    expect(REDUCED).toMatch(/\.weight-chart-trend\s*\{[^}]*stroke-dasharray:\s*none/);
+    expect(REDUCED).toMatch(/\.weight-chart-trend\s*\{[^}]*clip-path:\s*none/);
     expect(REDUCED).toMatch(/\.weight-chart-latest\s*\{[^}]*opacity:\s*1/);
   });
 });

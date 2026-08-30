@@ -310,16 +310,28 @@
  * "does not" list — because an SVG element that React re-renders in place keeps
  * running neither animation twice.
  *
- * `stroke-dashoffset` rather than a clip or a width transition: with
- * `pathLength="1"` on the polyline, the dash units are the line's own normalised
- * length, so one dash of 1 covers it exactly and no measurement of the path is
- * needed at any point. See weight-chart.tsx. */
+ * A `clip-path` wipe rather than a `stroke-dashoffset` one, and FUEL-76 changed
+ * it under protest. The dash was the better mechanism: `pathLength="1"` on the
+ * polyline normalised the line's own length, so one dash of 1 covered it exactly
+ * and nothing measured the path at any point. It stopped working when the trend
+ * took `vector-effect="non-scaling-stroke"` to hold § Color Palette's 2px to 2px
+ * at desktop widths — under it a browser normalises the dash against the path in
+ * USER units and then paints it as that many CSS pixels, so on a 584px column
+ * the full-length dash covered 55% of the line and left the trend permanently
+ * half-drawn. Measured in Chromium and Firefox both; percentage dash arrays fail
+ * the same way, for the same reason.
+ *
+ * The wipe keeps everything the dash was chosen for. No length is involved, so
+ * still nothing measures the path, still no client JavaScript and no `useEffect`
+ * that would run after paint. And it reveals the line left to right, which for a
+ * series whose points are in date order is the same reveal the dash performed —
+ * the line draws in the direction time runs. See weight-chart.tsx. */
 @keyframes weight-chart-draw {
   from {
-    stroke-dashoffset: 1;
+    clip-path: inset(0 100% 0 0);
   }
   to {
-    stroke-dashoffset: 0;
+    clip-path: inset(0 0 0 0);
   }
 }
 
@@ -333,7 +345,6 @@
 }
 
 .weight-chart-trend {
-  stroke-dasharray: 1;
   animation: weight-chart-draw 400ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
@@ -344,13 +355,14 @@
 @media (prefers-reduced-motion: reduce) {
   /* Dropped, not shortened. The guide's word is "drops", and a 1ms draw-in is
      still a draw-in to a vestibular system — the point is that nothing moves.
-     `stroke-dasharray` is reset with it: leaving the dash on a line whose
-     animation no longer runs would leave the trend permanently half-drawn, and
-     `both` on the mark would hold it at its `from` opacity of 0, hiding the one
-     mark the chart has. Suppressing an animation must not remove the thing it
-     was animating. */
+     `clip-path` is reset with it: leaving a clip on a line whose animation no
+     longer runs would leave the trend permanently part-drawn, and `both` on the
+     mark would hold it at its `from` opacity of 0, hiding the one mark the chart
+     has. Suppressing an animation must not remove the thing it was animating —
+     which is the rule the mechanism changed under, and it applies to the clip
+     exactly as it applied to the dash it replaced. */
   .weight-chart-trend {
-    stroke-dasharray: none;
+    clip-path: none;
     animation: none;
   }
 
