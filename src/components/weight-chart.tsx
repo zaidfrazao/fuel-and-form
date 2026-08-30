@@ -218,7 +218,8 @@ function labelOffset(y: number): number {
  * the scaled `<svg>` maps its units onto — and the two agree at every width
  * without either of them being measured. Rounded to two places for the reason
  * `chartGeometry` rounds its coordinates: enough for a 320-unit box, and stable
- * in a test.
+ * in a test: two places is at most 0.005% of error, which is 0.06px on the
+ * widest column the frame allows and less than that everywhere else.
  */
 function pct(value: number, extent: number): string {
   return `${Math.round((value / extent) * 10000) / 100}%`;
@@ -300,8 +301,18 @@ export function WeightChart({
     <div className={cn("flex flex-col gap-2", className)}>
       {/* The positioning context the overlay is stacked in. It takes its height
           from the scaled `<svg>` below, which is what makes `inset-0` on the
-          overlay the same box the geometry is drawn in. */}
-      <div className="relative">
+          overlay the same box the geometry is drawn in.
+
+          `shrink-0` guards the one precondition the two layers rest on: that
+          this box keeps the viewBox's own 320:170 aspect. `h-auto` gives it that
+          from the width — but a flex item shrinks by default, and every caller
+          is a flex column, so a height-constrained parent could compress it. The
+          scaled layer would then letterbox itself inside the box (its
+          `preserveAspectRatio` centres what it cannot fill) while the overlay,
+          having no viewBox, would go on filling the whole of it — and the words
+          would drift off the rules they belong to, silently and only at that one
+          caller. Refusing to shrink turns that into overflow, which is visible. */}
+      <div className="relative shrink-0">
         <svg
           role="img"
           aria-label={summarise(plot, today)}
@@ -417,6 +428,12 @@ export function WeightChart({
           percentage of that same box, so the words and the mark sit exactly on
           the geometry they belong to without either layer measuring anything.
 
+          `pointer-events-none` for the same reason in the other direction: this
+          layer covers the whole chart, and a decorative box that answers a
+          pointer is one that can intercept something meant for what is beneath
+          it. Nothing under it is interactive today, which is exactly when a
+          layer like this is cheapest to make transparent to the pointer.
+
           `aria-hidden` covers the whole layer, and it is not an optimisation:
           every word in here is drawn INSIDE a graphic whose `aria-label` has
           already said it. `role="img"` on the layer beneath is supposed to prune
@@ -427,7 +444,7 @@ export function WeightChart({
           76" and both dates a second time, after a summary that has said all
           four in a sentence.
         */}
-        <svg aria-hidden className="absolute inset-0 h-full w-full">
+        <svg aria-hidden className="pointer-events-none absolute inset-0 h-full w-full">
           {/* Drawn after both rules and separately from them, because a label may
               belong to one line, or — when the two references coincide — to both.
               See `referenceLabels`. The `x` is a percentage because the inset

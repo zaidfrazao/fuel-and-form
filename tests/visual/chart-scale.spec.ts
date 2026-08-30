@@ -54,7 +54,11 @@ async function measureAt(page: Page, viewport: (typeof WIDTHS)[number]) {
 
     if (!geometry) throw new Error("the chart is not on the page");
 
-    const overlay = geometry.parentElement!.querySelectorAll("svg")[1]!;
+    // By the contract rather than by DOM order: the unscaled layer is the one
+    // with no viewBox, which is the whole reason its contents keep their size.
+    const overlay = [...geometry.parentElement!.querySelectorAll("svg")].find(
+      (layer) => !layer.hasAttribute("viewBox"),
+    )!;
     const label = [...overlay.querySelectorAll("text")].find((node) =>
       node.textContent?.startsWith("Start"),
     )!;
@@ -127,11 +131,18 @@ test("the chart's labels are 10.5px however wide the column is", async ({ page }
     expect(measurement.labelFontSize, `Micro at ${measurement.width}px`).toBe("10.5px");
   }
 
-  // Identical to the tenth of a pixel across every width, which is the claim the
-  // ticket's table made and the app failed: 10.5px declared, 19.1px painted.
-  const widths = new Set(measurements.map((measurement) => measurement.labelWidth));
+  // One width to within a tenth of a pixel, which is the claim the ticket's
+  // table made and the app failed: 10.5px declared, 19.1px painted.
+  //
+  // A tolerance rather than exact equality, and it costs nothing: the fault this
+  // catches measured 76.9px against 135.7px. Text is laid out from an origin
+  // that lands on a different subpixel at each of these widths, so demanding an
+  // identical figure would be asserting something about rasterisation that this
+  // test does not mean and a different machine need not honour.
+  const widths = measurements.map((measurement) => measurement.labelWidth);
+  const spread = Math.max(...widths) - Math.min(...widths);
 
-  expect(widths.size, `label widths: ${[...widths].join(", ")}`).toBe(1);
+  expect(spread, `label widths: ${widths.join(", ")}`).toBeLessThan(0.1);
 });
 
 /**
@@ -153,6 +164,7 @@ test("the trend and the mark keep their own size while the plot scales", async (
   expect(Math.abs(wide.trendInk - narrow.trendInk)).toBeLessThan(0.11);
 
   // The mark's box excludes its ring in Chromium, so this is the 4px disc; the
-  // claim is that it is the same disc at both widths.
-  expect(wide.markBox).toBe(narrow.markBox);
+  // claim is that it is the same disc at both widths, to the same tenth of a
+  // pixel and for the same reason.
+  expect(Math.abs(wide.markBox - narrow.markBox)).toBeLessThan(0.1);
 });

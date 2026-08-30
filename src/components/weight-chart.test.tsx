@@ -534,6 +534,26 @@ describe("the two layers", () => {
     }
   });
 
+  /**
+   * The layer itself carries the `aria-hidden`, and that is the claim rather
+   * than each word carrying one.
+   *
+   * "No word is read twice" is asserted above by looking for an `aria-hidden`
+   * ancestor on every `<text>`, which a future edit could satisfy by wrapping
+   * the words in an aria-hidden group while leaving the layer around them
+   * exposed — and then anything ADDED to the layer would be read. The layer is
+   * the boundary, so the layer is what is pinned.
+   */
+  test("the unscaled layer is hidden whole, not word by word", () => {
+    const { container } = draw();
+    const layer = container.querySelector("circle")?.closest("svg");
+
+    expect(layer?.getAttribute("viewBox")).toBeNull();
+    expect(layer?.getAttribute("aria-hidden")).toBe("true");
+    // And it is not the layer carrying the summary — that one stays the image.
+    expect(layer?.getAttribute("role")).toBeNull();
+  });
+
   test("the geometry is still drawn in a layer that does scale", () => {
     const { container } = draw();
 
