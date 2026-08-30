@@ -6,6 +6,7 @@ import { PageMain } from "@/components/page-main";
 import { UpLink } from "@/components/up-link";
 import { getSession } from "@/lib/auth/session";
 import { loadSchedule } from "@/lib/db/queries/profile";
+import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { scheduleFields } from "@/lib/slot-times";
 import { PushForm } from "./push-form";
 import { SlotTimesForm } from "./slot-times-form";
@@ -106,7 +107,7 @@ export default async function SettingsPage() {
       <section className="flex flex-col gap-2 border-t border-border pt-5">
         <Link
           href="/plan/template"
-          className="text-body text-text-primary underline decoration-text-tertiary underline-offset-4"
+          className={`text-body text-text-primary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
         >
           Weekly template
         </Link>
@@ -130,7 +131,7 @@ export default async function SettingsPage() {
          */}
         <Link
           href="/plan"
-          className="pt-3 text-body text-text-primary underline decoration-text-tertiary underline-offset-4"
+          className={`pt-3 text-body text-text-primary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
         >
           Plan
         </Link>
@@ -165,7 +166,7 @@ export default async function SettingsPage() {
         <section className="flex flex-col gap-2 border-t border-border pt-5">
           <a
             href="/api/export"
-            className="text-body text-text-primary underline decoration-text-tertiary underline-offset-4"
+            className={`text-body text-text-primary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
           >
             Export everything
           </a>
@@ -193,7 +194,7 @@ export default async function SettingsPage() {
             For a check-in, one week as a spreadsheet:{" "}
             <Link
               href="/plan"
-              className="underline decoration-text-tertiary underline-offset-4"
+              className={`underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
             >
               open Plan
             </Link>{" "}

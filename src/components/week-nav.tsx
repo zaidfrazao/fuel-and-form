@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { addDays, type CalendarDate } from "@/lib/date";
 import { weekLabel } from "@/lib/now-display";
+import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 
 /**
  * Prev, next, and the name of the week between them — the control two screens
@@ -52,7 +53,7 @@ export function WeekNav({
       <Link
         href={`${basePath}?week=${previous}`}
         aria-label={`Previous week, ${weekLabel(previous)}`}
-        className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
+        className={`text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
       >
         <span aria-hidden="true">&lsaquo; Prev</span>
       </Link>
@@ -70,7 +71,7 @@ export function WeekNav({
       <Link
         href={`${basePath}?week=${next}`}
         aria-label={`Next week, ${weekLabel(next)}`}
-        className="text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4"
+        className={`text-micro uppercase text-text-secondary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
       >
         <span aria-hidden="true">Next &rsaquo;</span>
       </Link>

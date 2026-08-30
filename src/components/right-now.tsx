@@ -22,6 +22,7 @@ import type { WorkoutExercise } from "@/lib/db/schema";
 import type { LogVerb } from "@/lib/log-intent";
 import { type MacroBearing, type MacroTarget, summariseDay } from "@/lib/macros";
 import { itemLabel, itemName, rulerSlots } from "@/lib/now-display";
+import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { swapNote } from "@/lib/swap-note";
 import { cn } from "@/lib/utils";
 import { isWalk, type WalkEntryView } from "@/lib/walk";
@@ -1213,7 +1214,7 @@ export function RightNow({
     <span className="flex items-center">
       <Link
         href="/settings"
-        className="text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4"
+        className={`text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
       >
         Settings
       </Link>

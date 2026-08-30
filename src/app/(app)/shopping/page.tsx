@@ -9,6 +9,7 @@ import { WeekNav } from "@/components/week-nav";
 import { getSession } from "@/lib/auth/session";
 import { startOfWeek } from "@/lib/date";
 import { loadShoppingWeek } from "@/lib/db/queries/shopping";
+import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { requestedWeek } from "@/lib/week-param";
 
 /**
@@ -140,7 +141,7 @@ export default async function ShoppingPage({
         <p className="text-slash text-text-secondary">
           <Link
             href="/shopping"
-            className="underline decoration-text-tertiary underline-offset-4"
+            className={`underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
           >
             Back to this week
           </Link>

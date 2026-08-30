@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import type { DayOfWeek } from "@/lib/date";
 import type { MealSlot } from "@/lib/db/schema";
 import { slotLabel } from "@/lib/now-display";
+import { HOVER_GROUND, HOVER_LIFT, POINTER } from "@/lib/pointer";
 import {
   templateWeek,
   weekdayName,
@@ -140,16 +141,27 @@ function SlotRow({
         aria-label={`${weekdayName(dayOfWeek)} ${slotLabel(slot).toLowerCase()}: ${
           meal ? meal.name : "not planned"
         }`}
-        className="flex min-h-[54px] w-full items-center justify-between gap-4 border-b border-border py-[10px] text-left transition-colors duration-150 last:border-b-0 hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        // One of the eight `hover:` declarations that predate § Desktop, and
+        // one the section ratifies rather than replaces — the ground was
+        // never the problem. What it gains is the cursor every `<button>` in
+        // this app lost to Tailwind v4's preflight, and the lift for the slot
+        // label beneath it.
+        className={`group flex min-h-[54px] w-full items-center justify-between gap-4 border-b border-border py-[10px] text-left transition-colors duration-150 last:border-b-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${HOVER_GROUND} ${POINTER}`}
       >
         <span className="flex flex-col gap-0.5">
-          <span className="text-micro uppercase text-text-secondary">
+          <span className={`text-micro uppercase text-text-secondary ${HOVER_LIFT}`}>
             {slotLabel(slot)}
           </span>
           {/* An empty cell says what it is, not nothing. § Tone of Voice asks an
               empty state to describe what will appear, and this one is also the
               control for making it appear. */}
-          <span className={meal ? "text-body text-text-primary" : "text-body text-text-tertiary"}>
+          <span
+            className={
+              meal
+                ? "text-body text-text-primary"
+                : `text-body text-text-tertiary ${HOVER_LIFT}`
+            }
+          >
             {meal ? meal.name : "Not planned"}
           </span>
         </span>

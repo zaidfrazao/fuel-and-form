@@ -495,6 +495,42 @@ describe("what a cell says about itself", () => {
     expect(swapped.getAttribute("aria-label")).toContain("swapped");
   });
 
+  test("the tint survives the pointer, and the cell still answers it", () => {
+    /*
+     * FUEL-75. § Desktop grounds a week cell in `surface` on hover, and a
+     * swapped cell is the one that cannot take it: the tint IS the swap mark in
+     * this app, so replacing it under the pointer would report the opposite of
+     * what had happened — the failure § Desktop rejects by name for a selected
+     * tile. Nor can the second row apply, since `accent-subtle` at 90% over the
+     * canvas is a change of about one step per channel.
+     *
+     * So it keeps its ground and takes the third row's inset rule, which is the
+     * device that exists precisely for a control whose ground cannot answer.
+     * Asserted because it is a divergence from the mock, where the hover
+     * selector outranks `td.sw` and the tint is lost — the mock can afford that
+     * because it also draws swapped cells in `accent` text, and this app marks
+     * them with the ground alone.
+     */
+    grid(swappedTuesday());
+
+    const swapped = cell(/Tue 10 Mar dinner: Chickpea Curry/);
+
+    expect(swapped.className).toContain("bg-accent-subtle");
+    expect(swapped.className).toContain(
+      "hover:shadow-[inset_0_0_0_1.5px_var(--text-tertiary)]",
+    );
+    expect(swapped.className).not.toContain("hover:bg-surface");
+  });
+
+  test("an unswapped cell takes the ground rather than the rule", () => {
+    grid();
+
+    const plain = cell("Wed 11 Mar dinner: Chilli con Carne");
+
+    expect(plain.className).toContain("hover:bg-surface");
+    expect(plain.className).not.toContain("hover:shadow-[inset");
+  });
+
   test("a template cell is neither tinted nor announced as swapped", () => {
     grid();
 

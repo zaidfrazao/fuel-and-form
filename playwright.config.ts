@@ -194,6 +194,33 @@ export default defineConfig({
       dependencies: ["setup"],
       use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
     },
+    /**
+     * The pointer states — FUEL-75. Two projects rather than eight, and rather
+     * than one.
+     *
+     * Both themes, because a hover state IS a colour: `surface` sits above the
+     * canvas in light and below it in dark, so the two answer in opposite
+     * directions and one of them would prove nothing about the other. One
+     * width, because § Desktop triggers these on `@media (hover: hover)` rather
+     * than on a breakpoint — there is no second width at which any of them
+     * differs, and 1272 is the one where the rail exists to be photographed.
+     *
+     * `Desktop Chrome` reports `hover: hover`, which is what puts the states in
+     * scope at all. A device with `hasTouch` would photograph the rest state
+     * and pass, so the touch half of that rule is asserted in
+     * `src/lib/pointer.test.ts` against the compiled CSS instead.
+     */
+    ...THEMES.map((theme) => ({
+      name: `hover-${theme}`,
+      testMatch: /hover\.spec\.ts/,
+      dependencies: ["setup"],
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1272, height: 900 },
+        colorScheme: theme,
+        storageState: STORAGE_STATE,
+      },
+    })),
     ...screens,
   ],
 

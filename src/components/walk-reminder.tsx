@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getSession } from "@/lib/auth/session";
 import { loadWalkReminder } from "@/lib/db/queries/walk-reminder";
 import { FRAME, FRAME_MEASURE } from "@/lib/frame";
+import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { REMINDER_LINK, reminderStatement } from "@/lib/walk-reminder";
 
 /**
@@ -102,7 +103,7 @@ export async function WalkReminder() {
              * row it points at is a few centimetres below it.
              */}
             <Link
-              className="text-text-primary underline decoration-text-tertiary underline-offset-4"
+              className={`text-text-primary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
               href="/"
             >
               {REMINDER_LINK}

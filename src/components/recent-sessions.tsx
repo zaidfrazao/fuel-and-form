@@ -4,6 +4,7 @@ import type { DayStatus } from "@/components/dot-grid";
 import type { RecentSession } from "@/lib/adherence";
 import type { CalendarDate } from "@/lib/date";
 import { dayLabel } from "@/lib/now-display";
+import { HOVER_GROUND, HOVER_LIFT } from "@/lib/pointer";
 
 /**
  * The dates under the dot grid — FUEL-30, PRD § P3.
@@ -68,12 +69,14 @@ function Row({ session, viewing }: { session: RecentSession; viewing: CalendarDa
       <span className="flex min-w-0 flex-col gap-1">
         <span className="truncate text-body text-text-primary">
           {dayLabel(session.date)}
-          {here && <span className="text-text-tertiary"> · Viewing</span>}
+          {here && <span className={`text-text-tertiary ${HOVER_LIFT}`}> · Viewing</span>}
         </span>
-        <span className="truncate text-slash text-text-tertiary">{session.label}</span>
+        <span className={`truncate text-slash text-text-tertiary ${HOVER_LIFT}`}>
+          {session.label}
+        </span>
       </span>
 
-      <span className="shrink-0 text-micro uppercase text-text-secondary">
+      <span className={`shrink-0 text-micro uppercase text-text-secondary ${HOVER_LIFT}`}>
         {STATUS_LABEL[session.status]}
       </span>
     </>
@@ -99,7 +102,19 @@ function Row({ session, viewing }: { session: RecentSession; viewing: CalendarDa
          */
         <Link
           href={`/training?date=${session.date}`}
-          className="flex min-h-[54px] items-center justify-between gap-4 py-3 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          /*
+           * A list row, so § Desktop's first ground — and `group`, because
+           * the status and the workout name inside it are `text-secondary`
+           * and `text-tertiary`, which a `surface` ground would read at
+           * 4.26:1 and 1.95:1. `HOVER_LIFT` on each of them is what keeps
+           * § Accessibility's 4.5 while the pointer is here.
+           *
+           * The row that is already being viewed is a `<span>` above and
+           * gets none of this: `DateNav`'s rule is that "a control that
+           * takes you where you already are is a control that does nothing",
+           * and a hover on it would say it was one.
+           */
+          className={`group flex min-h-[54px] items-center justify-between gap-4 py-3 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${HOVER_GROUND}`}
         >
           {content}
         </Link>

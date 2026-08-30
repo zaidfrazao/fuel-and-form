@@ -2,6 +2,7 @@ import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
 
 import { SlashMeta } from "@/components/kv-grid";
 import { Motif, type MotifName } from "@/components/motifs";
+import { HOVER_FILL, HOVER_RING, POINTER } from "@/lib/pointer";
 import { cn } from "@/lib/utils";
 
 /**
@@ -117,6 +118,28 @@ export function Tile({
     // tile most likely to be focused.
     as === "button" &&
       "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+    /*
+     * The pointer — Brand Guide § Desktop, "Pointer states". Only on the
+     * `button` tile: a `div` tile is being shown rather than offered, and a
+     * hover on it "would promise an action that does not exist".
+     *
+     * The two materials take different rows of § Desktop's table, which is the
+     * clearest case for a rule keyed to what a control rests as: the ink tile
+     * is a solid fill and goes to that fill at 90%, and the stone tile is
+     * already sitting on the hover ground, so it takes the inset rule instead —
+     * "the third case exists because the first cannot apply twice."
+     *
+     * **Selection outranks hover, and the cascade does it rather than a
+     * conditional.** The accent ring below is an inline `style`, which beats
+     * any class, so a selected stone tile keeps its umber under the pointer
+     * without this having to ask whether it is selected. That is the exact
+     * failure § Desktop warns about — a pointer crossing the chosen tile
+     * "would take its umber away and leave grey, reporting the opposite of
+     * what had happened" — and it is closed by the two states being written in
+     * different places rather than by a rule that could be edited apart.
+     */
+    as === "button" &&
+      `${POINTER} ${material === "ink" ? HOVER_FILL : HOVER_RING}`,
     className,
   );
 

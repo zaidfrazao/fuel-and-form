@@ -7,6 +7,7 @@ import type { LoggedEntry } from "@/lib/day-summary";
 import type { WalkEntryView } from "@/lib/walk";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
 import type { MacroTarget } from "@/lib/macros";
+import { FOCUS_RING, HOVER_GROUND } from "@/lib/pointer";
 import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve-now";
 
 /**
@@ -387,7 +388,13 @@ export default async function RightNowSpecimen({
               key={id}
               href={`/dev/right-now?case=${id}`}
               aria-current={id === key ? "page" : undefined}
-              className="rounded-sm border border-border px-2 py-1 text-micro uppercase text-text-secondary aria-[current=page]:bg-ink aria-[current=page]:text-ink-fg"
+              // § Desktop, keyed to what each one rests as: an outlined
+              // case rests as an outline and gains `surface`; the one
+              // that is current is an `ink` fill and goes to 90% of it.
+              // The `aria-[current=page]:hover:` compound outranks the
+              // bare `hover:` on specificity, so the order here is not
+              // what decides which of the two a current case takes.
+              className={`rounded-sm border border-border px-2 py-1 text-micro uppercase text-text-secondary aria-[current=page]:bg-ink aria-[current=page]:text-ink-fg ${HOVER_GROUND} hover:text-text-primary aria-[current=page]:hover:bg-ink/90 ${FOCUS_RING}`}
             >
               {label}
             </Link>
