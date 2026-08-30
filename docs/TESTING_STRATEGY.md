@@ -211,7 +211,7 @@ Manual, and not automatable:
 - [ ] VoiceOver pass on the Right Now flow
 - [ ] **Day ruler and dot grid** expose an accessible summary plus an adjacent data table — the Brand Guide's requirement that "a mark on a screen is not the data"
 - [ ] Status is never conveyed by colour alone (both signature graphics already encode by fill/hatch/hairline and solid/ring/size, so they should pass in greyscale)
-- [ ] 10.5px Micro labels remain legible and scale under Dynamic Type
+- [ ] 10.5px Micro labels remain legible and scale under Dynamic Type — the weight chart's are measured at every width by `chart-scale.spec.ts` (FUEL-76); every other Micro on every other screen is still an eye
 - [ ] 200% zoom without horizontal scroll — the weekly grid excepted, which scrolls by design
 - [ ] `prefers-reduced-motion` suppresses the chart and ruler draw-in
 
@@ -232,7 +232,13 @@ Playwright screenshots at **375, 820, 1272 and 1920px**, light and dark, for the
 - **Sticky positioning.** Full-page captures draw a sticky bar at its resting place, not pinned.
 - **Any machine but the one that took them.** There is no webfont, so glyphs are rasterised through the local fontconfig. The committed set is from Linux; a macOS run fails against all 56. `{platform}` is deliberately absent from the snapshot path, so that such a run fails loudly instead of writing its own set and reporting green.
 
-**The suite also measures, and `npm run test:visual` is therefore 60 tests rather than 57** — the 56 baselines and the demo-provisioning setup project, plus three. FUEL-70 added `tests/visual/frame.spec.ts` and a Playwright project of its own for it: three assertions about where boxes land — the notice band and the content column sharing a centre at 1024, 1280, 1440 and 1920; the rail-to-content gap being the frame's 28px gutter rather than leftover space; and `/plan` putting nothing off the right edge at 1024. They belong beside the baselines because they need the same server, the same frozen clock and the same demo session, and they are separate from them because a screenshot reports a fault as "some pixels differ" where § Desktop states its requirements as numbers. It carries no baseline of its own, so it is not part of an `--update-snapshots` run.
+**The suite also measures, and the measuring half has grown faster than the photographing half.** A full run is **120 tests** against 100 committed images: the seven screens at four widths in two themes, the sheet and hover baselines the tickets since have added, the demo-provisioning setup project — and, in five projects of their own, the specs that assert numbers instead of pixels. They belong beside the baselines because they need the same server, the same frozen clock and the same demo session, and they are separate from them because a screenshot reports a fault as "some pixels differ" where the Brand Guide states its requirements as numbers. **None of them carries a baseline, so none is part of an `--update-snapshots` run.**
+
+`frame.spec.ts` (FUEL-70) measures where boxes land, `sheet.spec.ts` (FUEL-73) whether the sheet stands in the content's column, `action-bar.spec.ts` (FUEL-72) whether the bar is pinned or released across `lg`, and `chart-scale.spec.ts` (FUEL-76) whether the weight chart's type scale survives its column.
+
+**`chart-scale.spec.ts` is the one worth reading before writing another of these**, because it is the case where the obvious assertion passes on the bug. The chart scales its whole viewBox with the column, so at 1272 its 10.5px Micro labels painted at 19.2px — and `getComputedStyle` still reported `10.5px`, because that is the declaration and the scaling happens after it. The spec therefore measures the label's rendered **width** beside its font-size, the trend's ink by hit-testing the stroke (`getBoundingClientRect` excludes it on SVG geometry in Chromium), and the plot's own scale factor as a control that the chart has not simply stopped filling its column. That it fails on the fault was established by planting the old markup and watching the width assertion fail while the font-size one passed.
+
+FUEL-70's three assertions, for the record, are about where boxes land — the notice band and the content column sharing a centre at 1024, 1280, 1440 and 1920; the rail-to-content gap being the frame's 28px gutter rather than leftover space; and `/plan` putting nothing off the right edge at 1024.
 
 **Not in CI.** Nothing runs this automatically — that is § 2.4 and FUEL-51. Until then it is enforced by whoever runs it, like the coverage gate.
 
@@ -322,6 +328,7 @@ No real credentials in any test file. The owner test password comes from a `.env
 
 ## Document History
 
+- **Updated:** 2026-08-30 — § 2.3 gains `chart-scale.spec.ts` (FUEL-76) and an honest count of a suite that four tickets have grown: 120 tests against 100 images.
 - **Updated:** 2026-08-29 — § 2.3 gains the frame measurements (FUEL-70), which take `test:visual` from 57 tests to 60.
 - **Updated:** 2026-08-19 — added § 1.6 (`lib/repeat.ts`) during FUEL-24, and renumbered the Tier 1 gate to § 1.7.
 - **Created:** 2026-08-10
