@@ -5,6 +5,8 @@ import { PageMain } from "@/components/page-main";
 import { UpLink } from "@/components/up-link";
 import { getSession } from "@/lib/auth/session";
 import { loadTemplate } from "@/lib/db/queries/template";
+import { PAGE_FRAME_SPAN, PAGE_PROSE } from "@/lib/frame";
+import { cn } from "@/lib/utils";
 import { TemplateEditor } from "./template-editor";
 
 /**
@@ -48,8 +50,12 @@ export default async function TemplatePage() {
   const { entries, meals } = await loadTemplate(session.userId);
 
   return (
-    <PageMain className="gap-7 py-8">
-      <header className="flex flex-col gap-2">
+    /* The frame's span, with the prose held back from it — the move
+       `/shopping` makes and for the same reason. § Desktop gives this screen
+       the same ruling in the same table: "the same move, three columns: seven
+       day groups of four slots". */
+    <PageMain className={cn("gap-7 py-8", PAGE_FRAME_SPAN)}>
+      <header className={cn("flex flex-col gap-2", PAGE_PROSE)}>
         {/*
          * `/plan`, where this used to send people to `/settings`.
          *
@@ -114,7 +120,7 @@ export default async function TemplatePage() {
           }))}
         />
       ) : (
-        <p className="text-body text-text-secondary">
+        <p className={cn("text-body text-text-secondary", PAGE_PROSE)}>
           The weekly template appears here once there are meals in the library to
           plan with.
         </p>

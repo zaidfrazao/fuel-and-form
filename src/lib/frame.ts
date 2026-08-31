@@ -167,8 +167,33 @@ export const FRAME_MEASURE_AND_ASIDE = "lg:col-end-[-1]";
  * construction. A `max-w-[1024px]` here would be that sum written a second time
  * in a form an edit to the frame could put out of step.
  */
-export const PAGE_ASIDE_GRID =
-  "xl:col-end-[-1] xl:grid xl:max-w-none xl:grid-cols-[var(--frame-measure-inset)_minmax(0,1fr)] xl:grid-rows-[auto_auto_1fr] xl:content-start xl:gap-x-[var(--frame-gutter)]";
+export const PAGE_FRAME_GRID =
+  "xl:col-end-[-1] xl:grid xl:max-w-none xl:grid-cols-[var(--frame-measure-inset)_minmax(0,1fr)] xl:content-start xl:gap-x-[var(--frame-gutter)]";
+
+/**
+ * The tracks without the rows — FUEL-78.
+ *
+ * Everything above this line is the same on every screen with an aside: the
+ * span, the two columns, the packing and the gutter. The ROWS are not, and
+ * FUEL-78 is where that stops being a distinction without a difference.
+ *
+ * `PAGE_ASIDE_GRID` names three — the band, the measure's sections, the bar —
+ * because that is `/`'s and `/training`'s shape, and it is composed from this
+ * constant below so the two remain literally the same utilities. What the two
+ * new shapes need is a different row count and nothing else:
+ *
+ *   - **`/settings`** has no band and no action bar. Its two columns are one
+ *     row, and a screen that borrowed the three-row declaration would carry two
+ *     empty tracks and — with a `gap-7` whose row half applies to them — 56px
+ *     of nothing under the last link.
+ *   - **`/weight`** needs five, because its DOM order and its desktop order are
+ *     not the same order. `weigh-ins.tsx` says why at the placement.
+ *
+ * Splitting the string rather than writing a second one is the point: a change
+ * to the frame's tracks or its gutter still has one place to be made, and the
+ * thing each screen states for itself is the one thing it actually differs in.
+ */
+export const PAGE_ASIDE_GRID = `${PAGE_FRAME_GRID} xl:grid-rows-[auto_auto_1fr]`;
 
 /**
  * ## The rows are declared, and the third one is flexible — FUEL-86
@@ -220,6 +245,30 @@ export const PAGE_ASIDE_GRID =
 export const PAGE_ASIDE_UNWRAP = "xl:contents";
 
 /**
+ * What makes a group of sections a column — FUEL-78.
+ *
+ * The mechanism the three placed wrappers share, with no placement and no
+ * rhythm in it: dissolved below the cap so the phone keeps one flat flex
+ * column, a flex column of its own above it, and `min-w-0` because a grid
+ * item's `min-width` is `auto` and a dot grid, a session row or a five-column
+ * shopping row is content that would rather not shrink.
+ *
+ * It is extracted because FUEL-78 adds two screens whose columns are the same
+ * mechanism in a different position: `/settings`' two sit in row one, since it
+ * has neither a header band above them nor an action bar below. Reaching for
+ * `PAGE_MEASURE_COLUMN` and overriding its row, its span and its gap would be
+ * three corrections to a constant that was right for the screen it was named
+ * for — and the fourth reader of a string is where the corrections start
+ * disagreeing with each other.
+ *
+ * `gap` is deliberately not here. 30px is `/`'s and `/training`'s rhythm and
+ * 28px is `/settings`', both of which predate this ticket; a shared default
+ * would make one of the two a silent override rather than a screen's own
+ * spacing.
+ */
+export const PAGE_COLUMN_BASE = "contents xl:flex xl:min-w-0 xl:flex-col";
+
+/**
  * The header band, across both columns — FUEL-86.
  *
  * § Desktop's "one job per zone" gives this one the question *where am I in
@@ -269,8 +318,7 @@ export const PAGE_HEADER_BAND =
  * sections for the grid, and a group that generated a box would insert a flex
  * item into the phone's column and take its sections out of the rhythm.
  */
-export const PAGE_MEASURE_COLUMN =
-  "contents xl:col-start-1 xl:row-start-2 xl:flex xl:min-w-0 xl:flex-col xl:gap-[30px]";
+export const PAGE_MEASURE_COLUMN = `${PAGE_COLUMN_BASE} xl:col-start-1 xl:row-start-2 xl:gap-[30px]`;
 
 /**
  * The second column: what the 544px of nothing is given to hold.
@@ -289,8 +337,7 @@ export const PAGE_MEASURE_COLUMN =
  * `min-w-0`, because a grid item's `min-width` is `auto` and the dot grid and
  * the recent-session rows are content that would rather not shrink.
  */
-export const PAGE_ASIDE_COLUMN =
-  "contents xl:col-start-2 xl:row-start-2 xl:row-span-2 xl:flex xl:min-w-0 xl:flex-col xl:gap-[30px]";
+export const PAGE_ASIDE_COLUMN = `${PAGE_COLUMN_BASE} xl:col-start-2 xl:row-start-2 xl:row-span-2 xl:gap-[30px]`;
 
 /**
  * The action bar, at the foot of the measure rather than the foot of the page.
@@ -345,3 +392,111 @@ export const PAGE_ASIDE_COLUMN =
  * this is the one width where the page has a second column to be shorter than.
  */
 export const PAGE_MEASURE_FOOT = "xl:col-start-1 xl:row-start-3 xl:mt-0 xl:self-start";
+
+/* -------------------------------------------------------------------------- */
+/* A screen with no aside, whose content is wider than its prose — FUEL-78     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The frame's full span, on a screen that keeps its flex column — FUEL-78.
+ *
+ * `/shopping` and `/plan/template` want the width without wanting an aside.
+ * They are a header and a list, and § Desktop's amendment splits those two
+ * apart rather than putting them side by side: "the header stays on the
+ * measure, because an up-link, a title and two sentences are prose. **The list
+ * flows into two columns across the frame**".
+ *
+ * So there is nothing to put in a second column, and this is deliberately NOT
+ * `PAGE_ASIDE_GRID`. A grid would be the wrong instrument twice over: it would
+ * need a row per section to place them in, and every one of those rows would
+ * exist to say "column one" for a screen that has one column of prose and one
+ * band of list. `<main>` stays the flex column it has always been and two of
+ * its children are told, individually, how wide they may be.
+ *
+ * `max-w-none` for `PAGE_ASIDE_GRID`'s reason: `FRAME_MEASURE`'s unscoped
+ * `max-w-[var(--frame-measure)]` is a no-op while the track is 640 and a cap
+ * the moment the item spans two tracks, which would leave 384px of the span
+ * unusable and the aside's track empty behind it.
+ */
+export const PAGE_FRAME_SPAN = "xl:col-end-[-1] xl:max-w-none";
+
+/**
+ * A block of prose on a screen that spans the frame — FUEL-78.
+ *
+ * The other half of `PAGE_FRAME_SPAN`, and the half that does the arguing.
+ * § Desktop's first amendment narrowed the 640 to "a paragraph, a heading and a
+ * sentence of explanation stay on the measure at every width", and a screen
+ * that has just taken 968px has to say which of its children that sentence is
+ * about — otherwise widening the page widens the prose, which is the one thing
+ * the measure has always existed to prevent.
+ *
+ * `--frame-measure-inset` and not `--frame-measure`, for the reason
+ * `PAGE_ASIDE_GRID` uses the inset: 584 is what a sentence has occupied on
+ * every screen since FUEL-70, because `PageMain` spends 28px a side on its own
+ * gutter. Capping at 640 here would make the prose 56px wider at 1272 than at
+ * 1271 and nowhere else in the app — a line that gets longer exactly once, at
+ * the width the mock is drawn at.
+ */
+export const PAGE_PROSE = "xl:max-w-[var(--frame-measure-inset)]";
+
+/**
+ * A list of grouped items, flowed into columns — FUEL-78.
+ *
+ * § Desktop, amended by FUEL-85: "**a list of grouped items may flow into
+ * columns at ≥1272, with a group never split across one.** The rows keep their
+ * height, their gaps and their rhythm; what changes is how many of them are on
+ * screen at once, which is the one thing a desktop can offer a list that a
+ * phone cannot."
+ *
+ * ## `block`, and why the flex column has to be dismissed rather than adjusted
+ *
+ * Multi-column is a fragmentation of a BLOCK container's flow. A flex container
+ * establishes a flex formatting context instead, and `column-count` on one is
+ * simply ignored — no error, no warning, and a screen that looks exactly as it
+ * did before. So `xl:block` is not tidying: it is the declaration that makes
+ * the other two words in this string mean anything.
+ *
+ * Dismissing the flex column takes its `gap` with it, which is why the group
+ * constant below carries a margin. The two have to be read together.
+ *
+ * ## The gutter is stated rather than inherited
+ *
+ * `gap-x-[var(--frame-gutter)]` compiles to `column-gap`, which is the same
+ * property multi-column takes its gutter from — so a wrapper whose `gap-7`
+ * happens to be 28px would already produce the right answer here, by a
+ * coincidence between the flex rhythm and the frame's gutter that nothing
+ * guarantees and no test would catch breaking. It is the frame's gutter, so it
+ * is the frame's variable.
+ */
+export const PAGE_COLUMN_FLOW = "xl:block xl:gap-x-[var(--frame-gutter)]";
+
+/** Two columns — `/shopping`'s five aisles. Worn with `PAGE_COLUMN_FLOW`. */
+export const PAGE_COLUMNS_2 = "xl:columns-2";
+
+/** Three — `/plan/template`'s seven days. Worn with `PAGE_COLUMN_FLOW`. */
+export const PAGE_COLUMNS_3 = "xl:columns-3";
+
+/**
+ * One group inside a `PAGE_COLUMN_FLOW` — FUEL-78.
+ *
+ * `break-inside-avoid` is the acceptance criterion, stated as a property: "with
+ * a group never split across one". A category whose heading is at the foot of
+ * one column and whose items are at the head of the next is a worse list than
+ * the 3,331px scroll this replaces, because it looks like two categories.
+ *
+ * ## A margin goes with this, and it is the screen's own
+ *
+ * `xl:block` dismisses the wrapper's flex `gap`, so each group has to carry the
+ * rhythm itself as a bottom margin — block layout has no gap to inherit. That
+ * margin is NOT here for `PAGE_COLUMN_BASE`'s reason: `/shopping`'s groups sit
+ * 28px apart and `/plan/template`'s sit 30px, both of which predate this
+ * ticket, so a number written here would silently restyle one of the two.
+ * Every caller pairs this with an `xl:mb-*` equal to the gap it is replacing.
+ *
+ * A margin on every group rather than only between them, and no `last:mb-0`:
+ * that would take the margin off whichever group is last in the SOURCE, which
+ * in a balanced multi-column is rarely the one at the foot of a column and is
+ * never reliably so. The cost is 28 or 30px under the tallest column, which is
+ * the cheaper of the two mistakes.
+ */
+export const PAGE_COLUMN_GROUP = "xl:break-inside-avoid";

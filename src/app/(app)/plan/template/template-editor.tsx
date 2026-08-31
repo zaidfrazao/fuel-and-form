@@ -8,6 +8,7 @@ import { SlashMeta } from "@/components/kv-grid";
 import { Button } from "@/components/ui/button";
 import type { DayOfWeek } from "@/lib/date";
 import type { MealSlot } from "@/lib/db/schema";
+import { PAGE_COLUMNS_3, PAGE_COLUMN_FLOW, PAGE_COLUMN_GROUP } from "@/lib/frame";
 import { slotLabel } from "@/lib/now-display";
 import { HOVER_GROUND, HOVER_LIFT, POINTER } from "@/lib/pointer";
 import {
@@ -15,6 +16,7 @@ import {
   weekdayName,
   type TemplateRow,
 } from "@/lib/template-plan";
+import { cn } from "@/lib/utils";
 
 /**
  * The template editor — PRD § P2's "editing the template itself is a separate,
@@ -283,23 +285,42 @@ export function TemplateEditor({
         </div>
       )}
 
-      {week.map((day) => (
-        <section key={day.dayOfWeek} className="flex flex-col gap-[14px]">
-          <h2 className="text-micro uppercase text-text-secondary">{day.name}</h2>
+      {/*
+       * Seven day groups, flowed into three columns at ≥1272 — § Desktop,
+       * amended by FUEL-85, and the same move `/shopping` makes with five
+       * aisles in two. Twenty-eight slot rows stacked in a 584px column is
+       * 2,776px of template; the rows keep their height and their rhythm, and
+       * what changes is how many of them are on screen at once.
+       *
+       * The wrapper is here rather than on the box above for the reason
+       * `shopping-list-view.tsx` gives: two of this component's children are
+       * not day groups. The refusal banner has to stay above all three columns
+       * — § Feedback puts it "at the point of action", and a banner flowed into
+       * column two is a banner beside the action rather than above it — and
+       * `MealPicker` is a sheet, which has no business being fragmented at all.
+       */}
+      <div className={cn("flex flex-col gap-[30px]", PAGE_COLUMN_FLOW, PAGE_COLUMNS_3)}>
+        {week.map((day) => (
+          <section
+            key={day.dayOfWeek}
+            className={cn("flex flex-col gap-[14px]", PAGE_COLUMN_GROUP, "xl:mb-[30px]")}
+          >
+            <h2 className="text-micro uppercase text-text-secondary">{day.name}</h2>
 
-          <ul className="flex flex-col">
-            {day.cells.map((cell) => (
-              <SlotRow
-                key={cell.slot}
-                dayOfWeek={day.dayOfWeek}
-                slot={cell.slot}
-                meal={cell.meal}
-                onOpen={() => setEditing({ dayOfWeek: day.dayOfWeek, slot: cell.slot })}
-              />
-            ))}
-          </ul>
-        </section>
-      ))}
+            <ul className="flex flex-col">
+              {day.cells.map((cell) => (
+                <SlotRow
+                  key={cell.slot}
+                  dayOfWeek={day.dayOfWeek}
+                  slot={cell.slot}
+                  meal={cell.meal}
+                  onOpen={() => setEditing({ dayOfWeek: day.dayOfWeek, slot: cell.slot })}
+                />
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
 
       {editing && (
         <MealPicker
