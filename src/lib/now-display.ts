@@ -5,7 +5,14 @@
 // them gained a field. Types are erased, so nothing of the component reaches
 // the bundle through this line.
 import type { Slot } from "@/components/day-ruler";
-import { addDays, type CalendarDate, type DateParts, parseCalendarDate } from "@/lib/date";
+import {
+  addDays,
+  type CalendarDate,
+  type DateParts,
+  daysBetween,
+  parseCalendarDate,
+  startOfWeek,
+} from "@/lib/date";
 import type { MealSlot } from "@/lib/db/schema";
 import type { NowItem, ScheduledItem } from "@/lib/resolve-now";
 
@@ -244,4 +251,45 @@ export function rulerSlots(timeline: readonly ScheduledItem[]): Slot[] {
     minutes: item.minutes,
     status: "upcoming" as const,
   }));
+}
+
+/**
+ * Where the week on screen is relative to now — `/plan`'s folio, FUEL-78.
+ *
+ * § Desktop's header rule gives the band one question, "where am I in this?",
+ * and answers it with "a Micro folio line, and the screen's own time graphic if
+ * it has one". `/plan`'s graphic is its week paginator; this is the line above
+ * it.
+ *
+ * ## Why it is not the week's dates
+ *
+ * Because `WeekNav` is already showing them, at `text-body`, three lines below.
+ * § Desktop's third warning under the same rule is **say a thing once**: the
+ * draft it was written against "put a count in the folio that the ruler beneath
+ * already drew in ticks", and a folio reading `15 – 21 Jun 2026` over a
+ * paginator reading `15 – 21 Jun 2026` is the identical mistake with a
+ * different noun.
+ *
+ * So it says the one thing this screen knows and never shows. `/plan` is
+ * addressed by `?week=`, so the reader can be on any week in either direction,
+ * and nothing on the page says which — the foot grows a "Back to this week"
+ * link when they have strayed, which is the app already conceding that being
+ * lost here is possible. This is the caption that answers it before the scroll.
+ *
+ * Named weeks for the three that have names, and a count for the rest. "3 weeks
+ * ahead" is § Tone of Voice's plain register, and reads correctly in both
+ * directions in a way "+3" does not.
+ *
+ * Both dates are snapped before they are compared: `monday` already is by
+ * `loadWeek`, and `today` is a day rather than a week. Subtracting an unsnapped
+ * today would make the answer depend on which weekday it happens to be.
+ */
+export function weekFolio(monday: CalendarDate, today: CalendarDate): string {
+  const weeks = daysBetween(startOfWeek(today), monday) / 7;
+
+  if (weeks === 0) return "This week";
+  if (weeks === 1) return "Next week";
+  if (weeks === -1) return "Last week";
+
+  return weeks > 0 ? `${weeks} weeks ahead` : `${-weeks} weeks back`;
 }

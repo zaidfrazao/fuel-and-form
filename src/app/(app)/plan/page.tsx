@@ -11,7 +11,7 @@ import { type CalendarDate, startOfWeek } from "@/lib/date";
 import { loadWeek } from "@/lib/db/queries/week";
 import type { Meal } from "@/lib/db/schema";
 import { FRAME_MEASURE_AND_ASIDE } from "@/lib/frame";
-import { weekLabel } from "@/lib/now-display";
+import { weekFolio, weekLabel } from "@/lib/now-display";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { requestedWeek } from "@/lib/week-param";
 
@@ -219,6 +219,28 @@ export default async function PlanPage({
           only — the weekly template is unchanged.
         </p>
       </header>
+
+      {/*
+       * The folio — § Desktop's header rule, FUEL-85, and the whole of what
+       * FUEL-78 changes on this screen. "FUEL-71 already gave the week grid the
+       * full span, and it is the proof the approach works"; the rest of the
+       * ticket is other screens catching up with it.
+       *
+       * Directly above the paginator because the rule pairs the two — "a Micro
+       * folio line, and the screen's own time graphic if it has one" — and this
+       * screen's graphic is the week nav below. Above the `<header>` instead
+       * would put a caption before the up-link, which is navigation rather than
+       * content.
+       *
+       * `hidden … xl:block`, like `/`'s folio and `/training`'s standing: the
+       * band is a thing that exists at the cap, and the phone was measured
+       * without this line. It is a `<p>` and not a heading — § Desktop, "the
+       * folio is a caption, not a heading" — so the screen's heading order is
+       * the same at every width.
+       */}
+      <p className="hidden text-micro uppercase text-text-tertiary xl:block">
+        {weekFolio(plan.monday, plan.today)}
+      </p>
 
       <div className="flex flex-col items-center gap-2">
         <WeekNav monday={plan.monday} basePath="/plan" />
