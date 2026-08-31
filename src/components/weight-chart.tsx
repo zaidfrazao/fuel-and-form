@@ -308,19 +308,21 @@ function Plot({
 }) {
   const { gridlines, latest, path, points, start, target } = plot;
 
-  /* The positioning context the overlay is stacked in. It takes its height
-  from the scaled `<svg>` below, which is what makes `inset-0` on the
-  overlay the same box the geometry is drawn in.
-
-  `shrink-0` guards the one precondition the two layers rest on: that
-  this box keeps its viewBox's own aspect, whichever shape it is. `h-auto` gives it that
-  from the width — but a flex item shrinks by default, and every caller
-  is a flex column, so a height-constrained parent could compress it. The
-  scaled layer would then letterbox itself inside the box (its
-  `preserveAspectRatio` centres what it cannot fill) while the overlay,
-  having no viewBox, would go on filling the whole of it — and the words
-  would drift off the rules they belong to, silently and only at that one
-  caller. Refusing to shrink turns that into overflow, which is visible. */
+  /*
+   * The positioning context the overlay is stacked in. It takes its height from
+   * the scaled `<svg>` below, which is what makes `inset-0` on the overlay the
+   * same box the geometry is drawn in.
+   *
+   * `shrink-0` guards the one precondition the two layers rest on: that this box
+   * keeps its viewBox's own aspect, whichever of the two shapes it is drawing.
+   * `h-auto` gives it that from the width — but a flex item shrinks by default,
+   * and every caller is a flex column, so a height-constrained parent could
+   * compress it. The scaled layer would then letterbox itself inside the box
+   * (its `preserveAspectRatio` centres what it cannot fill) while the overlay,
+   * having no viewBox, would go on filling the whole of it — and the words would
+   * drift off the rules they belong to, silently and only at that one caller.
+   * Refusing to shrink turns that into overflow, which is visible.
+   */
 
   return (
     <div className={cn("relative shrink-0", className)} data-chart-shape={name}>
@@ -331,16 +333,30 @@ function Plot({
         // Scales with the column at any width, which is what makes "legible at
         // 375px" a proportion fixed once in the viewBox rather than a
         // measurement. `h-auto` keeps the aspect ratio, so nothing is squashed
-        // on the way to a 640px desktop column — and so the overlay's
-        // percentages land on this layer's units. What scales with it is the
-        // geometry alone: since FUEL-76 the words and the mark are drawn a
-        // layer up, in pixels.
+        // on the way to the measure's column — and so the overlay's percentages
+        // land on this layer's units. What scales with it is the geometry
+        // alone: since FUEL-76 the words and the mark are drawn a layer up, in
+        // pixels.
+        //
+        // What this cannot do is CHANGE the aspect, which is why FUEL-78 gave
+        // the geometry a second shape rather than simply handing this one a
+        // wider box. On the frame's shape there is nothing left to scale: the
+        // frame caps at 1272, so the box is 968px wide wherever it is shown and
+        // one user unit is one device pixel — including the `rx` below, which
+        // is the first time it has actually been the 14px § Implementation
+        // Notes asks for rather than the column's scale times fourteen.
         className="w-full h-auto"
       >
         {/* The plot area — the documented second use of `surface`. `rx` is the
             14px tile radius from § Implementation Notes: this is the one place
             the fill appears outside a tile, so it should at least be shaped
-            like one. */}
+            like one.
+
+            A KNOWN DIVERGENCE, recorded by FUEL-85 rather than fixed by it and
+            left standing here: `BRAND_GUIDE.html` draws this chart with no
+            plate at all. It "belongs to whoever reconciles the chart's
+            drawing", and FUEL-78 is a composition ticket — widening a graphic
+            is not a licence to restyle it. */}
         <rect
           x={0}
           y={0}

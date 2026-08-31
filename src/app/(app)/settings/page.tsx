@@ -42,7 +42,7 @@ export default async function SettingsPage() {
   const schedule = await loadSchedule(session.userId);
 
   return (
-    <PageMain className={cn("gap-7 py-8", PAGE_FRAME_GRID, "xl:grid-rows-1")}>
+    <PageMain className={cn("gap-7 py-8", PAGE_FRAME_GRID, "xl:grid-rows-[auto]")}>
       {/*
        * The form, and the utilities beside it — § Desktop, amended by FUEL-85,
        * and FUEL-78's half of it.
@@ -92,9 +92,39 @@ export default async function SettingsPage() {
        * has no header band to sit under and no action bar to sit above, so
        * `PAGE_ASIDE_COLUMN`'s row two and its span of two would both be
        * describing a shape that is not here.
+       *
+       * `grid-rows-[auto]` and not `grid-rows-1`, which is the same row count
+       * and a different track: Tailwind's numbered form is
+       * `repeat(1, minmax(0, 1fr))`, and a flexible track in a `<main>` the
+       * frame stretches to the viewport would make both columns as tall as the
+       * window. Nothing would look wrong — a flex column starts its content at
+       * the top either way — which is exactly why it is worth declaring: every
+       * box measured on this screen would silently be the window's height
+       * rather than its own.
+       *
+       * ## The first section loses its rule, and only here
+       *
+       * Every utility below carries `border-t pt-5`, which is a SEPARATOR: on
+       * the phone each one divides itself from whatever it follows, and the
+       * first of them divides the links from the slot-times form above. In a
+       * column of their own there is nothing above the first, and a hairline
+       * with nothing on one side of it is not separating anything — it reads as
+       * an outer rule drawn around the aside, which § Lists rules out by name
+       * and which neither `/` nor `/training` draws at the top of theirs.
+       *
+       * `:first-child` rather than a prop on `PushForm`, because which section
+       * is first is a fact about this column and not about that component: the
+       * push control is conditional on a VAPID key, and without one the links
+       * section is first and needs exactly the same treatment. A prop would
+       * have to be passed to whichever component happened to be first, which is
+       * the same fault a second time.
        */}
       <div
-        className={cn(PAGE_COLUMN_BASE, "xl:col-start-2 xl:row-start-1 xl:gap-7")}
+        className={cn(
+          PAGE_COLUMN_BASE,
+          "xl:col-start-2 xl:row-start-1 xl:gap-7",
+          "xl:[&>section:first-child]:border-t-0 xl:[&>section:first-child]:pt-0",
+        )}
         data-column="aside"
       >
         {/*

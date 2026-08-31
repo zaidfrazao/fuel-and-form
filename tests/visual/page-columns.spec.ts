@@ -505,12 +505,21 @@ test.describe("/weight", () => {
        */
       const progress = await boxOf(page.locator('[data-row="progress"]'));
       const form = await boxOf(page.locator('[data-column="measure"]'));
-      const history = await boxOf(page.locator('[data-column="aside"]'));
+
+      /*
+       * The precondition, measured on the LIST rather than on the aside's box.
+       * The aside spans the flexible last row, so on a page shorter than the
+       * viewport its box is stretched to the foot of `<main>` — and a guard
+       * that compared box heights would pass without the history being long at
+       * all, which is a guard that proves nothing on exactly the runs where it
+       * matters. The rows are the thing that is actually long.
+       */
+      const rows = await boxOf(page.getByRole("list", { name: "Weigh-ins" }));
 
       expect(
-        history.height,
-        "the history is the taller column, or this proves nothing",
-      ).toBeGreaterThan(progress.height + form.height);
+        rows.y + rows.height,
+        "the history outruns the measure, or this proves nothing",
+      ).toBeGreaterThan(form.y + form.height);
 
       expect(form.y - (progress.y + progress.height), "the measure's gap").toBeCloseTo(
         28,
@@ -560,12 +569,14 @@ test.describe("/settings", () => {
 /**
  * The two that flow their groups into columns.
  *
- * `columns` is the count § Desktop gives each, and `groups` is the selector for
- * the thing that may not be split. The gutter is the frame's 28px in both.
+ * `count` is the column count § Desktop gives each, and `groups` selects the
+ * thing that may not be split — the flowed box's own children rather than every
+ * `<section>` on the page, so a section added outside the flow cannot quietly
+ * join the set being measured. The gutter is the frame's 28px in both.
  */
 for (const { path, count, groups, settlesOn } of [
-  { path: "/shopping", count: 2, groups: "main section", settlesOn: "Shopping list" },
-  { path: "/plan/template", count: 3, groups: "main section", settlesOn: "Weekly template" },
+  { path: "/shopping", count: 2, groups: "[data-column-flow] > section", settlesOn: "Shopping list" },
+  { path: "/plan/template", count: 3, groups: "[data-column-flow] > section", settlesOn: "Weekly template" },
 ]) {
   test.describe(path, () => {
     test.beforeEach(async ({ page }) => {
