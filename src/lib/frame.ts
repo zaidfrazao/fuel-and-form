@@ -151,9 +151,24 @@ export const FRAME_MEASURE_AND_ASIDE = "lg:col-end-[-1]";
  *
  * There is no row gap, and that is deliberate rather than an omission: the bar
  * brings its own `pt-[30px]` (`action-bar.ts`), so a 30px row gap would draw 60.
+ *
+ * ## `max-w-none`, which is not decoration either
+ *
+ * `FRAME_MEASURE` carries an unscoped `max-w-[var(--frame-measure)]` — the
+ * below-`lg` half of the measure, where there is no grid track to be the width.
+ * It is a no-op at `lg`, where the track is already exactly 640, and it is a
+ * *cap* the moment a screen spans two tracks: the item would resolve to 640 of
+ * the 1024 it was given, the inner grid would get 584 of content, and the aside
+ * would come out at zero with its content overflowing. `/plan` meets the same
+ * edge and answers it by naming its own 1024.
+ *
+ * `none` rather than a number, because at this breakpoint there is nothing left
+ * to cap: the frame has capped and centred, so the span is 640 + 28 + 356 by
+ * construction. A `max-w-[1024px]` here would be that sum written a second time
+ * in a form an edit to the frame could put out of step.
  */
 export const PAGE_ASIDE_GRID =
-  "xl:col-end-[-1] xl:grid xl:grid-cols-[var(--frame-measure-inset)_minmax(0,1fr)] xl:content-start xl:gap-x-[var(--frame-gutter)]";
+  "xl:col-end-[-1] xl:grid xl:max-w-none xl:grid-cols-[var(--frame-measure-inset)_minmax(0,1fr)] xl:content-start xl:gap-x-[var(--frame-gutter)]";
 
 /**
  * The content wrapper each screen already had, dissolved at `xl`.
