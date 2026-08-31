@@ -453,15 +453,16 @@ describe("the day's numbers, in two shapes", () => {
 
     expect(document.querySelector('[data-ruler="phone"]')).toBeNull();
 
-    // Two in the DOM, not one — FUEL-77. The second column takes the ruler at
-    // ≥1272 on a session exactly as it does on a meal, so the copy that serves
-    // everything below it has to stand down there. `hidden md:block` is absent
-    // for the reason above: this one is drawn on a phone too.
+    // Two in the DOM, not one — FUEL-77, and FUEL-86 only changed which zone
+    // the second is in. The header band takes the ruler at ≥1272 on a session
+    // exactly as it does on a meal, so the copy that serves everything below it
+    // has to stand down there. `hidden md:block` is absent for the reason
+    // above: this one is drawn on a phone too.
     const wide = document.querySelector('[data-ruler="wide"]')!;
 
-    expect(wide.className).toBe(RULER_AT.wideOnSession);
-    expect(document.querySelector('[data-ruler="aside"]')!.className).toBe(
-      RULER_AT.aside,
+    expect(wide.className).toBe(RULER_AT.belowCap);
+    expect(document.querySelector('[data-ruler="header"]')!.className).toBe(
+      RULER_AT.header,
     );
   });
 
@@ -475,7 +476,7 @@ describe("the day's numbers, in two shapes", () => {
      */
     renderNow(active(0));
 
-    const shownAt = (which: "wide" | "phone" | "aside") =>
+    const shownAt = (which: "wide" | "phone" | "header") =>
       document.querySelector(`[data-ruler="${which}"]`)!.className;
 
     // Read from the declaration both this screen and the skeleton take, rather
@@ -483,7 +484,7 @@ describe("the day's numbers, in two shapes", () => {
     // constant exists to end, and this test would be the place it started.
     expect(shownAt("phone")).toBe(RULER_AT.phone);
     expect(shownAt("wide")).toBe(RULER_AT.wide);
-    expect(shownAt("aside")).toBe(RULER_AT.aside);
+    expect(shownAt("header")).toBe(RULER_AT.header);
 
     /*
      * And the property that matters, which the strings alone do not give: each
@@ -494,7 +495,7 @@ describe("the day's numbers, in two shapes", () => {
      * where the three copies are.
      */
     expect(shownAt("wide")).toContain("max-xl:");
-    expect(shownAt("aside")).not.toContain("md:");
+    expect(shownAt("header")).not.toContain("md:");
   });
 });
 
@@ -1249,7 +1250,7 @@ describe("the actions", () => {
     // number is checked.
     const { container } = renderNow(active(0));
 
-    const bar = container.querySelector('[data-variant="default"]')?.parentElement;
+    const bar = container.querySelector(".action-bar-fade");
 
     expect(bar?.className).toContain("sticky");
     expect(bar?.className).toMatch(/(?<!lg:)bottom-\[/);
@@ -1265,7 +1266,7 @@ describe("the actions", () => {
     // matching. Identity, so this screen cannot quietly add or drop a class.
     const { container } = renderNow(active(0));
 
-    const bar = container.querySelector('[data-variant="default"]')?.parentElement;
+    const bar = container.querySelector(".action-bar-fade");
 
     // The shared string plus where the bar stands in the page's own grid —
     // FUEL-77. Still identity rather than `toContain`, so this screen cannot
@@ -1285,7 +1286,7 @@ describe("the actions", () => {
     // exists to catch.
     const { container } = renderNow(active(0));
 
-    const bar = container.querySelector('[data-variant="default"]')?.parentElement;
+    const bar = container.querySelector(".action-bar-fade");
 
     expect(bar?.className).not.toContain("safe-area-inset-bottom");
   });
@@ -2047,7 +2048,7 @@ describe("a slot that is already swapped", () => {
     const revert = screen.getByRole("button", { name: "Revert" });
     // The primary's own parent IS the bar: `Actions` renders it and the
     // Swap/Skip row inside one sticky container, with no wrapper between.
-    const bar = screen.getByRole("button", { name: "Log eaten" }).parentElement;
+    const bar = screen.getByRole("button", { name: "Log eaten" }).closest(".action-bar-fade");
 
     expect(bar?.className).toContain("sticky");
     expect(bar?.contains(screen.getByRole("button", { name: "Swap" }))).toBe(true);
@@ -2214,26 +2215,48 @@ describe("the second column", () => {
   test("the measure keeps the meal and its figures", () => {
     renderNow(active(0));
 
-    // § Desktop: "the measure keeps the meal, the macro grid and the action
-    // bar". The meal's name is the h1 — it is the answer to the question the
-    // screen asks — and both named grids are beside it at ≥768px.
-    expect(sectionsIn("measure")).toEqual(["Overnight oats", "This meal", "Today"]);
+    // § Desktop, as FUEL-85 redrew it: "the measure keeps the meal, its four
+    // figures four-across, and the actions in a row". The meal's name is the h1
+    // — it is the answer to the question the screen asks — and `This meal` is
+    // the one grid beside it.
+    //
+    // `Today` left for the aside in FUEL-86, which is the redraw's one real
+    // move on this screen: the meal's four figures and the day's four figures
+    // were two identical grids stacked, saying the same thing twice.
+    expect(sectionsIn("measure")).toEqual(["Overnight oats", "This meal"]);
   });
 
   test("the aside takes the day around it", () => {
     renderNow(active(0));
 
-    // "The aside takes the day ruler and the Anytime list, which is what the
-    // 544px of nothing sat in front of." Up next is the ticket's own ruling:
-    // the mock draws a day with nothing upcoming, so it settles nothing, and
-    // this is the section that answers the same question the ruler does.
-    expect(sectionsIn("aside")).toEqual(["Up next", "Anytime"]);
+    // § Desktop, redrawn: the aside takes "the day's totals, the day's own
+    // items with their status, and the Anytime list" — the record, the day
+    // around it, and what can still be done.
+    //
+    // The ruler left for the header band, whose question is the ruler's. Up
+    // next stays in the DOM and stands down at the cap, because `The day`
+    // contains its two items; both are here because both are the aside's, at
+    // the width each is drawn at.
+    expect(sectionsIn("aside")).toEqual(["Today", "The day", "Up next", "Anytime"]);
+  });
+
+  test("the header band takes the folio and the ruler, and nothing else", () => {
+    renderNow(active(0));
+
+    const band = document.querySelector<HTMLElement>('[data-column="header"]')!;
+
+    // § Desktop: "a Micro folio line, and the screen's own time graphic if it
+    // has one". A heading here is the failure the rule names — it would arrive
+    // before the subject — so the assertion is that the band contains none.
+    expect(band.querySelectorAll("h1, h2")).toHaveLength(0);
+    expect(band.querySelector("[data-ruler]")!.getAttribute("data-ruler")).toBe("header");
+    expect(band.querySelector("p")!.textContent).toMatch(/^Today · /);
   });
 
   test("the action bar is in neither group, and lands under the measure", () => {
     const { container } = renderNow(active(0));
 
-    const bar = container.querySelector('[data-variant="default"]')!.parentElement!;
+    const bar = container.querySelector<HTMLElement>(".action-bar-fade")!;
 
     // Outside both wrappers in the DOM — it is `<main>`'s own child, placed by
     // `PAGE_MEASURE_FOOT` into the first column's second row. A bar inside the
@@ -2252,8 +2275,15 @@ describe("the second column", () => {
      * placing sections into grid cells, this sequence would still read as it
      * does — but the phone's would have changed, because the sections would
      * have had to be reordered in the source to sit in the right cells. So the
-     * assertion is the phone's own order, on the screen that now has two
-     * columns: subject, figures, ruler, up next, anytime, foot link.
+     * assertion is the phone's own order, on the screen that now has three
+     * zones: subject, figures, ruler, up next, anytime, foot link.
+     *
+     * FUEL-86 moved two sections between groups and this list did not change,
+     * which is the property it exists to protect: `Today` was the last of the
+     * measure and became the first of the aside, and the two groups are
+     * adjacent, so the flat column is the same list in the same order. The
+     * header band contributes nothing here because everything in it is drawn
+     * only above the cap.
      */
     renderNow(active(0));
 
@@ -2265,12 +2295,13 @@ describe("the second column", () => {
       );
 
     expect(order).toEqual([
+      "ruler:header",
       "Overnight oats",
       "ruler:wide",
       "This meal",
       "Today",
       "ruler:phone",
-      "ruler:aside",
+      "The day",
       "Up next",
       "Anytime",
       "Settings",
@@ -2286,6 +2317,14 @@ describe("the second column", () => {
 
     expect(sectionsIn("measure")).toEqual(["Nothing planned"]);
     expect(sectionsIn("aside")).toEqual(["Anytime"]);
+
+    // The band is drawn on this state too — § Desktop's header rule "applies to
+    // every screen" — and holds only the folio, since there is no timeline for
+    // a ruler to be about.
+    const band = document.querySelector<HTMLElement>('[data-column="header"]')!;
+
+    expect(band.querySelector("[data-ruler]")).toBeNull();
+    expect(band.querySelector("p")!.textContent).toMatch(/^Today · /);
   });
 
   test("day-complete refuses one", () => {
@@ -2299,30 +2338,46 @@ describe("the second column", () => {
     expect(document.querySelector("[data-column]")).toBeNull();
   });
 
-  test("the figures stay two columns at every width", () => {
+  test("the meal's figures go four across on the measure, the day's stay 2×2", () => {
     /*
-     * FUEL-77's third criterion, which turns out to be a verification rather
-     * than a change — recorded here so the next reader does not re-open it.
+     * § Desktop's density rule and FUEL-85's amendment to it, asserted where a
+     * later reader would otherwise re-open the question.
      *
-     * The ticket's complaint is real: at 584px there is a chasm between
-     * CALORIES and PROTEIN. The fix is not a third column, and § Desktop says so
-     * twice. Its density rule is "three columns when there are exactly three
-     * values and each is short; two otherwise", and then, in the same
+     * The rule proper — "three columns when there are exactly three values and
+     * each is short; two otherwise" — names this grid out of scope in the same
      * paragraph: "the four-macro grid is four values and so is never in scope".
-     * Every grid on this screen is that grid. What closes the gap is the aside
-     * taking 356px of the width away, which is this ticket's actual subject.
+     * That has not changed and is not what this is about.
      *
-     * The rule is also explicitly not a width rule — "extra width in this system
-     * becomes a second column BESIDE the measure, never more columns inside it"
-     * — so the assertion is that no variant is attached to the column count at
-     * all, rather than that it is two at some particular width.
+     * What FUEL-85 added is the shape the grid takes instead: "the four-macro
+     * grid, which this rule names out of scope, goes four-across on a measure
+     * and stays 2×2 in an aside. At 584 the 2×2 puts around 300px between a
+     * label and the next value, which is four islands rather than a grid, and
+     * at 356 the 2×2 is the density the phone already proves."
+     *
+     * So the count is decided by the COLUMN, and the two grids on this screen
+     * are in different columns. Both are 2×2 below the cap, which is what keeps
+     * the 375 and 820 baselines byte-identical.
      */
     renderNow(active(0));
 
-    for (const grid of document.querySelectorAll("dl")) {
-      expect(grid.className).toContain("grid-cols-2");
-      expect(grid.className).not.toMatch(/(md|lg|xl):grid-cols/);
-    }
+    // `This meal` by its shape rather than by position: the measure also holds
+    // the merged phone grid, which is a fourth four-figure `dl` that only ever
+    // draws below 768 and is not what this rule is about.
+    const meal = document.querySelector<HTMLElement>('[data-shape="split"] dl')!.className;
+    const day = document.querySelector<HTMLElement>('[data-column="aside"] dl')!.className;
+
+    expect(meal).toContain("grid-cols-2");
+    expect(day).toContain("grid-cols-2");
+
+    // The measure's, and only at the cap. `md:`/`lg:` are barred outright: the
+    // 820 baseline is the control for this whole ticket, and a grid that went
+    // four across in that band would move it.
+    expect(meal).toContain("xl:grid-cols-4");
+    expect(meal).not.toMatch(/(md|lg):grid-cols/);
+
+    // The aside's takes no variant at all — 356px is the width the phone's own
+    // 2×2 was measured at.
+    expect(day).not.toMatch(/(md|lg|xl):grid-cols/);
   });
 
   test("the groups are the frame's, not this screen's", () => {

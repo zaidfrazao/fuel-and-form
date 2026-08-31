@@ -295,13 +295,13 @@ export default function Loading() {
          * way, so nothing moves vertically on swap-in at any width.
          */}
         <div className={ACTION_BAR_CONTROLS}>
-          <Block className={cn("h-13 rounded-md", ACTION_BAR_PRIMARY, "xl:w-[122px]")} />
+          <Block className={cn("h-13 rounded-md", ACTION_BAR_PRIMARY, "xl:w-[121px]")} />
           <div className={ACTION_BAR_SPLIT}>
             <Block
-              className={cn("h-[2.875rem] rounded-md", ACTION_BAR_SECONDARY, "xl:w-[86px]")}
+              className={cn("h-[2.875rem] rounded-md", ACTION_BAR_SECONDARY, "xl:w-[76px]")}
             />
             <Block
-              className={cn("h-[2.875rem] rounded-md", ACTION_BAR_SECONDARY, "xl:w-[78px]")}
+              className={cn("h-[2.875rem] rounded-md", ACTION_BAR_SECONDARY, "xl:w-[66px]")}
             />
           </div>
         </div>

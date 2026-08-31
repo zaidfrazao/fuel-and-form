@@ -168,7 +168,37 @@ export const FRAME_MEASURE_AND_ASIDE = "lg:col-end-[-1]";
  * in a form an edit to the frame could put out of step.
  */
 export const PAGE_ASIDE_GRID =
-  "xl:col-end-[-1] xl:grid xl:max-w-none xl:grid-cols-[var(--frame-measure-inset)_minmax(0,1fr)] xl:content-start xl:gap-x-[var(--frame-gutter)]";
+  "xl:col-end-[-1] xl:grid xl:max-w-none xl:grid-cols-[var(--frame-measure-inset)_minmax(0,1fr)] xl:grid-rows-[auto_auto_1fr] xl:content-start xl:gap-x-[var(--frame-gutter)]";
+
+/**
+ * ## The rows are declared, and the third one is flexible — FUEL-86
+ *
+ * `xl:grid-rows-[auto_auto_1fr]`: the band, the measure's sections, and the bar.
+ * Left implicit they were three `auto` tracks, and that is a different layout
+ * the moment the aside is the taller column.
+ *
+ * A grid distributes a SPANNING item's height across the tracks it spans, and
+ * the aside spans rows two and three. With both `auto`, an aside taller than
+ * the measure plus the bar has its surplus split evenly between them — so the
+ * measure's row grows for a reason that has nothing to do with the measure, and
+ * the bar goes down with it. Measured on `/` at 1272 after `The day` landed:
+ * the measure's own content was 187px, its row was 370, and the primary sat
+ * 183px below the last figure it acts on. That is the void this milestone
+ * exists to remove, drawn again by the fix for it.
+ *
+ * `1fr` on the last row is what confines the surplus to it. A flexible track is
+ * sized after the intrinsic ones, so row two is the measure's content and
+ * nothing else, and whatever the aside still needs is taken by row three —
+ * BELOW the bar, which `xl:mt-0` in `PAGE_MEASURE_FOOT` holds at the top of it.
+ *
+ * Checked in a browser at both of the two regimes a flexible track behaves
+ * differently in, because the difference is exactly where an `fr` is easy to
+ * get wrong: a page shorter than the viewport, where `<main>` is stretched by
+ * `flex-1` and the row resolves against a definite height, and a page taller
+ * than it, where the height is indefinite and the `fr` falls back to its
+ * content. The bar sits on the measure's last figure in both, and the aside's
+ * last row is inside `<main>` in both.
+ */
 
 /**
  * The content wrapper each screen already had, dissolved at `xl`.
@@ -270,13 +300,35 @@ export const PAGE_ASIDE_COLUMN =
  * down — the answer changes the moment a screen renders a third group.
  *
  * § Desktop: "the primary action sits at the end of its column", and the mock
- * draws it 30px under the last figure at the measure's width. `mt-auto` in
- * `ACTION_BAR` goes inert here exactly as `bottom-[…]` went inert under
- * FUEL-72's `lg:static`: the bar's grid area is its own height, so there is no
- * free space for an auto margin to absorb. Both stay in the shared string
- * because both are still doing their work below this breakpoint.
+ * draws it 30px under the last figure at the measure's width.
  *
  * Row three since FUEL-86 put the header band in row one. The bar is still the
  * row after the measure's sections; what changed is what is above them.
+ *
+ * ## `xl:mt-0`, which used to be true by luck
+ *
+ * This said, until FUEL-86, that `mt-auto` in `ACTION_BAR` "goes inert here
+ * exactly as `bottom-[…]` went inert under FUEL-72's `lg:static`: the bar's
+ * grid area is its own height, so there is no free space for an auto margin to
+ * absorb". The conclusion was right and the reason was not. The bar's row is
+ * its own height only while the ASIDE fits in the rows it spans — and the aside
+ * spans this one. A taller aside pushes its surplus into this track, an auto
+ * top margin absorbs every pixel of it, and the primary lands at the foot of
+ * the aside instead of under the figures it acts on.
+ *
+ * `page-columns.spec.ts` had already written the warning down — "an aside
+ * taller than the measure plus the bar would grow row one and push the primary
+ * an arbitrary distance below the figures it acts on... Neither is true on
+ * these two screens today — the measure is the longer column on both, by a wide
+ * margin". FUEL-86 is what made it false: `The day` gives `/`'s aside the whole
+ * timeline, and at 1272 the bar was measured 212px below the measure's last
+ * figure, in the middle of the void this milestone exists to remove.
+ *
+ * So the inertness is declared rather than inherited. An auto margin outranks
+ * `align-self`, so `xl:self-start` would not have done it; zeroing the margin
+ * is what leaves the bar at the top of its own row wherever that row ends up.
+ * `mt-auto` stays in the shared string because it is still doing its work below
+ * this breakpoint — it is what puts the bar at the foot of a short page — and
+ * this is the one width where the page has a second column to be shorter than.
  */
-export const PAGE_MEASURE_FOOT = "xl:col-start-1 xl:row-start-3";
+export const PAGE_MEASURE_FOOT = "xl:col-start-1 xl:row-start-3 xl:mt-0";

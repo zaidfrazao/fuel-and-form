@@ -5,6 +5,7 @@ import {
   adherenceWindow,
   recentSessions,
   type SessionLog,
+  weekStanding,
 } from "./adherence";
 import type { TrainingTemplateEntry, Workout } from "./db/schema";
 import type { TrainingPlan } from "./rotation";
@@ -359,5 +360,77 @@ describe("the recent list", () => {
       CIRCUIT_A,
       CIRCUIT_B,
     ]);
+  });
+});
+
+describe("the week's standing", () => {
+  /*
+   * The right of `/training`'s header band — FUEL-86, `3 of 5 sessions this
+   * week`. Read off the same six weeks the dot grid draws, so the count and the
+   * dots cannot disagree.
+   */
+
+  const weeksWith = (logs: readonly SessionLog[] = [], anchor = ANCHOR) =>
+    adherenceWeeks(PLAN, logs, anchor);
+
+  it("counts the sessions the template trains in the viewed week", () => {
+    // The seed's program is PRD § P3's five weekdays, and the walk is on every
+    // one of them — so a count that let the walk in would say seven.
+    const standing = weekStanding(weeksWith(), ANCHOR);
+
+    expect(standing?.sessions).toBe(5);
+    expect(standing?.done).toBe(0);
+  });
+
+  it("counts only what was recorded as done", () => {
+    // Partial has its own control precisely to say NOT done — § Buttons — and a
+    // count that folded the two would erase the distinction the screen offers
+    // to make. A skip is not done either, and an unlogged day is not a skip.
+    // The program's first week, whose three session dates and their workouts
+    // are the ones "what a day says" already pins above — the rotation puts a
+    // different workout on a given weekday in a later week, and a log naming
+    // the wrong one would match nothing and pass this test for no reason.
+    const viewing = "2026-03-04";
+
+    const standing = weekStanding(
+      weeksWith(
+        [
+          { date: "2026-03-02", workoutId: CIRCUIT_A_ID, status: "done" },
+          { date: "2026-03-04", workoutId: CIRCUIT_B_ID, status: "partial" },
+          { date: "2026-03-06", workoutId: CIRCUIT_A_ID, status: "skipped" },
+        ],
+        viewing,
+      ),
+      viewing,
+    );
+
+    expect(standing).toEqual({ done: 1, sessions: 5 });
+  });
+
+  it("answers about the week the date is in, not the last week of the window", () => {
+    // The window is anchored on the viewed date, so the two coincide today.
+    // Found by the date rather than indexed, because the index is a fact about
+    // how the window is built and the date is a fact about what is on screen.
+    const earlier = "2026-03-03"; // the first week of ANCHOR's window
+
+    const standing = weekStanding(
+      weeksWith([{ date: "2026-03-02", workoutId: CIRCUIT_A_ID, status: "done" }]),
+      earlier,
+    );
+
+    expect(standing).toEqual({ done: 1, sessions: 5 });
+  });
+
+  it("says nothing about a date the window does not cover", () => {
+    // A caller cannot draw `0 of 0` if it is never handed one.
+    expect(weekStanding(weeksWith(), "2027-01-01")).toBeNull();
+  });
+
+  it("says nothing about a week with no sessions on it", () => {
+    // Before the program starts there is nothing to be a fraction of, and
+    // § Tone of Voice would rather say nothing than report a ratio about it.
+    const before = "2026-02-25"; // a Wednesday, the week before PROGRAM_START
+
+    expect(weekStanding(adherenceWeeks(PLAN, [], before), before)).toBeNull();
   });
 });

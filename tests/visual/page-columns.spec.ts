@@ -53,6 +53,7 @@ const columns = async (page: import("@playwright/test").Page) => {
 
   return {
     main,
+    header: await boxOf(page.locator('[data-column="header"]')),
     measure: await boxOf(page.locator('[data-column="measure"]')),
     aside: await boxOf(page.locator('[data-column="aside"]')),
   };
@@ -75,6 +76,7 @@ for (const path of ["/", "/training"]) {
       // Both groups are in the DOM at every width. Asserted before anything is
       // measured, so a screen that stopped rendering one of them fails here
       // rather than passing every geometric claim about a box that is not there.
+      await expect(page.locator('[data-column="header"]')).toHaveCount(1);
       await expect(page.locator('[data-column="measure"]')).toHaveCount(1);
       await expect(page.locator('[data-column="aside"]')).toHaveCount(1);
     });
@@ -91,12 +93,15 @@ for (const path of ["/", "/training"]) {
        * the last width without it.
        */
       const aside = page.locator('[data-column="aside"]');
+      const header = page.locator('[data-column="header"]');
 
       await page.setViewportSize({ width: 1271, height: 900 });
       expect(await displayOf(aside), "at 1271px").toBe("contents");
+      expect(await displayOf(header), "the band at 1271px").toBe("contents");
 
       await page.setViewportSize({ width: 1272, height: 900 });
       expect(await displayOf(aside), "at 1272px").toBe("flex");
+      expect(await displayOf(header), "the band at 1272px").toBe("flex");
     });
 
     for (const width of [1272, 1920]) {
@@ -118,6 +123,53 @@ for (const path of ["/", "/training"]) {
 
         // § Spacing's ≥768px gutter, doing the same job between columns.
         expect(aside.x - (measure.x + measure.width), "the gutter").toBeCloseTo(28, 0);
+      });
+
+      test(`the header band spans both columns at ${width}`, async ({ page }) => {
+        /*
+         * FUEL-86's third zone, and the arithmetic that makes it one thing
+         * rather than two — § Desktop: the measure and the aside "together come
+         * to exactly that 1024", which is the width the frame is a sum of.
+         *
+         * A band that merely started at the measure and ran to the aside's
+         * right edge would measure the same and mean less. What is asserted is
+         * the pair: it begins where the measure begins and ends where the aside
+         * ends, so a band placed from column one — over the rail, which is what
+         * `col-span-2` would do — fails on its x rather than on its width.
+         */
+        await page.setViewportSize({ width, height: 900 });
+
+        const { header, measure, aside } = await columns(page);
+
+        expect(header.x, "the band's left edge").toBeCloseTo(measure.x, 0);
+        expect(
+          header.x + header.width,
+          "the band's right edge",
+        ).toBeCloseTo(aside.x + aside.width, 0);
+        expect(header.width, "the span").toBeCloseTo(584 + 28 + 356, 0);
+      });
+
+      test(`the band is above both columns at ${width}`, async ({ page }) => {
+        /*
+         * A row of its own, not a taller first row. § Desktop's "one job per
+         * zone" puts the folio and the time graphic ahead of the subject, and
+         * the band's 30px is its own bottom margin rather than a grid row gap —
+         * `lib/frame.ts` gives the reason, which is that the action bar brings
+         * its own `pt-[30px]` and a row gap would be paid twice.
+         */
+        await page.setViewportSize({ width, height: 900 });
+
+        const { header, measure, aside } = await columns(page);
+
+        for (const [name, box] of [
+          ["the measure", measure],
+          ["the aside", aside],
+        ] as const) {
+          expect(box.y, `${name} starts below the band`).toBeCloseTo(
+            header.y + header.height + 30,
+            0,
+          );
+        }
       });
 
       test(`the measure keeps its own inset at ${width}`, async ({ page }) => {
@@ -262,6 +314,17 @@ for (const path of ["/", "/training"]) {
 
       expect(await displayOf(page.locator('[data-column="measure"]'))).toBe("contents");
       expect(await displayOf(page.locator('[data-column="aside"]'))).toBe("contents");
+
+      // The band too, and what it draws here is the point. Everything FUEL-86
+      // ADDED to it is `hidden` below the cap — `/`'s folio, the ruler's third
+      // copy, `/training`'s week standing — so the only thing left drawn is
+      // `/training`'s paginator, which was on this screen at this width all
+      // along and changed zone rather than visibility. That is the composition
+      // reason the 820 baselines come back byte-identical, stated as a count.
+      expect(await displayOf(page.locator('[data-column="header"]'))).toBe("contents");
+      await expect(page.locator('[data-column="header"] > *:visible')).toHaveCount(
+        path === "/" ? 0 : 1,
+      );
 
       // Measured on the sections themselves, since a group with no box has no
       // edge to compare. The first thing in each column shares the other's x and

@@ -1,6 +1,13 @@
 import { describe, expect, test } from "vitest";
 
-import { dayLog, entryTotals, pendingEntry } from "@/lib/day-summary";
+import {
+  dayLog,
+  entryTotals,
+  type LoggedEntry,
+  type LogStatus,
+  pendingEntry,
+  theDay,
+} from "@/lib/day-summary";
 import type { Meal, MealLog, Workout, WorkoutLog } from "@/lib/db/schema";
 import type { DayLogs } from "@/lib/log-intent";
 import type { NowItem, ScheduledItem } from "@/lib/resolve-now";
@@ -339,5 +346,99 @@ describe("pendingEntry", () => {
     expect(pendingEntry(item, "log", DATE).status).toBe("done");
     expect(pendingEntry(item, "skip", DATE).status).toBe("skipped");
     expect(pendingEntry(item, "log", DATE).macros).toBeUndefined();
+  });
+});
+
+describe("theDay", () => {
+  /*
+   * The desktop aside's list — FUEL-86. The join is by name and the placement
+   * is by position, and `day-summary.ts` carries the argument for both.
+   */
+
+  const timed = (item: NowItem, key: string, time: string): ScheduledItem => ({
+    ...item,
+    key,
+    at: time,
+    minutes: Number(time.slice(0, 2)) * 60 + Number(time.slice(3)),
+  });
+
+  const TIMELINE = [
+    timed(mealItem(OATS), "m1", "07:30"),
+    timed(workoutItem(CIRCUIT), "w1", "12:00"),
+    timed(mealItem(SALAD), "m2", "13:00"),
+  ];
+
+  const entry = (name: string, status: LogStatus, walk = false): LoggedEntry => ({
+    id: `log-${name}-${status}`,
+    name,
+    status,
+    ...(walk ? { walk: true as const } : {}),
+  });
+
+  test("places every item by the cursor, and only the cursor", () => {
+    // The card and the list cannot disagree about where the day has got to,
+    // because both read the same position.
+    expect(theDay(TIMELINE, 1, []).map((row) => row.place)).toEqual([
+      "past",
+      "now",
+      "upcoming",
+    ]);
+  });
+
+  test("takes the status word from the log, for past items only", () => {
+    const rows = theDay(TIMELINE, 2, [
+      entry("Overnight oats", "eaten"),
+      entry("Circuit A", "skipped"),
+      // Ahead of the cursor, and so not this list's to report. A day whose
+      // lunch was logged early still shows lunch as the item the reader is on.
+      entry("Chicken salad", "eaten"),
+    ]);
+
+    expect(rows.map((row) => row.status)).toEqual(["eaten", "skipped", undefined]);
+    expect(rows[2]!.place).toBe("now");
+  });
+
+  test("keeps the time on a past item nothing logged", () => {
+    // The manual advance walks past an item without writing a row — "I'm done"
+    // with no tap on anything. § Tone of Voice would rather say nothing than
+    // name it something it was not.
+    const [row] = theDay(TIMELINE, 3, [entry("Circuit A", "done")]);
+
+    expect(row!.status).toBeUndefined();
+    expect(row!.at).toBe("07:30");
+  });
+
+  test("gives two identically named items one log row each", () => {
+    // Names are not unique — a day with the same meal in two slots is ordinary
+    // — so the join is a queue rather than a lookup. Taking the first for both
+    // would report the skip against the slot that was eaten.
+    const twice = [
+      timed(mealItem(OATS), "m1", "07:30"),
+      timed(mealItem(OATS), "m2", "16:00"),
+    ];
+
+    expect(
+      theDay(twice, 2, [
+        entry("Overnight oats", "eaten"),
+        entry("Overnight oats", "skipped"),
+      ]).map((row) => row.status),
+    ).toEqual(["eaten", "skipped"]);
+  });
+
+  test("never lets the walk answer for a scheduled item", () => {
+    // The walk is in `anytime` rather than on the timeline, so its log row has
+    // nothing here to match. Left in, it could be consumed by an item that
+    // happened to share its name.
+    const named = [timed(workoutItem(WALK), "w9", "18:00")];
+
+    expect(theDay(named, 1, [entry("Daily walk", "done", true)])[0]!.status).toBeUndefined();
+  });
+
+  test("carries the item's own key, so a row is stable across renders", () => {
+    expect(theDay(TIMELINE, 0, []).map((row) => row.key)).toEqual(["m1", "w1", "m2"]);
+  });
+
+  test("an empty timeline is an empty list, not a heading with nothing under it", () => {
+    expect(theDay([], 0, [entry("Overnight oats", "eaten")])).toEqual([]);
   });
 });

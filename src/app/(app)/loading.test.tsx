@@ -7,6 +7,7 @@ import {
   PAGE_ASIDE_COLUMN,
   PAGE_ASIDE_GRID,
   PAGE_ASIDE_UNWRAP,
+  PAGE_HEADER_BAND,
   PAGE_MEASURE_COLUMN,
   PAGE_MEASURE_FOOT,
 } from "@/lib/frame";
@@ -49,9 +50,15 @@ describe("the skeleton stands in the same frame as the screen", () => {
     }
   });
 
-  test("groups its blocks into the same two columns", () => {
+  test("groups its blocks into the same three zones", () => {
     const container = skeleton();
 
+    // The band takes the constant plus the caption gap the screen gives it —
+    // `toContain` rather than identity for that one reason, and the gap is
+    // named so a second class cannot arrive here unnoticed.
+    expect(container.querySelector('[data-column="header"]')!.className).toBe(
+      `${PAGE_HEADER_BAND} xl:gap-[2px]`,
+    );
     expect(container.querySelector('[data-column="measure"]')!.className).toBe(
       PAGE_MEASURE_COLUMN,
     );
@@ -75,20 +82,21 @@ describe("the skeleton stands in the same frame as the screen", () => {
      */
     const container = skeleton();
 
-    // Three of `RULER_AT`'s four. The fourth, `wideOnSession`, is the copy a
-    // workout card draws instead of the meal card's pair — a skeleton stands in
-    // for one layout and the meal is the one it was drawn against, so it has no
-    // place to put a variant that only exists on the other card.
-    for (const at of ["phone", "wide", "aside"] as const) {
+    // Three of `RULER_AT`'s four. The fourth, `belowCap`, is the copy a workout
+    // card draws instead of the meal card's pair — a skeleton stands in for one
+    // layout and the meal is the one it was drawn against, so it has no place
+    // to put a variant that only exists on the other card.
+    for (const at of ["phone", "wide", "header"] as const) {
       expect(container.querySelector(`[data-ruler="${at}"]`)!.className).toBe(
         RULER_AT[at],
       );
     }
   });
 
-  test("the wide copy is in the measure and the other two are in the aside", () => {
-    // Which is where `/` puts them: 768–1271 the ruler precedes the figures in
-    // the first column, and at the cap it is the top of the second.
+  test("each copy is in the zone `/` puts it in", () => {
+    // 768–1271 the ruler precedes the figures in the measure, below 768 it
+    // follows them in the aside group, and at the cap it is the header band's —
+    // which is where FUEL-86 moved it from the aside.
     const container = skeleton();
 
     const columnOf = (at: string) =>
@@ -99,25 +107,57 @@ describe("the skeleton stands in the same frame as the screen", () => {
 
     expect(columnOf("wide")).toBe("measure");
     expect(columnOf("phone")).toBe("aside");
-    expect(columnOf("aside")).toBe("aside");
+    expect(columnOf("header")).toBe("header");
   });
 
-  test("carries both macro shapes, at the row gaps each uses", () => {
+  test("carries every macro shape, at the row gaps and counts each uses", () => {
     // Below 768 the meal and the day are one grid of three-line cells at a 14px
     // row gap — `macro-grid.tsx` — and above it they are two named sections of
     // four cells at 22. A skeleton with one grid was 40px short at one width and
     // a whole section short at the other.
+    //
+    // FUEL-86 split the pair across the two columns, so `split` is the meal's
+    // alone and the day's is `day`, in the aside where the screen now puts it.
     const container = skeleton();
 
     const merged = container.querySelector('[data-shape="merged"]')!;
     const split = container.querySelector('[data-shape="split"]')!;
+    const day = container.querySelector('[data-shape="day"]')!;
 
     expect(merged.className).toBe("md:hidden");
     expect(merged.querySelector(".grid")!.className).toContain("gap-y-[14px]");
 
     expect(split.className).toContain("hidden");
-    expect(split.querySelectorAll(".grid")).toHaveLength(2);
+    expect(split.querySelectorAll(".grid")).toHaveLength(1);
     expect(split.querySelector(".grid")!.className).toContain("gap-y-[22px]");
+
+    // The meal's goes four across at the cap and the day's does not, which is
+    // the screen's own arrangement — `kv-grid.tsx` owns the rule.
+    expect(split.querySelector(".grid")!.className).toContain("xl:grid-cols-4");
+    expect(day.querySelector(".grid")!.className).not.toContain("xl:grid-cols");
+
+    // Both gated at `md`, because below it the merged grid carries all four
+    // figures and neither of these is drawn.
+    expect(day.className).toContain("hidden");
+    expect(day.querySelector(".grid")!.className).toContain("gap-y-[22px]");
+  });
+
+  test("draws the list each width shows, at that list's row height", () => {
+    // `The day` at the cap and `Up next` below it — `right-now.tsx` carries the
+    // argument for the pair. A skeleton with only one of them would swap in
+    // against a different list at one of the two widths, which is the shift it
+    // exists to prevent.
+    const container = skeleton();
+
+    const theDay = container.querySelector('[data-section="the-day"]')!;
+    const upNext = container.querySelector('[data-section="up-next"]')!;
+
+    expect(theDay.className).toContain("hidden");
+    expect(theDay.className).toContain("xl:flex");
+    expect(theDay.querySelectorAll(".min-h-\\[44px\\]")).toHaveLength(6);
+
+    expect(upNext.className).toContain("xl:hidden");
+    expect(upNext.querySelectorAll(".min-h-\\[54px\\]")).toHaveLength(2);
   });
 
   test("the bar is the shared string and the shared placement", () => {
