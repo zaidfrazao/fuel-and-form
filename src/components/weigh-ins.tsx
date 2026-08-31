@@ -486,6 +486,46 @@ export function WeighIns({
   const unlisted = history.readings.length - history.rows.length;
 
   /*
+   * Nothing has been weighed yet — and at ≥1272 that is a different SHAPE, not
+   * just a screen with three sections missing.
+   *
+   * `latest`, `stats` and the chart are all governed by this one answer:
+   * `weightStats` returns null for an empty history, `WeightChart` renders
+   * nothing, and the History section is gated on `latest`. So the frame's five
+   * rows would have content in row one and row four and nothing in between —
+   * and an empty grid track is zero pixels tall while the gaps on either side
+   * of it are not. Three 28px gaps between a heading and the form it sits
+   * above, where every other width draws one: 56px of void, on the milestone
+   * whose entire purpose is removing them.
+   *
+   * The demo has fifty-seven readings, so no baseline in the suite would ever
+   * have photographed it.
+   *
+   * The frame is therefore not applied at all here, which is the honest
+   * statement rather than a smaller number: a screen with no data has nothing
+   * to compose, no chart to span the frame with and no record to put beside
+   * it. The placement classes on the children below go inert on their own —
+   * `col-start` and `row-start` do nothing to a flex item — so there is one
+   * conditional and not five.
+   *
+   * ## The invariant this rests on, stated so a later edit cannot lose it
+   *
+   * `gap-7` is a flex gap below the cap and a grid ROW gap at it, so **every
+   * intermediate row must have content whenever the frame is applied**. That
+   * holds today because rows two and three are the chart and Progress, and
+   * both appear on exactly this condition: `WeightChart` renders nothing
+   * without readings, and `weightStats` returns null only when its own
+   * `readings` are empty — not for a flat history, not for a single point.
+   * (The rate inside it can be null; the figures cannot.)
+   *
+   * Gating Progress on anything narrower — a minimum number of readings, a
+   * computable rate — would empty row three while rows two and four stayed
+   * full, and 28px of rhythm would silently become 56. Whoever does that has
+   * to move the row rather than only the condition.
+   */
+  const composed = latest !== undefined;
+
+  /*
    * The progress figures and the trailing rate — FUEL-36.
    *
    * Over the OPTIMISTIC readings, which is the chart's reasoning one line of
@@ -678,8 +718,7 @@ export function WeighIns({
     <PageMain
       className={cn(
         "gap-7 pt-[22px]",
-        PAGE_FRAME_GRID,
-        "xl:grid-rows-[auto_auto_auto_auto_1fr]",
+        composed && [PAGE_FRAME_GRID, "xl:grid-rows-[auto_auto_auto_auto_1fr]"],
       )}
     >
       {/* The band: the reading itself. § Desktop's amendment releases it from

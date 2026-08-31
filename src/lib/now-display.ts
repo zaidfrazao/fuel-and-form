@@ -280,12 +280,22 @@ export function rulerSlots(timeline: readonly ScheduledItem[]): Slot[] {
  * ahead" is § Tone of Voice's plain register, and reads correctly in both
  * directions in a way "+3" does not.
  *
- * Both dates are snapped before they are compared: `monday` already is by
- * `loadWeek`, and `today` is a day rather than a week. Subtracting an unsnapped
- * today would make the answer depend on which weekday it happens to be.
+ * **Both arguments are snapped here, including the one that arrives snapped.**
+ * `today` obviously needs it — it is a day rather than a week, and subtracting
+ * an unsnapped one would make the answer depend on which weekday it happened
+ * to be. `monday` does not: `loadWeek` runs `startOfWeek` before it reaches
+ * the only caller.
+ *
+ * It is snapped anyway because this is exported, pure, and cheap to reuse
+ * wrongly. The division by seven assumes a whole number of weeks, and a caller
+ * passing a Wednesday would get "1.5714285714285714 weeks ahead" rendered into
+ * the page — a failure with no exception, no wrong branch and nothing for a
+ * type to catch. Snapping makes the function total instead of documenting a
+ * precondition and hoping; `startOfWeek` on a Monday is the identity, so it
+ * costs the correct caller nothing.
  */
 export function weekFolio(monday: CalendarDate, today: CalendarDate): string {
-  const weeks = daysBetween(startOfWeek(today), monday) / 7;
+  const weeks = daysBetween(startOfWeek(today), startOfWeek(monday)) / 7;
 
   if (weeks === 0) return "This week";
   if (weeks === 1) return "Next week";

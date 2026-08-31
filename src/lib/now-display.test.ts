@@ -344,6 +344,26 @@ describe("weekFolio", () => {
     expect(weekFolio("2026-12-28", "2027-01-06")).toBe("Last week");
   });
 
+  /*
+   * The function is total rather than partial — raised by the FUEL-78
+   * precommit review as the one latent assumption worth removing.
+   *
+   * The division by seven wants a whole number of weeks. Every caller today
+   * hands over a Monday, because `loadWeek` snaps before the page sees it; a
+   * future one passing any other weekday would have rendered
+   * "1.5714285714285714 weeks ahead" into the page — no exception, no wrong
+   * branch, nothing a type could catch. So `monday` is snapped here too, and
+   * `startOfWeek` on a Monday is the identity, so the correct caller pays
+   * nothing for it.
+   */
+  test("snaps a mid-week date rather than counting a fraction of a week", () => {
+    for (const midweek of ["2026-06-23", "2026-06-25", "2026-06-28"]) {
+      expect(weekFolio(midweek, today), midweek).toBe("Next week");
+    }
+
+    expect(weekFolio("2026-06-18", today)).toBe("This week");
+  });
+
   test("refuses a date that is not one", () => {
     expect(() => weekFolio("2026-02-30", today)).toThrow(/No such date/);
   });
