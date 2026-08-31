@@ -505,3 +505,46 @@ describe("the checkbox survives the reflow", () => {
     expect(label?.textContent).toContain(GREENS_AMOUNT);
   });
 });
+
+describe("the column flow", () => {
+  /**
+   * § Desktop, amended by FUEL-85: "a list of grouped items may flow into
+   * columns at ≥1272, with a group never split across one."
+   *
+   * The geometry is `page-columns.spec.ts`'s — jsdom applies no stylesheet, so
+   * `columns-2` here is a substring and a test that asserted it would pass
+   * against a list that never flowed. What is held here is the STRUCTURE the
+   * flow depends on, which is the half that survives having no CSS: the copy
+   * control is outside the box that fragments.
+   */
+  test("the copy control is not one of the groups that flow", () => {
+    const { container } = render(
+      <ShoppingListView week={MON} groups={GROUPS} checked={[]} />,
+    );
+
+    const copy = screen.getByRole("button", { name: /copy/i });
+    const flow = container.querySelector("[data-column-flow]");
+
+    expect(flow, "the flowed box exists").not.toBeNull();
+    expect(flow?.contains(copy), "the copy button is outside it").toBe(false);
+
+    /*
+     * A control acting on the whole list, flowed as if it were part of one,
+     * lands at the foot of whichever column the balancer left room in — a copy
+     * button in the middle of the ingredients. It has to be the box's sibling
+     * rather than its child, and that is a fact about the DOM rather than
+     * about the stylesheet, so it is a fact jsdom can hold.
+     */
+    expect(flow?.parentElement?.contains(copy)).toBe(true);
+  });
+
+  test("every aisle is a group inside the flow", () => {
+    const { container } = render(
+      <ShoppingListView week={MON} groups={GROUPS} checked={[]} />,
+    );
+
+    const flow = container.querySelector("[data-column-flow]");
+
+    expect(flow?.querySelectorAll(":scope > section")).toHaveLength(GROUPS.length);
+  });
+});

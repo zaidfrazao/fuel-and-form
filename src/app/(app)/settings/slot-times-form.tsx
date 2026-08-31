@@ -3,9 +3,11 @@
 import { useActionState, useState } from "react";
 
 import { saveSlotTimes, type SettingsState } from "@/app/actions/settings";
+import { ACTION_BAR_PRIMARY } from "@/components/action-bar";
 import { Button } from "@/components/ui/button";
 import { slotLabel } from "@/lib/now-display";
 import { REMINDER_FIELD, slotField, workoutField } from "@/lib/slot-times";
+import { cn } from "@/lib/utils";
 
 /**
  * The slot times, as a grouped list — Brand Guide § Component Patterns → Lists.
@@ -190,7 +192,26 @@ export function SlotTimesForm({
       </div>
 
       <div className="flex flex-col gap-2">
-        <Button type="submit" disabled={pending}>
+        {/*
+         * § Buttons, amended by FUEL-85: "at ≥1272 the buttons in a **page
+         * action bar** take their content's width and sit in a row. A 584px
+         * slab is a thumb target drawn on a screen with no thumb."
+         *
+         * This is the screen's one primary action. It carried no width of its
+         * own and took the measure's anyway, because `align-items: stretch` on
+         * the column around it overrides an auto width — which is why the
+         * `xl:self-start` is not decoration: without it `xl:w-auto` draws the
+         * same slab and says nothing.
+         *
+         * `ACTION_BAR_PRIMARY` rather than the utilities written out, for
+         * `weigh-ins.tsx`'s reason at the same rule: the two are the same
+         * decision, and a second spelling is how they start to differ.
+         */}
+        <Button
+          type="submit"
+          disabled={pending}
+          className={cn(ACTION_BAR_PRIMARY, "xl:self-start")}
+        >
           {pending ? "Saving…" : "Save times"}
         </Button>
 

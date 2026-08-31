@@ -9,6 +9,7 @@ import {
   itemName,
   rulerSlots,
   slotLabel,
+  weekFolio,
   weekLabel,
 } from "@/lib/now-display";
 import type { NowItem, ScheduledItem } from "@/lib/resolve-now";
@@ -295,5 +296,75 @@ describe("weekLabel", () => {
 
   test("refuses a date that is not one", () => {
     expect(() => weekLabel("2026-02-30")).toThrow(/No such date/);
+  });
+});
+
+describe("weekFolio", () => {
+  // Wednesday 17 June 2026 — the visual suite's frozen instant, whose own
+  // Monday is the 15th. Every case below is measured from that Monday, which
+  // is the point: the answer must not depend on which weekday "today" is.
+  const today = "2026-06-17";
+
+  test("names the week the reader is standing in", () => {
+    expect(weekFolio("2026-06-15", today)).toBe("This week");
+  });
+
+  test("names the two neighbours rather than counting them", () => {
+    expect(weekFolio("2026-06-22", today)).toBe("Next week");
+    expect(weekFolio("2026-06-08", today)).toBe("Last week");
+  });
+
+  test("counts beyond the named three, in both directions", () => {
+    expect(weekFolio("2026-06-29", today)).toBe("2 weeks ahead");
+    expect(weekFolio("2026-07-27", today)).toBe("6 weeks ahead");
+    expect(weekFolio("2026-06-01", today)).toBe("2 weeks back");
+    expect(weekFolio("2026-05-04", today)).toBe("6 weeks back");
+  });
+
+  /*
+   * The reason `today` is snapped before the subtraction. Sunday the 21st is
+   * the LAST day of the week beginning Monday the 15th, so a reader on it is
+   * still in "This week" — while an unsnapped difference would be six days,
+   * round to nothing useful, and put them somewhere they are not.
+   */
+  test("is measured from the week's Monday, not from today", () => {
+    for (const day of ["2026-06-15", "2026-06-17", "2026-06-21"]) {
+      expect(weekFolio("2026-06-15", day)).toBe("This week");
+      expect(weekFolio("2026-06-22", day)).toBe("Next week");
+    }
+  });
+
+  /*
+   * The three the year boundary would break if the arithmetic were done on
+   * month numbers rather than on `daysBetween`'s UTC days. Monday 28 December
+   * 2026 and Monday 4 January 2027 are one week apart and share no field.
+   */
+  test("counts across a year boundary", () => {
+    expect(weekFolio("2027-01-04", "2026-12-30")).toBe("Next week");
+    expect(weekFolio("2026-12-28", "2027-01-06")).toBe("Last week");
+  });
+
+  /*
+   * The function is total rather than partial — raised by the FUEL-78
+   * precommit review as the one latent assumption worth removing.
+   *
+   * The division by seven wants a whole number of weeks. Every caller today
+   * hands over a Monday, because `loadWeek` snaps before the page sees it; a
+   * future one passing any other weekday would have rendered
+   * "1.5714285714285714 weeks ahead" into the page — no exception, no wrong
+   * branch, nothing a type could catch. So `monday` is snapped here too, and
+   * `startOfWeek` on a Monday is the identity, so the correct caller pays
+   * nothing for it.
+   */
+  test("snaps a mid-week date rather than counting a fraction of a week", () => {
+    for (const midweek of ["2026-06-23", "2026-06-25", "2026-06-28"]) {
+      expect(weekFolio(midweek, today), midweek).toBe("Next week");
+    }
+
+    expect(weekFolio("2026-06-18", today)).toBe("This week");
+  });
+
+  test("refuses a date that is not one", () => {
+    expect(() => weekFolio("2026-02-30", today)).toThrow(/No such date/);
   });
 });

@@ -497,6 +497,41 @@ describe("the empty state", () => {
     expect(screen.queryByRole("list", { name: "Weigh-ins" })).toBeNull();
   });
 
+  /*
+   * FUEL-78. At ≥1272 this screen is a five-row grid: the reading, the chart
+   * across the frame, the figures, the entry control, and the history spanning
+   * the measure's rows. Every one of those but the first and the fourth is
+   * governed by the same answer — `weightStats` returns null for an empty
+   * history, `WeightChart` renders nothing, the History section is gated on
+   * there being a latest reading — so an empty screen would place content in
+   * row one and row four with nothing between them.
+   *
+   * An empty grid track is zero pixels tall; the gaps either side of it are
+   * not. That is three 28px gaps between the heading and the form where every
+   * other width draws one, on the milestone whose purpose is removing voids.
+   *
+   * The visual suite cannot see this: the demo has fifty-seven readings, so no
+   * baseline photographs the empty state. Hence a class assertion here, which
+   * this file otherwise avoids — the grid IS the defect, so it is what has to
+   * be named.
+   */
+  test("does not wear the frame when there is nothing to compose", () => {
+    const { container } = render(view([]));
+
+    const main = container.querySelector("main");
+
+    expect(main?.className).not.toContain("xl:grid");
+    expect(main?.className).not.toContain("xl:grid-rows-");
+  });
+
+  test("wears it as soon as there is a reading", () => {
+    const { container } = render(view([{ date: "2026-08-17", weightKg: 80.1, note: null }]));
+
+    const main = container.querySelector("main");
+
+    expect(main?.className).toContain("xl:grid");
+  });
+
   test("leads with the latest reading once there is one", () => {
     render(view());
 

@@ -3,12 +3,12 @@ import type { CalendarDate } from "@/lib/date";
 import { entryLabel } from "@/lib/now-display";
 import { cn } from "@/lib/utils";
 import {
+  CHART_SHAPE,
+  CHART_SHAPE_WIDE,
   type ChartPlot,
+  type ChartShape,
   chartGeometry,
-  PLOT_HEIGHT,
   type Reading,
-  VIEW_HEIGHT,
-  VIEW_WIDTH,
 } from "@/lib/weight-chart";
 
 /**
@@ -264,6 +264,286 @@ function summarise(plot: ChartPlot, today: CalendarDate): string {
   ].join("");
 }
 
+/**
+ * The chart itself, at one shape — FUEL-78.
+ *
+ * Extracted rather than invented: every line of this was `WeightChart`'s own
+ * body until `/weight` needed the same drawing at two aspects, and what changed
+ * is that the three geometry constants became the `shape` it is handed.
+ *
+ * ## Two of these render, and only one is ever in the accessibility tree
+ *
+ * `WeightChart` draws both shapes and hides one with `xl:hidden` /
+ * `hidden xl:block`. That is `display: none`, which removes an element from the
+ * accessibility tree entirely — so exactly one `role="img"` with exactly one
+ * `aria-label` is exposed at any width, and the sr-only table below them is
+ * outside both and is rendered once.
+ *
+ * A CSS switch rather than a measurement because the geometry is computed on
+ * the server, where there is no viewport: the y of a gridline depends on the
+ * box's height, so a single SVG whose viewBox changed at a breakpoint would be
+ * drawing one shape's coordinates in the other shape's box.
+ */
+function Plot({
+  plot,
+  shape,
+  name,
+  today,
+  className,
+}: {
+  plot: ChartPlot;
+  shape: ChartShape;
+  /**
+   * Which of the two this is, for a test to scope to.
+   *
+   * jsdom applies no stylesheet, so `xl:hidden` is a substring there and BOTH
+   * shapes are in the tree at once — which is what makes a bare
+   * `querySelectorAll("text")` over the container count everything twice. A
+   * browser never shows two, and `page-columns.spec.ts` is where that is
+   * asserted; here the tests say which drawing they mean.
+   */
+  name: "measure" | "frame";
+  today: CalendarDate;
+  className?: string;
+}) {
+  const { gridlines, latest, path, points, start, target } = plot;
+
+  /*
+   * The positioning context the overlay is stacked in. It takes its height from
+   * the scaled `<svg>` below, which is what makes `inset-0` on the overlay the
+   * same box the geometry is drawn in.
+   *
+   * `shrink-0` guards the one precondition the two layers rest on: that this box
+   * keeps its viewBox's own aspect, whichever of the two shapes it is drawing.
+   * `h-auto` gives it that from the width — but a flex item shrinks by default,
+   * and every caller is a flex column, so a height-constrained parent could
+   * compress it. The scaled layer would then letterbox itself inside the box
+   * (its `preserveAspectRatio` centres what it cannot fill) while the overlay,
+   * having no viewBox, would go on filling the whole of it — and the words would
+   * drift off the rules they belong to, silently and only at that one caller.
+   * Refusing to shrink turns that into overflow, which is visible.
+   */
+
+  return (
+    <div className={cn("relative shrink-0", className)} data-chart-shape={name}>
+      <svg
+        role="img"
+        aria-label={summarise(plot, today)}
+        viewBox={`0 0 ${shape.viewWidth} ${shape.viewHeight}`}
+        // Scales with the column at any width, which is what makes "legible at
+        // 375px" a proportion fixed once in the viewBox rather than a
+        // measurement. `h-auto` keeps the aspect ratio, so nothing is squashed
+        // on the way to the measure's column — and so the overlay's percentages
+        // land on this layer's units. What scales with it is the geometry
+        // alone: since FUEL-76 the words and the mark are drawn a layer up, in
+        // pixels.
+        //
+        // What this cannot do is CHANGE the aspect, which is why FUEL-78 gave
+        // the geometry a second shape rather than simply handing this one a
+        // wider box. On the frame's shape there is nothing left to scale: the
+        // frame caps at 1272, so the box is 968px wide wherever it is shown and
+        // one user unit is one device pixel — including the `rx` below, which
+        // is the first time it has actually been the 14px § Implementation
+        // Notes asks for rather than the column's scale times fourteen.
+        className="w-full h-auto"
+      >
+        {/* The plot area — the documented second use of `surface`. `rx` is the
+            14px tile radius from § Implementation Notes: this is the one place
+            the fill appears outside a tile, so it should at least be shaped
+            like one.
+
+            A KNOWN DIVERGENCE, recorded by FUEL-85 rather than fixed by it and
+            left standing here: `BRAND_GUIDE.html` draws this chart with no
+            plate at all. It "belongs to whoever reconciles the chart's
+            drawing", and FUEL-78 is a composition ticket — widening a graphic
+            is not a licence to restyle it. */}
+        <rect
+          x={0}
+          y={0}
+          width={shape.viewWidth}
+          height={shape.plotHeight}
+          rx={14}
+          fill="var(--surface)"
+        />
+
+        {/* Horizontal only. There is no vertical rule anywhere on this chart:
+            time is continuous and a weigh-in is a moment in it, so a vertical
+            gridline would be an edge the data does not have. FUEL-35's
+            criterion, and § Deliberately Absent's disposition generally.
+
+            `vector-effect` keeps a hairline one device pixel wide however far
+            the viewBox is scaled up — which is what "hairline" means in
+            § Materials, and what a plain stroke width of 1 stops being the
+            moment the column is wider than 320px. */}
+        {gridlines.map((rule) => (
+          <line
+            key={rule.weightKg}
+            x1={0}
+            x2={shape.viewWidth}
+            y1={rule.y}
+            y2={rule.y}
+            stroke="var(--border)"
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+
+        {/* Start and target: the same dashed hairline, told apart by their
+            labels rather than by their ink. § Accessibility's "never colour
+            alone", applied to a pair of lines that would otherwise need a
+            second accent to separate them — which § Deliberately Absent
+            forbids. The band between them is the whole journey, which is a
+            thing worth being able to see.
+
+            `vector-effect` fixes the dash as well as the width: under it the
+            `3 3` is three device pixels rather than three units, which is what
+            § Data Display asks for and what it stopped being above 320px. */}
+        {[
+          { rule: start, name: "start" },
+          { rule: target, name: "target" },
+        ].map(({ rule, name }) => (
+          <line
+            key={name}
+            x1={0}
+            x2={shape.viewWidth}
+            y1={rule.y}
+            y2={rule.y}
+            stroke="var(--text-tertiary)"
+            strokeWidth={1}
+            strokeDasharray="3 3"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+
+        {/* The trend. `fill="none"` is the criterion — no area fill, and there
+            is no gradient anywhere in this file to go with it.
+
+            `vector-effect` is what holds § Color Palette's 2px to 2px: the
+            shape is the data and scales with the column, the ink laid along it
+            is a specified width and does not.
+
+            It is also why the draw-in is a clip rather than a dash. The line
+            used to carry `pathLength={1}`, which normalised its length so one
+            dash of 1 covered it exactly and nothing had to measure the path;
+            under `non-scaling-stroke` a browser normalises that dash against
+            the path in USER units and then paints it as that many CSS pixels,
+            so on a 584px column the full-length dash covered 55% of the line
+            and the trend rendered permanently half-drawn. Measured in Chromium
+            and Firefox both. `globals.css` wipes the line in with `clip-path`
+            instead, which needs no length at all — see FUEL-76 there. */}
+        {path !== null && (
+          <polyline
+            points={path}
+            fill="none"
+            stroke="var(--ink)"
+            strokeWidth={TREND_WIDTH}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+            className="weight-chart-trend"
+          />
+        )}
+      </svg>
+
+      {/*
+        The unscaled layer — FUEL-76.
+
+        No viewBox, so its user units ARE CSS pixels: a `<text>` in here is the
+        10.5px § Typography specifies at every column width, and the mark is
+        the 4px disc and 2px ring § Data Display specifies. `inset-0` puts it
+        over the box the layer beneath is drawn in, and every position is a
+        percentage of that same box, so the words and the mark sit exactly on
+        the geometry they belong to without either layer measuring anything.
+
+        `pointer-events-none` for the same reason in the other direction: this
+        layer covers the whole chart, and a decorative box that answers a
+        pointer is one that can intercept something meant for what is beneath
+        it. Nothing under it is interactive today, which is exactly when a
+        layer like this is cheapest to make transparent to the pointer.
+
+        `aria-hidden` covers the whole layer, and it is not an optimisation:
+        every word in here is drawn INSIDE a graphic whose `aria-label` has
+        already said it. `role="img"` on the layer beneath is supposed to prune
+        its own descendants, but dot-grid.tsx records that Chrome lists them
+        anyway and day-ruler.tsx hit the same thing with its 06 · 12 · 18 · 22
+        scale — and these are not its descendants at all, so nothing would
+        prune them. Without this a screen reader reads "Start 84.2", "Target
+        76" and both dates a second time, after a summary that has said all
+        four in a sentence.
+      */}
+      <svg aria-hidden className="pointer-events-none absolute inset-0 h-full w-full">
+        {/* Drawn after both rules and separately from them, because a label may
+            belong to one line, or — when the two references coincide — to both.
+            See `referenceLabels`. The `x` is a percentage because the inset
+            from the plate's edge is plot-area padding and belongs to the
+            geometry; the `dy` is pixels because what it clears is a cap-height.
+            10.5px Micro, which § Accessibility permits here on its own terms:
+            the figure it names sits at 22px in the hero above, and the exact
+            number is in the table below either way. */}
+        {referenceLabels(start, target).map(({ key, y, text }) => (
+          <text
+            key={key}
+            x={pct(8, shape.viewWidth)}
+            y={pct(y, shape.viewHeight)}
+            dy={labelOffset(y)}
+            className="text-micro uppercase fill-text-secondary"
+          >
+            {text}
+          </text>
+        ))}
+
+        {/* The one umber mark on the screen — § Rule 2: "umber marks the present
+            moment and nothing else … the latest reading on the chart". No other
+            point carries a marker, which is both the criterion and the reason
+            this dot means anything.
+
+            The ring is `canvas` rather than `surface` so the dot reads as
+            lifted off the plate in both modes; it is a hole in the trend line,
+            not a second colour. */}
+        <circle
+          cx={pct(latest.x, shape.viewWidth)}
+          cy={pct(latest.y, shape.viewHeight)}
+          r={LATEST_RADIUS}
+          fill="var(--accent)"
+          stroke="var(--canvas)"
+          strokeWidth={LATEST_RING}
+          className="weight-chart-latest"
+        />
+
+        {/* The date axis, outside the plate. Only the ends: the readings between
+            them are in the table, and a label per weigh-in would be unreadable
+            at 375px on a history of any length. Suppressed for a single reading,
+            where the two labels would be the same date printed twice at opposite
+            ends of a chart with one point in the middle.
+
+            Hung from the plate's bottom edge rather than from the box's floor —
+            see `AXIS_DROP`. */}
+        {points.length > 1 && points[0] && (
+          <>
+            <text
+              x="0%"
+              y={pct(shape.plotHeight, shape.viewHeight)}
+              dy={AXIS_DROP}
+              className="text-micro uppercase fill-text-tertiary"
+            >
+              {entryLabel(points[0].date, today)}
+            </text>
+            <text
+              x="100%"
+              y={pct(shape.plotHeight, shape.viewHeight)}
+              dy={AXIS_DROP}
+              textAnchor="end"
+              className="text-micro uppercase fill-text-tertiary"
+            >
+              {entryLabel(latest.date, today)}
+            </text>
+          </>
+        )}
+      </svg>
+    </div>
+  );
+}
+
 export function WeightChart({
   entries,
   today,
@@ -295,225 +575,38 @@ export function WeightChart({
   // plate here would contradict the sentence and repeat it.
   if (plot === null) return null;
 
-  const { domain, gridlines, latest, path, points, start, target } = plot;
+  const { domain, points, start, target, latest } = plot;
+
+  /*
+   * The same readings, laid out in the frame's box — FUEL-78.
+   *
+   * `chartGeometry` is pure arithmetic over at most a few dozen rows, so
+   * running it twice is cheaper than any mechanism for avoiding it, and it is
+   * the only way to have both shapes' coordinates available to a server render
+   * that cannot know the viewport.
+   *
+   * Non-null by construction: it is the same readings and the same references
+   * that just produced `plot`, and `chartGeometry` returns null only for an
+   * empty history. The check is here because the type says it can be, and
+   * `?? plot` would silently draw the phone's coordinates in a 968px box.
+   */
+  const widePlot = chartGeometry(entries, { startWeightKg, targetWeightKg }, CHART_SHAPE_WIDE);
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      {/* The positioning context the overlay is stacked in. It takes its height
-          from the scaled `<svg>` below, which is what makes `inset-0` on the
-          overlay the same box the geometry is drawn in.
+      {/* Below the cap, where the chart has the measure and nothing else. */}
+      <Plot plot={plot} shape={CHART_SHAPE} name="measure" today={today} className="xl:hidden" />
 
-          `shrink-0` guards the one precondition the two layers rest on: that
-          this box keeps the viewBox's own 320:170 aspect. `h-auto` gives it that
-          from the width — but a flex item shrinks by default, and every caller
-          is a flex column, so a height-constrained parent could compress it. The
-          scaled layer would then letterbox itself inside the box (its
-          `preserveAspectRatio` centres what it cannot fill) while the overlay,
-          having no viewBox, would go on filling the whole of it — and the words
-          would drift off the rules they belong to, silently and only at that one
-          caller. Refusing to shrink turns that into overflow, which is visible. */}
-      <div className="relative shrink-0">
-        <svg
-          role="img"
-          aria-label={summarise(plot, today)}
-          viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
-          // Scales with the column at any width, which is what makes "legible at
-          // 375px" a proportion fixed once in the viewBox rather than a
-          // measurement. `h-auto` keeps the aspect ratio, so nothing is squashed
-          // on the way to a 640px desktop column — and so the overlay's
-          // percentages land on this layer's units. What scales with it is the
-          // geometry alone: since FUEL-76 the words and the mark are drawn a
-          // layer up, in pixels.
-          className="w-full h-auto"
-        >
-          {/* The plot area — the documented second use of `surface`. `rx` is the
-              14px tile radius from § Implementation Notes: this is the one place
-              the fill appears outside a tile, so it should at least be shaped
-              like one. */}
-          <rect
-            x={0}
-            y={0}
-            width={VIEW_WIDTH}
-            height={PLOT_HEIGHT}
-            rx={14}
-            fill="var(--surface)"
-          />
-
-          {/* Horizontal only. There is no vertical rule anywhere on this chart:
-              time is continuous and a weigh-in is a moment in it, so a vertical
-              gridline would be an edge the data does not have. FUEL-35's
-              criterion, and § Deliberately Absent's disposition generally.
-
-              `vector-effect` keeps a hairline one device pixel wide however far
-              the viewBox is scaled up — which is what "hairline" means in
-              § Materials, and what a plain stroke width of 1 stops being the
-              moment the column is wider than 320px. */}
-          {gridlines.map((rule) => (
-            <line
-              key={rule.weightKg}
-              x1={0}
-              x2={VIEW_WIDTH}
-              y1={rule.y}
-              y2={rule.y}
-              stroke="var(--border)"
-              strokeWidth={1}
-              vectorEffect="non-scaling-stroke"
-            />
-          ))}
-
-          {/* Start and target: the same dashed hairline, told apart by their
-              labels rather than by their ink. § Accessibility's "never colour
-              alone", applied to a pair of lines that would otherwise need a
-              second accent to separate them — which § Deliberately Absent
-              forbids. The band between them is the whole journey, which is a
-              thing worth being able to see.
-
-              `vector-effect` fixes the dash as well as the width: under it the
-              `3 3` is three device pixels rather than three units, which is what
-              § Data Display asks for and what it stopped being above 320px. */}
-          {[
-            { rule: start, name: "start" },
-            { rule: target, name: "target" },
-          ].map(({ rule, name }) => (
-            <line
-              key={name}
-              x1={0}
-              x2={VIEW_WIDTH}
-              y1={rule.y}
-              y2={rule.y}
-              stroke="var(--text-tertiary)"
-              strokeWidth={1}
-              strokeDasharray="3 3"
-              vectorEffect="non-scaling-stroke"
-            />
-          ))}
-
-          {/* The trend. `fill="none"` is the criterion — no area fill, and there
-              is no gradient anywhere in this file to go with it.
-
-              `vector-effect` is what holds § Color Palette's 2px to 2px: the
-              shape is the data and scales with the column, the ink laid along it
-              is a specified width and does not.
-
-              It is also why the draw-in is a clip rather than a dash. The line
-              used to carry `pathLength={1}`, which normalised its length so one
-              dash of 1 covered it exactly and nothing had to measure the path;
-              under `non-scaling-stroke` a browser normalises that dash against
-              the path in USER units and then paints it as that many CSS pixels,
-              so on a 584px column the full-length dash covered 55% of the line
-              and the trend rendered permanently half-drawn. Measured in Chromium
-              and Firefox both. `globals.css` wipes the line in with `clip-path`
-              instead, which needs no length at all — see FUEL-76 there. */}
-          {path !== null && (
-            <polyline
-              points={path}
-              fill="none"
-              stroke="var(--ink)"
-              strokeWidth={TREND_WIDTH}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              vectorEffect="non-scaling-stroke"
-              className="weight-chart-trend"
-            />
-          )}
-        </svg>
-
-        {/*
-          The unscaled layer — FUEL-76.
-
-          No viewBox, so its user units ARE CSS pixels: a `<text>` in here is the
-          10.5px § Typography specifies at every column width, and the mark is
-          the 4px disc and 2px ring § Data Display specifies. `inset-0` puts it
-          over the box the layer beneath is drawn in, and every position is a
-          percentage of that same box, so the words and the mark sit exactly on
-          the geometry they belong to without either layer measuring anything.
-
-          `pointer-events-none` for the same reason in the other direction: this
-          layer covers the whole chart, and a decorative box that answers a
-          pointer is one that can intercept something meant for what is beneath
-          it. Nothing under it is interactive today, which is exactly when a
-          layer like this is cheapest to make transparent to the pointer.
-
-          `aria-hidden` covers the whole layer, and it is not an optimisation:
-          every word in here is drawn INSIDE a graphic whose `aria-label` has
-          already said it. `role="img"` on the layer beneath is supposed to prune
-          its own descendants, but dot-grid.tsx records that Chrome lists them
-          anyway and day-ruler.tsx hit the same thing with its 06 · 12 · 18 · 22
-          scale — and these are not its descendants at all, so nothing would
-          prune them. Without this a screen reader reads "Start 84.2", "Target
-          76" and both dates a second time, after a summary that has said all
-          four in a sentence.
-        */}
-        <svg aria-hidden className="pointer-events-none absolute inset-0 h-full w-full">
-          {/* Drawn after both rules and separately from them, because a label may
-              belong to one line, or — when the two references coincide — to both.
-              See `referenceLabels`. The `x` is a percentage because the inset
-              from the plate's edge is plot-area padding and belongs to the
-              geometry; the `dy` is pixels because what it clears is a cap-height.
-              10.5px Micro, which § Accessibility permits here on its own terms:
-              the figure it names sits at 22px in the hero above, and the exact
-              number is in the table below either way. */}
-          {referenceLabels(start, target).map(({ key, y, text }) => (
-            <text
-              key={key}
-              x={pct(8, VIEW_WIDTH)}
-              y={pct(y, VIEW_HEIGHT)}
-              dy={labelOffset(y)}
-              className="text-micro uppercase fill-text-secondary"
-            >
-              {text}
-            </text>
-          ))}
-
-          {/* The one umber mark on the screen — § Rule 2: "umber marks the present
-              moment and nothing else … the latest reading on the chart". No other
-              point carries a marker, which is both the criterion and the reason
-              this dot means anything.
-
-              The ring is `canvas` rather than `surface` so the dot reads as
-              lifted off the plate in both modes; it is a hole in the trend line,
-              not a second colour. */}
-          <circle
-            cx={pct(latest.x, VIEW_WIDTH)}
-            cy={pct(latest.y, VIEW_HEIGHT)}
-            r={LATEST_RADIUS}
-            fill="var(--accent)"
-            stroke="var(--canvas)"
-            strokeWidth={LATEST_RING}
-            className="weight-chart-latest"
-          />
-
-          {/* The date axis, outside the plate. Only the ends: the readings between
-              them are in the table, and a label per weigh-in would be unreadable
-              at 375px on a history of any length. Suppressed for a single reading,
-              where the two labels would be the same date printed twice at opposite
-              ends of a chart with one point in the middle.
-
-              Hung from the plate's bottom edge rather than from the box's floor —
-              see `AXIS_DROP`. */}
-          {points.length > 1 && points[0] && (
-            <>
-              <text
-                x="0%"
-                y={pct(PLOT_HEIGHT, VIEW_HEIGHT)}
-                dy={AXIS_DROP}
-                className="text-micro uppercase fill-text-tertiary"
-              >
-                {entryLabel(points[0].date, today)}
-              </text>
-              <text
-                x="100%"
-                y={pct(PLOT_HEIGHT, VIEW_HEIGHT)}
-                dy={AXIS_DROP}
-                textAnchor="end"
-                className="text-micro uppercase fill-text-tertiary"
-              >
-                {entryLabel(latest.date, today)}
-              </text>
-            </>
-          )}
-        </svg>
-      </div>
+      {/* At it, where § Desktop gives it the frame. */}
+      {widePlot && (
+        <Plot
+          plot={widePlot}
+          shape={CHART_SHAPE_WIDE}
+          name="frame"
+          today={today}
+          className="hidden xl:block"
+        />
+      )}
 
       {/*
         § Accessibility — the summary above, and the data table here, because "a

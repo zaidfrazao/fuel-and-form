@@ -50,7 +50,27 @@ async function measureAt(page: Page, viewport: (typeof WIDTHS)[number]) {
   await page.setViewportSize({ width: viewport.width, height: viewport.height });
 
   return page.evaluate(() => {
-    const geometry = document.querySelector<SVGSVGElement>('svg[role="img"][aria-label^="Weight trend"]');
+    /*
+     * The drawing that is SHOWN, not the first in the document — FUEL-78.
+     *
+     * `/weight` renders the chart twice: the measure's 320×170 box, and the
+     * frame's 968×300 at ≥1272. The geometry depends on the box's aspect and is
+     * computed on a server with no viewport, so both are laid out and CSS hides
+     * one. A `document.querySelector` takes the measure's drawing at every
+     * width, and at 1272 and 1920 that one is `display: none` — every box it
+     * reports is zero, which is how this first failed: "label widths: 74.4,
+     * 74.4, 0, 0".
+     *
+     * `getClientRects()` is what asks the question this test means. A hidden
+     * element has none; the one being drawn has one.
+     */
+    const shown = [...document.querySelectorAll("[data-chart-shape]")].find(
+      (box) => box.getClientRects().length > 0,
+    );
+
+    if (!shown) throw new Error("no chart drawing is visible");
+
+    const geometry = shown.querySelector<SVGSVGElement>('svg[role="img"][aria-label^="Weight trend"]');
 
     if (!geometry) throw new Error("the chart is not on the page");
 
@@ -152,11 +172,32 @@ test("the chart's labels are 10.5px however wide the column is", async ({ page }
  */
 test("the trend and the mark keep their own size while the plot scales", async ({ page }) => {
   const narrow = await measureAt(page, WIDTHS[0]);
+  const medium = await measureAt(page, WIDTHS[1]!);
   const wide = await measureAt(page, WIDTHS[WIDTHS.length - 1]!);
 
   // The plot still fills its column — AC4, and the control for everything else.
   expect(wide.column).toBeGreaterThan(narrow.column);
-  expect(wide.scale).toBeGreaterThan(narrow.scale * 1.5);
+
+  /*
+   * The scale guard, which FUEL-78 had to split in two — and the split is the
+   * claim rather than an accommodation.
+   *
+   * This asked `wide.scale > narrow.scale * 1.5`, so that the whole test could
+   * not pass on a chart which had simply stopped scaling. Between 375 and 820
+   * that is still exactly the right question: both draw the measure's shape, and
+   * the viewBox is stretched from ~331px of column to 584.
+   *
+   * At the cap it is the wrong question, because the frame's shape is 968 user
+   * units drawn in a 968px column. The frame caps at 1272 and centres, so that
+   * box has no range to scale over at all, and a scale of 1 is the point of it:
+   * `INSET`, the dot's clearance and the plate's 14-unit radius are device
+   * pixels there rather than the column's scale times fourteen. Demanding
+   * growth would be demanding the distortion back.
+   */
+  expect(medium.scale, "the measure's shape scales with its column").toBeGreaterThan(
+    narrow.scale * 1.5,
+  );
+  expect(wide.scale, "the frame's shape is 1:1 by construction").toBeCloseTo(1, 2);
 
   // The ink laid on it does not grow with it. A tolerance of a tenth covers the
   // 0.05px step the scan takes; without the fix the wide figure is 3.65px.

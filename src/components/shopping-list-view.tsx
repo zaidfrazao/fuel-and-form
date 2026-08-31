@@ -5,9 +5,11 @@ import { startTransition, useOptimistic, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { setChecked } from "@/app/actions/shopping";
 import type { CalendarDate } from "@/lib/date";
+import { PAGE_COLUMNS_2, PAGE_COLUMN_FLOW, PAGE_COLUMN_GROUP } from "@/lib/frame";
 import { HOVER_GROUND, HOVER_LIFT, POINTER } from "@/lib/pointer";
 import type { ShoppingGroup, ShoppingLine } from "@/lib/shopping-list";
 import { quantity, shoppingText } from "@/lib/shopping-text";
+import { cn } from "@/lib/utils";
 
 /**
  * The week's shopping, as a list you can tick — P8, FUEL-45.
@@ -401,38 +403,69 @@ export function ShoppingListView({
 
   return (
     <div className="flex flex-col gap-7">
-      {groups.map((group) => (
-        <section key={group.category} className="flex flex-col gap-1">
-          {/*
-           * § Micro labels are "permitted only where the value sits adjacent at
-           * 22px or more — never for standalone information". An aisle heading
-           * is standalone, so it takes Slash rather than Micro, in caps for the
-           * heading reading and `text-secondary` so it sits under the names it
-           * groups rather than competing with them.
-           */}
-          <h2 className="text-slash uppercase tracking-[0.16em] text-text-secondary">
-            {group.category}
-          </h2>
+      {/*
+       * Aisles, not a scroll — § Desktop, amended by FUEL-85: "a list of
+       * grouped items may flow into columns at ≥1272, with a group never split
+       * across one".
+       *
+       * This screen is the one the amendment was measured against. Fifty-six
+       * items in five named groups, stacked in a 584px column with 690px of
+       * nothing beside them, is 3,331px of shopping list — "the one screen
+       * where seeing all of it at once is the whole point".
+       *
+       * ## The wrapper is new and the phone does not notice
+       *
+       * `CopyButton` is why there is a second box here rather than
+       * `PAGE_COLUMN_FLOW` on the one that was already here. It is not a group
+       * and must not be flowed as one: in a two-column list it would land at
+       * the foot of whichever column the balancer left room in, which is a
+       * copy button in the middle of the ingredients.
+       *
+       * Below the cap the two boxes are a `flex flex-col gap-7` inside a
+       * `flex flex-col gap-7`, which draws exactly what one of them drew — 28px
+       * between the sections and 28px between the last section and the button.
+       * The 375px baseline is the assertion.
+       */}
+      <div className={cn("flex flex-col gap-7", PAGE_COLUMN_FLOW, PAGE_COLUMNS_2)} data-column-flow>
+        {groups.map((group) => (
+          <section
+            key={group.category}
+            className={cn("flex flex-col gap-1", PAGE_COLUMN_GROUP, "xl:mb-7")}
+          >
+            {/*
+             * § Micro labels are "permitted only where the value sits adjacent at
+             * 22px or more — never for standalone information". An aisle heading
+             * is standalone, so it takes Slash rather than Micro, in caps for the
+             * heading reading and `text-secondary` so it sits under the names it
+             * groups rather than competing with them.
+             */}
+            <h2 className="text-slash uppercase tracking-[0.16em] text-text-secondary">
+              {group.category}
+            </h2>
 
-          <ul className="flex flex-col">
-            {group.lines.map((line) => (
-              <Row
-                key={line.key}
-                line={line}
-                checked={ticked.has(line.key)}
-                failed={failure?.key === line.key ? failure : undefined}
-                onToggle={onToggle}
-              />
-            ))}
-          </ul>
-        </section>
-      ))}
+            <ul className="flex flex-col">
+              {group.lines.map((line) => (
+                <Row
+                  key={line.key}
+                  line={line}
+                  checked={ticked.has(line.key)}
+                  failed={failure?.key === line.key ? failure : undefined}
+                  onToggle={onToggle}
+                />
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
 
       {/*
        * Below the list rather than above it: the copy is of what has just been
        * read, and § Progressive Disclosure's "one question per screen" makes
        * the list the question. The text is computed from the OPTIMISTIC set, so
        * a copy taken immediately after a tap carries the tick that tap made.
+       *
+       * Below BOTH columns at ≥1272, for the same reason — a control that acts
+       * on the whole list belongs under the whole list.
        */}
       <CopyButton text={shoppingText(groups, ticked)} />
     </div>

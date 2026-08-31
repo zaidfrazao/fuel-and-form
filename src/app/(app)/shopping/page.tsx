@@ -9,7 +9,9 @@ import { WeekNav } from "@/components/week-nav";
 import { getSession } from "@/lib/auth/session";
 import { startOfWeek } from "@/lib/date";
 import { loadShoppingWeek } from "@/lib/db/queries/shopping";
+import { PAGE_FRAME_SPAN, PAGE_PROSE } from "@/lib/frame";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
+import { cn } from "@/lib/utils";
 import { requestedWeek } from "@/lib/week-param";
 
 /**
@@ -93,10 +95,20 @@ export default async function ShoppingPage({
   const elsewhere = startOfWeek(list.today) !== list.monday;
 
   return (
-    // 640px, not 1024px — § Spacing: "max content width: 640px single-column;
-    // 1024px for the week grid". This is a single column of rows, not a grid.
-    <PageMain className="gap-7 py-8">
-      <header className="flex flex-col gap-2">
+    /*
+     * The frame's span, and the prose held back from it — § Desktop, amended
+     * by FUEL-85.
+     *
+     * This used to read "640px, not 1024px", citing § Spacing's "max content
+     * width: 640px single-column; 1024px for the week grid" on the grounds that
+     * "this is a single column of rows, not a grid". The premise stopped being
+     * true with the amendment: the 640 "binds prose, and only prose", and a
+     * list of grouped items may now flow into columns. So the page takes the
+     * width and each block of prose on it says, for itself, that it does not
+     * want any.
+     */
+    <PageMain className={cn("gap-7 py-8", PAGE_FRAME_SPAN)}>
+      <header className={cn("flex flex-col gap-2", PAGE_PROSE)}>
         {/*
          * The week travels up. Both this screen and `/plan` are addressed by
          * `?week=`, so an up-link without it would leave the week of the 24th
@@ -119,7 +131,15 @@ export default async function ShoppingPage({
         </p>
       </header>
 
-      <div className="flex flex-col items-center gap-2">
+      {/*
+       * With the header, not with the list. § Desktop gives the header band a
+       * screen's "own time graphic" and `/training`'s paginator is the example
+       * — but this ticket's ruling for this screen is narrower and is the one
+       * that governs: "the header stays on the measure... **Only the list takes
+       * the width.**" A week paginator centred across 968px of shopping list is
+       * a control that has left the thing it belongs to.
+       */}
+      <div className={cn("flex flex-col items-center gap-2", PAGE_PROSE)}>
         <WeekNav monday={list.monday} basePath="/shopping" />
       </div>
 
@@ -131,14 +151,14 @@ export default async function ShoppingPage({
          * of Voice again: say what will appear. Not "Nothing to buy!", which
          * reads as an achievement rather than as an unplanned week.
          */
-        <p className="text-body text-text-secondary">
+        <p className={cn("text-body text-text-secondary", PAGE_PROSE)}>
           Nothing is planned for this week yet. Ingredients appear here once the
           week has meals on it.
         </p>
       )}
 
       {elsewhere && (
-        <p className="text-slash text-text-secondary">
+        <p className={cn("text-slash text-text-secondary", PAGE_PROSE)}>
           <Link
             href="/shopping"
             className={`underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
