@@ -716,3 +716,61 @@ test.describe("/plan", () => {
     await expect(page.getByText("This week", { exact: true })).toBeHidden();
   });
 });
+
+/**
+ * § Buttons, amended by FUEL-85 — the width rule, on the two screens whose
+ * primary is not in an action bar.
+ *
+ * "At ≥1272 the buttons in a **page action bar** take their content's width and
+ * sit in a row. A 584px slab is a thumb target drawn on a screen with no
+ * thumb." `/` and `/training` are covered by "the action bar stands in the
+ * measure" above; these two have no sticky bar — their primary lives in the
+ * form it submits — and the mock draws both of them `btn btn-primary auto`.
+ *
+ * Both directions are asserted, because each fails differently. Below the cap
+ * the control is the thumb target § Touch Targets asks for and a narrow one
+ * would be the regression; at it, `xl:w-auto` alone does nothing — the column
+ * around both buttons is `align-items: stretch`, which overrides an auto width
+ * — so a fix that forgot `self-start` would draw the slab and say it had not.
+ */
+for (const { path, name } of [
+  { path: "/weight", name: "Log weigh-in" },
+  { path: "/settings", name: "Save times" },
+]) {
+  test.describe(`${path}'s primary`, () => {
+    test("is a slab below the cap and its content's width at it", async ({ page }) => {
+      await page.goto(path);
+
+      const primary = page.getByRole("button", { name });
+
+      /*
+       * The control itself is the settle, rather than something near it. An
+       * earlier draft waited on `getByText(/Weight trend/)`, which never
+       * matches: that string is the chart's `aria-label` and not its text, so
+       * the wait timed out on a page that had rendered perfectly.
+       *
+       * Nothing that mounts later moves what is measured here. `/settings`'
+       * push control arrives after `navigator.serviceWorker.ready` and adds a
+       * section to the ASIDE, which changes this button's y and neither its
+       * width nor its x.
+       */
+      await expect(primary).toBeVisible();
+
+      await page.setViewportSize({ width: 1271, height: 900 });
+
+      const slab = await boxOf(primary);
+
+      expect(slab.width, `${name} at 1271px`).toBeCloseTo(584, 0);
+
+      await page.setViewportSize({ width: 1272, height: 900 });
+
+      const sized = await boxOf(primary);
+
+      // Its content plus § Buttons' air, which is a good deal less than the
+      // column. The number is not asserted — that would be pinning a string's
+      // rendered width — only that the control has stopped being the measure.
+      expect(sized.width, `${name} at 1272px`).toBeLessThan(300);
+      expect(sized.x, "still at the measure's left edge").toBeCloseTo(slab.x, 0);
+    });
+  });
+}

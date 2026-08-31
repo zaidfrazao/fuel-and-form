@@ -2,6 +2,7 @@
 
 import { startTransition, useOptimistic, useRef, useState, useTransition } from "react";
 
+import { ACTION_BAR_PRIMARY } from "@/components/action-bar";
 import { PageMain } from "@/components/page-main";
 import { Button } from "@/components/ui/button";
 import { KeyValueGrid, type KeyValueItem } from "@/components/kv-grid";
@@ -926,25 +927,39 @@ export function WeighIns({
             date is empty or already has a reading, because the write is the
             same write. */}
         {/*
-         * `w-full` at every width, desktop included — and FUEL-74 checked this
-         * rather than left it.
+         * Full-width below the cap, its content's width at it — § Buttons,
+         * amended by FUEL-85, and the paragraph this replaces called the
+         * question the other way on the evidence it had.
          *
-         * The ticket asked for a narrower primary above 1024px "per § Desktop".
-         * § Desktop has no width rule for a button, and `BRAND_GUIDE.html` —
-         * authoritative at 1272 since FUEL-67 drew the frames — draws this exact
-         * control full-measure: `.dactions` sets no width and `.btn` is
-         * `width: 100%`, in markup identical to the 375px frame's. The mock
-         * marks the buttons that do NOT fill with an explicit `width:auto`, so
-         * the silence here is a decision and not an omission.
+         * That note said "§ Desktop has no width rule for a button, and
+         * `BRAND_GUIDE.html` — authoritative at 1272 since FUEL-67 drew the
+         * frames — draws this exact control full-measure... The mock marks the
+         * buttons that do NOT fill with an explicit `width:auto`, so the
+         * silence here is a decision and not an omission." Both halves were
+         * true when FUEL-74 wrote them and neither is now: § Buttons has the
+         * rule — "at ≥1272 the buttons in a **page action bar** take their
+         * content's width and sit in a row. A 584px slab is a thumb target
+         * drawn on a screen with no thumb" — and FUEL-85 redrew D5, which now
+         * marks this very control `btn btn-primary auto`. The silence it read
+         * as a decision has become a drawing that says the opposite.
          *
-         * The ticket's evidence — "584px of button" — measures something else.
-         * `page-main.tsx` is `max-w-[640px]` with `px-[22px] md:px-7`, so the
-         * measure is charged twice and the content is 640 − 56. That is the
-         * fault § Desktop names and FUEL-71 fixed for `/plan` alone; the button
-         * is not too wide, the column is too narrow. Left to FUEL-77/78, which
-         * own the other six screens.
+         * It also named the ticket: "the button is not too wide, the column is
+         * too narrow. Left to FUEL-77/78, which own the other six screens."
+         * This is FUEL-78, and the column is 584 either way — so the answer is
+         * the rule rather than the width.
+         *
+         * `ACTION_BAR_PRIMARY` rather than the same two utilities written out.
+         * This is not inside an `APP_ACTION_BAR` — the screen has no sticky bar
+         * and its primary lives in the form it submits — but it is the page's
+         * one primary action, which is what the rule is about, and a second
+         * spelling of it is how two controls start disagreeing.
+         *
+         * `xl:self-start` is what `w-auto` needs here and does not need on `/`.
+         * There the primary sits in a flex ROW with `items-center`, so nothing
+         * stretches it; this one is in a flex COLUMN, where `align-items:
+         * stretch` overrides an auto width and would draw the slab again.
          */}
-        <Button className="w-full" onClick={log}>
+        <Button className={cn(ACTION_BAR_PRIMARY, "xl:self-start")} onClick={log}>
           Log weigh-in
         </Button>
       </section>
