@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { APP_ACTION_BAR } from "@/components/action-bar";
 import { RightNow } from "@/components/right-now";
 import type { LoggedEntry } from "@/lib/day-summary";
+import { RULER_AT } from "@/components/day-ruler";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
 import { PAGE_ASIDE_COLUMN, PAGE_MEASURE_COLUMN, PAGE_MEASURE_FOOT } from "@/lib/frame";
 import type { MacroTarget } from "@/lib/macros";
@@ -458,9 +459,9 @@ describe("the day's numbers, in two shapes", () => {
     // for the reason above: this one is drawn on a phone too.
     const wide = document.querySelector('[data-ruler="wide"]')!;
 
-    expect(wide.className).toBe("xl:hidden");
+    expect(wide.className).toBe(RULER_AT.wideOnSession);
     expect(document.querySelector('[data-ruler="aside"]')!.className).toBe(
-      "hidden xl:block",
+      RULER_AT.aside,
     );
   });
 
@@ -477,12 +478,23 @@ describe("the day's numbers, in two shapes", () => {
     const shownAt = (which: "wide" | "phone" | "aside") =>
       document.querySelector(`[data-ruler="${which}"]`)!.className;
 
-    // The phone: `md:hidden` is the only copy without a `hidden` base.
-    expect(shownAt("phone")).toBe("md:hidden");
-    // 768–1271: hidden below `md`, and hidden again at `xl`.
-    expect(shownAt("wide")).toBe("hidden md:block xl:hidden");
-    // The frame's cap and above.
-    expect(shownAt("aside")).toBe("hidden xl:block");
+    // Read from the declaration both this screen and the skeleton take, rather
+    // than restated: two lists of the same three strings is the drift the
+    // constant exists to end, and this test would be the place it started.
+    expect(shownAt("phone")).toBe(RULER_AT.phone);
+    expect(shownAt("wide")).toBe(RULER_AT.wide);
+    expect(shownAt("aside")).toBe(RULER_AT.aside);
+
+    /*
+     * And the property that matters, which the strings alone do not give: each
+     * band is covered once. `wide` is BOUNDED — `md:max-xl:` — rather than an
+     * `md:` turned off again by an `xl:`, because Tailwind emits the redefined
+     * `xl` media block ahead of `md` and the override never lands.
+     * `frame.css.test.ts` pins that ordering; this is the consequence, stated
+     * where the three copies are.
+     */
+    expect(shownAt("wide")).toContain("max-xl:");
+    expect(shownAt("aside")).not.toContain("md:");
   });
 });
 

@@ -78,6 +78,16 @@ test.beforeEach(async ({ page }) => {
  * frame's cap, and 1440 and 1920 are past it — where a viewport-centred sheet
  * drifts further from its column the wider the window gets.
  */
+/**
+ * The demo banner's inner box — the notice band's half of § Desktop's measure.
+ *
+ * The same selector `frame.spec.ts` uses, and the same element: it wears
+ * `FRAME_MEASURE`, so it is the measure at every width, on a screen with an
+ * aside and on one without. The session is a demo, so the banner is there; if it
+ * ever is not, `boxOf` throws rather than measuring nothing.
+ */
+const BAND_MEASURE = 'aside[aria-label="Demo session"] > div > div';
+
 const WIDTHS = [1023, 1024, 1272, 1440, 1920];
 
 for (const width of WIDTHS) {
@@ -87,16 +97,30 @@ for (const width of WIDTHS) {
     const sheet = await openSwapSheet(page);
 
     /**
-     * `locator("main")` and not `getByRole("main")`, which finds nothing here.
+     * The measure, read off the notice band rather than off `<main>` — FUEL-77.
      *
-     * The sheet is `aria-modal`, so Radix marks everything outside it
-     * `aria-hidden` — the page is gone from the accessibility tree for as long
-     * as the sheet is up, which is the behaviour that stops a screen reader
-     * wandering into the list behind. A role query respects that and waits for a
-     * landmark that is deliberately no longer there; a CSS selector still finds
-     * the box, which is all this needs.
+     * `<main>` was the right proxy until `/` gained a second column: it wore
+     * `FRAME_MEASURE` and nothing else, so its box WAS the 640 track. It now
+     * spans the measure and the aside at ≥1272 and is 1024 wide there, and this
+     * assertion started failing by exactly the aside plus its gutter — 384 — on
+     * a sheet that had not moved a pixel.
+     *
+     * The band's inner box is the better proxy and always was. § Desktop's whole
+     * mechanism is that three elements in two layouts read one declaration —
+     * "two independent centrings can disagree, two readers of one template
+     * cannot" — and the sheet is the third reader. Comparing it against another
+     * reader asks the question the section actually poses; comparing it against
+     * `<main>` asked whether the sheet matched one particular screen's
+     * composition, which is a different and now false thing.
+     *
+     * A CSS selector rather than a role query, for both of them: the sheet is
+     * `aria-modal`, so Radix marks everything outside it `aria-hidden` and the
+     * page is gone from the accessibility tree for as long as the sheet is up.
+     * That is the behaviour that stops a screen reader wandering into the list
+     * behind. A role query respects it and waits for a landmark that is
+     * deliberately no longer there; a CSS selector still finds the box.
      */
-    const main = await boxOf(page.locator("main"));
+    const main = await boxOf(page.locator(BAND_MEASURE));
     const box = await boxOf(sheet);
 
     /**

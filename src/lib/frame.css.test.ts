@@ -63,6 +63,53 @@ describe("§ Desktop's xl is 1272, not the 1280 it resembles", () => {
   });
 });
 
+describe("a redefined breakpoint does not cascade the way it reads", () => {
+  /*
+   * The trap FUEL-77 fell into, pinned so the next person meets it as a failing
+   * test rather than as two day rulers in a screenshot.
+   *
+   * Tailwind v4 emits a breakpoint that the app redefines **before** the ones it
+   * did not, whatever order they are declared in and wherever in `@theme` the
+   * declaration sits — both were tried. So the emitted order is `xl` (1272),
+   * then `sm`, `md`, `lg`, `2xl` in the ascending order one expects.
+   *
+   * The consequence is the whole reason this is worth a test: on one element,
+   * for one property, **`xl:` loses to `md:` and `lg:`** — the opposite of what
+   * every developer reading the class string will assume. `hidden md:block
+   * xl:hidden` is a copy that never stands down, and the way it fails is silent:
+   * both copies draw, and on `/` that meant two day rulers and two umber NOW
+   * markers against § The Four Rules' "one umber element per screen".
+   *
+   * The app's answer is to stop relying on the cascade rather than to fight the
+   * order — a bounded `md:max-xl:` variant is one rule true in one band, with
+   * nothing to override. This test does not enforce that; it enforces that the
+   * reason for it is still true, so that a Tailwind release which sorts these
+   * properly is noticed here rather than assumed anywhere.
+   */
+  test("`xl` is emitted ahead of the framework's own breakpoints", async () => {
+    const css = await build(["md:block", "lg:block", "xl:block"]);
+
+    const at = (query: string) => {
+      const index = css.indexOf(query);
+      expect(index, `no ${query} block emitted`).toBeGreaterThan(-1);
+      return index;
+    };
+
+    expect(at("@media (width >= 1272px)")).toBeLessThan(at("@media (width >= 48rem)"));
+    expect(at("@media (width >= 48rem)")).toBeLessThan(at("@media (width >= 64rem)"));
+  });
+
+  test("a bounded variant nests instead of racing", async () => {
+    // What `RULER_AT.wide` and the ruler's own head clearance use instead. One
+    // rule, one band, no second rule to be ordered against.
+    const css = await build(["md:max-xl:block"]);
+
+    expect(css).toMatch(
+      /@media \(width >= 48rem\) \{\s*@media \(width < 1272px\) \{/,
+    );
+  });
+});
+
 describe("the page's own columns emit what they claim", () => {
   test("the reading column is the measure less its own gutters", async () => {
     const css = await build(utilities(PAGE_ASIDE_GRID));

@@ -1156,10 +1156,15 @@ export function RightNow({
     // the first thing in the second column, so the padding would drop it 8px
     // below the eyebrow it is drawn level with in the mock. One string for all
     // three copies, since the two that are hidden at this width cannot care.
+    //
+    // `md:max-xl:` and not `md:pt-2 xl:pt-0`, for the reason `RULER_AT` sets out
+    // at length: Tailwind emits the redefined `xl` media block BEFORE `md`, so
+    // the `md` rule is the later one at 1272 and an `xl:` override of it never
+    // lands. Bounded to the band it is for, there is nothing to override.
     <DayRuler
       slots={rulerSlots(base.timeline)}
       now={base.minutesOfDay}
-      className="md:pt-2 xl:pt-0"
+      className="md:max-xl:pt-2"
     />
   );
 
@@ -1217,7 +1222,7 @@ export function RightNow({
     // it drops the `hidden md:block` half and keeps only the stand-down at the
     // cap — there is no merged grid here for the ruler to move around.
     <div
-      className={activeMeal ? RULER_AT.wide : "xl:hidden"}
+      className={activeMeal ? RULER_AT.wide : RULER_AT.wideOnSession}
       data-ruler="wide"
     >
       {ruler}

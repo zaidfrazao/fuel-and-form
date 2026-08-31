@@ -142,7 +142,10 @@ for (const path of ["/", "/training"]) {
       test(`the action bar stands in the measure at ${width}`, async ({ page }) => {
         await page.setViewportSize({ width, height: 900 });
 
-        const bar = page.locator("main .action-bar-fade");
+        // `:not([aria-hidden])` excludes the `/` skeleton's bar, which carries
+        // the same class string by design — see `action-bar.spec.ts`, where the
+        // race this avoids has been re-run away more than once.
+        const bar = page.locator("main .action-bar-fade:not([aria-hidden])");
 
         // `/training`'s bar is conditional on a session; `/`'s on there being
         // something to do. Both are true at the frozen instant, and it is
@@ -176,7 +179,9 @@ for (const path of ["/", "/training"]) {
        */
       await page.setViewportSize({ width: 1440, height: 1400 });
 
-      const bar = await boxOf(page.locator("main .action-bar-fade"));
+      const bar = await boxOf(
+        page.locator("main .action-bar-fade:not([aria-hidden])"),
+      );
       const measure = await boxOf(page.locator('[data-column="measure"]'));
 
       // `action-bar.ts` carries `pt-[30px]`, and the grid adds no row gap — so
@@ -188,6 +193,59 @@ for (const path of ["/", "/training"]) {
       // And the control: it is nowhere near the foot of a 1400px window, which
       // is where `mt-auto` would still have it.
       expect(bar.y + bar.height, "the bar's bottom").toBeLessThan(1200);
+
+      /*
+       * The reason the aside spans both rows, asserted rather than reasoned
+       * about — and the one way this arrangement can still go wrong.
+       *
+       * A grid distributes a spanning item's height across the tracks it spans,
+       * so an aside taller than the measure plus the bar would grow row one and
+       * push the primary an arbitrary distance below the figures it acts on.
+       * Confined to row one it would do the same thing harder. Neither is true
+       * on these two screens today — the measure is the longer column on both,
+       * by a wide margin — and this is what says so out loud, at the width where
+       * it matters, so that a longer Anytime list is reported here rather than
+       * discovered in a screenshot.
+       */
+      const lastBlock = await boxOf(
+        page.locator('[data-column="measure"] > *:last-child'),
+      );
+
+      expect(
+        measure.y + measure.height - (lastBlock.y + lastBlock.height),
+        "space the aside added to the measure's row",
+      ).toBeCloseTo(0, 0);
+    });
+
+    test("draws exactly one day ruler at every width", async ({ page }) => {
+      /*
+       * § The Four Rules: "one umber element per screen, and it always says: you
+       * are here." On `/` that element is the ruler's NOW marker, and `/` holds
+       * three copies of the ruler in the DOM so that one DOM can serve three
+       * compositions — FUEL-82's device, extended here.
+       *
+       * This is the assertion that was missing when FUEL-77 drew two of them.
+       * `md:block xl:hidden` looks like it stands down at the cap and does not:
+       * Tailwind emits the redefined `xl` media block ahead of `md`, so the `md`
+       * rule wins at 1272 and both copies drew — one in the measure and one in
+       * the aside, two NOW markers on one screen. Nothing in the unit suite
+       * could see it (jsdom applies no stylesheet), the geometry assertions
+       * above all passed, and it was found by looking at a baseline.
+       *
+       * Counting what is *drawn* is the cheapest statement of the rule that a
+       * browser can make, and it is the one this file was missing.
+       */
+      for (const width of [375, 820, 1271, 1272, 1920]) {
+        await page.setViewportSize({ width, height: 900 });
+
+        const drawn = page.locator("main [data-ruler]:visible");
+
+        // `/training` renders no ruler at all — it is `/`'s graphic — so the
+        // count is "one if any", asserted per screen rather than globally.
+        const total = await page.locator("main [data-ruler]").count();
+
+        await expect(drawn, `at ${width}px`).toHaveCount(total === 0 ? 0 : 1);
+      }
     });
 
     test("is a single column at 820, unchanged", async ({ page }) => {
@@ -206,8 +264,15 @@ for (const path of ["/", "/training"]) {
       // edge to compare. The first thing in each column shares the other's x and
       // sits below it, which is a column rather than a row.
       const first = await boxOf(page.getByRole("heading", { level: 1 }));
+
+      // `:visible`, because the first thing in the aside at this width is not
+      // the first thing in the DOM: `/` renders three copies of the ruler and
+      // two of them are `display: none` here. A box is what this measures, and
+      // a copy that is not drawn does not have one.
       const inAside = await boxOf(
-        page.locator('[data-column="aside"] h2, [data-column="aside"] [data-ruler]').first(),
+        page
+          .locator('[data-column="aside"] :is(h2, [data-ruler]):visible')
+          .first(),
       );
 
       expect(inAside.x, "the aside's first block").toBeCloseTo(first.x, 0);

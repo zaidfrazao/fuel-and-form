@@ -755,8 +755,11 @@ describe("the second column", () => {
     // from a signature graphic under § Rule 4.
     expect(within(aside).getByRole("img").getAttribute("aria-label")).toMatch(/week/i);
 
-    // And the row that says which date is being viewed.
-    expect(aside.querySelector("[aria-current]")).not.toBeNull();
+    // And the row that says which date is being viewed — named, so this cannot
+    // pass on the dot grid's own `aria-current` while the list has lost its.
+    const recent = within(aside).getByRole("list", { name: /recent/i });
+
+    expect(recent.querySelector("[aria-current]")).not.toBeNull();
   });
 
   test("the groups are the frame's, not this screen's", () => {

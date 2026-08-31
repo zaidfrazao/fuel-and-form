@@ -71,8 +71,14 @@ describe("the skeleton stands in the same frame as the screen", () => {
      */
     const container = skeleton();
 
-    for (const [at, variant] of Object.entries(RULER_AT)) {
-      expect(container.querySelector(`[data-ruler="${at}"]`)!.className).toBe(variant);
+    // Three of `RULER_AT`'s four. The fourth, `wideOnSession`, is the copy a
+    // workout card draws instead of the meal card's pair — a skeleton stands in
+    // for one layout and the meal is the one it was drawn against, so it has no
+    // place to put a variant that only exists on the other card.
+    for (const at of ["phone", "wide", "aside"] as const) {
+      expect(container.querySelector(`[data-ruler="${at}"]`)!.className).toBe(
+        RULER_AT[at],
+      );
     }
   });
 
