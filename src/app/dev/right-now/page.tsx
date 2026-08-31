@@ -247,15 +247,15 @@ const TARGET: MacroTarget = {
 
 /** The day above, as it would look logged: two eaten, one skipped, two done. */
 const LOGGED: LoggedEntry[] = [
-  { id: "l1", name: "Coffee + MCT oil", status: "eaten", macros: { kcal: 118, proteinG: 0, fatG: 13, carbG: 0.4 } },
-  { id: "l2", name: "Overnight oats with berries", status: "eaten", macros: { kcal: 486, proteinG: 32.5, fatG: 11.8, carbG: 58.2 } },
-  { id: "l3", name: "Greek yoghurt", status: "skipped" },
-  { id: "l4", name: "Chicken and rice bowl", status: "eaten", macros: { kcal: 612, proteinG: 54.2, fatG: 14.6, carbG: 63.8 } },
-  { id: "l5", name: "Circuit A", status: "done" },
-  { id: "l6", name: "Beef chilli", status: "eaten", macros: { kcal: 1024, proteinG: 68.3, fatG: 34.1, carbG: 82.5 } },
+  { id: "l1", name: "Coffee + MCT oil", kind: "meal", status: "eaten", macros: { kcal: 118, proteinG: 0, fatG: 13, carbG: 0.4 } },
+  { id: "l2", name: "Overnight oats with berries", kind: "meal", status: "eaten", macros: { kcal: 486, proteinG: 32.5, fatG: 11.8, carbG: 58.2 } },
+  { id: "l3", name: "Greek yoghurt", kind: "meal", status: "skipped" },
+  { id: "l4", name: "Chicken and rice bowl", kind: "meal", status: "eaten", macros: { kcal: 612, proteinG: 54.2, fatG: 14.6, carbG: 63.8 } },
+  { id: "l5", name: "Circuit A", kind: "workout", status: "done" },
+  { id: "l6", name: "Beef chilli", kind: "meal", status: "eaten", macros: { kcal: 1024, proteinG: 68.3, fatG: 34.1, carbG: 82.5 } },
   // The walk's line carries `walk` (FUEL-29), which is what keeps the Undo
   // control off it: the bar's stack is over what the bar logged.
-  { id: "l7", name: "Daily walk", status: "done", walk: true },
+  { id: "l7", name: "Daily walk", kind: "workout", status: "done", walk: true },
 ];
 
 const activeAt = (

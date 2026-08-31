@@ -289,7 +289,7 @@ describe("the daily walk", () => {
     // What keeps the action bar's Undo off a row it cannot take back. The line
     // itself still crosses — the walk happened, and the summary says so.
     expect(payload.entries).toEqual([
-      { id: "log-9", name: "Daily Walk", status: "done", walk: true },
+      { id: "log-9", name: "Daily Walk", kind: "workout", status: "done", walk: true },
     ]);
   });
 });

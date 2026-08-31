@@ -325,6 +325,9 @@ describe("pendingEntry", () => {
       // appended to the server's own list.
       id: "pending:meal:e1",
       name: "Overnight oats",
+      // The optimistic entry carries the kind too, or `theDay` would fail to
+      // match the row the tap just created against the item it came from.
+      kind: "meal",
       status: "eaten",
       macros: { kcal: 486, proteinG: 32.5, fatG: 11.8, carbG: 58.2 },
     });
@@ -368,9 +371,15 @@ describe("theDay", () => {
     timed(mealItem(SALAD), "m2", "13:00"),
   ];
 
-  const entry = (name: string, status: LogStatus, walk = false): LoggedEntry => ({
+  const entry = (
+    name: string,
+    status: LogStatus,
+    kind: LoggedEntry["kind"] = "meal",
+    walk = false,
+  ): LoggedEntry => ({
     id: `log-${name}-${status}`,
     name,
+    kind,
     status,
     ...(walk ? { walk: true as const } : {}),
   });
@@ -388,7 +397,7 @@ describe("theDay", () => {
   test("takes the status word from the log, for past items only", () => {
     const rows = theDay(TIMELINE, 2, [
       entry("Overnight oats", "eaten"),
-      entry("Circuit A", "skipped"),
+      entry("Circuit A", "skipped", "workout"),
       // Ahead of the cursor, and so not this list's to report. A day whose
       // lunch was logged early still shows lunch as the item the reader is on.
       entry("Chicken salad", "eaten"),
@@ -402,7 +411,7 @@ describe("theDay", () => {
     // The manual advance walks past an item without writing a row — "I'm done"
     // with no tap on anything. § Tone of Voice would rather say nothing than
     // name it something it was not.
-    const [row] = theDay(TIMELINE, 3, [entry("Circuit A", "done")]);
+    const [row] = theDay(TIMELINE, 3, [entry("Circuit A", "done", "workout")]);
 
     expect(row!.status).toBeUndefined();
     expect(row!.at).toBe("07:30");
@@ -425,13 +434,41 @@ describe("theDay", () => {
     ).toEqual(["eaten", "skipped"]);
   });
 
+  test("never lets a workout's status answer for a meal that shares its name", () => {
+    // `meals` and `workouts` are separate namespaces with nothing constraining
+    // one against the other, so a name is unique only WITHIN a table. Keyed by
+    // name alone the two share a queue, and the meal is handed the session's
+    // "Done" while the session is left with nothing.
+    //
+    // Unreachable today — the library is seeded and no seeded meal is named
+    // after a workout — which is why it is a test rather than a bug report: the
+    // thing that makes it safe is a coincidence in the data, and this is what
+    // makes it a property of the code. Raised by the FUEL-86 precommit review.
+    //
+    // The meal is advanced past WITHOUT a log, which is what separates the two
+    // keyings: the day holds one log row and two items that answer to its name,
+    // so a name-only queue gives it to the first item rather than to the one it
+    // belongs to. An earlier version of this test logged both in timeline order
+    // and passed against the very bug it was written for — the queue handed out
+    // the right answers by accident.
+    const clash = meal({ id: "meal-9", name: "Circuit A", slotType: "lunch" });
+
+    const rows = theDay(
+      [timed(mealItem(clash), "m9", "13:00"), timed(workoutItem(CIRCUIT), "w9", "18:00")],
+      2,
+      [entry("Circuit A", "done", "workout")],
+    );
+
+    expect(rows.map((row) => row.status)).toEqual([undefined, "done"]);
+  });
+
   test("never lets the walk answer for a scheduled item", () => {
     // The walk is in `anytime` rather than on the timeline, so its log row has
     // nothing here to match. Left in, it could be consumed by an item that
     // happened to share its name.
     const named = [timed(workoutItem(WALK), "w9", "18:00")];
 
-    expect(theDay(named, 1, [entry("Daily walk", "done", true)])[0]!.status).toBeUndefined();
+    expect(theDay(named, 1, [entry("Daily walk", "done", "workout", true)])[0]!.status).toBeUndefined();
   });
 
   test("carries the item's own key, so a row is stable across renders", () => {

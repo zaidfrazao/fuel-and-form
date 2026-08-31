@@ -229,6 +229,9 @@ const TARGET: MacroTarget = {
 /** One line of the day's log, as `dayLog` would have produced it. */
 const entry = (fields: Partial<LoggedEntry> & { id: string }): LoggedEntry => ({
   name: "Overnight oats",
+  // A meal by default, because the default name is one. `theDay` joins on the
+  // pair, so a fixture that left this to chance could match a workout row.
+  kind: "meal",
   status: "eaten",
   ...fields,
 });

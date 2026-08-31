@@ -78,6 +78,22 @@ export type LoggedEntry = {
   id: string;
   /** The item's own name, resolved from today's plan. */
   name: string;
+  /**
+   * Which table the row came from — FUEL-86.
+   *
+   * Carried for one reader, `theDay`, which joins this list back onto the day's
+   * timeline by NAME because a log row cannot reproduce a timeline key. A name
+   * alone is not a safe key across the two tables: `meals` and `workouts` are
+   * separate namespaces with no constraint between them, so a meal named after
+   * a workout would share a queue and could be handed the workout's status.
+   *
+   * Not reachable today — the meal library is seeded and no seeded meal shares
+   * a workout's name — which is exactly why it is worth spending a field on. It
+   * is a coincidence rather than an invariant, nothing anywhere enforces it,
+   * and the failure it would produce is a wrong word on a row with no error
+   * anywhere. Raised by the FUEL-86 precommit review.
+   */
+  kind: "meal" | "workout";
   status: LogStatus;
   /**
    * What this entry contributes to the day's totals.
@@ -177,6 +193,7 @@ export function dayLog(
         entry: {
           id: log.id,
           name: meal?.name ?? slotLabel(log.slot),
+          kind: "meal",
           status: log.status,
           // The macros of what was eaten, from the meal the log names — never
           // from the slot, which a swap could have refilled since.
@@ -189,6 +206,7 @@ export function dayLog(
       entry: {
         id: log.id,
         name: workouts.get(log.workoutId)?.name ?? "Training",
+        kind: "workout",
         status: log.status,
         ...(walks.has(log.workoutId) ? { walk: true as const } : {}),
       } satisfies LoggedEntry,
@@ -233,6 +251,7 @@ export function pendingEntry(
   return {
     id: `pending:${item.key}`,
     name: itemName(item),
+    kind: item.kind,
     status: intent.status,
     ...(item.kind === "meal" && intent.status === "eaten"
       ? { macros: macrosOf(item.meal.meal) }
@@ -307,7 +326,33 @@ export type DayRow = {
  * The walk is excluded. It is in `anytime` and not on the timeline, so its log
  * row has nothing here to match and leaving it in would let it be consumed by a
  * scheduled item that happened to share its name.
+ *
+ * ## And the name is qualified by the kind
+ *
+ * `meals` and `workouts` are separate namespaces with nothing constraining one
+ * against the other, so "name" is only unique WITHIN a table. Keyed by name
+ * alone, a meal named after a workout would share a queue with it and could be
+ * handed its status — a different class of mix-up from the duplicate-name case
+ * above, and one the queue discipline does nothing about.
+ *
+ * It cannot happen today: the meal library is seeded and no seeded meal shares
+ * a workout's name. That is a coincidence rather than an invariant — nothing
+ * enforces it, a later seed could break it, and the result would be one wrong
+ * word on one row with no error raised anywhere. Raised by the FUEL-86
+ * precommit review and fixed by qualifying the key rather than by trusting the
+ * data.
  */
+
+/**
+ * The join key: a name, scoped to the table it came from.
+ *
+ * A function rather than two template literals, so the two sides of the join
+ * cannot be built differently — which is the only way this can go wrong now.
+ */
+function queueKey(kind: LoggedEntry["kind"], name: string): string {
+  return `${kind}:${name}`;
+}
+
 export function theDay(
   timeline: readonly ScheduledItem[],
   position: number,
@@ -318,10 +363,11 @@ export function theDay(
   for (const entry of entries) {
     if (entry.walk) continue;
 
-    const queue = pending.get(entry.name);
+    const key = queueKey(entry.kind, entry.name);
+    const queue = pending.get(key);
 
     if (queue) queue.push(entry.status);
-    else pending.set(entry.name, [entry.status]);
+    else pending.set(key, [entry.status]);
   }
 
   return timeline.map((item, index) => {
@@ -330,8 +376,19 @@ export function theDay(
     // Only a past item consumes a row. An upcoming item cannot have been
     // logged, and taking a status for one would hand the next item along the
     // queue's answer.
-    const status = place === "past" ? pending.get(name)?.shift() : undefined;
+    const status =
+      place === "past" ? pending.get(queueKey(item.kind, name))?.shift() : undefined;
 
-    return { key: item.key, name, at: item.at, place, ...(status ? { status } : {}) };
+    return {
+      key: item.key,
+      name,
+      at: item.at,
+      place,
+      // `!== undefined` rather than a truthiness test. Every `LogStatus` is a
+      // non-empty string today, so the two agree — but the one that stays
+      // correct if the vocabulary ever gains a falsy member is this one, and a
+      // status silently dropped here reads as an item nobody logged.
+      ...(status !== undefined ? { status } : {}),
+    };
   });
 }
