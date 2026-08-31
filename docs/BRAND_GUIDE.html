@@ -369,6 +369,46 @@ table.week thead th.now { color: var(--accent); border-bottom-color: var(--accen
 /* `/plan` alone spans the measure and the aside together: 640 + 28 + 356 = 1024,
    which is § Spacing's week-grid maximum to the pixel. */
 .dbody.wide > .dmain { grid-column: 2 / 4; }
+/* ---------- what belongs to the frame rather than to a column — FUEL-85 ----
+   A screen's header, and any graphic that IS the screen's subject, is drawn
+   across the rail's remainder rather than inside the measure. § Desktop's
+   width rules were amended for this: the 640 measure is a bound on PROSE, and
+   a folio line, a time axis and a trend line are none of them.
+
+   `1fr` rather than the measure and the aside spelled out, because the pair
+   below resumes them: two declarations of the same two columns is the fault
+   globals.css spends a paragraph warning about. */
+.dbody.spanning { grid-template-columns: var(--rail) 1fr; }
+.pair { display: grid; grid-template-columns: var(--measure) var(--aside);
+  column-gap: var(--gutter); align-items: start; }
+
+/* The folio: a caption line, not a heading. Micro is this system's register for
+   metadata, and a date on a screen that is always today is metadata. Drawn
+   above the screen's own time graphic, whose hairline is the band's rule — so
+   the separator is the graphic rather than a line drawn near it. */
+.folio { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; }
+
+/* Four figures across the measure. § Desktop's density rule governs
+   three-value summaries and names the four-macro grid out of scope; at 584 the
+   2×2 puts ~300px between a label and the next value, which is four islands
+   rather than a grid. */
+.kv.four { grid-template-columns: repeat(4, 1fr); gap: 0 20px; }
+
+/* A control is its content plus air. The full-measure button is the phone's
+   thumb target, and a 584px slab is what it becomes on a screen with no thumb.
+   The sheet keeps the old rule: a sheet IS the measure. */
+.btn.auto { width: auto; padding: 0 26px; }
+.act-row { display: flex; gap: 10px; align-items: center; }
+
+/* A form row: the label, and its control at its own width — FUEL-74's ruling,
+   drawn. */
+.frow { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 13px 0; min-height: 54px; }
+.frow + .frow { border-top: 1px solid var(--border); }
+.frow-main { display: flex; flex-direction: column; gap: 2px; }
+.control { background: var(--surface); border-radius: 8px; height: 42px; padding: 0 12px;
+  display: inline-flex; align-items: center; gap: 8px; font-size: 15px; white-space: nowrap; }
+
 .dmain, .daside { display: flex; flex-direction: column; gap: 30px; min-width: 0; }
 /* § Desktop: above 1024px the action bar is not sticky — there is no thumb, so
    there is no posture to serve — and the primary action sits at the end of its
@@ -1426,7 +1466,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
       <div class="dcell">
         <!-- ===== D1 · RIGHT NOW ===== -->
         <div class="dstage">
-          <div class="ui dframe" data-mode="light" role="img" aria-label="Right Now at 1272: the two notice bands full-bleed with their text at the measure&#39;s edge, the navigation as a left rail, Chilli con Carne with This meal and Today as two grids, and the day ruler and the Anytime list in the second column">
+          <div class="ui dframe" data-mode="light" role="img" aria-label="Right Now at 1272: the two notice bands full-bleed with their text at the measure&#39;s edge, the navigation as a left rail, a folio line and the day ruler across the frame, Greek Yogurt and Berries with its four figures in the measure, and the day&#39;s totals, the day&#39;s items and the Anytime list in the second column">
 <div class="dband">
             <div>
               <p>Demo session — your changes are temporary. <a href="#">View the source.</a></p>
@@ -1438,7 +1478,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
               <p>Walk not logged. Reminder set for 19:00. <a href="#">Log the walk.</a></p>
             </div>
           </div>
-          <div class="dbody">
+          <div class="dbody spanning">
             <nav class="rail" aria-label="Primary">
             <span class="railitem active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#n-now"/></svg>Now</span>
             <span class="railitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#n-plan"/></svg>Plan</span>
@@ -1446,76 +1486,102 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
             <span class="railitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#n-weight"/></svg>Weight</span>
             <div class="railfoot"><a href="#">Settings</a></div>
           </nav>
-            <div class="dmain">
-              <div style="display:flex;flex-direction:column;gap:4px;">
-                <span class="u-micro" style="color:var(--text-3);">Dinner · 19:00</span>
-                <div class="u-title">Chilli con Carne</div>
-              </div>
 
-              <!-- Two named sections again. § The Day&#39;s Numbers on a Phone
-                   merges these into one grid below 768px and says so in its
-                   title; above it the two survive, and 640px is the width they
-                   were drawn for. -->
-              <div class="blk">
-                <span class="u-micro">This meal</span>
-                <div class="kv">
-                  <div class="kvi"><span class="u-micro">Calories</span><span class="u-val">612</span></div>
-                  <div class="kvi"><span class="u-micro">Protein</span><span class="u-val em">48 g</span></div>
-                  <div class="kvi"><span class="u-micro">Fat</span><span class="u-val">18 g</span></div>
-                  <div class="kvi"><span class="u-micro">Carbs</span><span class="u-val">61 g</span></div>
+            <div style="display:flex;flex-direction:column;gap:30px;min-width:0;">
+              <!-- The header does one thing: say where we are in the day. A
+                   Micro folio line and the ruler at the width of the day, whose
+                   own hairline closes the band. There is no second heading here
+                   and no figure — both would arrive before the subject. -->
+              <div style="display:flex;flex-direction:column;gap:2px;">
+                <div class="folio">
+                  <span class="u-micro" style="color:var(--text-3);">Today · Wednesday 17 June</span>
                 </div>
-              </div>
-
-              <div class="blk">
-                <span class="u-micro">Today</span>
-                <div class="kv">
-                  <div class="kvi"><span class="u-micro">Calories</span><span class="u-val">1,178</span><span class="u-slash">of 1,780 · −602</span></div>
-                  <div class="kvi"><span class="u-micro">Protein</span><span class="u-val em">98 g</span><span class="u-slash">of 148 · −50</span></div>
-                  <div class="kvi"><span class="u-micro">Fat</span><span class="u-val">41 g</span><span class="u-slash">of 50 · −9</span></div>
-                  <div class="kvi"><span class="u-micro">Carbs</span><span class="u-val">132 g</span><span class="u-slash">of 185 · −53</span></div>
-                </div>
-              </div>
-
-              <!-- Not sticky, and this is where that shows. § Desktop: above
-                   1024px there is no thumb, so the bar has no posture to serve
-                   and the primary action sits at the end of its column. -->
-              <div class="dactions">
-                <button class="btn btn-primary" type="button">Log eaten</button>
-                <div class="btn-row">
-                  <button class="btn btn-secondary" type="button">Swap</button>
-                  <button class="btn btn-secondary" type="button">Skip</button>
-                </div>
-              </div>
-            </div>
-
-            <!-- The aside is the 544px of nothing, given something to hold. -->
-            <div class="daside">
-              <div class="blk">
-                <span class="u-micro">The day</span>
-                <div class="ruler">
+                <div class="ruler" style="padding:14px 0 24px;">
                 <div class="ruler-base"></div>
                 <span class="tick done" style="left:0%"></span>
                 <span class="tick done" style="left:6.3%"></span>
                 <span class="tick done" style="left:28.1%"></span>
                 <span class="tick done" style="left:43.8%"></span>
-                <span class="tick skip" style="left:62.5%"></span>
-                <span class="tick done" style="left:71.9%"></span>
+                <span class="now-mark" style="left:62.5%"></span>
+                <span class="now-pill" style="left:62.5%">NOW</span>
                 <span class="tick next" style="left:81.3%"></span>
-                <span class="now-mark" style="left:80.6%"></span>
-                <span class="now-pill" style="left:80.6%">NOW</span>
                 <div class="ruler-scale">
-                  <span style="left:0%">06</span><span style="left:37.5%">12</span>
+                  <span style="left:0%">06</span><span style="left:18.75%">09</span>
+                  <span style="left:37.5%">12</span><span style="left:56.25%">15</span>
                   <span style="left:75%">18</span><span style="left:100%">22</span>
                 </div>
               </div>
               </div>
 
-              <div class="blk">
-                <span class="u-micro">Anytime</span>
-                <div class="list">
-                  <div class="row" style="min-height:46px;padding:11px 0;"><div class="row-main"><span class="row-title">Greek Yoghurt &amp; Honey</span></div><span class="row-trail">180 kcal</span></div>
-                  <div class="row" style="min-height:46px;padding:11px 0;"><div class="row-main"><span class="row-title">Protein bar</span></div><span class="row-trail">Not logged</span></div>
-                  <div class="row" style="min-height:46px;padding:11px 0;"><div class="row-main"><span class="row-title">Walk</span></div><span class="row-trail">Not logged</span></div>
+              <div class="pair">
+                <div class="dmain">
+                  <div style="display:flex;flex-direction:column;gap:4px;">
+                    <span class="u-micro" style="color:var(--text-3);">Snack · 16:00</span>
+                    <div class="u-title">Greek Yogurt + Berries</div>
+                  </div>
+
+                  <!-- One grid on this screen, and it is the meal's. The day's
+                       four are in the aside at the 2×2 density that works at
+                       356 — two identical four-figure grids stacked was the
+                       other way to draw this, and it made the same component
+                       say the same thing twice. -->
+                  <div class="blk">
+                    <span class="u-micro">This meal</span>
+                    <div class="kv four">
+                      <div class="kvi"><span class="u-micro">Calories</span><span class="u-val">180</span></div>
+                      <div class="kvi"><span class="u-micro">Protein</span><span class="u-val em">18 g</span></div>
+                      <div class="kvi"><span class="u-micro">Fat</span><span class="u-val">4 g</span></div>
+                      <div class="kvi"><span class="u-micro">Carbs</span><span class="u-val">17 g</span></div>
+                    </div>
+                  </div>
+
+                  <!-- Not sticky, and now not full-measure either. A fourth
+                       control — Undo, when there is a log to take back — is a
+                       fourth item in this row rather than a third row. -->
+                  <div class="act-row">
+                    <button class="btn btn-primary auto" type="button">Log eaten</button>
+                    <button class="btn btn-secondary auto" type="button">Swap</button>
+                    <button class="btn btn-secondary auto" type="button">Skip</button>
+                  </div>
+                </div>
+
+                <!-- The aside answers the desktop's question. PRD § Target
+                     Users: the desktop is "Sunday evening, reviewing the week",
+                     and the phone is the one timed to three seconds. -->
+                <div class="daside">
+                  <div class="blk">
+                    <span class="u-micro">Today</span>
+                    <div class="kv">
+                      <div class="kvi"><span class="u-micro">Calories</span><span class="u-val">1,575</span><span class="u-slash">of 1,780 · −205</span></div>
+                      <div class="kvi"><span class="u-micro">Protein</span><span class="u-val em">113.5 g</span><span class="u-slash">of 148 · −34.5</span></div>
+                      <div class="kvi"><span class="u-micro">Fat</span><span class="u-val">48 g</span><span class="u-slash">of 50 · −2</span></div>
+                      <div class="kvi"><span class="u-micro">Carbs</span><span class="u-val">147 g</span><span class="u-slash">of 185 · −38</span></div>
+                    </div>
+                  </div>
+
+                  <!-- The day, which the client already holds and no width has
+                       ever shown. The current row is marked by weight rather
+                       than by colour: § The Four Rules gives this screen one
+                       umber element and the ruler above has it. -->
+                  <div class="blk">
+                    <span class="u-micro">The day</span>
+                    <div class="list">
+                      <div class="row" style="min-height:44px;padding:10px 0;"><div class="row-main"><span class="row-title" style="color:var(--text-2);">Coffee + MCT oil</span></div><span class="status done">Eaten</span></div>
+                      <div class="row" style="min-height:44px;padding:10px 0;"><div class="row-main"><span class="row-title" style="color:var(--text-2);">Overnight Oats</span></div><span class="status done">Eaten</span></div>
+                      <div class="row" style="min-height:44px;padding:10px 0;"><div class="row-main"><span class="row-title" style="color:var(--text-2);">Bodyweight Circuit A</span></div><span class="status done">Done</span></div>
+                      <div class="row" style="min-height:44px;padding:10px 0;"><div class="row-main"><span class="row-title" style="color:var(--text-2);">Ciabatta Roll</span></div><span class="status done">Eaten</span></div>
+                      <div class="row" style="min-height:44px;padding:10px 0;"><div class="row-main"><span class="row-title">Greek Yogurt + Berries</span></div><span class="status done">Now</span></div>
+                      <div class="row" style="min-height:44px;padding:10px 0;"><div class="row-main"><span class="row-title">Lemon-Garlic Baked Fish</span></div><span class="row-trail">19:00</span></div>
+                    </div>
+                  </div>
+
+                  <div class="blk">
+                    <span class="u-micro">Anytime</span>
+                    <div class="list">
+                      <div class="row" style="min-height:46px;padding:11px 0;"><div class="row-main"><span class="row-title">Greek Yoghurt &amp; Honey</span></div><span class="row-trail">180 kcal</span></div>
+                      <div class="row" style="min-height:46px;padding:11px 0;"><div class="row-main"><span class="row-title">Walk</span></div><button class="btn btn-secondary auto" type="button" style="font-size:13px;min-height:36px;">Log walk</button></div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1525,7 +1591,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
         <div class="cap">
           <span class="tagline">P1 · / · light</span>
           <h3>Right Now</h3>
-          <p>The 544px of nothing, given something to hold. The measure keeps the meal, both macro grids and the action bar; the aside takes the day ruler and the Anytime list. The two notice bands keep their full-bleed hairline and lose their own centre &mdash; their text starts at 248px, which is the measure&rsquo;s edge, and the offset that put them 124px off the content is gone. The action bar is not sticky here and covers nothing: &sect; Desktop&rsquo;s carry-over rule says thumb reach is a phone posture and does not travel.</p>
+          <p>Redrawn (FUEL-85). <b>One job per zone.</b> The header says where we are in the day &mdash; a folio line and the ruler at the day&rsquo;s width, closed by the ruler&rsquo;s own hairline. The measure keeps the subject and nothing arrives before it. The aside answers the question the desktop reader actually came with: the day against target, every item with its status, and what can still be logged. The first version of this frame put four figures with progress bars across the top; a progress bar is not in this system, and it buried the subject under three things that all wanted reading first.</p>
         </div>
       </div>
 
@@ -1668,8 +1734,8 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
       <div class="dcell">
         <!-- ===== D4 · TRAINING ===== -->
         <div class="dstage">
-          <div class="ui dframe" data-mode="dark" role="img" aria-label="Training at 1272: Circuit B and its exercise list in the measure, and the six-week adherence dot grid with the recent sessions beside it">
-<div class="dbody">
+          <div class="ui dframe" data-mode="dark" role="img" aria-label="Training at 1272: the date paginator across the frame, Circuit B and its exercise list in the measure, and the six-week adherence dot grid with the recent sessions beside it">
+<div class="dbody spanning">
             <nav class="rail" aria-label="Primary">
             <span class="railitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#n-now"/></svg>Now</span>
             <span class="railitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#n-plan"/></svg>Plan</span>
@@ -1677,9 +1743,23 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
             <span class="railitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#n-weight"/></svg>Weight</span>
             <div class="railfoot"><a href="#">Settings</a></div>
           </nav>
-            <div class="dmain">
-              <div class="topbar"><span class="u-micro">Training</span><span class="u-micro">Wed 12 Aug</span></div>
+            <div style="display:flex;flex-direction:column;gap:30px;min-width:0;">
+              <!-- The same header rule as `/`: one line saying where we are,
+                   and the paginator that moves it, across the frame. The
+                   adherence grid stays in the aside — at desktop the aside
+                   starts at the top of the content, so it is already the first
+                   thing in its column. The fold was the phone's. -->
+              <div class="folio" style="padding-bottom:16px;border-bottom:1px solid var(--border);">
+                <div style="display:flex;align-items:center;gap:20px;">
+                  <span class="u-micro" style="color:var(--text-2);">&lsaquo; Prev</span>
+                  <span class="u-micro" style="color:var(--text-3);">Wed 12 Aug · Today</span>
+                  <span class="u-micro" style="color:var(--text-2);">Next &rsaquo;</span>
+                </div>
+                <span class="u-micro" style="color:var(--text-3);">3 of 5 sessions this week</span>
+              </div>
 
+              <div class="pair">
+                <div class="dmain">
               <div style="display:flex;flex-direction:column;gap:12px;">
                 <span class="u-micro" style="color:var(--text-3);">Training · 17:30</span>
                 <div class="u-title">Circuit B</div>
@@ -1697,17 +1777,15 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                 </div>
               </div>
 
-              <div class="dactions">
-                <button class="btn btn-primary" type="button">Mark done</button>
-                <div class="btn-row">
-                  <button class="btn btn-secondary" type="button">Partial</button>
-                  <button class="btn btn-secondary" type="button">Skip</button>
-                </div>
+              <div class="act-row">
+                <button class="btn btn-primary auto" type="button">Mark done</button>
+                <button class="btn btn-secondary auto" type="button">Partial</button>
+                <button class="btn btn-secondary auto" type="button">Skip</button>
               </div>
             </div>
 
-            <!-- Both of these are below the fold at every width the app has
-                 today, on a screen whose whole point is the pattern. -->
+            <!-- The pattern, which is what this screen is about, at the top of
+                 its own column. -->
             <div class="daside">
               <div class="blk">
                 <div class="topbar"><span class="u-micro">Adherence</span><span class="u-micro" style="color:var(--text-3);">Last 6 weeks</span></div>
@@ -1734,13 +1812,15 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                 </div>
               </div>
             </div>
+              </div>
+            </div>
           </div>
           </div>
         </div>
         <div class="cap">
           <span class="tagline">P3 · /training · dark</span>
           <h3>Training</h3>
-          <p>The measure keeps the session and the exercise list; the aside takes the adherence grid and the recent sessions, both of which are below the fold at every width the app has today &mdash; on the one screen whose argument is the pattern rather than the day. The rail is drawn active on Training here, which is the first time this file has drawn that destination at all.</p>
+          <p>Redrawn (FUEL-85), and <b>changed least of the three</b> &mdash; this screen&rsquo;s columns were already full, which is why it read better than <code>/</code> before any of this. It takes the header rule and the content-width controls, and keeps everything else. The measure keeps the session and the exercise list; the aside keeps the adherence grid and the recent sessions. An earlier draft moved adherence into the header on the grounds that it was below the fold; that was the phone&rsquo;s fold, and at desktop the aside starts at the top of the content. <b>A redesign that churns a working screen to look busy is the same mistake in the other direction.</b> The rail is drawn active on Training here, which is the first time this file has drawn that destination at all.</p>
         </div>
       </div>
 
@@ -1748,7 +1828,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
         <!-- ===== D5 · WEIGHT ===== -->
         <div class="dstage">
           <div class="ui dframe" data-mode="light" role="img" aria-label="Weight at 1272: 79.3 kilograms, the twelve-week trend line and the summary in the measure, with the bounded weigh-in history beside them">
-<div class="dbody">
+<div class="dbody spanning">
             <nav class="rail" aria-label="Primary">
             <span class="railitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#n-now"/></svg>Now</span>
             <span class="railitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#n-plan"/></svg>Plan</span>
@@ -1756,57 +1836,105 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
             <span class="railitem active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#n-weight"/></svg>Weight</span>
             <div class="railfoot"><a href="#">Settings</a></div>
           </nav>
-            <div class="dmain">
-              <div class="topbar"><span class="u-micro">Weight</span><span class="u-micro">Sun 9 Aug</span></div>
 
-              <div style="display:flex;align-items:baseline;gap:10px;">
-                <span class="u-xl">79.3</span><span class="u-micro" style="padding-bottom:8px;">kg</span>
-              </div>
+            <div style="display:flex;flex-direction:column;gap:30px;min-width:0;">
+              <!-- The reading and the trend that produced it ARE the subject of
+                   this screen, so they belong to the frame rather than to a
+                   column. A chart is a data graphic and 584px is not its width:
+                   the same complaint FUEL-76 fixed INSIDE the chart, still
+                   standing around it. -->
+              <div style="display:flex;flex-direction:column;gap:16px;">
+                <div class="folio">
+                  <div style="display:flex;align-items:baseline;gap:12px;">
+                    <span class="u-xl">79.3</span>
+                    <span class="u-micro">kg</span>
+                    <span class="u-slash" style="padding-left:6px;">Sun 9 Aug</span>
+                  </div>
+                  <span class="u-micro" style="color:var(--text-3);">Twelve weeks</span>
+                </div>
 
-              <!-- The same chart on a 640×196 box rather than the phone's
-                   300×128 stretched to fit one: a non-uniform scale distorts
-                   every glyph on the axis, and § Data Display makes the axis an
-                   obligation rather than decoration. Every coordinate here is
-                   the phone's, multiplied. -->
-              <svg class="chart" style="height:196px;" viewBox="0 0 640 196" role="img" aria-label="Line chart: weight falling from 84.2 to 79.3 kilograms over twelve weekly weigh-ins, against a dashed target line at 76 kilograms">
-                <g stroke="var(--grid)" stroke-width="1">
-                  <line x1="0" y1="36.8" x2="640" y2="36.8"/><line x1="0" y1="81.2" x2="640" y2="81.2"/><line x1="0" y1="125.6" x2="640" y2="125.6"/>
+              <!-- A 1024×220 box rather than the phone's 300×128 stretched
+                   to fit one: a non-uniform scale distorts every glyph on the
+                   axis, and § Data Display makes the axis an obligation rather
+                   than decoration. The type, the trend's ink and the mark are
+                   rendered pixels at every width (FUEL-76); only the plot
+                   scales, which is why the coordinates below are the phone's
+                   multiplied and the font sizes are not.
+
+                   300px tall rather than 220: widening a plot without
+                   heightening it flattens what it draws, and 1024×220 is 4.65:1
+                   against the 640-wide box's 3.27 — a weight chart understating
+                   its own slope. 300 restores it.
+
+                   KNOWN DIVERGENCE, recorded rather than fixed here: the app
+                   draws this chart on a `surface` plate and this file does not.
+                   That predates FUEL-85 and belongs to whoever reconciles the
+                   chart's drawing; it is written down so the next person meets
+                   it as a decision rather than as a surprise. -->
+              <svg class="chart" style="height:300px;" viewBox="0 0 1024 300" role="img" aria-label="Line chart: weight falling from 84.2 to 79.3 kilograms over twelve weekly weigh-ins, against a dashed target line at 76 kilograms">
+                <g stroke="var(--grid)" stroke-width="1" vector-effect="non-scaling-stroke">
+                  <line x1="0" y1="55.9" x2="1024" y2="55.9"/><line x1="0" y1="124.1" x2="1024" y2="124.1"/><line x1="0" y1="192.3" x2="1024" y2="192.3"/>
                 </g>
                 <g fill="var(--text-3)" font-size="9.5" font-weight="600" letter-spacing=".08em" font-family="-apple-system, sans-serif">
-                  <text x="0" y="30.6">76</text><text x="0" y="75">72</text><text x="0" y="119.4">68</text>
+                  <text x="0" y="47.5">76</text><text x="0" y="115.6">72</text><text x="0" y="183.8">68</text>
                 </g>
-                <line x1="0" y1="170" x2="640" y2="170" stroke="var(--text-3)" stroke-width="1" stroke-dasharray="3 4"/>
-                <text x="640" y="163.8" text-anchor="end" fill="var(--text-3)" font-size="9.5" font-weight="600" letter-spacing=".12em" font-family="-apple-system, sans-serif">TARGET 64</text>
-                <polyline points="8.5,19.9 64,26 119.5,32.2 174.9,35.2 230.4,42.9 285.9,45.9 341.3,52.1 396.8,55.1 452.3,61.3 507.7,65.8 563.2,70.4 623,75"
-                  fill="none" stroke="var(--text)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                <circle cx="623" cy="75" r="3.4" fill="var(--accent)"/>
+                <line x1="0" y1="260.5" x2="1024" y2="260.5" stroke="var(--text-3)" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>
+                <text x="1024" y="252" text-anchor="end" fill="var(--text-3)" font-size="9.5" font-weight="600" letter-spacing=".12em" font-family="-apple-system, sans-serif">TARGET 64</text>
+                <polyline points="13.6,30.4 102.4,39.8 191.2,49.2 280,53.9 368.8,65.6 457.6,70.2 546.4,79.6 635.2,84.3 724,93.7 812.8,100.6 901.6,107.6 996.8,114.7"
+                  fill="none" stroke="var(--text)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+                <circle cx="996.8" cy="114.7" r="3.4" fill="var(--accent)"/>
               </svg>
 
-              <div class="kv three">
-                <div class="kvi"><span class="u-micro">Lost</span><span class="u-val">4.95</span></div>
-                <div class="kvi"><span class="u-micro">To go</span><span class="u-val">8.50</span></div>
-                <div class="kvi"><span class="u-micro">Rate</span><span class="u-val">0.44</span></div>
+              <div class="topbar">
+                <span class="u-micro" style="color:var(--text-3);">Mon 18 May</span>
+                <span class="u-micro" style="color:var(--text-3);">Sun 9 Aug</span>
+              </div>
               </div>
 
-              <div class="dactions">
-                <button class="btn btn-primary" type="button">Log weigh-in</button>
-              </div>
-            </div>
+              <div class="pair">
+                <div class="dmain">
+                  <!-- Four figures across the measure, where 146px a cell is
+                       dense. § Desktop's density rule decides between two and
+                       three for a short summary; this is the four-value case it
+                       names out of scope. -->
+                  <div class="blk">
+                    <span class="u-micro">Progress</span>
+                    <div class="kv four">
+                      <div class="kvi"><span class="u-micro">Lost</span><span class="u-val">4.95</span><span class="u-slash">from 84.2</span></div>
+                      <div class="kvi"><span class="u-micro">To go</span><span class="u-val">8.50</span><span class="u-slash">to 64</span></div>
+                      <div class="kvi"><span class="u-micro">To target</span><span class="u-val">37%</span><span class="u-slash">of 13.4</span></div>
+                      <div class="kvi"><span class="u-micro">Rate</span><span class="u-val">0.44</span><span class="u-slash">kg/wk · on pace</span></div>
+                    </div>
+                  </div>
 
-            <div class="daside">
-              <div class="blk">
-                <div class="topbar"><span class="u-micro">Weigh-ins</span><span class="u-micro" style="color:var(--text-3);">Last 6 weeks</span></div>
-                <div class="dot-head"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
-                <div class="dots">
-                  <span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot done"></span>
-                  <span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot done"></span>
-                  <span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot done"></span>
-                  <span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot skip"></span>
-                  <span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot done"></span>
-                  <span class="dot none"></span><span class="dot none"></span><span class="dot today"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span><span class="dot none"></span>
+                  <div class="blk">
+                    <span class="u-micro">Log a weigh-in</span>
+                    <div class="frow">
+                      <div class="frow-main"><span class="row-title">Date</span></div>
+                      <span class="control">10/08/2026</span>
+                    </div>
+                    <div class="frow">
+                      <div class="frow-main"><span class="row-title">Weight</span></div>
+                      <span class="control" style="color:var(--text-3);">77.4 kg</span>
+                    </div>
+                    <div class="frow" style="align-items:flex-start;">
+                      <div class="frow-main"><span class="row-title">Note</span><span class="u-slash">optional</span></div>
+                      <span class="control" style="height:64px;width:300px;align-items:flex-start;padding-top:11px;color:var(--text-3);font-size:13px;">Before breakfast, after the walk</span>
+                    </div>
+                    <div class="act-row" style="padding-top:8px;">
+                      <button class="btn btn-primary auto" type="button">Log weigh-in</button>
+                    </div>
+                  </div>
                 </div>
-              </div>
 
+                <!-- The record, and only the record. This aside drew a
+                     six-week weigh-in dot grid until FUEL-85; the app has never
+                     had one, and a signature graphic drawn in this file is an
+                     obligation on whoever builds the screen — § The Four Rules
+                     gives the dot grid to adherence, which is /training's. A
+                     device this file draws for a screen that does not want it
+                     is worse than a silence, because a silence gets a ruling. -->
+                <div class="daside">
               <div class="blk">
                 <span class="u-micro">History</span>
                 <div class="list">
@@ -1820,13 +1948,15 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                 <button class="btn btn-text" type="button" style="width:auto;align-self:flex-start;font-size:15px;">Show earlier</button>
               </div>
             </div>
+                </div>
+              </div>
           </div>
           </div>
         </div>
         <div class="cap">
           <span class="tagline">P5 · /weight · light</span>
           <h3>Weight</h3>
-          <p>The chart takes the height the extra width lets it have, and the aside takes the weigh-in history FUEL-84 bounded &mdash; a list that steps one way, because &sect; Progressive Disclosure rules out anything that can be collapsed again. 76px against 10.5px is unchanged: the scale ratio is not a width.</p>
+          <p>Redrawn (FUEL-85). The reading and the trend that produced it are the subject, so they take the frame rather than a column &mdash; <b>1,024px of chart instead of 584</b>, which is the complaint FUEL-76 fixed <i>inside</i> the chart still standing around it. Below it the measure holds the figures and the entry control, and the aside takes the weigh-in history FUEL-84 bounded &mdash; a list that steps one way, because &sect; Progressive Disclosure rules out anything that can be collapsed again. 76px against 10.5px is unchanged: the scale ratio is not a width.</p>
         </div>
       </div>
 
