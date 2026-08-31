@@ -8,7 +8,7 @@ import { repeatMeal, revertSwap, swapMeal } from "@/app/actions/swap";
 import { DayComplete } from "@/components/day-complete";
 import Link from "next/link";
 
-import { DayRuler } from "@/components/day-ruler";
+import { DayRuler, RULER_AT } from "@/components/day-ruler";
 import { ExerciseList } from "@/components/exercise-list";
 import { KeyValueGrid, SlashMeta } from "@/components/kv-grid";
 import { MacroGrid, MealDayGrid } from "@/components/macro-grid";
@@ -19,6 +19,13 @@ import { Button } from "@/components/ui/button";
 import type { CalendarDate } from "@/lib/date";
 import { type LoggedEntry, pendingEntry } from "@/lib/day-summary";
 import type { WorkoutExercise } from "@/lib/db/schema";
+import {
+  PAGE_ASIDE_COLUMN,
+  PAGE_ASIDE_GRID,
+  PAGE_ASIDE_UNWRAP,
+  PAGE_MEASURE_COLUMN,
+  PAGE_MEASURE_FOOT,
+} from "@/lib/frame";
 import type { LogVerb } from "@/lib/log-intent";
 import { type MacroBearing, type MacroTarget, summariseDay } from "@/lib/macros";
 import { itemLabel, itemName, rulerSlots } from "@/lib/now-display";
@@ -495,7 +502,13 @@ function Actions({
   if (!item && !undoable && !failure) return null;
 
   return (
-    <div className={APP_ACTION_BAR}>
+    // `PAGE_MEASURE_FOOT` places the bar under the first column at ≥1272 —
+    // FUEL-77. Inert everywhere else, including on day-complete, where the
+    // screen never becomes a grid and a grid-placement property on a flex item
+    // does nothing. Stated on the bar rather than passed in per state, because
+    // it says the same thing in all three: the primary action is at the end of
+    // the measure, and never in the aside.
+    <div className={cn(APP_ACTION_BAR, PAGE_MEASURE_FOOT)}>
       {/*
        * § Feedback: "inline banner at the point of action, value reverted,
        * 'Try again'. Never a modal." The point of action is this bar, so the
@@ -666,15 +679,30 @@ function SwapNote({
  * the two quiet states carried a copy because their bar is conditional; all
  * three are gone, which is what stops the screens that kept one from ending up
  * with two.
+ *
+ * ## The second column, taken by two of the three states — FUEL-77
+ *
+ * `className` is here so that the grid arrives per state rather than per screen.
+ * Two of the three take it and one refuses it: § Desktop gives day-complete "the
+ * same column, with more air", because "a second column would set something
+ * beside a screen whose whole argument is that there is nothing left". A grid on
+ * this component would have handed it one.
+ *
+ * At ≥1272 that grid also decides where the bar sits, and the paragraph above
+ * about `flex-1` stops applying there. `PAGE_ASIDE_GRID` packs its rows to the
+ * top, so the bar is 30px under the last figure the way the mock draws it rather
+ * than at the foot of the window — which is `mt-auto` going inert, exactly as
+ * `bottom-[…]` went inert under FUEL-72's `lg:static`. Below 1272, including the
+ * whole 1024–1271 band, `flex-1` and `mt-auto` do what they have always done.
  */
-function Screen({ children }: { children: ReactNode }) {
+function Screen({ className, children }: { className?: string; children: ReactNode }) {
   return (
     // 12px of head clearance below 768px rather than 22 — FUEL-82. This screen
     // opens under up to two notice bands, each with its own hairline, so the gap
     // between the last of them and the eyebrow is already read as separation;
     // the full 22 is head room the fold cannot spare. Above 768px there is no
     // fold to spare it from and the gutter's own 22 is restored.
-    <PageMain className="pt-3 md:pt-[22px]">
+    <PageMain className={cn("pt-3 md:pt-[22px]", className)}>
       {children}
     </PageMain>
   );
@@ -1122,7 +1150,22 @@ export function RightNow({
     // ruler 30px of clearance while every other block on the screen has 22,
     // which is the inconsistency rather than the rhythm. Restored from 768px up,
     // where the rhythm it was tuned against is still what runs.
-    <DayRuler slots={rulerSlots(base.timeline)} now={base.minutesOfDay} className="md:pt-2" />
+    //
+    // And spent again at 1272 — FUEL-77. The 8px is clearance from the block
+    // ABOVE the ruler, and in the aside there is no block above it: the ruler is
+    // the first thing in the second column, so the padding would drop it 8px
+    // below the eyebrow it is drawn level with in the mock. One string for all
+    // three copies, since the two that are hidden at this width cannot care.
+    //
+    // `md:max-xl:` and not `md:pt-2 xl:pt-0`, for the reason `RULER_AT` sets out
+    // at length: Tailwind emits the redefined `xl` media block BEFORE `md`, so
+    // the `md` rule is the later one at 1272 and an `xl:` override of it never
+    // lands. Bounded to the band it is for, there is nothing to override.
+    <DayRuler
+      slots={rulerSlots(base.timeline)}
+      now={base.minutesOfDay}
+      className="md:max-xl:pt-2"
+    />
   );
 
   /*
@@ -1154,19 +1197,49 @@ export function RightNow({
    * buy nothing. The card that has the fold problem is the one that gets the
    * reordering.
    */
-  const rulerAbove = activeMeal ? (
-    <div className="hidden md:block" data-ruler="wide">
+  /*
+   * A third position, and the same device — FUEL-77.
+   *
+   * At ≥1272 the ruler is not on the measure at all: § Desktop gives the aside
+   * "the day ruler and the Anytime list, which is what the 544px of nothing sat
+   * in front of". So the copy that serves 768–1271 stands down at `xl` and the
+   * one in the second column takes over.
+   *
+   * Three copies rather than two, for the reason there were two: `order` and
+   * grid placement both move the box without moving the sequence, so a screen
+   * reader would meet the ruler somewhere a sighted reader does not. The hidden
+   * copies are `display: none` and out of the accessibility tree, so exactly one
+   * is announced at every width — which is why the tests count what is drawn by
+   * `data-ruler` rather than by counting `img` roles.
+   *
+   * The workout card now takes a wrapper it did not have. It renders one visible
+   * ruler as it always did; what changed is that "the original place" is now a
+   * place it leaves at 1272 like every other, so the copy needs something to
+   * hang `xl:hidden` on.
+   */
+  const rulerAbove = (
+    // On a workout card this copy is the one that serves the phone as well, so
+    // it drops the `hidden md:block` half and keeps only the stand-down at the
+    // cap — there is no merged grid here for the ruler to move around.
+    <div
+      className={activeMeal ? RULER_AT.wide : RULER_AT.wideOnSession}
+      data-ruler="wide"
+    >
       {ruler}
     </div>
-  ) : (
-    ruler
   );
 
   const rulerBelow = activeMeal ? (
-    <div className="md:hidden" data-ruler="phone">
+    <div className={RULER_AT.phone} data-ruler="phone">
       {ruler}
     </div>
   ) : null;
+
+  const rulerAside = (
+    <div className={RULER_AT.aside} data-ruler="aside">
+      {ruler}
+    </div>
+  );
 
   /*
    * The way to `/settings` — FUEL-21, and now the only link at the foot of `/`.
@@ -1211,7 +1284,16 @@ export function RightNow({
   const settingsFootLink = (
     // Still a flex row, so the anchor is sized to its text rather than
     // stretching the width of the column as a block-level child would.
-    <span className="flex items-center">
+    //
+    // `lg:hidden` — FUEL-77. The paragraph above says this link exists because
+    // `nav-shell.tsx` "renders a Settings link in the sidebar's foot at ≥1024px
+    // and explicitly leaves the phone to this one". Both halves were rendering
+    // above 1024, so `/` carried two links to the same destination — the only
+    // screen in the app that did, since it is the only one with a foot link at
+    // all. § Desktop's frames draw one. The rail's is the one that stays: it is
+    // on every screen, it shows where you are, and § Navigation puts Settings in
+    // the sidebar's foot by name.
+    <span className="flex items-center lg:hidden">
       <Link
         href="/settings"
         className={`text-slash text-text-tertiary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
@@ -1287,23 +1369,46 @@ export function RightNow({
 
   if (now.state === "nothing-planned") {
     return (
-      <Screen>
-        <div className="flex flex-col gap-[30px]">
-          <header className="flex flex-col gap-2">
-            <p className="text-micro uppercase text-text-secondary">Today</p>
-            <h1 className="text-title text-text-primary">Nothing planned</h1>
-            {/* § Tone of Voice — empty states describe what will appear, they
-                do not nudge. */}
-            <p className="text-body text-text-secondary">
-              Meals and sessions appear here once the week&rsquo;s plan covers today.
-            </p>
-          </header>
+      /*
+       * The same two columns as the timeline state — FUEL-77.
+       *
+       * The mock draws no frame for this state, so the ruling is written down
+       * rather than transcribed: it is `/` with an empty subject, not a screen
+       * of its own, and the aside's contents are exactly what they are next
+       * door. Giving it one column instead would mean the reader's page
+       * rearranged itself on a day the plan happens not to cover — the aside
+       * appearing and disappearing with the data rather than with the width.
+       *
+       * Day-complete is the one that genuinely differs, and § Desktop says why
+       * in a sentence this state cannot borrow: "a second column would set
+       * something beside a screen whose whole argument is that there is nothing
+       * left". Nothing is planned here; there is still a day going on.
+       */
+      <Screen className={PAGE_ASIDE_GRID}>
+        <div className={`flex flex-col gap-[30px] ${PAGE_ASIDE_UNWRAP}`}>
+          <div className={PAGE_MEASURE_COLUMN} data-column="measure">
+            <header className="flex flex-col gap-2">
+              <p className="text-micro uppercase text-text-secondary">Today</p>
+              <h1 className="text-title text-text-primary">Nothing planned</h1>
+              {/* § Tone of Voice — empty states describe what will appear, they
+                  do not nudge. */}
+              <p className="text-body text-text-secondary">
+                Meals and sessions appear here once the week&rsquo;s plan covers today.
+              </p>
+            </header>
+          </div>
 
-          {base.timeline.length > 0 && ruler}
+          <div className={PAGE_ASIDE_COLUMN} data-column="aside">
+            {/* One copy, not three: there is no macro grid here for the ruler to
+                move around, so it has occupied one position at every width since
+                FUEL-82 and it keeps it. `xl:pt-0` in the shared string is what
+                lands it level with the heading beside it. */}
+            {base.timeline.length > 0 && ruler}
 
-          <Anytime items={base.anytime} date={base.date} walks={walks} />
+            <Anytime items={base.anytime} date={base.date} walks={walks} />
 
-          {settingsFootLink}
+            {settingsFootLink}
+          </div>
         </div>
 
         {actions}
@@ -1312,7 +1417,7 @@ export function RightNow({
   }
 
   return (
-    <Screen>
+    <Screen className={PAGE_ASIDE_GRID}>
       {/*
        * § Spacing & Layout's section rhythm is 30px between blocks, and that is
        * what this screen uses from 768px up. Below it the rhythm steps to 22 —
@@ -1323,8 +1428,20 @@ export function RightNow({
        * for one screen. It is scoped to `/` and to phones because that is where
        * the constraint is: 313px of the 667 is chrome, and three of these gaps
        * fall inside the 354px that leaves.
+       *
+       * At 1272 this wrapper stops generating a box — `PAGE_ASIDE_UNWRAP` —
+       * and the two groups inside it become `<main>`'s grid items. That is what
+       * lets one DOM serve both shapes: below the breakpoint the groups are
+       * `display: contents` and this is the single flex column it has always
+       * been, with the sections in the order they are written and the rhythm
+       * above between them. Nothing is reordered at any width, which is the
+       * whole reason the composition is grouped rather than placed.
        */}
-      <div className="flex flex-col gap-[22px] md:gap-[30px]">
+      <div className={`flex flex-col gap-[22px] md:gap-[30px] ${PAGE_ASIDE_UNWRAP}`}>
+        {/* The measure: the subject, the figures it is measured on, and — as a
+            grid item below this group — the action bar. § Desktop: "the measure
+            keeps the meal, the macro grid and the action bar". */}
+        <div className={PAGE_MEASURE_COLUMN} data-column="measure">
         <Subject
           item={now.active}
           at={now.active.at}
@@ -1404,17 +1521,39 @@ export function RightNow({
           target={target}
           className={activeMeal ? "hidden md:flex" : undefined}
         />
+        </div>
 
-        {/* The phone's position for it — see `rulerBelow`. Below the figures,
-            because on the longest meal names one of the two has to go under the
-            action bar and it should not be the numbers. */}
-        {rulerBelow}
+        {/*
+         * The aside — § Desktop: "the aside takes the day ruler and the Anytime
+         * list, which is what the 544px of nothing sat in front of".
+         *
+         * Up next joins them, and the mock does not settle it: it draws a day
+         * with nothing upcoming, so the section is absent there rather than
+         * placed. It goes here because it answers the ruler's question — what is
+         * left of the day, and when — and because the measure is the card and
+         * its figures. The rule that decides it is § Desktop's own division: the
+         * measure keeps the subject and its primary action, the aside takes the
+         * day around it.
+         *
+         * The group starts where the phone's own sequence already had these
+         * three, so nothing moves below 1272: the ruler's phone copy, then Up
+         * next, then Anytime, then the foot link.
+         */}
+        <div className={PAGE_ASIDE_COLUMN} data-column="aside">
+          {/* The phone's position for it — see `rulerBelow`. Below the figures,
+              because on the longest meal names one of the two has to go under the
+              action bar and it should not be the numbers. */}
+          {rulerBelow}
 
-        <UpNext items={now.upcoming} />
+          {/* And the second column's, which is the same ruler a third time. */}
+          {rulerAside}
 
-        <Anytime items={base.anytime} date={base.date} walks={walks} />
+          <UpNext items={now.upcoming} />
 
-        {settingsFootLink}
+          <Anytime items={base.anytime} date={base.date} walks={walks} />
+
+          {settingsFootLink}
+        </div>
       </div>
 
       {actions}

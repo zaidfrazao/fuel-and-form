@@ -62,6 +62,10 @@ const classesOf = (element: Element | null) =>
 const wears = (element: Element | null, constant: string) => {
   const worn = classesOf(element);
 
+  // No `filter(Boolean)` here, deliberately, and it is the opposite call from
+  // the one the sibling test files make: `every` over a set MEMBERSHIP fails on
+  // an empty string, where their `toContain("")` would pass. This one fails
+  // closed already, and filtering it would be the change that broke it.
   return constant.split(" ").every((className) => worn.has(className));
 };
 

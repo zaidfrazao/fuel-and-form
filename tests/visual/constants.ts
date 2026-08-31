@@ -123,4 +123,39 @@ export const SCREENS = [
   { slug: "weight", path: "/weight" },
   { slug: "shopping", path: "/shopping" },
   { slug: "settings", path: "/settings", settlesOn: "Notify this device" },
-] as const satisfies readonly { slug: string; path: string; settlesOn?: string }[];
+  /**
+   * The other two states of `/` — FUEL-77.
+   *
+   * § Desktop's per-screen table gives day-complete a composition of its own,
+   * and FUEL-77 gives one to nothing-planned; both are states of `/` and neither
+   * is reachable from the demo at the frozen instant, which is 18:54 with dinner
+   * still ahead. `/dev/right-now` addresses every state by URL and is the only
+   * way to photograph these two at all.
+   *
+   * `capture` is why they can be photographed usefully. The specimen page ends
+   * in a case switcher, so a `fullPage` shot of it would put a row of links in
+   * the baseline and re-baseline both screens every time a case is added. The
+   * screen under test is `<main>`, and that is what is compared.
+   *
+   * The rail is absent here, as it is on every `/dev/*` page. What these
+   * baselines hold is the composition inside `<main>`: the crop marks closing
+   * the summary rather than the window, and nothing-planned taking the same two
+   * columns as the timeline state.
+   */
+  {
+    slug: "right-now-day-complete",
+    path: "/dev/right-now?case=complete",
+    capture: "main",
+  },
+  {
+    slug: "right-now-nothing-planned",
+    path: "/dev/right-now?case=empty",
+    capture: "main",
+  },
+] as const satisfies readonly {
+  slug: string;
+  path: string;
+  settlesOn?: string;
+  /** A selector to photograph instead of the whole page. */
+  capture?: string;
+}[];

@@ -21,6 +21,7 @@
     Arial, sans-serif;
   --font-heading: var(--font-sans);
 
+
   /* Override 1 — Radius. shadcn derives its scale from --radius via calc(),
      which yields lg 12px / xl 16.8px. The Brand Guide wants 14 and 26, so the
      calc chain is replaced with the guide's explicit values. */
@@ -127,6 +128,31 @@
   --text-micro--line-height: 1rem; /* 16px */
   --text-micro--letter-spacing: 0.16em;
   --text-micro--font-weight: 600;
+
+  /* Brand Guide § Desktop — the breakpoints, declared — FUEL-77.
+
+     "Two are in use and neither is declared; `md` and `lg` are the framework's
+     defaults, and both keep their default widths." They are not restated here
+     for exactly that reason: a default written down is a second declaration of
+     a number nothing changed, and § Desktop names moving either as re-opening
+     two settled sections.
+
+     `xl` is different, and § Desktop calls it out as one: Tailwind's default is
+     1280px and the frame is a SUM — 220 rail + 28 gutter + 640 measure + 28
+     gutter + 356 aside — so 1280 would leave 8px belonging to no column. It is
+     the width at which the frame caps and centres and the aside appears, which
+     is what `right-now.tsx` and `training.tsx` turn on.
+
+     Owed since FUEL-67 and unpaid until now, which was quietly dangerous rather
+     than merely untidy: § Desktop wrote "nothing in `src/` uses an `xl:` utility
+     today — so the redefinition costs nothing now and is written down so that it
+     is never later read as the default it resembles", and `lib/frame.ts` carried
+     the same warning. This ticket is the first `xl:` in the codebase, so an
+     8px-late aside was the failure waiting on the next person to write one.
+     `frame.css.test.ts` reads the emitted CSS rather than this line, and
+     pins the emission ORDER as well as the width — see there for why that is
+     not the pedantry it looks like. */
+  --breakpoint-xl: 1272px;
 }
 
 :root {
@@ -189,6 +215,35 @@
   --frame-gutter: 28px;
   --frame-measure: 640px;
   --frame-columns: var(--frame-rail) minmax(0, var(--frame-measure)) minmax(0, 1fr);
+
+  /* The measure as the reader meets it, rather than as the grid declares it —
+     FUEL-77, and the number every screen has actually been drawn at since
+     FUEL-70.
+
+     `page-main.tsx` pads `<main>` by 28px each side at ≥768px, and both notice
+     bands take the same padding so their text lands on the same x as the content
+     under them. Those are border-box columns, so the padding sits INSIDE the
+     640 and the column a sentence occupies is 584. § Desktop chose that
+     deliberately and says so — "`/plan`'s heading, week nav and totals keep the
+     inset and stay on the measure's x with the notice bands above them" — and
+     `/plan`'s grid is the single element exempted, because it is "the only
+     element on the screen that cannot be inset and still be right" (FUEL-71).
+
+     Which makes this the width a page's own second column has to be measured
+     from. A screen with an aside spans the measure and the aside together, 1024
+     at the cap, and pays the same 56px of padding once across the pair; giving
+     the reading column 584 leaves 1024 − 56 − 28 − 584 = 356 for the aside,
+     which is the frame's third track exactly. The alternative — a 640 reading
+     column with a 300 aside — would widen the measure at 1272 and only there,
+     so the column moved under the reader at the one width where § Desktop
+     requires it not to: "every screen puts its measure at the same x whether or
+     not it has an aside".
+
+     Derived rather than stated, for the reason the block above gives about
+     `--frame-aside`: 584 written here as a number would be the same measurement
+     in two forms that an edit to the gutter could put out of step. The aside is
+     still nobody's declaration — it is what is left. */
+  --frame-measure-inset: calc(var(--frame-measure) - 2 * var(--frame-gutter));
 
   /* Brand Guide § Color Palette — light */
   --ink: #1c1917;

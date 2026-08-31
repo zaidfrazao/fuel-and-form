@@ -65,7 +65,9 @@ describe("PageMain", () => {
 
     const className = screen.getByRole("main").className;
 
-    for (const invariant of FRAME_MEASURE.split(" ")) {
+    // `filter(Boolean)` — see `loading.test.tsx`. An empty utility makes
+    // `toContain` vacuous.
+    for (const invariant of FRAME_MEASURE.split(" ").filter(Boolean)) {
       expect(className).toContain(invariant);
     }
   });

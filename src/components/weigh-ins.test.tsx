@@ -800,7 +800,24 @@ describe("the bounded history", () => {
 
     // § Tone of Voice: name what happened.
     expect(alert.textContent).toContain("Couldn’t load earlier weigh-ins.");
-    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+
+    /*
+     * `findBy`, and not the `getBy` this was — a flake, caught by a full-suite
+     * run on an unrelated branch and reproduced by reading the component.
+     *
+     * The alert and the control are siblings of one `unlisted > 0` block, but
+     * they are driven by two pieces of state: the alert by `unreachable`, and
+     * the label by `loading`, which is what makes it read "Loading…" until the
+     * request settles. React does not have to land those in one commit, so
+     * there is a frame where the alert is on the screen and the button still
+     * says "Loading…" — `findByRole("alert")` resolves on exactly that frame,
+     * and a synchronous query for the label fails a beat before it is true.
+     *
+     * Nothing about the screen is wrong; the frame is momentary and correct.
+     * What was wrong is asking a question synchronously that has an
+     * asynchronous answer.
+     */
+    expect(await screen.findByRole("button", { name: "Try again" })).toBeTruthy();
     expect(rows()).toHaveLength(RECENT_WEIGH_INS);
   });
 

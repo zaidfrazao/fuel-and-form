@@ -3,6 +3,64 @@ import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 
 /**
+ * Where `/` draws this, at each of the three widths it has — FUEL-77.
+ *
+ * The ruler is the one element on the screen that moves between bands: below
+ * 768px it follows the figures, from 768 it precedes them, and at the frame's
+ * cap it is in the second column. `right-now.tsx` carries the argument for each
+ * position; what lives here is the pairing of a position with the variant that
+ * turns it on, because two files draw this screen and they may not disagree
+ * about which copy is visible.
+ *
+ * The second is `app/(app)/loading.tsx`. A skeleton exists to hold the layout
+ * still across the swap-in, so a skeleton with the ruler in a different place
+ * from the screen is worse than none — it guarantees the shift it was added to
+ * prevent, at whichever width the two disagree at. Three literals in two files
+ * kept in step by hand is exactly what `action-bar.ts` was extracted to end.
+ *
+ * Rendered rather than switched: all three copies are in the DOM and CSS picks
+ * one, because `order` and grid placement move the box without moving the
+ * sequence a screen reader walks. The two that are off are `display: none` and
+ * out of the accessibility tree, so exactly one is ever announced.
+ */
+export const RULER_AT = {
+  /** Below 768px, under the merged grid — FUEL-82. */
+  phone: "md:hidden",
+  /**
+   * 768–1271, above the two named grids.
+   *
+   * `md:max-xl:block` and not `md:block xl:hidden`, which is what this was and
+   * which does not work. Tailwind v4 emits a redefined breakpoint's media block
+   * **before** the framework's own, whatever order they are declared in — so
+   * `@media (width >= 1272px)` comes out ahead of `@media (width >= 48rem)`,
+   * `md:block` is the later rule at 1272, and the copy that was supposed to
+   * stand down at the frame's cap stayed drawn beside the one in the aside.
+   *
+   * Two rulers is not a cosmetic fault: § The Four Rules allows "one umber
+   * element per screen, and it always says: you are here", and each ruler
+   * carries a NOW marker. It was found by looking at the 1272 baseline rather
+   * than by any assertion, which is why `page-columns.spec.ts` now counts the
+   * drawn copies at every width and `frame.css.test.ts` pins the emission order
+   * that caused it.
+   *
+   * A single bounded utility has no cascade to lose. `md:max-xl:` is one rule
+   * that is true in one band, and it says what this copy is for.
+   */
+  wide: "hidden md:max-xl:block",
+  /**
+   * Everything below the cap, on a session card.
+   *
+   * There is no merged grid on a workout for the ruler to move around — the
+   * middle of that screen is `ExerciseList` — so FUEL-82 left it in one place
+   * and the phone and the wide band share this copy. It still stands down at the
+   * frame's cap like every other, which is what it needs a variant for at all.
+   */
+  wideOnSession: "xl:hidden",
+  /** The frame's cap and above, at the top of the aside — FUEL-77. */
+  aside: "hidden xl:block",
+} as const;
+
+/**
  * The Day Ruler — Brand Guide § Signature Graphics.
  *
  * A horizontal timeline of the day's slots across a 06:00–22:00 span with a NOW

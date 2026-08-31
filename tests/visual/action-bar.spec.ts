@@ -42,7 +42,21 @@ import { FROZEN_NOW_MS } from "./constants";
  * or to smear it across a range.
  */
 
-const BAR = "main .action-bar-fade";
+/**
+ * The real bar, and not the skeleton's.
+ *
+ * `loading.tsx` takes the same class string on purpose — that is FUEL-83's whole
+ * mechanism, and the property this file measures depends on it — so while `/`'s
+ * skeleton is still mounted this selector matches two elements and strict mode
+ * throws before a single assertion runs. It is a race rather than a fault, and
+ * it has been re-run away more than once.
+ *
+ * `:not([aria-hidden])` settles it from the other direction: the skeleton's bar
+ * is hidden from the accessibility tree because the whole skeleton is, and the
+ * real bar never is. So this names the bar a *user* has, which is what every
+ * assertion below is about anyway.
+ */
+const BAR = "main .action-bar-fade:not([aria-hidden])";
 
 /** The last row of the Recent list — the content the pinned bar used to cover. */
 const LAST_RECENT_ROW = 'ul[aria-label="Recent sessions"] > li:last-child';
@@ -115,12 +129,29 @@ test("still clears the navigation shell at 375, which FUEL-65 fixed", async ({ p
 });
 
 test("sits at the foot of a tall viewport rather than mid-screen", async ({ page }) => {
-  // AC #4, and the failure mode that releasing the pinning could plausibly have
-  // introduced. `mt-auto` inside a `flex-1` `<main>` is what puts the bar at the
-  // bottom of the screen when the content does not reach it; drop either and a
-  // static bar lands directly under the content with a gap beneath, which at
-  // 1920 is the phone's old mid-screen failure with no thumb left to explain it.
-  await page.setViewportSize({ width: 1920, height: 1600 });
+  /*
+   * AC #4, and the failure mode that releasing the pinning could plausibly have
+   * introduced. `mt-auto` inside a `flex-1` `<main>` is what puts the bar at the
+   * bottom of the screen when the content does not reach it; drop either and a
+   * static bar lands directly under the content with a gap beneath, which at
+   * 1920 is the phone's old mid-screen failure with no thumb left to explain it.
+   *
+   * **1200 and no longer 1920 — FUEL-77.** This is now a claim about one band
+   * rather than about every desktop width. At the frame's cap the screen becomes
+   * two columns and the bar takes a place in that grid, which packs its rows to
+   * the top: § Desktop's "the primary action sits at the end of its column" is
+   * drawn by the mock as 30px under the last figure, and `mt-auto` goes inert
+   * there because the bar's grid area is its own height. That is the same shape
+   * as this ticket's own `bottom-[…]` going inert under `lg:static`, and it is
+   * recorded on FUEL-72 as a change to what this ticket shipped.
+   *
+   * What survives is the 1024–1271 band, where the frame is fluid, there is no
+   * second column, and `mt-auto` is still the only thing between the bar and the
+   * middle of the screen. `page-columns.spec.ts` holds the other side of the
+   * seam, so both behaviours are asserted rather than one being assumed from the
+   * other.
+   */
+  await page.setViewportSize({ width: 1200, height: 1600 });
 
   const bar = await boxOf(page.locator(BAR));
   const viewport = page.viewportSize();

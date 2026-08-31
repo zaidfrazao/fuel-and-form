@@ -6,6 +6,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import type { LoggedEntry } from "@/lib/day-summary";
 import type { WalkEntryView } from "@/lib/walk";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
+import { FRAME } from "@/lib/frame";
 import type { MacroTarget } from "@/lib/macros";
 import { FOCUS_RING, HOVER_GROUND } from "@/lib/pointer";
 import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve-now";
@@ -360,6 +361,23 @@ export default async function RightNowSpecimen({
           its top. A fixed bar across the top was tried and hid the 40px title
           behind itself in every screenshot. Each case is addressable by URL, so
           the switcher is a convenience rather than the way in. */}
+      {/*
+       * The frame, without the shell — FUEL-77.
+       *
+       * `/dev/*` carries no navigation: § Navigation puts these pages outside
+       * the hierarchy, and `app/(app)/layout.tsx` is what renders the rail. But
+       * the frame is not the shell — it is the grid `<main>` stands a column of,
+       * and the screen under test now has a second column that only exists
+       * inside it. Without this wrapper `xl:col-end-[-1]` has no grid to span,
+       * so at ≥1272 the specimen would draw a 584px measure with the aside
+       * squeezed to nothing: a specimen that is broken in a way the product is
+       * not, which is worse than no specimen.
+       *
+       * The rail's column stands empty, which is what a screen looks like with
+       * the navigation taken out of it. Below 1024 this is a `max-width` and
+       * nothing else, so the 375px case these specimens exist for is untouched.
+       */}
+      <div className={FRAME}>
       <RightNow
         view={current.view}
         exercises={EXERCISES}
@@ -371,6 +389,7 @@ export default async function RightNowSpecimen({
         meals={LIBRARY}
         templatePlan={TEMPLATE_PLAN}
       />
+      </div>
 
       <div className="mx-auto flex max-w-[640px] flex-col gap-3 border-t border-border px-[22px] py-6 md:px-7">
         <p className="text-slash text-text-tertiary">{current.note}</p>

@@ -165,7 +165,17 @@ export function DayComplete({
     // `relative` is what the crop marks are positioned against, and `flex-1`
     // is what makes that box the whole page rather than the height of the
     // content — a page marked at its corners has to be the page.
-    <div className="relative flex flex-1 flex-col gap-[26px]">
+    //
+    // Which is why it stops at 1272 — FUEL-77. On a phone the page and the
+    // viewport are the same object, so filling one marks the other. On a 1920
+    // ×1080 window they are not: the summary ends around 600px down and the
+    // bottom two marks were left at the foot of the screen, 480px below the
+    // last thing they were supposed to be closing. That is a mark on the
+    // window, and the window is not a page — it is a different size for every
+    // reader and it changes when they drag a corner. § Desktop gives this state
+    // "the same column, with more air", and the mock draws the marks around the
+    // column's content, which is what `flex-none` restores them to.
+    <div className="relative flex flex-1 flex-col gap-[26px] xl:flex-none">
       {/* Out into the page gutter, not at the text's own edge. Measured at
           375px: a mark flush with the content column sits on top of the date in
           the corner it shares — registration marks belong OUTSIDE the trim, and

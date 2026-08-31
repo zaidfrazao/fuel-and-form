@@ -1,8 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
-import { compile } from "tailwindcss";
 import { describe, expect, test } from "vitest";
 
 import {
@@ -14,6 +9,7 @@ import {
   HOVER_RING,
   POINTER,
 } from "./pointer";
+import { build, enclosingAtRules, utilities } from "./tailwind-build.test-helper";
 
 /**
  * The pointer states, compiled rather than read.
@@ -35,103 +31,12 @@ import {
  *
  * So the constants are put through the real compiler with the app's real
  * stylesheet, and the emitted CSS is what gets asserted.
- */
-
-const THIS_FILE = fileURLToPath(import.meta.url);
-const SRC = join(dirname(THIS_FILE), "..");
-const ROOT = join(SRC, "..");
-const NODE_MODULES = join(ROOT, "node_modules");
-
-/**
- * Resolve an `@import` the way the bundler does.
  *
- * Bare specifiers land in `node_modules`, and a package that ships its CSS
- * under `dist` is followed there — `shadcn/tailwind.css` is the one that does,
- * and globals.css imports it.
+ * The compiler harness itself moved to `tailwind-build.test-helper.ts` when
+ * FUEL-77 needed it a second time, for the breakpoint whose deletion swaps in a
+ * default rather than nothing. Only the resolver moved; every assertion below is
+ * unchanged.
  */
-function resolveStylesheet(id: string, base: string): string {
-  if (id.startsWith(".")) return resolve(base, id);
-  if (id === "tailwindcss") return join(NODE_MODULES, "tailwindcss/index.css");
-  if (id.endsWith(".css")) {
-    const direct = join(NODE_MODULES, id);
-    if (existsSync(direct)) return direct;
-    const [pkg = id, ...rest] = id.split("/");
-    const dist = join(NODE_MODULES, pkg, "dist", rest.join("/"));
-    if (existsSync(dist)) return dist;
-    return direct;
-  }
-  // A bare package specifier: the entry a CSS bundler follows is `style`,
-  // then `main`. `tw-animate-css` is the one globals.css imports this way.
-  const manifest = join(NODE_MODULES, id, "package.json");
-  if (existsSync(manifest)) {
-    const pkg = JSON.parse(readFileSync(manifest, "utf8")) as {
-      style?: string;
-      main?: string;
-      exports?: { "."?: { style?: string } };
-    };
-    const entry = pkg.exports?.["."]?.style ?? pkg.style ?? pkg.main;
-    if (entry) return join(NODE_MODULES, id, entry);
-  }
-  return join(NODE_MODULES, `${id}.css`);
-}
-
-/**
- * The app's own stylesheet, compiled against a list of candidate classes.
- *
- * `globals.css` rather than a bare `@import "tailwindcss"`, so the tokens these
- * utilities reference are the real ones and a renamed token shows up here as a
- * `var(--…)` that no longer exists.
- */
-async function build(candidates: readonly string[]): Promise<string> {
-  const entry = join(SRC, "app/globals.css");
-  const compiled = await compile(readFileSync(entry, "utf8"), {
-    base: dirname(entry),
-    loadStylesheet: async (id: string, base: string) => {
-      const path = resolveStylesheet(id, base);
-      return { path, base: dirname(path), content: readFileSync(path, "utf8") };
-    },
-    // globals.css declares no `@plugin`, so nothing should ask for a module. If
-    // one is ever added, this throws rather than quietly compiling without it.
-    loadModule: async (id: string) => {
-      throw new Error(`unexpected @plugin/@config: ${id}`);
-    },
-  });
-  return compiled.build([...candidates]);
-}
-
-/** A class name as it appears in a selector, with the CSS escapes applied. */
-const escapeClass = (candidate: string) =>
-  `.${candidate.replace(/[:.[\]()/%]/g, (character) => `\\${character}`)}`;
-
-/**
- * The at-rule preludes wrapping the first rule for `candidate`.
- *
- * Walks the brace structure rather than pattern-matching on the surrounding
- * text, so `@media (hover: hover)` is only reported when the rule is genuinely
- * nested inside it — a string search would also match a media query that had
- * closed several rules earlier, which is exactly the way this assertion would
- * fail open.
- */
-function enclosingAtRules(css: string, candidate: string): string[] {
-  const index = css.indexOf(escapeClass(candidate));
-  expect(index, `no rule emitted for ${candidate}`).toBeGreaterThan(-1);
-
-  const stack: string[] = [];
-  let preludeStart = 0;
-  for (let i = 0; i < index; i += 1) {
-    const character = css[i];
-    if (character === "{") {
-      stack.push(css.slice(preludeStart, i).trim());
-      preludeStart = i + 1;
-    } else if (character === "}") {
-      stack.pop();
-      preludeStart = i + 1;
-    } else if (character === ";") {
-      preludeStart = i + 1;
-    }
-  }
-  return stack.filter((prelude) => prelude.startsWith("@"));
-}
 
 /** Everything in `pointer.ts` that a pointer, rather than a keyboard, reaches. */
 const POINTER_STATES = {
@@ -141,9 +46,6 @@ const POINTER_STATES = {
   HOVER_LINK,
   HOVER_LIFT,
 } as const;
-
-/** Each constant split into the individual utilities it is made of. */
-const utilities = (value: string) => value.split(" ").filter(Boolean);
 
 describe("every pointer state is scoped to a device with a pointer", () => {
   /*
