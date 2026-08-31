@@ -3,6 +3,36 @@ import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 
 /**
+ * Where `/` draws this, at each of the three widths it has — FUEL-77.
+ *
+ * The ruler is the one element on the screen that moves between bands: below
+ * 768px it follows the figures, from 768 it precedes them, and at the frame's
+ * cap it is in the second column. `right-now.tsx` carries the argument for each
+ * position; what lives here is the pairing of a position with the variant that
+ * turns it on, because two files draw this screen and they may not disagree
+ * about which copy is visible.
+ *
+ * The second is `app/(app)/loading.tsx`. A skeleton exists to hold the layout
+ * still across the swap-in, so a skeleton with the ruler in a different place
+ * from the screen is worse than none — it guarantees the shift it was added to
+ * prevent, at whichever width the two disagree at. Three literals in two files
+ * kept in step by hand is exactly what `action-bar.ts` was extracted to end.
+ *
+ * Rendered rather than switched: all three copies are in the DOM and CSS picks
+ * one, because `order` and grid placement move the box without moving the
+ * sequence a screen reader walks. The two that are off are `display: none` and
+ * out of the accessibility tree, so exactly one is ever announced.
+ */
+export const RULER_AT = {
+  /** Below 768px, under the merged grid — FUEL-82. */
+  phone: "md:hidden",
+  /** 768–1271, above the two named grids. */
+  wide: "hidden md:block xl:hidden",
+  /** The frame's cap and above, at the top of the aside — FUEL-77. */
+  aside: "hidden xl:block",
+} as const;
+
+/**
  * The Day Ruler — Brand Guide § Signature Graphics.
  *
  * A horizontal timeline of the day's slots across a 06:00–22:00 span with a NOW

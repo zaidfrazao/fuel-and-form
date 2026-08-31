@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { Week } from "@/components/dot-grid";
 import { APP_ACTION_BAR } from "@/components/action-bar";
 import type { TrainingItem } from "@/components/training";
+import { PAGE_ASIDE_COLUMN, PAGE_MEASURE_COLUMN, PAGE_MEASURE_FOOT } from "@/lib/frame";
 
 /**
  * The Training screen — FUEL-27's acceptance criteria, as the DOM answers them.
@@ -461,7 +462,10 @@ describe("the action bar", () => {
     // Partial/Skip row inside the one sticky container, with no wrapper between.
     const bar = screen.getByRole("button", { name: "Mark done" }).parentElement;
 
-    expect(bar?.className).toBe(APP_ACTION_BAR);
+    // The shared string plus where the bar stands in the page's own grid —
+    // FUEL-77, and `/`'s bar carries exactly the same pair. Identity still, so
+    // this screen cannot quietly add or drop anything else.
+    expect(bar?.className).toBe(`${APP_ACTION_BAR} ${PAGE_MEASURE_FOOT}`);
   });
 });
 
@@ -674,5 +678,106 @@ describe("reaching a past date", () => {
         entryId: "entry-circuit",
       }),
     );
+  });
+});
+
+describe("the second column", () => {
+  /*
+   * § Desktop's composition for `/training` — FUEL-77.
+   *
+   * The rendered geometry is `tests/visual/page-columns.spec.ts`'s; jsdom loads
+   * no stylesheet, so what is asserted here is the grouping and the reading
+   * order, which is the half a refactor breaks without anything going red.
+   */
+
+  /** The sections a column holds, by heading, in DOM order. */
+  const sectionsIn = (column: "measure" | "aside") =>
+    [
+      ...document
+        .querySelector<HTMLElement>(`[data-column="${column}"]`)!
+        .querySelectorAll("h1, h2"),
+    ].map((node) => node.textContent);
+
+  test("the measure keeps the session and its exercise list", () => {
+    render(view());
+
+    // § Desktop, and the note travels with them: the bar acts on this session,
+    // and what it records is the status and the note beside it.
+    expect(sectionsIn("measure")).toEqual([
+      "Training",
+      "Bodyweight Circuit B",
+      "Exercises",
+      "This session",
+    ]);
+  });
+
+  test("the aside takes the pattern rather than the day", () => {
+    render(view());
+
+    // "Both of which are below the fold at every width today — on the one
+    // screen whose argument is the pattern rather than the day." Anytime joins
+    // them because it is the same row `/` renders, in the column `/` puts it in.
+    expect(sectionsIn("aside")).toEqual(["Adherence", "Recent", "Anytime"]);
+  });
+
+  test("the division needed no section moved", () => {
+    /*
+     * The evidence that this composition is § Desktop's rather than the
+     * ticket's: the sections were already in the order the two columns want, so
+     * the groups could be wrapped around them without a resequence. This
+     * asserts the sequence a screen reader walks, which is unchanged from
+     * before FUEL-77 and identical at every width.
+     */
+    render(view());
+
+    expect([...document.querySelectorAll("h1, h2")].map((n) => n.textContent)).toEqual([
+      "Training",
+      "Bodyweight Circuit B",
+      "Exercises",
+      "This session",
+      "Adherence",
+      "Recent",
+      "Anytime",
+    ]);
+  });
+
+  test("the dot grid and the recent list keep what makes them reachable", () => {
+    /*
+     * FUEL-77's fifth criterion, and the reason it is a criterion: both of these
+     * were moved wholesale into another column, and the two things that make
+     * them usable are exactly the two a reflow drops without a word.
+     */
+    render(view());
+
+    const aside = document.querySelector<HTMLElement>('[data-column="aside"]')!;
+
+    // The grid's accessible summary — the whole of what a screen reader gets
+    // from a signature graphic under § Rule 4.
+    expect(within(aside).getByRole("img").getAttribute("aria-label")).toMatch(/week/i);
+
+    // And the row that says which date is being viewed.
+    expect(aside.querySelector("[aria-current]")).not.toBeNull();
+  });
+
+  test("the groups are the frame's, not this screen's", () => {
+    render(view());
+
+    // `xl:gap-7` is this screen's own rhythm — 28px, what the wrapper has always
+    // used — resolved through `cn` so the two gap utilities cannot both stand
+    // and let source order decide which wins.
+    for (const [column, base] of [
+      ["measure", PAGE_MEASURE_COLUMN],
+      ["aside", PAGE_ASIDE_COLUMN],
+    ] as const) {
+      const className = document.querySelector(`[data-column="${column}"]`)!.className;
+
+      expect(className).toContain("contents");
+      expect(className).toContain("xl:gap-7");
+      expect(className).not.toContain("xl:gap-[30px]");
+
+      for (const utility of base.split(" ").filter((u) => !u.includes("gap"))) {
+        expect(className).toContain(utility);
+      }
+    }
   });
 });

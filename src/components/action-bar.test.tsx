@@ -6,6 +6,7 @@ import { render } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 
 import { ACTION_BAR, APP_ACTION_BAR } from "@/components/action-bar";
+import { PAGE_MEASURE_FOOT } from "@/lib/frame";
 
 import Loading from "@/app/(app)/loading";
 
@@ -49,7 +50,13 @@ describe("the skeleton takes the same string as the bar it stands in for", () =>
     const bar = container.querySelector(".action-bar-fade");
 
     expect(bar).not.toBeNull();
-    expect(bar?.className).toBe(APP_ACTION_BAR);
+
+    // The shared string plus the page's own placement — FUEL-77, and `/`'s bar
+    // and `/training`'s carry exactly the same pair. Both halves matter to the
+    // property this test is about: the pinning decides where the primary sits
+    // below 1272, and the placement decides which column it is in above it, so
+    // a skeleton that disagreed about either would move the primary on swap-in.
+    expect(bar?.className).toBe(`${APP_ACTION_BAR} ${PAGE_MEASURE_FOOT}`);
   });
 });
 

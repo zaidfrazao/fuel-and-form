@@ -195,6 +195,19 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
     },
     /**
+     * The second column on `/` and `/training` — FUEL-77, and a project for the
+     * reason the three above are. It asks how wide two columns are and which one
+     * the primary action stands in, which has no theme; and it needs 1271, 1272,
+     * 1440 and 1920 from one browser that resizes itself, where the `screens`
+     * matrix would run it eight times to learn one width each.
+     */
+    {
+      name: "page-columns",
+      testMatch: /page-columns\.spec\.ts/,
+      dependencies: ["setup"],
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+    },
+    /**
      * The weight chart's type scale — FUEL-76, and a project for the reason the
      * three above are. It asks whether a font-size, a stroke and a disc stay the
      * size they are declared at while the column around them grows, which has no

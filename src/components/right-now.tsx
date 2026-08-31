@@ -8,7 +8,7 @@ import { repeatMeal, revertSwap, swapMeal } from "@/app/actions/swap";
 import { DayComplete } from "@/components/day-complete";
 import Link from "next/link";
 
-import { DayRuler } from "@/components/day-ruler";
+import { DayRuler, RULER_AT } from "@/components/day-ruler";
 import { ExerciseList } from "@/components/exercise-list";
 import { KeyValueGrid, SlashMeta } from "@/components/kv-grid";
 import { MacroGrid, MealDayGrid } from "@/components/macro-grid";
@@ -1213,19 +1213,25 @@ export function RightNow({
    * hang `xl:hidden` on.
    */
   const rulerAbove = (
-    <div className={activeMeal ? "hidden md:block xl:hidden" : "xl:hidden"} data-ruler="wide">
+    // On a workout card this copy is the one that serves the phone as well, so
+    // it drops the `hidden md:block` half and keeps only the stand-down at the
+    // cap — there is no merged grid here for the ruler to move around.
+    <div
+      className={activeMeal ? RULER_AT.wide : "xl:hidden"}
+      data-ruler="wide"
+    >
       {ruler}
     </div>
   );
 
   const rulerBelow = activeMeal ? (
-    <div className="md:hidden" data-ruler="phone">
+    <div className={RULER_AT.phone} data-ruler="phone">
       {ruler}
     </div>
   ) : null;
 
   const rulerAside = (
-    <div className="hidden xl:block" data-ruler="aside">
+    <div className={RULER_AT.aside} data-ruler="aside">
       {ruler}
     </div>
   );

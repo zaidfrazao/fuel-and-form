@@ -3,11 +3,16 @@ import { expect, test } from "@playwright/test";
 import { FROZEN_NOW_MS, SCREENS } from "./constants";
 
 /**
- * The seven screens, at four widths, in both themes — 56 baselines.
+ * The screens, at four widths, in both themes — 72 baselines.
  *
  * TESTING_STRATEGY § 2.3. The width and the theme are the Playwright *project*
  * (see playwright.config.ts), so this file describes one screen once and the
  * matrix falls out of the configuration rather than out of eight nested loops.
+ *
+ * Seven of the nine are the mock's own screens at their own routes. The last two
+ * are the other states of `/` — day-complete and nothing-planned — which no
+ * route can reach at the frozen instant and which `/dev/right-now` addresses by
+ * URL; `constants.ts` carries that argument beside them.
  */
 
 test.beforeEach(async ({ page }) => {
@@ -31,6 +36,7 @@ test.beforeEach(async ({ page }) => {
 for (const screen of SCREENS) {
   const { slug, path } = screen;
   const settlesOn = "settlesOn" in screen ? screen.settlesOn : undefined;
+  const capture = "capture" in screen ? screen.capture : undefined;
 
   test(slug, async ({ page }) => {
     await page.goto(path);
@@ -111,6 +117,21 @@ for (const screen of SCREENS) {
      * consecutive frames match; the height wait above makes an unstable frame
      * unlikely, and this keeps one from failing the run outright.
      */
+    /**
+     * A `capture` selector photographs that element instead of the document —
+     * FUEL-77, and only the two `/dev/right-now` states use it. The specimen
+     * page carries a case switcher below the screen, so a full-page shot would
+     * bake a row of links into the baseline and re-baseline both screens every
+     * time a case is added. `fullPage` has no meaning for a locator: it captures
+     * the element's whole box, scrolling to it if it has to.
+     */
+    if (capture) {
+      await expect(page.locator(capture)).toHaveScreenshot(`${slug}.png`, {
+        timeout: 15_000,
+      });
+      return;
+    }
+
     await expect(page).toHaveScreenshot(`${slug}.png`, { fullPage: true, timeout: 15_000 });
   });
 }

@@ -2287,6 +2287,32 @@ describe("the second column", () => {
     expect(document.querySelector("[data-column]")).toBeNull();
   });
 
+  test("the figures stay two columns at every width", () => {
+    /*
+     * FUEL-77's third criterion, which turns out to be a verification rather
+     * than a change — recorded here so the next reader does not re-open it.
+     *
+     * The ticket's complaint is real: at 584px there is a chasm between
+     * CALORIES and PROTEIN. The fix is not a third column, and § Desktop says so
+     * twice. Its density rule is "three columns when there are exactly three
+     * values and each is short; two otherwise", and then, in the same
+     * paragraph: "the four-macro grid is four values and so is never in scope".
+     * Every grid on this screen is that grid. What closes the gap is the aside
+     * taking 356px of the width away, which is this ticket's actual subject.
+     *
+     * The rule is also explicitly not a width rule — "extra width in this system
+     * becomes a second column BESIDE the measure, never more columns inside it"
+     * — so the assertion is that no variant is attached to the column count at
+     * all, rather than that it is two at some particular width.
+     */
+    renderNow(active(0));
+
+    for (const grid of document.querySelectorAll("dl")) {
+      expect(grid.className).toContain("grid-cols-2");
+      expect(grid.className).not.toMatch(/(md|lg|xl):grid-cols/);
+    }
+  });
+
   test("the groups are the frame's, not this screen's", () => {
     // The strings live in `lib/frame.ts` so that `/training` and, next,
     // `/weight` compose against the same declaration rather than against a

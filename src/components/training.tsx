@@ -15,9 +15,17 @@ import { WalkRow } from "@/components/walk-row";
 import { recentSessions } from "@/lib/adherence";
 import { addDays, type CalendarDate } from "@/lib/date";
 import type { WorkoutLogStatus } from "@/lib/db/schema";
+import {
+  PAGE_ASIDE_COLUMN,
+  PAGE_ASIDE_GRID,
+  PAGE_ASIDE_UNWRAP,
+  PAGE_MEASURE_COLUMN,
+  PAGE_MEASURE_FOOT,
+} from "@/lib/frame";
 import { dayLabel } from "@/lib/now-display";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { MAX_NOTE_LENGTH } from "@/lib/session-entry";
+import { cn } from "@/lib/utils";
 
 /**
  * The Training screen — PRD § P3, Brand Guide § Seven screens → Training.
@@ -372,8 +380,23 @@ export function Training({
     // and for the same reason: this screen carries the identical 140px action bar
     // and 86px shell under the same two notice bands, so the fold sits in the
     // same place and the head room is the same 10px that cannot be spared.
-    <PageMain className="pt-3 md:pt-[22px]">
-      <div className="flex flex-col gap-7">
+    <PageMain className={`pt-3 md:pt-[22px] ${PAGE_ASIDE_GRID}`}>
+      {/*
+       * The two columns — § Desktop, FUEL-77. At 1272 this wrapper stops
+       * generating a box and the two groups inside become `<main>`'s grid items;
+       * below it they are `display: contents` and this is the single flex column
+       * it has always been, in the order it was already written.
+       *
+       * This screen needed no resequencing at all, which is the evidence that
+       * the division is the guide's rather than the ticket's: the session and
+       * its exercises were already the first four sections and the pattern was
+       * already the last three.
+       */}
+      <div className={`flex flex-col gap-7 ${PAGE_ASIDE_UNWRAP}`}>
+        {/* § Desktop: "the measure keeps the session and the exercise list."
+            The note and the recorded status join them — they are this session's
+            own record, and the bar below acts on exactly what they hold. */}
+        <div className={cn(PAGE_MEASURE_COLUMN, "xl:gap-7")} data-column="measure">
         <DateNav date={date} today={today} />
 
         {session ? (
@@ -469,6 +492,20 @@ export function Training({
           </section>
         )}
 
+        </div>
+
+        {/*
+         * § Desktop: "the aside takes the dot grid and recent sessions, both of
+         * which are below the fold at every width today — on the one screen
+         * whose argument is the pattern rather than the day."
+         *
+         * The walk row goes with them, which the mock does not draw and this
+         * ticket rules: it is the same Anytime list `/` renders, `/` puts it in
+         * the aside, and a row that appeared in a different column depending on
+         * which screen you reached it from would be two rows as far as a reader
+         * is concerned.
+         */}
+        <div className={cn(PAGE_ASIDE_COLUMN, "xl:gap-7")} data-column="aside">
         <section className="flex flex-col gap-[14px]">
           <div className="flex items-center justify-between gap-3">
             <Eyebrow>Adherence</Eyebrow>
@@ -543,7 +580,7 @@ export function Training({
             </ul>
           </section>
         )}
-
+        </div>
       </div>
 
       {/*
@@ -579,7 +616,9 @@ export function Training({
        * bar with nothing passing under it has no edge to soften.
        */}
       {session ? (
-        <div className={APP_ACTION_BAR}>
+        // Under the measure at ≥1272 — FUEL-77, and inert below it. The bar acts
+        // on the session in the first column, so it is never in the second.
+        <div className={cn(APP_ACTION_BAR, PAGE_MEASURE_FOOT)}>
           {failure && (
             <div
               role="alert"
