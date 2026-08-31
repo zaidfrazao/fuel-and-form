@@ -6,6 +6,7 @@ import { APP_ACTION_BAR } from "@/components/action-bar";
 import { RightNow } from "@/components/right-now";
 import type { LoggedEntry } from "@/lib/day-summary";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
+import { PAGE_ASIDE_COLUMN, PAGE_MEASURE_COLUMN, PAGE_MEASURE_FOOT } from "@/lib/frame";
 import type { MacroTarget } from "@/lib/macros";
 import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve-now";
 import type { WalkEntryView } from "@/lib/walk";
@@ -301,10 +302,16 @@ const shape = (which: "merged" | "split") =>
  * a test that is not about position: it is the copy these tests were written
  * against, and both are the same `DayRuler` with the same props.
  *
- * On a workout card there is no merged grid to move it past, so only one copy
- * renders and it carries no `data-ruler` — hence the fallback to `getAllByRole`.
+ * Three copies since FUEL-77, which added the second column: at ≥1272 the ruler
+ * is in the aside and neither of the other two is drawn. Every copy is the same
+ * `DayRuler` with the same props, and exactly one is displayed at any width — so
+ * a test that is not about position keeps using `"wide"`.
+ *
+ * The `getAllByRole` fallback is kept for a caller that asks for a copy a state
+ * does not render: nothing-planned draws one ruler and gives it no attribute,
+ * because there it has only ever had one position.
  */
-const dayRuler = (which: "wide" | "phone" = "wide"): HTMLElement => {
+const dayRuler = (which: "wide" | "phone" | "aside" = "wide"): HTMLElement => {
   const scoped = document.querySelector<HTMLElement>(`[data-ruler="${which}"]`);
 
   // `getAllByRole` throws when it finds none, so the index is safe — but it is
@@ -437,13 +444,45 @@ describe("the day's numbers, in two shapes", () => {
     expect(follows(merged, phone)).toBe(true);
   });
 
-  test("a workout card draws the ruler once, in its original place", () => {
+  test("a workout card keeps the ruler above the list at every width it is drawn", () => {
     // Nothing to move it past, and `ExerciseList` runs to six rows — demoting it
-    // below that would push it most of a screen down to buy nothing.
+    // below that would push it most of a screen down to buy nothing. So there is
+    // no phone copy here: the wide copy serves every width up to the frame's cap.
     renderNow(active(2));
 
     expect(document.querySelector('[data-ruler="phone"]')).toBeNull();
-    expect(screen.getAllByRole("img")).toHaveLength(1);
+
+    // Two in the DOM, not one — FUEL-77. The second column takes the ruler at
+    // ≥1272 on a session exactly as it does on a meal, so the copy that serves
+    // everything below it has to stand down there. `hidden md:block` is absent
+    // for the reason above: this one is drawn on a phone too.
+    const wide = document.querySelector('[data-ruler="wide"]')!;
+
+    expect(wide.className).toBe("xl:hidden");
+    expect(document.querySelector('[data-ruler="aside"]')!.className).toBe(
+      "hidden xl:block",
+    );
+  });
+
+  test("exactly one copy of the ruler is drawn at each of the three widths", () => {
+    /*
+     * The property the copies exist to have, asserted directly — FUEL-82 built
+     * two positions and FUEL-77 made it three, and each addition is a chance to
+     * leave two visible at once. jsdom applies no stylesheet, so this reads the
+     * variants off the class strings rather than measuring anything: `hidden`
+     * with a variant that turns it back on is the only shape any of them takes.
+     */
+    renderNow(active(0));
+
+    const shownAt = (which: "wide" | "phone" | "aside") =>
+      document.querySelector(`[data-ruler="${which}"]`)!.className;
+
+    // The phone: `md:hidden` is the only copy without a `hidden` base.
+    expect(shownAt("phone")).toBe("md:hidden");
+    // 768–1271: hidden below `md`, and hidden again at `xl`.
+    expect(shownAt("wide")).toBe("hidden md:block xl:hidden");
+    // The frame's cap and above.
+    expect(shownAt("aside")).toBe("hidden xl:block");
   });
 });
 
@@ -1216,7 +1255,11 @@ describe("the actions", () => {
 
     const bar = container.querySelector('[data-variant="default"]')?.parentElement;
 
-    expect(bar?.className).toBe(APP_ACTION_BAR);
+    // The shared string plus where the bar stands in the page's own grid —
+    // FUEL-77. Still identity rather than `toContain`, so this screen cannot
+    // quietly add or drop anything; what it may add is named here, and the two
+    // constants are the only things it is allowed to be made of.
+    expect(bar?.className).toBe(`${APP_ACTION_BAR} ${PAGE_MEASURE_FOOT}`);
   });
 
   test("no longer carries the safe-area inset, which the shell owns", () => {
@@ -1251,16 +1294,17 @@ describe("the accent", () => {
      * Counted per SHAPE now, plus a total — FUEL-82.
      *
      * "One umber element per screen" is a claim about a rendered viewport, and a
-     * meal card holds two rulers in the DOM because the phone puts it below the
-     * figures and the desktop above them. Only one is ever displayed, so the
-     * rule is intact; what changed is that the DOM cannot be counted as if it
-     * were the screen.
+     * meal card holds three rulers in the DOM: the phone puts it below the
+     * figures, 768–1271 above them, and the frame's cap puts it in the aside.
+     * Only one is ever displayed, so the rule is intact; what changed is that
+     * the DOM cannot be counted as if it were the screen.
      *
      * The total is asserted as well as the per-copy check because that is the
-     * assertion that fails if a third copy is ever added and nobody revisits
-     * this — the per-copy loop alone would pass forever.
+     * assertion that fails if a copy is ever added and nobody revisits this —
+     * the per-copy loop alone would pass forever. It did fail, on FUEL-77's
+     * third copy, which is the only evidence that it works.
      */
-    const rulers = [dayRuler("wide"), dayRuler("phone")];
+    const rulers = [dayRuler("wide"), dayRuler("phone"), dayRuler("aside")];
     const accented = [...container.querySelectorAll('[class*="accent"]')];
 
     // A positive control first: an assertion that everything accented is inside
@@ -2041,6 +2085,27 @@ describe("a slot that is already swapped", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("the link at the foot", () => {
+  test("stands down where the rail carries the same link", () => {
+    /*
+     * FUEL-77. `right-now.tsx` has always said the rail "renders a Settings link
+     * in the sidebar's foot at ≥1024px and explicitly leaves the phone to this
+     * one" — and both were rendering above 1024, so `/` was the one screen in
+     * the app with two links to the same destination. § Desktop's frames draw
+     * one, and the rail's is the copy that is on every screen and shows where
+     * you are.
+     *
+     * The element stays in the DOM at every width, which is what keeps the
+     * reading order in "grouping the sections moved none of them" honest: it is
+     * `display: none` above the breakpoint, so it is out of the accessibility
+     * tree there rather than announced twice.
+     */
+    renderNow(active(0));
+
+    expect(screen.getByRole("link", { name: "Settings" }).parentElement!.className).toContain(
+      "lg:hidden",
+    );
+  });
+
   test("is Settings, and nothing else", () => {
     // It was four links until FUEL-58 — `/plan`, `/training` and `/weight`
     // beside this one — because there was no other way to reach those screens.
@@ -2113,5 +2178,126 @@ describe("a slot resolved from the template", () => {
     expect(screen.queryByText("Swapped")).toBeNull();
     expect(screen.queryByText(/Swapped\./)).toBeNull();
     expect(screen.queryByRole("button", { name: "Revert" })).toBeNull();
+  });
+});
+
+describe("the second column", () => {
+  /*
+   * § Desktop's composition for `/`, asserted where it can be — FUEL-77.
+   *
+   * jsdom applies no stylesheet, so nothing here can claim the screen has two
+   * columns; that is `tests/visual/page-columns.spec.ts`, which measures the
+   * rendered boxes. What this file owns is the half a browser cannot check
+   * cheaply and a refactor breaks silently: which sections are grouped into
+   * which column, and that grouping them changed nobody's reading order.
+   */
+
+  /** The sections a column holds, by their eyebrow or heading, in DOM order. */
+  const sectionsIn = (column: "measure" | "aside") => {
+    const box = document.querySelector<HTMLElement>(`[data-column="${column}"]`)!;
+
+    return [...box.querySelectorAll("h1, h2")].map((node) => node.textContent);
+  };
+
+  test("the measure keeps the meal and its figures", () => {
+    renderNow(active(0));
+
+    // § Desktop: "the measure keeps the meal, the macro grid and the action
+    // bar". The meal's name is the h1 — it is the answer to the question the
+    // screen asks — and both named grids are beside it at ≥768px.
+    expect(sectionsIn("measure")).toEqual(["Overnight oats", "This meal", "Today"]);
+  });
+
+  test("the aside takes the day around it", () => {
+    renderNow(active(0));
+
+    // "The aside takes the day ruler and the Anytime list, which is what the
+    // 544px of nothing sat in front of." Up next is the ticket's own ruling:
+    // the mock draws a day with nothing upcoming, so it settles nothing, and
+    // this is the section that answers the same question the ruler does.
+    expect(sectionsIn("aside")).toEqual(["Up next", "Anytime"]);
+  });
+
+  test("the action bar is in neither group, and lands under the measure", () => {
+    const { container } = renderNow(active(0));
+
+    const bar = container.querySelector('[data-variant="default"]')!.parentElement!;
+
+    // Outside both wrappers in the DOM — it is `<main>`'s own child, placed by
+    // `PAGE_MEASURE_FOOT` into the first column's second row. A bar inside the
+    // measure group would be a fourth thing in a flex column with a 30px gap,
+    // which is 60px with its own `pt-[30px]`.
+    expect(bar.closest("[data-column]")).toBeNull();
+    expect(bar.className).toContain(PAGE_MEASURE_FOOT);
+  });
+
+  test("grouping the sections moved none of them", () => {
+    /*
+     * The control for the whole composition, and the reason it is built from
+     * `display: contents` rather than from grid placement or `order`.
+     *
+     * A screen reader walks the DOM. If the two columns had been produced by
+     * placing sections into grid cells, this sequence would still read as it
+     * does — but the phone's would have changed, because the sections would
+     * have had to be reordered in the source to sit in the right cells. So the
+     * assertion is the phone's own order, on the screen that now has two
+     * columns: subject, figures, ruler, up next, anytime, foot link.
+     */
+    renderNow(active(0));
+
+    const order = [...document.querySelectorAll("h1, h2, [data-ruler], a[href='/settings']")]
+      .map((node) =>
+        node.getAttribute("data-ruler")
+          ? `ruler:${node.getAttribute("data-ruler")}`
+          : node.textContent,
+      );
+
+    expect(order).toEqual([
+      "Overnight oats",
+      "ruler:wide",
+      "This meal",
+      "Today",
+      "ruler:phone",
+      "ruler:aside",
+      "Up next",
+      "Anytime",
+      "Settings",
+    ]);
+  });
+
+  test("nothing-planned takes the same two columns", () => {
+    // It is `/` with an empty subject rather than a screen of its own, so the
+    // aside holds what it holds next door. The alternative — one column here
+    // and two on a day with a plan — is a page that rearranges itself on the
+    // data rather than on the width.
+    renderNow({ ...BASE, state: "nothing-planned", timeline: [] });
+
+    expect(sectionsIn("measure")).toEqual(["Nothing planned"]);
+    expect(sectionsIn("aside")).toEqual(["Anytime"]);
+  });
+
+  test("day-complete refuses one", () => {
+    // § Desktop: "a second column would set something beside a screen whose
+    // whole argument is that there is nothing left." The state that gets the
+    // grid is the one with a day still running in it.
+    renderNow({ ...BASE, state: "day-complete" }, EXERCISES, [
+      entry({ id: "l1", name: "Overnight oats" }),
+    ]);
+
+    expect(document.querySelector("[data-column]")).toBeNull();
+  });
+
+  test("the groups are the frame's, not this screen's", () => {
+    // The strings live in `lib/frame.ts` so that `/training` and, next,
+    // `/weight` compose against the same declaration rather than against a
+    // second copy of these class names that drifts from it.
+    renderNow(active(0));
+
+    expect(document.querySelector('[data-column="measure"]')!.className).toBe(
+      PAGE_MEASURE_COLUMN,
+    );
+    expect(document.querySelector('[data-column="aside"]')!.className).toBe(
+      PAGE_ASIDE_COLUMN,
+    );
   });
 });
