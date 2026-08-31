@@ -363,3 +363,48 @@ describe("a refusal", () => {
     expect(await screen.findByRole("alert")).toBeTruthy();
   });
 });
+
+describe("the column flow", () => {
+  /**
+   * § Desktop, amended by FUEL-85 — the same ruling `/shopping` gets, at three
+   * columns: "the same move, three columns: seven day groups of four slots".
+   *
+   * Structure only, for `shopping-list-view.test.tsx`'s reason: jsdom applies
+   * no stylesheet, so the fragmentation itself is `page-columns.spec.ts`'s to
+   * measure. What is held here is what the flow is allowed to contain.
+   */
+  test("the seven days are the groups that flow, and nothing else is", () => {
+    const { container } = editor();
+
+    const flow = container.querySelector("[data-column-flow]");
+
+    expect(flow?.querySelectorAll(":scope > section")).toHaveLength(7);
+  });
+
+  /*
+   * § Feedback puts a refusal "inline banner at the point of action", and
+   * `template-editor.tsx` places it above the list because "the point of action
+   * is the list — the sheet has closed by the time an answer arrives". Flowed
+   * into a column it would be a banner BESIDE the action rather than above it,
+   * and in column two on a wide screen it would be beside the wrong day.
+   */
+  test("a refusal banner stands above all three columns", async () => {
+    const user = userEvent.setup();
+
+    setTemplateMeal.mockResolvedValue({ ok: false });
+
+    const { container } = editor();
+    await user.click(row("Tuesday", "dinner", "Chilli con Carne"));
+    await user.click(screen.getByRole("button", { name: /Chickpea Curry/ }));
+    await user.click(screen.getByRole("button", { name: "Save to every Tuesday" }));
+
+    const banner = await screen.findByRole("alert");
+    const flow = container.querySelector("[data-column-flow]");
+
+    expect(flow?.contains(banner), "the banner is outside the flow").toBe(false);
+    expect(
+      banner.compareDocumentPosition(flow!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      "and above it",
+    ).toBeTruthy();
+  });
+});

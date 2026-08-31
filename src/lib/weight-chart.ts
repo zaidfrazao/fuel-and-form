@@ -116,6 +116,75 @@ export const VIEW_HEIGHT = 170;
 export const PLOT_HEIGHT = 148;
 
 /**
+ * A drawing surface — FUEL-78, and the reason the three constants above are no
+ * longer the only ones.
+ *
+ * `/weight`'s chart takes the frame at ≥1272 rather than the measure: § Desktop
+ * gives the screen "**the reading and the trend take the frame** — a chart is a
+ * data graphic and 584 is not its width". A box that only got wider would not
+ * do it. The viewBox above is 320 × 170, so `h-auto` on a 968px column draws a
+ * **514px** chart — 1.88:1, very nearly square, and half a screen tall on the
+ * one ticket whose whole argument is rendered height.
+ *
+ * The mock draws 1024 × 300 and says why: "widening a plot without heightening
+ * it flattens what it draws, and 1024×220 is 4.65:1 against the 640-wide box's
+ * 3.27 — a weight chart understating its own slope." 514px is that complaint
+ * inverted, and just as wrong.
+ *
+ * So the shape is a parameter. Nothing about how the chart DRAWS changes —
+ * every rule, inset, step and label is the one it already had — and the two
+ * shapes differ only in the box the same geometry is laid out in.
+ */
+export type ChartShape = {
+  /** The viewBox's width in user units. */
+  viewWidth: number;
+  /** Its full height, plot area plus the date axis strip beneath. */
+  viewHeight: number;
+  /** The height of the filled plot area alone. */
+  plotHeight: number;
+};
+
+/** The shape every width below `xl` draws: the phone's, unchanged since FUEL-35. */
+export const CHART_SHAPE: ChartShape = {
+  viewWidth: VIEW_WIDTH,
+  viewHeight: VIEW_HEIGHT,
+  plotHeight: PLOT_HEIGHT,
+};
+
+/**
+ * The shape `/weight` draws at ≥1272, where the chart has the frame's span.
+ *
+ * ## The units are CSS pixels, and that is the whole point of these numbers
+ *
+ * The frame caps at 1272 and centres, so a graphic spanning the measure and the
+ * aside inside `PageMain`'s gutters is **968px wide at every width this shape
+ * is visible at** — 1272 less the 220 rail and the 28px gutter beside it, which
+ * is `<main>`'s 1024, less `PageMain`'s own 28 a side. The gutter BETWEEN the
+ * two columns is not subtracted: it is inside that 1024, and this graphic spans
+ * across it. There is no range left for the box to scale over, so a viewBox of
+ * 968 makes one user unit one device pixel.
+ *
+ * That is worth having rather than a tidier round number, because it retires a
+ * distortion instead of merely avoiding one. Everything in this module sized in
+ * units — `INSET`'s 10, the plate's 14-unit corner radius from § Implementation
+ * Notes, the dot's clearance — inflates with the column on the phone shape: at
+ * 584 the scale is 1.825 and § Implementation Notes' 14px radius is drawn at
+ * 25.5. At 968 on this shape it is 14px, which is what the guide asked for.
+ * This is FUEL-76's complaint — the type scale inflating with the column —
+ * one layer down, and this shape is where it stops.
+ *
+ * 300 tall is the mock's own number, and 278 leaves a 22px axis strip: the same
+ * strip in PIXELS that the phone shape's 22 units draw at 375, which is what a
+ * 10.5px Micro date label actually needs. Keeping the strip proportional
+ * instead would have spent 66px on one line of type.
+ */
+export const CHART_SHAPE_WIDE: ChartShape = {
+  viewWidth: 968,
+  viewHeight: 300,
+  plotHeight: 278,
+};
+
+/**
  * How far inside the plot area a mark may sit.
  *
  * Wide enough for the latest reading's dot — 4 units of radius plus its 2-unit
@@ -125,10 +194,21 @@ export const PLOT_HEIGHT = 148;
  */
 const INSET = 10;
 
-const LEFT = INSET;
-const RIGHT = VIEW_WIDTH - INSET;
-const TOP = INSET;
-const BOTTOM = PLOT_HEIGHT - INSET;
+/**
+ * The four edges a mark may occupy, for a given shape.
+ *
+ * These were four module constants until FUEL-78 gave the chart a second shape.
+ * `INSET` is unchanged and is still applied on all four sides — what varies is
+ * only the box it is measured in.
+ */
+function bounds({ viewWidth, plotHeight }: ChartShape) {
+  return {
+    left: INSET,
+    right: viewWidth - INSET,
+    top: INSET,
+    bottom: plotHeight - INSET,
+  };
+}
 
 /**
  * The kilogram intervals a gridline is allowed to fall on.
@@ -233,7 +313,10 @@ function niceDomain(values: readonly number[]): {
 export function chartGeometry(
   readings: readonly Reading[],
   references: { startWeightKg: number; targetWeightKg: number },
+  shape: ChartShape = CHART_SHAPE,
 ): ChartPlot | null {
+  const { left: LEFT, right: RIGHT, top: TOP, bottom: BOTTOM } = bounds(shape);
+
   // Copied before sorting: the screen's array is React state, and `sort`
   // mutates in place. Sorting the caller's rows would reorder the history list
   // rendered beneath this chart, from a function that is supposed to be pure.

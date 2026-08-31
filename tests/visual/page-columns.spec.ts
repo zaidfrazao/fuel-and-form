@@ -354,3 +354,332 @@ for (const path of ["/", "/training"]) {
     });
   });
 }
+
+/* -------------------------------------------------------------------------- */
+/* The other five screens — FUEL-78                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * § Desktop's amendment, measured.
+ *
+ * FUEL-85 replaced "each the measure with more air" with a job per screen, and
+ * every one of those jobs is a claim about a rendered box. The five here are
+ * three shapes:
+ *
+ *   - **`/weight`** takes the full frame — a band, a chart across it, two
+ *     columns beneath, and five rows to get there without moving a line of DOM.
+ *   - **`/settings`** takes the two columns and nothing else: no band, no bar,
+ *     so its columns are one row.
+ *   - **`/shopping`** and **`/plan/template`** take the span without an aside,
+ *     and flow their groups into columns with none split across one.
+ *
+ * `/plan` is the fifth and had the width already; what it gains is the folio,
+ * which is a visibility claim rather than a geometric one.
+ *
+ * The same argument this file opens with applies to all of it: `screens.spec.ts`
+ * would catch a missing column and report it as "pixels differ at 1272", which
+ * is the sentence a late font produces. These faults have names.
+ */
+
+/** The frame's span inside `<main>`'s gutters, at and above the cap. */
+const SPAN = 584 + 28 + 356;
+
+test.describe("/weight", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/weight");
+    await expect(page.getByRole("main")).toBeVisible();
+  });
+
+  test("is one column below the cap and two at it", async ({ page }) => {
+    const aside = page.locator('[data-column="aside"]');
+
+    /*
+     * Unlike `/` and `/training`, these are real boxes at every width rather
+     * than `display: contents` groups — nothing on this screen needed
+     * grouping, because each of the five children is already one element. So
+     * the claim is about placement rather than about display: below the cap
+     * the history sits under the entry control in one column, and at it they
+     * are side by side.
+     */
+    await page.setViewportSize({ width: 1271, height: 900 });
+
+    let measure = await boxOf(page.locator('[data-column="measure"]'));
+    let history = await boxOf(aside);
+
+    expect(history.y, "the history is below the form at 1271px").toBeGreaterThan(
+      measure.y,
+    );
+    expect(history.x, "and in the same column").toBeCloseTo(measure.x, 0);
+
+    await page.setViewportSize({ width: 1272, height: 900 });
+
+    measure = await boxOf(page.locator('[data-column="measure"]'));
+    history = await boxOf(aside);
+
+    expect(history.x, "the history is beside it at 1272px").toBeGreaterThan(
+      measure.x + measure.width,
+    );
+  });
+
+  for (const width of [1272, 1920]) {
+    test(`the chart takes the frame at ${width}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+
+      /*
+       * The ticket in one assertion: "**1,024px of chart instead of 584**".
+       * 968 is that 1024 less `PageMain`'s own 28px a side, which is the same
+       * correction every other number on this screen carries.
+       */
+      const chart = await boxOf(page.locator('[data-chart-shape="frame"]'));
+      const measure = await boxOf(page.locator('[data-column="measure"]'));
+      const aside = await boxOf(page.locator('[data-column="aside"]'));
+
+      expect(chart.width, "the chart's span").toBeCloseTo(SPAN, 0);
+      expect(chart.x, "its left edge").toBeCloseTo(measure.x, 0);
+      expect(chart.x + chart.width, "its right edge").toBeCloseTo(
+        aside.x + aside.width,
+        0,
+      );
+
+      /*
+       * And its height, which is the reason the shape is a parameter rather
+       * than the box simply being made wider. The viewBox is aspect-locked, so
+       * a 968px column drawn at the phone's 320:170 is 514px tall — very nearly
+       * square, on the one ticket whose whole argument is rendered height.
+       */
+      expect(chart.height, "the chart's height").toBeCloseTo(300, 0);
+    });
+
+    test(`only one of the two drawings is shown at ${width}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+
+      // Both are in the DOM — the geometry is computed on the server, which
+      // cannot know the viewport — and exactly one is displayed, which is what
+      // keeps a single `role="img"` in the accessibility tree.
+      await expect(page.locator("[data-chart-shape]")).toHaveCount(2);
+      await expect(page.locator('[data-chart-shape="frame"]')).toBeVisible();
+      await expect(page.locator('[data-chart-shape="measure"]')).toBeHidden();
+      await expect(page.getByRole("img", { name: /Weight trend/ })).toHaveCount(1);
+    });
+
+    test(`the figures sit above the entry control at ${width}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+
+      /*
+       * The reorder this screen's five rows exist for, and the only place it
+       * can be observed. The DOM order is the phone's — form, chart, Progress —
+       * because § Touch Targets put the form within thumb reach; the desktop
+       * order is Progress then the form, and grid placement is what gets there
+       * without `order` and without moving a line of markup.
+       */
+      const progress = await boxOf(page.locator('[data-row="progress"]'));
+      const form = await boxOf(page.locator('[data-column="measure"]'));
+      const chart = await boxOf(page.locator('[data-chart-shape="frame"]'));
+
+      expect(progress.y, "Progress is under the chart").toBeGreaterThan(
+        chart.y + chart.height - 1,
+      );
+      expect(form.y, "and the form is under Progress").toBeGreaterThan(
+        progress.y + progress.height - 1,
+      );
+      expect(form.x, "both in the measure").toBeCloseTo(progress.x, 0);
+      expect(progress.width, "at the measure's width").toBeCloseTo(584, 0);
+    });
+
+    test(`a long history does not push the entry control down at ${width}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+
+      /*
+       * The fault FUEL-86 measured on `/` and fixed with a flexible last row,
+       * arriving here for the same reason: the history spans the measure's
+       * rows, and a grid distributes a spanning item's surplus evenly across
+       * every track it spans. With all five rows `auto`, a history taller than
+       * Progress plus the form would grow the form's row — moving the entry
+       * control for a reason that has nothing to do with the entry control.
+       *
+       * `row-span-3` over a fifth row of `1fr` is what confines the surplus
+       * below both. Asserted as the gap between the two blocks in column one,
+       * which is the screen's own 28px rhythm and nothing else.
+       */
+      const progress = await boxOf(page.locator('[data-row="progress"]'));
+      const form = await boxOf(page.locator('[data-column="measure"]'));
+      const history = await boxOf(page.locator('[data-column="aside"]'));
+
+      expect(
+        history.height,
+        "the history is the taller column, or this proves nothing",
+      ).toBeGreaterThan(progress.height + form.height);
+
+      expect(form.y - (progress.y + progress.height), "the measure's gap").toBeCloseTo(
+        28,
+        0,
+      );
+    });
+  }
+});
+
+test.describe("/settings", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/settings");
+    // The push control mounts late — `constants.ts` records the race in full.
+    await expect(page.getByText("Notify this device")).toBeVisible();
+  });
+
+  for (const width of [1272, 1920]) {
+    test(`the form and the utilities are side by side at ${width}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+
+      const { measure, aside } = await columns(page);
+
+      expect(measure.width, "the form's column").toBeCloseTo(584, 0);
+      expect(aside.width, "the utilities'").toBeCloseTo(356, 0);
+      expect(aside.x - (measure.x + measure.width), "the gutter").toBeCloseTo(28, 0);
+
+      /*
+       * One row, which is what distinguishes this screen's grid from `/`'s.
+       * There is no band above and no action bar below, so both columns start
+       * at the same y — a screen that borrowed the three-row declaration would
+       * put them in row two and carry an empty track above them.
+       */
+      expect(aside.y, "both columns start together").toBeCloseTo(measure.y, 0);
+    });
+  }
+
+  test("is one column below the cap", async ({ page }) => {
+    await page.setViewportSize({ width: 1271, height: 900 });
+
+    const { measure, aside } = await columns(page);
+
+    expect(aside.y, "the utilities are below the form").toBeGreaterThan(measure.y);
+    expect(aside.x, "in the same column").toBeCloseTo(measure.x, 0);
+  });
+});
+
+/**
+ * The two that flow their groups into columns.
+ *
+ * `columns` is the count § Desktop gives each, and `groups` is the selector for
+ * the thing that may not be split. The gutter is the frame's 28px in both.
+ */
+for (const { path, count, groups, settlesOn } of [
+  { path: "/shopping", count: 2, groups: "main section", settlesOn: "Shopping list" },
+  { path: "/plan/template", count: 3, groups: "main section", settlesOn: "Weekly template" },
+]) {
+  test.describe(path, () => {
+    test.beforeEach(async ({ page }) => {
+      await page.goto(path);
+      await expect(
+        page.getByRole("heading", { level: 1, name: settlesOn }),
+      ).toBeVisible();
+    });
+
+    for (const width of [1272, 1920]) {
+      test(`the header stays on the measure at ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+
+        /*
+         * § Desktop: "the header stays on the measure, because an up-link, a
+         * title and two sentences are prose." The amendment narrowed the 640 to
+         * exactly this — "a paragraph, a heading and a sentence of explanation
+         * stay on the measure at every width" — so the one thing that must NOT
+         * happen when a page takes 968px is its prose taking it too.
+         */
+        const header = await boxOf(page.locator("main > header"));
+
+        expect(header.width, "the prose").toBeCloseTo(584, 0);
+      });
+
+      test(`the groups flow into ${count} columns at ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+
+        const boxes = await page.locator(groups).all();
+
+        expect(boxes.length, "there are groups to flow").toBeGreaterThan(count);
+
+        /*
+         * The acceptance criterion, as a property of every group's box: **no
+         * group split across a column.**
+         *
+         * A fragmented element reports a bounding box covering all of its
+         * fragments, so a category whose heading is at the foot of one column
+         * and whose rows are at the head of the next measures nearly the full
+         * span. A group that stayed whole measures one column and no more.
+         */
+        const columnWidth = (SPAN - (count - 1) * 28) / count;
+
+        for (const box of boxes) {
+          const { width: groupWidth } = await boxOf(box);
+
+          expect(groupWidth, "one group, one column").toBeLessThanOrEqual(
+            columnWidth + 1,
+          );
+        }
+      });
+
+      test(`the list takes the frame at ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+
+        // The other half of the ruling: the header holds back, and the list
+        // does not. Measured on the leftmost and rightmost groups rather than
+        // on their wrapper, so a wrapper that spanned while its columns did not
+        // fails here.
+        const boxes = await Promise.all(
+          (await page.locator(groups).all()).map((group) => boxOf(group)),
+        );
+
+        const left = Math.min(...boxes.map((box) => box.x));
+        const right = Math.max(...boxes.map((box) => box.x + box.width));
+        const header = await boxOf(page.locator("main > header"));
+
+        expect(left, "the list starts at the measure").toBeCloseTo(header.x, 0);
+        expect(right - left, "and runs to the frame").toBeCloseTo(SPAN, 0);
+      });
+    }
+
+    test(`is one column below the cap`, async ({ page }) => {
+      await page.setViewportSize({ width: 1271, height: 900 });
+
+      const boxes = await Promise.all(
+        (await page.locator(groups).all()).map((group) => boxOf(group)),
+      );
+
+      // Every group at the same x and the same width, stacked — which is the
+      // 375px and 820px baselines' claim, made once at the width just below the
+      // cap where a leak would land first.
+      for (const box of boxes) {
+        expect(box.x, "one column at 1271px").toBeCloseTo(boxes[0]!.x, 0);
+        expect(box.width).toBeCloseTo(boxes[0]!.width, 0);
+      }
+    });
+  });
+}
+
+test.describe("/plan", () => {
+  for (const width of [1272, 1920]) {
+    test(`the folio appears at ${width}`, async ({ page }) => {
+      await page.goto("/plan");
+      await page.setViewportSize({ width, height: 900 });
+
+      /*
+       * The whole of what FUEL-78 changes on this screen. § Desktop's header
+       * rule applies to every screen, and this one already had the width.
+       *
+       * The text is deliberately not the week's dates: `WeekNav` is showing
+       * those three lines below, and § Desktop's "say a thing once" is what
+       * rules that out. At the frozen instant the demo is on the current week.
+       */
+      await expect(page.getByText("This week", { exact: true })).toBeVisible();
+    });
+  }
+
+  test("the folio is absent below the cap", async ({ page }) => {
+    await page.goto("/plan");
+    await page.setViewportSize({ width: 1271, height: 900 });
+
+    // The band is a thing that exists at the cap. The phone was measured
+    // without this line, and the 375px baseline is what says it still is.
+    await expect(page.getByText("This week", { exact: true })).toBeHidden();
+  });
+});

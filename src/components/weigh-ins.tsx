@@ -15,6 +15,7 @@ import {
 } from "@/app/actions/weight";
 import type { CalendarDate } from "@/lib/date";
 import { figure } from "@/lib/format";
+import { PAGE_FRAME_GRID } from "@/lib/frame";
 import { entryLabel } from "@/lib/now-display";
 import { HOVER_GROUND, HOVER_LIFT, POINTER } from "@/lib/pointer";
 import { MAX_NOTE_LENGTH } from "@/lib/session-entry";
@@ -26,6 +27,7 @@ import {
   parseWeightKg,
 } from "@/lib/weigh-in";
 import type { Reading } from "@/lib/weight-chart";
+import { cn } from "@/lib/utils";
 import { type WeightStats, weightStats } from "@/lib/weight-stats";
 
 /**
@@ -630,8 +632,63 @@ export function WeighIns({
     "h-11 rounded-md border border-border bg-surface px-3 text-body text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background aria-invalid:border-destructive";
 
   return (
-    <PageMain className="gap-7 pt-[22px]">
-      <div className="flex flex-col gap-3">
+    /*
+     * The frame, and five rows — § Desktop, FUEL-78.
+     *
+     * ## The DOM order and the desktop order are not the same order
+     *
+     * This is the one screen in the ticket where they differ, and it is why
+     * this grid names five rows where `/`'s names three. The phone reads
+     * heading → form → chart → Progress → History, which is § Touch Targets'
+     * doing: "below the form rather than above it, so a ~176px graphic never
+     * pushes the screen's one primary action out of thumb reach". At the cap
+     * there is no thumb, and the composition § Desktop asks for is the chart
+     * across the frame with the figures and the entry control beneath it.
+     *
+     * So neither desktop group is a run of adjacent children — the band wants
+     * the heading and the chart with the form between them, and the measure
+     * wants Progress above the form with the chart between them.
+     *
+     * `display: contents` cannot help with that: it dissolves a wrapper, and a
+     * wrapper cannot be drawn around children that are not adjacent. Reordering
+     * the DOM and correcting it with `order` below the cap could, and is
+     * refused — `order` moves boxes and leaves the reading order behind, so the
+     * phone would announce its screen in an order it does not draw.
+     *
+     * Explicit grid placement is what actually fits the problem. Every child is
+     * its own item and says which cell it occupies, so the five can be dealt
+     * into any arrangement the frame wants **without one line of DOM moving**,
+     * and below `xl` they are the flex column they have always been. The
+     * 375px and 820px baselines coming back byte-identical is the proof.
+     *
+     * No `contents` wrappers here either, and for the same reason there are
+     * five rows: nothing needs grouping. Each of the five is already one box.
+     *
+     * ## The rows
+     *
+     * `auto auto auto auto 1fr` — the heading, the chart, Progress, the entry
+     * control, and the slack. The last is `1fr` for the reason FUEL-86 gives in
+     * `frame.ts`: History spans the measure's rows, and a grid distributes a
+     * spanning item's surplus evenly across every track it spans. With all five
+     * `auto`, a history taller than Progress plus the form would push the form
+     * down for a reason that has nothing to do with the form. A flexible last
+     * track takes the surplus instead, below both.
+     */
+    <PageMain
+      className={cn(
+        "gap-7 pt-[22px]",
+        PAGE_FRAME_GRID,
+        "xl:grid-rows-[auto_auto_auto_auto_1fr]",
+      )}
+    >
+      {/* The band: the reading itself. § Desktop's amendment releases it from
+          the measure — "a folio, a figure, a time axis, a trend line and a
+          table" may take the frame — and its per-screen table spends that here
+          by name: "**the reading and the trend take the frame**". */}
+      <div
+        className="flex flex-col gap-3 xl:col-start-1 xl:col-end-[-1] xl:row-start-1"
+        data-column="header"
+      >
         <h2 className="text-micro uppercase text-text-secondary">Weight</h2>
         <h1 className="text-title text-text-primary">
           {latest ? kilograms(latest.weightKg) : "No weigh-ins yet"}
@@ -646,7 +703,14 @@ export function WeighIns({
         </p>
       </div>
 
-      <section className="flex flex-col gap-[14px]">
+      {/* The entry control, under the figures at the cap and under the reading
+          below it — row four, which is the second half of what the five rows
+          are for. `data-column` is on this rather than on Progress because a
+          history with one reading has no Progress to measure a column by. */}
+      <section
+        className="flex flex-col gap-[14px] xl:col-start-1 xl:row-start-4"
+        data-column="measure"
+      >
         <h2 className="text-micro uppercase text-text-secondary">Log a weigh-in</h2>
 
         <div className="flex flex-col gap-2">
@@ -906,6 +970,12 @@ export function WeighIns({
         today={today}
         startWeightKg={startWeightKg}
         targetWeightKg={targetWeightKg}
+        /* The trend, at the frame's span — the other half of the ruling above,
+           and "the complaint FUEL-76 fixed INSIDE the chart still standing
+           around it". Row two rather than beside anything: a chart 968px wide
+           has nothing to sit next to. The component draws a second shape for
+           this box; `weight-chart.ts` says why a wider one alone would not do. */
+        className="xl:col-start-1 xl:col-end-[-1] xl:row-start-2"
       />
 
       {/*
@@ -920,17 +990,43 @@ export function WeighIns({
        * against the other should not have to scroll between them.
        */}
       {stats && (
-        <section className="flex flex-col gap-[14px]">
+        /* First in the measure at the cap, where the chart above has taken the
+           reading's place at the top of the screen. Below it, unchanged: the
+           order in the DOM is the phone's. */
+        <section
+          className="flex flex-col gap-[14px] xl:col-start-1 xl:row-start-3"
+          data-row="progress"
+        >
           <h2 className="text-micro uppercase text-text-secondary">Progress</h2>
 
+          {/* Four across on the measure — § Desktop, amended by FUEL-85: "the
+              four-macro grid, which this rule names out of scope, goes
+              four-across on a measure and stays 2×2 in an aside". These are
+              four figures on a 584px measure, which is the case that amendment
+              describes; `kv-grid.tsx` has taken a 4 since FUEL-86. */}
           <KeyValueGrid
+            columns={4}
             items={progressItems(stats, { startWeightKg, targetWeightKg, goalPaceKgPerWeek })}
           />
         </section>
       )}
 
       {latest && (
-        <section className="flex flex-col gap-[14px]">
+        /*
+         * The aside: "the record, and only the record" — § Desktop gives this
+         * zone the question *what is the context?*, and the weigh-in history
+         * FUEL-84 bounded is this screen's answer.
+         *
+         * `row-span-3` covers rows three, four and five. Three rather than two
+         * because the fifth is the flexible one: a history longer than Progress
+         * plus the entry control has to have somewhere to put its surplus, and
+         * a span that stopped at row four would push the form down with it —
+         * which is the fault FUEL-86 measured on `/` and fixed the same way.
+         */
+        <section
+          className="flex flex-col gap-[14px] xl:col-start-2 xl:row-start-3 xl:row-span-3"
+          data-column="aside"
+        >
           <h2 className="text-micro uppercase text-text-secondary">History</h2>
 
           {/* § Lists: rows on the canvas, separated by hairlines. No card, no

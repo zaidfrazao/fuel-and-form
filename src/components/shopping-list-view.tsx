@@ -426,7 +426,7 @@ export function ShoppingListView({
        * between the sections and 28px between the last section and the button.
        * The 375px baseline is the assertion.
        */}
-      <div className={cn("flex flex-col gap-7", PAGE_COLUMN_FLOW, PAGE_COLUMNS_2)}>
+      <div className={cn("flex flex-col gap-7", PAGE_COLUMN_FLOW, PAGE_COLUMNS_2)} data-column-flow>
         {groups.map((group) => (
           <section
             key={group.category}

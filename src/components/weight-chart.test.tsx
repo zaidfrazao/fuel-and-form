@@ -40,13 +40,45 @@ const HISTORY: Reading[] = [
   { date: "2026-08-17", weightKg: 80.1 },
 ];
 
-function draw(entries: readonly Reading[] = HISTORY) {
+/**
+ * Renders the chart, and leaves exactly one of its two drawings in the DOM.
+ *
+ * FUEL-78 gave `/weight`'s chart a second shape — the measure's 320×170 box
+ * below 1272, the frame's 968×300 at it. Both are rendered, one hidden by
+ * `xl:hidden` and the other by `hidden xl:block`, because the geometry depends
+ * on the box's aspect and is computed on a server that cannot know the
+ * viewport. In a browser exactly one is displayed, and `display: none` also
+ * removes the other from the accessibility tree — so there is one `role="img"`
+ * carrying one `aria-label` at every width.
+ *
+ * jsdom applies no stylesheet, so neither is hidden here and both are exposed:
+ * `screen.getByRole("img")` finds two, and every `querySelectorAll` over the
+ * container counts twice. That is an artefact of the environment rather than
+ * anything the component does, so this helper removes the drawing the width
+ * under test would have hidden, and every assertion below goes on meaning what
+ * it says — about ONE chart, in the box its coordinates were written against.
+ *
+ * `drawBoth` is what the pair itself is tested with.
+ */
+function draw(entries: readonly Reading[] = HISTORY, references: References = {}) {
+  const result = drawBoth(entries, references);
+
+  result.container.querySelector('[data-chart-shape="frame"]')?.remove();
+
+  return result;
+}
+
+/** The profile's two figures, where a test needs them to be something else. */
+type References = { startWeightKg?: number; targetWeightKg?: number };
+
+/** Both drawings, as the component renders them. */
+function drawBoth(entries: readonly Reading[] = HISTORY, references: References = {}) {
   return render(
     <WeightChart
       entries={entries}
       today={TODAY}
-      startWeightKg={START_KG}
-      targetWeightKg={TARGET_KG}
+      startWeightKg={references.startWeightKg ?? START_KG}
+      targetWeightKg={references.targetWeightKg ?? TARGET_KG}
     />,
   );
 }
@@ -297,17 +329,13 @@ describe("the reference lines", () => {
    * same pixels as one — and it is only the words that merge.
    */
   test("references on the same weight are labelled once, not twice over", () => {
-    render(
-      <WeightChart
-        entries={[
-          { date: "2026-08-10", weightKg: 76 },
-          { date: "2026-08-17", weightKg: 76 },
-        ]}
-        today={TODAY}
-        startWeightKg={76}
-        targetWeightKg={76}
-      />,
-    );
+    draw([
+              { date: "2026-08-10", weightKg: 76 },
+              { date: "2026-08-17", weightKg: 76 },
+            ], {
+      startWeightKg: 76,
+      targetWeightKg: 76,
+    });
 
     expect(screen.getByText("Start · Target 76").tagName.toLowerCase()).toBe("text");
     expect(screen.queryByText("Target 76")).toBeNull();
@@ -321,14 +349,10 @@ describe("the reference lines", () => {
    * printing one figure twice in order to say the two are different.
    */
   test("references that merely display the same are labelled once", () => {
-    render(
-      <WeightChart
-        entries={[{ date: "2026-08-17", weightKg: 76 }]}
-        today={TODAY}
-        startWeightKg={76.04}
-        targetWeightKg={76.01}
-      />,
-    );
+    draw([{ date: "2026-08-17", weightKg: 76 }], {
+      startWeightKg: 76.04,
+      targetWeightKg: 76.01,
+    });
 
     expect(screen.getByText("Start · Target 76").tagName.toLowerCase()).toBe("text");
     expect(screen.queryByText("Start 76 · Target 76")).toBeNull();
@@ -345,17 +369,13 @@ describe("the reference lines", () => {
    * way the equal case does would state something false.
    */
   test("references too close to label separately keep both figures", () => {
-    render(
-      <WeightChart
-        entries={[
-          { date: "2016-08-17", weightKg: 120 },
-          { date: "2026-08-17", weightKg: 70 },
-        ]}
-        today={TODAY}
-        startWeightKg={84.2}
-        targetWeightKg={84}
-      />,
-    );
+    draw([
+              { date: "2016-08-17", weightKg: 120 },
+              { date: "2026-08-17", weightKg: 70 },
+            ], {
+      startWeightKg: 84.2,
+      targetWeightKg: 84,
+    });
 
     expect(screen.getByText("Start 84.2 · Target 84").tagName.toLowerCase()).toBe(
       "text",
@@ -367,14 +387,10 @@ describe("the reference lines", () => {
    * data; the label is only how it is named.
    */
   test("both rules are drawn even when one label names them", () => {
-    const { container } = render(
-      <WeightChart
-        entries={[{ date: "2026-08-17", weightKg: 76 }]}
-        today={TODAY}
-        startWeightKg={76}
-        targetWeightKg={76}
-      />,
-    );
+    const { container } = draw([{ date: "2026-08-17", weightKg: 76 }], {
+      startWeightKg: 76,
+      targetWeightKg: 76,
+    });
 
     const dashed = [...container.querySelectorAll("line")].filter(
       (line) => line.getAttribute("stroke-dasharray") !== null,
@@ -394,17 +410,13 @@ describe("the reference lines", () => {
    * which is most of the first fortnight of a program.
    */
   test("a label with no room above its rule is drawn below it", () => {
-    const { container } = render(
-      <WeightChart
-        entries={[
-          { date: "2026-08-10", weightKg: 79 },
-          { date: "2026-08-17", weightKg: 78 },
-        ]}
-        today={TODAY}
-        startWeightKg={80}
-        targetWeightKg={76}
-      />,
-    );
+    const { container } = draw([
+              { date: "2026-08-10", weightKg: 79 },
+              { date: "2026-08-17", weightKg: 78 },
+            ], {
+      startWeightKg: 80,
+      targetWeightKg: 76,
+    });
 
     const start = [...container.querySelectorAll("text")].find((node) =>
       node.textContent?.startsWith("Start"),
@@ -424,14 +436,10 @@ describe("the reference lines", () => {
    * would draw the owner's goal across a visitor's chart.
    */
   test("the labels follow the profile's own figures", () => {
-    render(
-      <WeightChart
-        entries={HISTORY}
-        today={TODAY}
-        startWeightKg={91}
-        targetWeightKg={64}
-      />,
-    );
+    draw(HISTORY, {
+      startWeightKg: 91,
+      targetWeightKg: 64,
+    });
 
     expect(screen.getByText("Target 64").tagName.toLowerCase()).toBe("text");
     expect(screen.getByText("Start 91").tagName.toLowerCase()).toBe("text");
@@ -702,5 +710,83 @@ describe("the draw-in", () => {
   test("reduced motion leaves the trend whole and the mark visible", () => {
     expect(REDUCED).toMatch(/\.weight-chart-trend\s*\{[^}]*clip-path:\s*none/);
     expect(REDUCED).toMatch(/\.weight-chart-latest\s*\{[^}]*opacity:\s*1/);
+  });
+});
+
+describe("the two drawings", () => {
+  /*
+   * FUEL-78. `/weight`'s chart takes the frame at ≥1272, and the geometry
+   * depends on the box's aspect — so the same readings are laid out twice, on
+   * the server, and CSS shows one. These are the claims that arrangement rests
+   * on; `page-columns.spec.ts` is where a browser confirms only one is seen.
+   */
+  test("both shapes are drawn, in their own boxes", () => {
+    const { container } = drawBoth();
+
+    const boxes = [...container.querySelectorAll("[data-chart-shape]")];
+
+    expect(boxes.map((box) => box.getAttribute("data-chart-shape"))).toEqual([
+      "measure",
+      "frame",
+    ]);
+  });
+
+  test("the frame's drawing carries the frame's viewBox", () => {
+    const { container } = drawBoth();
+
+    const frame = container.querySelector('[data-chart-shape="frame"] svg[viewBox]');
+    const measure = container.querySelector('[data-chart-shape="measure"] svg[viewBox]');
+
+    expect(frame?.getAttribute("viewBox")).toBe("0 0 968 300");
+    expect(measure?.getAttribute("viewBox")).toBe("0 0 320 170");
+  });
+
+  /*
+   * The measure's drawing is hidden at the cap and the frame's below it, which
+   * is `display: none` in both directions — so exactly one graphic is in the
+   * accessibility tree at any width, and the summary is heard once.
+   *
+   * The classes are asserted here rather than the rendered visibility because
+   * jsdom applies no stylesheet. This is the one place in this file that names
+   * a Tailwind class, and it does so because the class IS the mechanism: the
+   * pair is only correct if each is hidden exactly where the other is shown.
+   */
+  test("each drawing is hidden exactly where the other is shown", () => {
+    const { container } = drawBoth();
+
+    const measure = container.querySelector('[data-chart-shape="measure"]');
+    const frame = container.querySelector('[data-chart-shape="frame"]');
+
+    expect(measure?.className).toContain("xl:hidden");
+    expect(measure?.className).not.toContain("hidden xl:block");
+    expect(frame?.className).toContain("hidden");
+    expect(frame?.className).toContain("xl:block");
+  });
+
+  /*
+   * § Accessibility's data table is the chart's other half, and it belongs to
+   * the readings rather than to a box. Rendered twice it would read every
+   * weigh-in out a second time — the failure `aria-hidden` on the overlay was
+   * added to prevent, one level up.
+   */
+  test("the readings are tabled once, outside both drawings", () => {
+    const { container } = drawBoth();
+
+    const tables = container.querySelectorAll("table");
+
+    expect(tables).toHaveLength(1);
+    expect(tables[0]?.closest("[data-chart-shape]")).toBeNull();
+  });
+
+  test("both drawings plot every reading, and mark only the latest in each", () => {
+    const { container } = drawBoth();
+
+    for (const shape of ["measure", "frame"]) {
+      const box = container.querySelector(`[data-chart-shape="${shape}"]`);
+
+      // § Rule 2's one umber mark, per drawing rather than per document.
+      expect(box?.querySelectorAll("circle")).toHaveLength(1);
+      expect(box?.querySelectorAll("polyline")).toHaveLength(1);
+    }
   });
 });

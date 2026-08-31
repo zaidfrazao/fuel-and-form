@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 
 import { MAX_KG, MIN_KG } from "./weigh-in";
 import {
+  CHART_SHAPE,
+  CHART_SHAPE_WIDE,
   type ChartPlot,
   chartGeometry,
   PLOT_HEIGHT,
@@ -448,5 +450,123 @@ describe("the caller's rows", () => {
     chartGeometry(newestFirst, REFERENCES);
 
     expect(newestFirst).toEqual(asPassed);
+  });
+});
+
+describe("the two shapes", () => {
+  /*
+   * FUEL-78. `/weight`'s chart takes the frame at ≥1272, and a box that only
+   * got wider would have drawn it 514px tall — 1.88:1, very nearly square. The
+   * shape is a parameter instead, and these are the claims that makes.
+   */
+  const references = { startWeightKg: 84.2, targetWeightKg: 76 };
+
+  const READINGS = [
+    { date: "2026-07-27", weightKg: 82.4 },
+    { date: "2026-08-03", weightKg: 81.6 },
+    { date: "2026-08-10", weightKg: 80.9 },
+    { date: "2026-08-17", weightKg: 80.1 },
+  ];
+
+  test("the default shape is the phone's, so every existing caller is unmoved", () => {
+    expect(chartGeometry(READINGS, references)).toEqual(
+      chartGeometry(READINGS, references, CHART_SHAPE),
+    );
+  });
+
+  test("the frame's shape is 968 by 300, and its units are CSS pixels", () => {
+    /*
+     * Not a round number for its own sake. The frame caps at 1272 and centres,
+     * so `<main>` spans the measure and the aside — 1272 less the 220 rail and
+     * the 28px gutter beside it, which is 1024 — and `PageMain` spends 28px a
+     * side of that on its own gutter. 968 is what is left, at every width this
+     * shape is visible at. One user unit is therefore one device pixel, which
+     * is what stops `INSET` and the plate's 14-unit corner radius inflating
+     * with the column the way they do on the phone's shape.
+     *
+     * The gutter BETWEEN the measure and the aside is not subtracted: it is
+     * inside the 1024 the two columns share, and this graphic spans across it.
+     */
+    expect(CHART_SHAPE_WIDE.viewWidth).toBe(1272 - 220 - 28 - 56);
+    expect(CHART_SHAPE_WIDE.viewHeight).toBe(300);
+
+    // The axis strip is 22px, which is what a 10.5px Micro date label needs —
+    // the same strip in PIXELS the phone's 22 units draw at 375.
+    expect(CHART_SHAPE_WIDE.viewHeight - CHART_SHAPE_WIDE.plotHeight).toBe(22);
+  });
+
+  test("the frame's box is wider than it is tall by enough to show a slope", () => {
+    /*
+     * The mock's reasoning, as an assertion: "widening a plot without
+     * heightening it flattens what it draws". 1024×220 is 4.65:1 and was
+     * rejected as too flat; the aspect-locked box this ticket would otherwise
+     * have produced is 968×514, or 1.88:1, and is the same fault inverted.
+     */
+    const ratio = CHART_SHAPE_WIDE.viewWidth / CHART_SHAPE_WIDE.viewHeight;
+
+    expect(ratio).toBeGreaterThan(3);
+    expect(ratio).toBeLessThan(4);
+  });
+
+  test("every mark stays inside the frame's plate, as it does inside the phone's", () => {
+    const plot = chartGeometry(READINGS, references, CHART_SHAPE_WIDE);
+
+    if (plot === null) throw new Error("four readings drew nothing");
+
+    // The same claim the phone's shape makes above, in the other box: the
+    // latest reading's dot and its ring clear every edge.
+    for (const point of plot.points) {
+      expect(point.x).toBeGreaterThanOrEqual(6);
+      expect(point.x).toBeLessThanOrEqual(CHART_SHAPE_WIDE.viewWidth - 6);
+      expect(point.y).toBeGreaterThanOrEqual(6);
+      expect(point.y).toBeLessThanOrEqual(CHART_SHAPE_WIDE.plotHeight - 6);
+    }
+
+    for (const rule of plot.gridlines) {
+      expect(rule.y).toBeGreaterThanOrEqual(0);
+      expect(rule.y).toBeLessThanOrEqual(CHART_SHAPE_WIDE.plotHeight);
+    }
+  });
+
+  test("the two shapes plot the same readings on the same dates", () => {
+    const narrow = chartGeometry(READINGS, references, CHART_SHAPE);
+    const wide = chartGeometry(READINGS, references, CHART_SHAPE_WIDE);
+
+    if (narrow === null || wide === null) throw new Error("four readings drew nothing");
+
+    /*
+     * The shape changes the box, not the data. Same count, same dates, same
+     * order, same domain and the same weights ruled — a shape that quietly
+     * chose different gridlines would be a second chart rather than the same
+     * one laid out differently.
+     */
+    expect(wide.points.map((p) => p.date)).toEqual(narrow.points.map((p) => p.date));
+    expect(wide.domain).toEqual(narrow.domain);
+    expect(wide.gridlines.map((g) => g.weightKg)).toEqual(
+      narrow.gridlines.map((g) => g.weightKg),
+    );
+    expect(wide.latest.weightKg).toBe(narrow.latest.weightKg);
+  });
+
+  test("the wider box spreads the same readings further apart", () => {
+    const narrow = chartGeometry(READINGS, references, CHART_SHAPE);
+    const wide = chartGeometry(READINGS, references, CHART_SHAPE_WIDE);
+
+    if (narrow === null || wide === null) throw new Error("four readings drew nothing");
+
+    // The point of the ticket, as one number: the horizontal span the same four
+    // weigh-ins occupy is three times what it was.
+    const span = (plot: NonNullable<typeof narrow>) =>
+      plot.points[plot.points.length - 1]!.x - plot.points[0]!.x;
+
+    expect(span(wide)).toBeGreaterThan(span(narrow) * 2.5);
+  });
+
+  test("a single reading centres in the frame's box too", () => {
+    const plot = chartGeometry([{ date: "2026-08-17", weightKg: 80.1 }], references, CHART_SHAPE_WIDE);
+
+    if (plot === null) throw new Error("one reading drew nothing");
+
+    expect(plot.latest.x).toBe(CHART_SHAPE_WIDE.viewWidth / 2);
   });
 });

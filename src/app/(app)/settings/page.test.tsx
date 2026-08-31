@@ -220,3 +220,67 @@ describe("the route itself", () => {
     expect(loadSchedule).not.toHaveBeenCalled();
   });
 });
+
+describe("the two columns", () => {
+  /**
+   * § Desktop, amended by FUEL-85: `/settings` is "**the form and the
+   * not-form**. Slot times, the walk reminder and Save are a form you fill in
+   * and take the measure; notify, the template link, the plan link, export and
+   * sign out are links you follow and take the aside."
+   *
+   * What is tested here is the GROUPING — which section is in which column —
+   * because that is the half jsdom can hold. It applies no stylesheet, so the
+   * geometry is `page-columns.spec.ts`'s and the two columns' widths are
+   * measured in a browser or not at all.
+   *
+   * It is worth holding here anyway: the grouping is the thing a later edit
+   * breaks by adding a section in the wrong place, and that is a mistake with a
+   * name rather than a pixel difference at one width.
+   */
+  const columnOf = (node: Element | null) =>
+    node?.closest("[data-column]")?.getAttribute("data-column");
+
+  test("the form you fill in is on the measure", async () => {
+    render(await SettingsPage());
+
+    expect(columnOf(screen.getByRole("heading", { level: 1, name: "Settings" }))).toBe(
+      "measure",
+    );
+    expect(columnOf(screen.getByRole("heading", { name: "Slot times" }))).toBe("measure");
+  });
+
+  test("the links you follow are in the aside", async () => {
+    render(await SettingsPage());
+
+    for (const name of ["Weekly template", "Plan", "Export everything"]) {
+      expect(columnOf(screen.getByRole("link", { name })), name).toBe("aside");
+    }
+  });
+
+  /*
+   * The push control is not asserted here. It renders nothing until
+   * `navigator.serviceWorker.ready` resolves — `constants.ts` records the same
+   * late mount as the reason the visual suite waits on its heading — so in
+   * jsdom there is no node to ask which column it is in. It is the first child
+   * of the aside in the source, and `page-columns.spec.ts` waits for it in a
+   * browser before it measures anything.
+   */
+
+  /*
+   * The reading order is unchanged by the grouping, which is the claim that
+   * makes the byte-identical phone baselines possible: the wrappers were drawn
+   * around runs that were already runs, so nothing moved to get here.
+   */
+  test("grouping them reordered nothing", async () => {
+    const { container } = render(await SettingsPage());
+
+    const order = [...container.querySelectorAll("h1, h2, a[href]")].map(
+      (node) => node.textContent?.trim(),
+    );
+
+    expect(order.indexOf("Settings")).toBeLessThan(order.indexOf("Slot times"));
+    expect(order.indexOf("Slot times")).toBeLessThan(order.indexOf("Weekly template"));
+    expect(order.indexOf("Weekly template")).toBeLessThan(order.indexOf("Plan"));
+    expect(order.indexOf("Plan")).toBeLessThan(order.indexOf("Export everything"));
+  });
+});

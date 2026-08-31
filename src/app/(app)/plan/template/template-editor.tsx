@@ -299,7 +299,7 @@ export function TemplateEditor({
        * column two is a banner beside the action rather than above it — and
        * `MealPicker` is a sheet, which has no business being fragmented at all.
        */}
-      <div className={cn("flex flex-col gap-[30px]", PAGE_COLUMN_FLOW, PAGE_COLUMNS_3)}>
+      <div className={cn("flex flex-col gap-[30px]", PAGE_COLUMN_FLOW, PAGE_COLUMNS_3)} data-column-flow>
         {week.map((day) => (
           <section
             key={day.dayOfWeek}
