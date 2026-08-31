@@ -63,7 +63,9 @@ describe("the app frame", () => {
     // by and which nothing below `lg` would show.
     const { container } = layout();
 
-    for (const invariant of FRAME.split(" ")) {
+    // `filter(Boolean)` — see `loading.test.tsx`. An empty utility makes
+    // `toContain` vacuous, which is the one thing this loop must not be.
+    for (const invariant of FRAME.split(" ").filter(Boolean)) {
       expect(container.firstElementChild?.className).toContain(invariant);
     }
 

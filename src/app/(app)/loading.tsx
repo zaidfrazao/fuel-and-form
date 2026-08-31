@@ -115,7 +115,19 @@ export default function Loading() {
         aria-hidden
         className={`flex flex-col gap-[22px] md:gap-[30px] ${PAGE_ASIDE_UNWRAP}`}
       >
-        <div className={PAGE_MEASURE_COLUMN} data-column="measure">
+        {/*
+         * `aria-hidden` on each group as well as on their wrapper, which is
+         * redundant on purpose — raised by the FUEL-77 precommit review.
+         *
+         * The wrapper carries it, and the wrapper is `display: contents` at
+         * `xl`. Every implementation resolves `aria-hidden` by walking the DOM
+         * rather than the box tree, so the descendants are hidden either way —
+         * but `display: contents` has a history of accessibility bugs, the
+         * property being guarded is "a screen reader is never read a dozen
+         * empty boxes", and the failure would be silent to every test in this
+         * repository. Two attributes is a cheap way not to depend on it.
+         */}
+        <div aria-hidden className={PAGE_MEASURE_COLUMN} data-column="measure">
           {/* Subject — eyebrow, 40px title, slash metadata. */}
           <div className="flex flex-col gap-1">
             <Block className="h-[10px] w-20" />
@@ -142,7 +154,7 @@ export default function Loading() {
           </div>
         </div>
 
-        <div className={PAGE_ASIDE_COLUMN} data-column="aside">
+        <div aria-hidden className={PAGE_ASIDE_COLUMN} data-column="aside">
           {/* The phone's position for the ruler, and the frame's. */}
           <RulerBand className={RULER_AT.phone} at="phone" />
           <RulerBand className={RULER_AT.aside} at="aside" />

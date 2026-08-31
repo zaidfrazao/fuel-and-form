@@ -778,7 +778,9 @@ describe("the second column", () => {
       expect(className).toContain("xl:gap-7");
       expect(className).not.toContain("xl:gap-[30px]");
 
-      for (const utility of base.split(" ").filter((u) => !u.includes("gap"))) {
+      // `Boolean(u)` as well as the gap filter: an empty utility survives the
+      // second test and makes `toContain` vacuous.
+      for (const utility of base.split(" ").filter((u) => u && !u.includes("gap"))) {
         expect(className).toContain(utility);
       }
     }

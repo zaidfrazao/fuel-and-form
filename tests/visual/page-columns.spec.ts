@@ -39,9 +39,6 @@ import { FROZEN_NOW_MS } from "./constants";
  * below — the one width in this file where the correct answer is "one column".
  */
 
-/** The frame: the container `app/(app)/layout.tsx` wraps the rail and main in. */
-const FRAME = "main:not([data-column])";
-
 const boxOf = async (locator: Locator) => {
   const box = await locator.boundingBox();
 
@@ -56,7 +53,6 @@ const columns = async (page: import("@playwright/test").Page) => {
 
   return {
     main,
-    frame: await boxOf(page.locator(FRAME).locator("xpath=..")),
     measure: await boxOf(page.locator('[data-column="measure"]')),
     aside: await boxOf(page.locator('[data-column="aside"]')),
   };
@@ -127,14 +123,21 @@ for (const path of ["/", "/training"]) {
       test(`the measure keeps its own inset at ${width}`, async ({ page }) => {
         await page.setViewportSize({ width, height: 900 });
 
-        const { main, frame, measure, aside } = await columns(page);
+        const { main, measure, aside } = await columns(page);
 
-        // 28px in from `<main>`'s box on the left, and 28px in from the frame's
-        // edge on the right — the same gutter at both ends, which is what makes
-        // a left-aligned composition read as symmetric inside the frame.
+        // 28px in from `<main>`'s box at both ends — the same gutter on each
+        // side, which is what makes a left-aligned composition read as
+        // symmetric inside the frame.
+        //
+        // Measured against `<main>` rather than against its parent, which is
+        // what this asked before the FUEL-77 precommit review pointed out the
+        // brittleness of an `xpath=..` lookup. It is also the truer statement:
+        // at this width `<main>` spans to the last track, so its right edge IS
+        // the frame's, and the number being checked is main's own padding
+        // rather than a relationship between two boxes.
         expect(measure.x - main.x, "left inset").toBeCloseTo(28, 0);
         expect(
-          frame.x + frame.width - (aside.x + aside.width),
+          main.x + main.width - (aside.x + aside.width),
           "right inset",
         ).toBeCloseTo(28, 0);
       });

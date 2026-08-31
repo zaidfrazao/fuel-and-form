@@ -40,7 +40,11 @@ describe("the skeleton stands in the same frame as the screen", () => {
 
     // Not a copy of the class names: the same string `right-now.tsx` wears, so
     // the two cannot be given different columns by an edit to one of them.
-    for (const utility of PAGE_ASIDE_GRID.split(" ")) {
+    // `filter(Boolean)`, because `split(" ")` on a string that has picked up a
+    // double space yields `""` and `toContain("")` is true of everything — the
+    // one assertion meant to stop the screen and the skeleton drifting would
+    // then pass on any element at all.
+    for (const utility of PAGE_ASIDE_GRID.split(" ").filter(Boolean)) {
       expect(main.className).toContain(utility);
     }
   });
@@ -149,8 +153,12 @@ describe("the skeleton stands in the same frame as the screen", () => {
       "Loading today’s plan.",
     );
 
+    // Two boundaries, asserted separately — the group's own and its wrapper's.
+    // `closest` alone would now be satisfied by the element itself, which would
+    // make this pass while the wrapper had quietly lost its attribute.
     for (const column of container.querySelectorAll("[data-column]")) {
-      expect(column.closest("[aria-hidden]")).not.toBeNull();
+      expect(column.getAttribute("aria-hidden")).toBe("true");
+      expect(column.parentElement!.getAttribute("aria-hidden")).toBe("true");
     }
   });
 

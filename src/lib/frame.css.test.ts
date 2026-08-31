@@ -89,14 +89,21 @@ describe("a redefined breakpoint does not cascade the way it reads", () => {
   test("`xl` is emitted ahead of the framework's own breakpoints", async () => {
     const css = await build(["md:block", "lg:block", "xl:block"]);
 
-    const at = (query: string) => {
-      const index = css.indexOf(query);
-      expect(index, `no ${query} block emitted`).toBeGreaterThan(-1);
+    /*
+     * Matched on the WIDTH rather than on the whole prelude — raised by the
+     * FUEL-77 precommit review. The claim here is about order; pinning
+     * `@media (width >= 48rem)` verbatim would also fail the day Tailwind or
+     * lightningcss emits `min-width`, which would be a failure for the wrong
+     * reason and would teach the next reader to distrust the test.
+     */
+    const at = (width: string) => {
+      const index = css.search(new RegExp(`@media[^{]*${width.replace(".", "\\.")}`));
+      expect(index, `no media block emitted for ${width}`).toBeGreaterThan(-1);
       return index;
     };
 
-    expect(at("@media (width >= 1272px)")).toBeLessThan(at("@media (width >= 48rem)"));
-    expect(at("@media (width >= 48rem)")).toBeLessThan(at("@media (width >= 64rem)"));
+    expect(at("1272px"), "xl before md").toBeLessThan(at("48rem"));
+    expect(at("48rem"), "md before lg").toBeLessThan(at("64rem"));
   });
 
   test("a bounded variant nests instead of racing", async () => {
