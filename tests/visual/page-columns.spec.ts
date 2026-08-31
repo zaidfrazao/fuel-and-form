@@ -540,7 +540,14 @@ test.describe("/settings", () => {
     test(`the form and the utilities are side by side at ${width}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
 
-      const { measure, aside } = await columns(page);
+      /*
+       * Measured directly rather than through `columns()`, which also demands a
+       * `[data-column="header"]` — this screen has no header band, which is the
+       * whole reason its grid is one row. Asking the shared helper for one would
+       * be the test insisting on a zone § Desktop does not give it.
+       */
+      const measure = await boxOf(page.locator('[data-column="measure"]'));
+      const aside = await boxOf(page.locator('[data-column="aside"]'));
 
       expect(measure.width, "the form's column").toBeCloseTo(584, 0);
       expect(aside.width, "the utilities'").toBeCloseTo(356, 0);
@@ -556,13 +563,28 @@ test.describe("/settings", () => {
     });
   }
 
-  test("is one column below the cap", async ({ page }) => {
+  test("is one column below the cap and two at it", async ({ page }) => {
+    /*
+     * Asked of `display` rather than of boxes, which is what `/` and
+     * `/training` do and for a reason worth stating: below the cap these
+     * wrappers are `display: contents`, so they generate no box at all and
+     * `boundingBox()` has nothing to return. The columns are a thing that comes
+     * into existence at 1272, so the assertion is about their existence.
+     *
+     * `/weight` two describes above can be measured at both widths instead,
+     * because none of its five children is a wrapper — each is already one box,
+     * so there was nothing to dissolve.
+     */
+    const aside = page.locator('[data-column="aside"]');
+    const measure = page.locator('[data-column="measure"]');
+
     await page.setViewportSize({ width: 1271, height: 900 });
+    expect(await displayOf(measure), "the form at 1271px").toBe("contents");
+    expect(await displayOf(aside), "the utilities at 1271px").toBe("contents");
 
-    const { measure, aside } = await columns(page);
-
-    expect(aside.y, "the utilities are below the form").toBeGreaterThan(measure.y);
-    expect(aside.x, "in the same column").toBeCloseTo(measure.x, 0);
+    await page.setViewportSize({ width: 1272, height: 900 });
+    expect(await displayOf(measure), "the form at 1272px").toBe("flex");
+    expect(await displayOf(aside), "the utilities at 1272px").toBe("flex");
   });
 });
 

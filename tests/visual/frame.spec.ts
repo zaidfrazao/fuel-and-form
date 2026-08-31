@@ -33,13 +33,13 @@ import { FROZEN_NOW_MS } from "./constants";
 /** The demo banner's inner box: `aside` > frame > measure. */
 const BAND_MEASURE = 'aside[aria-label="Demo session"] > div > div';
 
-/** Where the centre of an element's border box is, in page coordinates. */
-const centreOf = async (locator: Locator) => {
+/** An element's border box, in page coordinates. */
+const boxOf = async (locator: Locator) => {
   const box = await locator.boundingBox();
 
-  if (!box) throw new Error("element is not visible, so it has no centre");
+  if (!box) throw new Error("element is not visible, so it has no box");
 
-  return box.x + box.width / 2;
+  return box;
 };
 
 test.beforeEach(async ({ page }) => {
@@ -53,7 +53,33 @@ test.beforeEach(async ({ page }) => {
  */
 const WIDTHS = [1024, 1280, 1440, 1920];
 
-test("the notice band and the content column share a centre", async ({ page }) => {
+/**
+ * ## This asked about centres until FUEL-78, and a centre was a proxy
+ *
+ * § Desktop states the rule as a position rather than as a centre: the notice
+ * bands "stop having a centre of their own: **they take the measure's
+ * position**", which is what `walk-reminder.tsx` says it wants — "the width and
+ * padding match every page's `main`, so the sentence lines up with the content
+ * beneath it". And the section is explicit about the frame generally:
+ * "**content is left-aligned in the frame, not centred in it.** ... Every screen
+ * puts its measure at the same x whether or not it has an aside."
+ *
+ * While every `<main>` in the app was exactly the measure, an equal centre and
+ * an equal x were the same assertion, and the centre was the one written. They
+ * stopped being the same assertion at FUEL-77, which gave `/` and `/training` a
+ * `<main>` spanning the measure and the aside — this test never looked at those
+ * two, so it went on passing — and FUEL-78 removes the last screen where the
+ * proxy held: `/shopping` now spans the frame for its list while its header
+ * stays on the measure.
+ *
+ * So the offset is measured where § Desktop puts it. The band's inner box and
+ * `<main>` begin at the same x, and the band is still the measure's width,
+ * because § Desktop's amendment leaves prose on the measure — a demo notice is
+ * a sentence. A band that had drifted from the column, which is the 124px fault
+ * this file was written for, fails on the first assertion; a band that had been
+ * widened to follow the content fails on the second.
+ */
+test("the notice band begins where the content column begins", async ({ page }) => {
   await page.goto("/shopping");
   await expect(page.getByRole("main")).toBeVisible();
 
@@ -64,11 +90,15 @@ test("the notice band and the content column share a centre", async ({ page }) =
   for (const width of WIDTHS) {
     await page.setViewportSize({ width, height: 900 });
 
-    const offset =
-      (await centreOf(page.locator(BAND_MEASURE))) -
-      (await centreOf(page.getByRole("main")));
+    const band = await boxOf(page.locator(BAND_MEASURE));
+    const main = await boxOf(page.getByRole("main"));
 
-    expect(Math.abs(offset), `banner offset at ${width}px`).toBeLessThan(0.5);
+    expect(Math.abs(band.x - main.x), `banner x at ${width}px`).toBeLessThan(0.5);
+
+    // The measure's width, whatever the page beside it has taken. 640 at every
+    // width here: `WIDTHS` starts at 1024, where the frame's second track is
+    // already the full measure.
+    expect(band.width, `banner width at ${width}px`).toBeCloseTo(640, 0);
   }
 });
 
