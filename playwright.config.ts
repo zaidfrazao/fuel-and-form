@@ -201,6 +201,17 @@ export default defineConfig({
      * 1440 and 1920 from one browser that resizes itself, where the `screens`
      * matrix would run it eight times to learn one width each.
      */
+    /**
+     * The scrollbar's gutter — FUEL-87, and a project of its own for the reason
+     * the others are: it asks whether a width changes, which has no theme, and
+     * it sets its own viewport per assertion.
+     */
+    {
+      name: "scrollbar-gutter",
+      testMatch: /scrollbar-gutter\.spec\.ts/,
+      dependencies: ["setup"],
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+    },
     {
       name: "page-columns",
       testMatch: /page-columns\.spec\.ts/,

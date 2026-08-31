@@ -341,7 +341,78 @@
   }
   html {
     @apply font-sans;
+
+    /* The scrollbar's gutter is permanent — FUEL-87.
+     *
+     * Everything on a screen is centred on `--frame-max` by `lib/frame.ts`'s
+     * `mx-auto`, so every centred element's x is `(clientWidth − 1272) / 2` —
+     * a function of the available width. On a browser that draws CLASSIC
+     * scrollbars, that width changes by the scrollbar's ~15px the moment a
+     * document stops overflowing, and the rail, the content column and both
+     * notice bands all move by half of it. Measured on `/`: 84.0px at
+     * clientWidth 1440, 76.5px at 1425.
+     *
+     * It reads as an intermittent wiggle rather than a constant offset because
+     * it depends on the window's height against each page's: sampling every
+     * frame through one navigation, the document goes 940 → 1043 → 1126, so at
+     * some window heights every route change crosses the threshold, and the
+     * loading skeleton — shorter than the page it stands in for — crosses it
+     * twice.
+     *
+     * `overflow-y: scroll` rather than `scrollbar-gutter: stable`, and the
+     * reason is support rather than cost. Both stop the width changing, and
+     * both reserve nothing where scrollbars are overlays — measured 0px in
+     * Chromium and Firefox here, tall document and short, for each of them. So
+     * neither costs a Mac at its default setting anything, and the visual
+     * baselines are untouched either way.
+     *
+     * What separates them is where the fault actually lives. `scrollbar-gutter`
+     * is Chrome 94+, Firefox 97+ and Safari **18.2+**; a Safari older than that
+     * with "Show scroll bars: Always" is a classic scrollbar with no gutter
+     * support, which is precisely the machine that reported this. `overflow-y`
+     * is universal, and the price is a painted-but-dead track on short pages
+     * where scrollbars take space — visible, honest, and preferable to content
+     * that moves.
+     *
+     * Measured rather than reasoned, and one of the measurements was wrong the
+     * first time: `page.setContent` produces a QUIRKS-mode document, where
+     * `scrollbar-gutter: stable` reserves 15px even under overlay scrollbars.
+     * That number is an artefact of `compatMode = BackCompat` and says nothing
+     * about this app, which is standards mode. Any future probe of this has to
+     * carry a doctype.
+     */
+    overflow-y: scroll;
   }
+}
+
+/* The scroll lock has nothing left to compensate for — FUEL-87.
+ *
+ * `react-remove-scroll-bar` measures `innerWidth − clientWidth` before it locks
+ * and adds that much `margin-right !important` to the body, on the assumption
+ * that hiding the body's overflow takes a scrollbar away. Above, it no longer
+ * does: the gutter belongs to `html` and is permanent, so the scrollbar is
+ * still there while the sheet is open and the margin is compensation for
+ * nothing — 15px of it, applied the moment a swap opens and removed when it
+ * closes, which is the jump this ticket exists to remove arriving from the
+ * other direction.
+ *
+ * Scoped to the attribute the library sets rather than to a class of ours, so
+ * it cannot apply at any other time. `--removed-body-scroll-bar-size` is left
+ * exactly as it is: `sheet.tsx` reads it to position the portal layer against
+ * the window, and that arithmetic is still right — what changes is only whether
+ * the body is pushed.
+ *
+ * **`html body[...]` and not `body[...]`, which was tried and lost.** The
+ * library injects its rule into a `<style>` at runtime, so it lands after this
+ * stylesheet; its selector is `body[data-scroll-locked]` and it is `!important`
+ * too. Two declarations of equal specificity, both important, are settled by
+ * source order — and theirs is later, so the obvious version of this rule is
+ * overridden by the thing it exists to override. Measured in the browser, not
+ * assumed: with the bare selector the locked body computes to `margin-right:
+ * 15px`, and with `html` in front it computes to `0px`. One element of
+ * specificity is the whole fix. */
+html body[data-scroll-locked] {
+  margin-right: 0 !important;
 }
 
 /* Brand Guide § Animation & Motion — the chart draw-in (FUEL-35).
