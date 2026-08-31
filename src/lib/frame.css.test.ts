@@ -175,6 +175,26 @@ describe("the page's own columns emit what they claim", () => {
   test("the action bar is placed rather than left to fall where it may", async () => {
     const css = await build(utilities(PAGE_MEASURE_FOOT));
     expect(css).toContain("grid-column-start: 1");
-    expect(css).toContain("grid-row-start: 2");
+
+    // Row three since FUEL-86 put the header band in row one. Still the row
+    // after the measure's sections; what changed is what is above them.
+    expect(css).toContain("grid-row-start: 3");
+
+    // And the two utilities that stop it paying for the aside's height — the
+    // auto margin zeroed so the bar sits at the TOP of its row, and the stretch
+    // released so its box is its own height rather than the row's. `frame.ts`
+    // carries the argument; this is that the CSS actually says it.
+    expect(css).toContain("margin-top: 0");
+    expect(css).toContain("align-self: flex-start");
+  });
+
+  test("the rows are declared, and the last one takes the aside's surplus", async () => {
+    const css = await build(utilities(PAGE_ASIDE_GRID));
+
+    // Three `auto` tracks split a spanning aside's surplus evenly, so the
+    // measure's row grows for a reason that has nothing to do with the measure
+    // and the bar goes down with it — measured at 183px on `/` before this.
+    // A flexible last track confines the surplus to the bar's row, below it.
+    expect(css).toContain("grid-template-rows: auto auto 1fr");
   });
 });

@@ -225,9 +225,11 @@ for (const path of ["/", "/training"]) {
     }) => {
       /*
        * FUEL-72 put the bar at the bottom of a tall `<main>` by `mt-auto`, and
-       * the mock draws it 30px under the last figure. At 1272 the mock wins:
-       * `PAGE_ASIDE_GRID` packs its rows to the top, so the bar's grid area is
-       * its own height and there is no free space for the auto margin to take.
+       * the mock draws it 30px under the last figure. At 1272 the mock wins,
+       * and since FUEL-86 it wins because `lib/frame.ts` says so rather than
+       * because the numbers happened to work out: `xl:mt-0` kills the auto
+       * margin and `xl:self-start` keeps the bar's box its own height, which
+       * this test measures.
        *
        * A tall viewport is the only place the two answers differ, which is why
        * the height here is 1400 rather than 900.
@@ -254,13 +256,19 @@ for (const path of ["/", "/training"]) {
        * about — and the one way this arrangement can still go wrong.
        *
        * A grid distributes a spanning item's height across the tracks it spans,
-       * so an aside taller than the measure plus the bar would grow row one and
-       * push the primary an arbitrary distance below the figures it acts on.
-       * Confined to row one it would do the same thing harder. Neither is true
-       * on these two screens today — the measure is the longer column on both,
-       * by a wide margin — and this is what says so out loud, at the width where
-       * it matters, so that a longer Anytime list is reported here rather than
-       * discovered in a screenshot.
+       * so an aside taller than the measure plus the bar grows the measure's
+       * row and pushes the primary an arbitrary distance below the figures it
+       * acts on.
+       *
+       * **This is no longer hypothetical, and the note that used to stand here
+       * is why the fix was cheap.** FUEL-77 wrote "neither is true on these two
+       * screens today — the measure is the longer column on both, by a wide
+       * margin", and FUEL-86 made it false on `/`: `The day` put the whole
+       * timeline in the aside and the day's totals left the measure, so the
+       * aside is 634px against the measure's 187 and the primary was measured
+       * 183px below its last figure. The answer is `xl:grid-rows-[auto_auto_1fr]`
+       * — the surplus is confined to the bar's row, below the bar — and this
+       * assertion is what holds it there.
        */
       const lastBlock = await boxOf(
         page.locator('[data-column="measure"] > *:last-child'),

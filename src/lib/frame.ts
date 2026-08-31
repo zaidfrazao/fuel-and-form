@@ -324,11 +324,24 @@ export const PAGE_ASIDE_COLUMN =
  * timeline, and at 1272 the bar was measured 212px below the measure's last
  * figure, in the middle of the void this milestone exists to remove.
  *
- * So the inertness is declared rather than inherited. An auto margin outranks
- * `align-self`, so `xl:self-start` would not have done it; zeroing the margin
- * is what leaves the bar at the top of its own row wherever that row ends up.
+ * So the inertness is declared rather than inherited, and it takes two
+ * utilities because the auto margin and the stretch are two different things.
+ *
+ * `xl:mt-0` is the position. An auto margin outranks `align-self` — a grid item
+ * with `margin-top: auto` ignores its alignment entirely — so `self-start`
+ * alone would have done nothing, and zeroing the margin is what leaves the bar
+ * at the TOP of its row wherever that row ends up.
+ *
+ * `xl:self-start` is the height. Row three is `1fr` and so absorbs whatever the
+ * aside still needs, and a grid item stretches to its area by default: the bar
+ * kept the right y and grew an 800px `bg-background` box beneath itself on a
+ * tall window. Nothing was drawn wrong, which is exactly why this is declared —
+ * `action-bar.spec.ts` and `page-columns.spec.ts` both measure the bar's BOX,
+ * and a box that is not the bar's own height makes every one of those numbers
+ * mean something slightly different from what it says.
+ *
  * `mt-auto` stays in the shared string because it is still doing its work below
  * this breakpoint — it is what puts the bar at the foot of a short page — and
  * this is the one width where the page has a second column to be shorter than.
  */
-export const PAGE_MEASURE_FOOT = "xl:col-start-1 xl:row-start-3 xl:mt-0";
+export const PAGE_MEASURE_FOOT = "xl:col-start-1 xl:row-start-3 xl:mt-0 xl:self-start";

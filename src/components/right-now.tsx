@@ -1586,7 +1586,18 @@ export function RightNow({
 
           <div className={PAGE_MEASURE_COLUMN} data-column="measure">
             <header className="flex flex-col gap-2">
-              <p className="text-micro uppercase text-text-secondary">Today</p>
+              {/* Stood down at the cap, where the folio in the band above says
+                  the same word 40px higher — § Desktop's "say a thing once",
+                  which is the rule FUEL-85 wrote against exactly this: a header
+                  that "stated one fact three ways". This is the only state
+                  where the two collide; the timeline's eyebrow is the slot and
+                  its time, and day-complete has no band.
+
+                  Hidden rather than removed, because below the cap there is no
+                  folio and the h1 would lose its caption entirely. It is a `p`
+                  and not a heading, so nothing about the document outline moves
+                  at either width. */}
+              <p className="text-micro uppercase text-text-secondary xl:hidden">Today</p>
               <h1 className="text-title text-text-primary">Nothing planned</h1>
               {/* § Tone of Voice — empty states describe what will appear, they
                   do not nudge. */}
