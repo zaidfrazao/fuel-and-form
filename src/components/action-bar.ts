@@ -81,3 +81,71 @@ export const ACTION_BAR =
  * arrangement in a specimen labelled with the phone's dimensions.
  */
 export const APP_ACTION_BAR = `${ACTION_BAR} lg:static`;
+
+/* -------------------------------------------------------------------------- */
+/* A control is its content plus air — § Buttons, FUEL-85; built in FUEL-86     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The controls, as a row at the frame's cap.
+ *
+ * § Buttons, amended by FUEL-85: "On a phone a page's action bar is full-width,
+ * because a full-width target is what a thumb wants and § Touch Targets asks
+ * for it. That is a phone's reason, so by this section's own carry-over test it
+ * does not travel: at ≥1272 the buttons in a **page action bar** take their
+ * content's width and sit in a row. A 584px slab is a thumb target drawn on a
+ * screen with no thumb, and a row is what lets a fourth control — Undo, when
+ * there is a log to take back — be a fourth item rather than a third row of
+ * slabs."
+ *
+ * ## Why this is a wrapper inside the bar rather than the bar itself
+ *
+ * Because the bar holds one thing that is not a control. § Feedback puts a
+ * refusal "at the point of action", so the inline banner is the bar's first
+ * child and it is a block that spans the column — turning the BAR into a row
+ * would stand the banner beside the buttons it is reporting on. The bar stays a
+ * flex column of at most two things: the banner, and this.
+ *
+ * `contents` below `xl`, so the phone is untouched: the primary, the
+ * Swap/Skip pair and the Undo row are the bar's own flex items in the order
+ * they are written, with the 12px gap they have always had.
+ *
+ * ## The gap is 12 and the mock draws 10
+ *
+ * Kept at `gap-3`. § Spacing's base scale is 4, 8, 12, 14, 20, 22, 26, 30 — 10
+ * is not on it and 12 is, the bar already uses 12 between its rows at every
+ * width, and a row that changed its gap by 2px at one breakpoint would be a
+ * number no rule in the guide can defend. Recorded rather than silently
+ * rounded: it is the one place this bar does not transcribe the drawing.
+ */
+export const ACTION_BAR_CONTROLS = "contents xl:flex xl:flex-row xl:items-center xl:gap-3";
+
+/**
+ * A pair of controls that share a row below the cap and dissolve into the row
+ * above it — Swap and Skip, Partial and Skip.
+ *
+ * The same `display: contents` device the column groups use in `lib/frame.ts`,
+ * for the same reason: one DOM, two shapes, and nothing reordered at either, so
+ * a screen reader meets these controls in one sequence at every width.
+ */
+export const ACTION_BAR_SPLIT = "flex gap-3 xl:contents";
+
+/**
+ * The primary, and the Undo row's wrapper: full-width below the cap, its own
+ * width at it.
+ *
+ * `xl:w-auto` rather than a width, because the whole rule is that the control
+ * is its content plus air. `Button` already carries the air — the size variants
+ * set the padding — so there is nothing here to name.
+ */
+export const ACTION_BAR_PRIMARY = "w-full xl:w-auto";
+
+/**
+ * A control that shares the phone's second row.
+ *
+ * `flex-1` splits that row in two; `xl:flex-none` gives the shorthand back at
+ * the cap, where the pair has become two items of the controls row and `flex: 1
+ * 1 0%` would stretch them to fill the measure — the slab this rule exists to
+ * remove, drawn twice instead of once.
+ */
+export const ACTION_BAR_SECONDARY = "flex-1 xl:flex-none";

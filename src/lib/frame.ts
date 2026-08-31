@@ -190,6 +190,49 @@ export const PAGE_ASIDE_GRID =
 export const PAGE_ASIDE_UNWRAP = "xl:contents";
 
 /**
+ * The header band, across both columns — FUEL-86.
+ *
+ * § Desktop's "one job per zone" gives this one the question *where am I in
+ * this?*, and answers it with "a Micro folio line, and the screen's own time
+ * graphic if it has one — `/`'s ruler, `/training`'s paginator". Those are the
+ * two things FUEL-85's amendment released from the measure: the 640 "binds
+ * prose, and only prose", and "a folio line, a time axis, a trend line and a
+ * table are none of them".
+ *
+ * ## Why this is a third row rather than a taller first one
+ *
+ * The band spans the measure and the aside, so it cannot be a member of either
+ * column group — a grid item spans tracks, not columns it is nested inside. It
+ * is a sibling of the two groups, placed in a row of its own above them, which
+ * is why every placement below moved down one:
+ *
+ * ```
+ * rail |28|<---- measure 584 ---->|28|<- aside 356 ->|
+ *      |  |  row 1  the band, spanning 1024          |
+ *      |  |  row 2  measure column | aside column    |
+ *      |  |  row 3  action bar     | (aside spans)   |
+ * ```
+ *
+ * `col-end-[-1]` rather than `col-span-2` for the reason `FRAME_MEASURE_AND_
+ * ASIDE` gives: the shorthand sets both ends, so `cn` would drop the
+ * `xl:col-start-1` it conflicts with.
+ *
+ * ## The margin is not a row gap, and that is the same argument as before
+ *
+ * `PAGE_ASIDE_GRID` has no `row-gap` on purpose — the action bar brings its own
+ * `pt-[30px]` from `action-bar.ts`, so a 30px row gap would draw 60 under the
+ * measure. That was true when there were two rows and it is still true now, so
+ * the 30px between the band and the content is the band's own bottom margin
+ * rather than a gap the bar would also pay.
+ *
+ * `contents` below `xl` like the two column groups, so the folio and the
+ * graphic stay where they already are in the phone's flat flex column and the
+ * margin — which `display: contents` ignores — never reaches it.
+ */
+export const PAGE_HEADER_BAND =
+  "contents xl:col-start-1 xl:col-end-[-1] xl:row-start-1 xl:mb-[30px] xl:flex xl:min-w-0 xl:flex-col";
+
+/**
  * The first column: the subject, the figures, and the action bar under them.
  *
  * `contents` below `xl` for the reason above — this wrapper exists to group the
@@ -197,23 +240,27 @@ export const PAGE_ASIDE_UNWRAP = "xl:contents";
  * item into the phone's column and take its sections out of the rhythm.
  */
 export const PAGE_MEASURE_COLUMN =
-  "contents xl:col-start-1 xl:row-start-1 xl:flex xl:min-w-0 xl:flex-col xl:gap-[30px]";
+  "contents xl:col-start-1 xl:row-start-2 xl:flex xl:min-w-0 xl:flex-col xl:gap-[30px]";
 
 /**
  * The second column: what the 544px of nothing is given to hold.
  *
  * `row-span-2` is what keeps the bar where the mock draws it. The measure's
- * sections are row one and the action bar is row two, so an aside confined to
- * row one would make that row as tall as whichever column was taller — and on a
- * day with a long Anytime list that is the aside, which would push the bar an
- * arbitrary distance below the figures it belongs to. Spanning both rows lets
- * the two columns end where their own content ends.
+ * sections are the content row and the action bar is the one below it, so an
+ * aside confined to the content row would make that row as tall as whichever
+ * column was taller — and on a day with a long Anytime list that is the aside,
+ * which would push the bar an arbitrary distance below the figures it belongs
+ * to. Spanning both rows lets the two columns end where their own content ends.
+ *
+ * The span is still two and not three: the band above is a row this column has
+ * no business in, which is the whole point of giving it one. FUEL-86 moved the
+ * start from row 1 to row 2 and left the count alone.
  *
  * `min-w-0`, because a grid item's `min-width` is `auto` and the dot grid and
  * the recent-session rows are content that would rather not shrink.
  */
 export const PAGE_ASIDE_COLUMN =
-  "contents xl:col-start-2 xl:row-start-1 xl:row-span-2 xl:flex xl:min-w-0 xl:flex-col xl:gap-[30px]";
+  "contents xl:col-start-2 xl:row-start-2 xl:row-span-2 xl:flex xl:min-w-0 xl:flex-col xl:gap-[30px]";
 
 /**
  * The action bar, at the foot of the measure rather than the foot of the page.
@@ -228,5 +275,8 @@ export const PAGE_ASIDE_COLUMN =
  * FUEL-72's `lg:static`: the bar's grid area is its own height, so there is no
  * free space for an auto margin to absorb. Both stay in the shared string
  * because both are still doing their work below this breakpoint.
+ *
+ * Row three since FUEL-86 put the header band in row one. The bar is still the
+ * row after the measure's sections; what changed is what is above them.
  */
-export const PAGE_MEASURE_FOOT = "xl:col-start-1 xl:row-start-2";
+export const PAGE_MEASURE_FOOT = "xl:col-start-1 xl:row-start-3";

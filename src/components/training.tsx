@@ -4,7 +4,13 @@ import Link from "next/link";
 import { type ReactNode, startTransition, useOptimistic, useState } from "react";
 
 import { clearSessionStatus, setSessionStatus } from "@/app/actions/training";
-import { APP_ACTION_BAR } from "@/components/action-bar";
+import {
+  ACTION_BAR_CONTROLS,
+  ACTION_BAR_PRIMARY,
+  ACTION_BAR_SECONDARY,
+  ACTION_BAR_SPLIT,
+  APP_ACTION_BAR,
+} from "@/components/action-bar";
 import { DotGrid, type Week } from "@/components/dot-grid";
 import { ExerciseList, type ListedExercise } from "@/components/exercise-list";
 import { SlashMeta } from "@/components/kv-grid";
@@ -12,13 +18,14 @@ import { PageMain } from "@/components/page-main";
 import { RecentSessions } from "@/components/recent-sessions";
 import { Button } from "@/components/ui/button";
 import { WalkRow } from "@/components/walk-row";
-import { recentSessions } from "@/lib/adherence";
+import { recentSessions, weekStanding } from "@/lib/adherence";
 import { addDays, type CalendarDate } from "@/lib/date";
 import type { WorkoutLogStatus } from "@/lib/db/schema";
 import {
   PAGE_ASIDE_COLUMN,
   PAGE_ASIDE_GRID,
   PAGE_ASIDE_UNWRAP,
+  PAGE_HEADER_BAND,
   PAGE_MEASURE_COLUMN,
   PAGE_MEASURE_FOOT,
 } from "@/lib/frame";
@@ -140,7 +147,12 @@ function DateNav({ date, today }: { date: CalendarDate; today: CalendarDate }) {
   const next = addDays(date, 1);
 
   return (
-    <nav aria-label="Date" className="flex items-center justify-between gap-3">
+    // Full width below the frame's cap, where this is a section of the measure
+    // and `justify-between` puts Prev and Next at its two edges. In the header
+    // band it is a flex item sized to its content, so the spread has nothing to
+    // spread and the three parts sit together at the left of the band with the
+    // mock's 20px between them — the week's standing takes the right.
+    <nav aria-label="Date" className="flex items-center justify-between gap-3 xl:gap-5">
       <Link
         href={`/training?date=${previous}`}
         aria-label={`Previous day, ${dayLabel(previous)}`}
@@ -375,6 +387,19 @@ export function Training({
     ((note.trim() || null) !== entry.note ||
       (duration === "" ? null : Number(duration)) !== entry.durationMin);
 
+  /*
+   * The right of the header band — FUEL-86.
+   *
+   * Read off the same six weeks the dot grid draws, so the count and the dots
+   * cannot disagree; `lib/adherence.ts` carries the counting rules. Not
+   * optimistic: `adherence` is the server's, so a status tapped here moves the
+   * dots and this number on the render that follows rather than on the frame of
+   * the tap. That is the same latency the grid below has always had, and the
+   * band is orientation rather than feedback — § Feedback's 300ms budget is
+   * about the control the reader touched, which is the bar.
+   */
+  const standing = weekStanding(adherence, date);
+
   return (
     // 12px of head clearance below 768px — FUEL-82, the same reduction `/` takes
     // and for the same reason: this screen carries the identical 140px action bar
@@ -393,11 +418,54 @@ export function Training({
        * already the last three.
        */}
       <div className={`flex flex-col gap-7 ${PAGE_ASIDE_UNWRAP}`}>
+        {/*
+         * The header band — § Desktop's "one job per zone", FUEL-85/86.
+         *
+         * "Where am I in this?", and on this screen the paginator IS the
+         * answer: it names the date and it is the control that moves it. The
+         * week's standing joins it on the right, which is the same question at
+         * the next scale up — the session on screen, and the week it is in.
+         *
+         * The band draws its own hairline here, where `/` does not. § Desktop
+         * gives the rule as "the graphic's own hairline closes the band, so the
+         * separator is the graphic rather than a rule drawn near it" — `/`'s
+         * ruler has one and a row of links does not, so this band supplies what
+         * the mock draws it with.
+         *
+         * `DateNav` moves out of the measure group and into this one, which
+         * moves nothing below the cap: it was that group's first child and this
+         * group sits immediately before it, so the flat column is the same list
+         * in the same order. That is the whole reason the 375 and 820 baselines
+         * are expected back byte-identical.
+         *
+         * The row overrides the band's default column, which `cn` resolves —
+         * `xl:flex-row` and `xl:flex-col` are one property, so the later wins
+         * rather than both landing.
+         */}
+        <div
+          className={cn(
+            PAGE_HEADER_BAND,
+            "xl:flex-row xl:items-baseline xl:justify-between xl:gap-5 xl:border-b xl:border-border xl:pb-4",
+          )}
+          data-column="header"
+        >
+          <DateNav date={date} today={today} />
+
+          {standing && (
+            /* Micro and a caption, like `/`'s folio — § Desktop: "the folio is
+               a caption, not a heading". Hidden below the cap, where the band
+               does not exist and this would land under the paginator as a
+               second line the phone was never measured with. */
+            <p className="hidden text-micro uppercase text-text-tertiary xl:block">
+              {standing.done} of {standing.sessions} sessions this week
+            </p>
+          )}
+        </div>
+
         {/* § Desktop: "the measure keeps the session and the exercise list."
             The note and the recorded status join them — they are this session's
             own record, and the bar below acts on exactly what they hold. */}
         <div className={cn(PAGE_MEASURE_COLUMN, "xl:gap-7")} data-column="measure">
-        <DateNav date={date} today={today} />
 
         {session ? (
           <Subject item={session} />
@@ -643,37 +711,42 @@ export function Training({
            * is the reason these are three buttons rather than a primary and two
            * alternatives: they are one choice with three answers.
            */}
-          <Button
-            className="w-full"
-            aria-pressed={entry?.status === "done"}
-            onClick={() => record("done")}
-          >
-            Mark done
-          </Button>
-          <div className="flex gap-3">
+          {/* A column of slabs on a phone, a row of content-width controls at
+              the frame's cap — § Buttons, FUEL-85. `action-bar.ts` carries the
+              argument and the strings; the banner above stays outside the row
+              because it is a block that spans the column. */}
+          <div className={ACTION_BAR_CONTROLS}>
             <Button
-              variant="secondary"
-              className="flex-1"
-              aria-pressed={entry?.status === "partial"}
-              onClick={() => record("partial")}
+              className={ACTION_BAR_PRIMARY}
+              aria-pressed={entry?.status === "done"}
+              onClick={() => record("done")}
             >
-              Partial
+              Mark done
             </Button>
-            <Button
-              variant="secondary"
-              className="flex-1"
-              aria-pressed={entry?.status === "skipped"}
-              onClick={() => record("skipped")}
-            >
-              Skip
-            </Button>
-          </div>
+            <div className={ACTION_BAR_SPLIT}>
+              <Button
+                variant="secondary"
+                className={ACTION_BAR_SECONDARY}
+                aria-pressed={entry?.status === "partial"}
+                onClick={() => record("partial")}
+              >
+                Partial
+              </Button>
+              <Button
+                variant="secondary"
+                className={ACTION_BAR_SECONDARY}
+                aria-pressed={entry?.status === "skipped"}
+                onClick={() => record("skipped")}
+              >
+                Skip
+              </Button>
+            </div>
 
           {/* Tertiary, so the Text variant — § Buttons gives it to Revert, and
               these are the same kind of thing: the way back from a tap that was
               made, for the uncommon case where it was the wrong one. */}
           {entry && (
-            <div className="flex items-center gap-4">
+            <div className={cn("flex items-center gap-4", ACTION_BAR_PRIMARY)}>
               {/* Offered only when the boxes hold something the server has
                   not been told. Before a status exists the note has a control
                   already — it travels with whichever status is tapped — and
@@ -690,6 +763,7 @@ export function Training({
               </Button>
             </div>
           )}
+          </div>
         </div>
       ) : null}
     </PageMain>

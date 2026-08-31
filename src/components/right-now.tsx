@@ -3,7 +3,13 @@
 import { type ReactNode, startTransition, useOptimistic, useState } from "react";
 
 import { logItem, undoLastLog } from "@/app/actions/log";
-import { APP_ACTION_BAR } from "@/components/action-bar";
+import {
+  ACTION_BAR_CONTROLS,
+  ACTION_BAR_PRIMARY,
+  ACTION_BAR_SECONDARY,
+  ACTION_BAR_SPLIT,
+  APP_ACTION_BAR,
+} from "@/components/action-bar";
 import { repeatMeal, revertSwap, swapMeal } from "@/app/actions/swap";
 import { DayComplete } from "@/components/day-complete";
 import Link from "next/link";
@@ -17,18 +23,25 @@ import { SwapSheet, type PlannedMeal, type SwappableMeal } from "@/components/sw
 import { WalkRow } from "@/components/walk-row";
 import { Button } from "@/components/ui/button";
 import type { CalendarDate } from "@/lib/date";
-import { type LoggedEntry, pendingEntry } from "@/lib/day-summary";
+import {
+  type DayRow,
+  type LoggedEntry,
+  pendingEntry,
+  STATUS_LABEL,
+  theDay,
+} from "@/lib/day-summary";
 import type { WorkoutExercise } from "@/lib/db/schema";
 import {
   PAGE_ASIDE_COLUMN,
   PAGE_ASIDE_GRID,
   PAGE_ASIDE_UNWRAP,
+  PAGE_HEADER_BAND,
   PAGE_MEASURE_COLUMN,
   PAGE_MEASURE_FOOT,
 } from "@/lib/frame";
 import type { LogVerb } from "@/lib/log-intent";
 import { type MacroBearing, type MacroTarget, summariseDay } from "@/lib/macros";
-import { itemLabel, itemName, rulerSlots } from "@/lib/now-display";
+import { folioLabel, itemLabel, itemName, rulerSlots } from "@/lib/now-display";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { swapNote } from "@/lib/swap-note";
 import { cn } from "@/lib/utils";
@@ -264,7 +277,25 @@ function MealMacros({
     <section className={cn("flex flex-col gap-[14px]", className)} {...rest}>
       <Eyebrow>This meal</Eyebrow>
 
+      {/*
+       * Four-across at the frame's cap, 2×2 below it — § Desktop's density
+       * rule as FUEL-85 amended it: "the four-macro grid, which this rule names
+       * out of scope, goes four-across on a measure and stays 2×2 in an aside.
+       * At 584 the 2×2 puts around 300px between a label and the next value,
+       * which is four islands rather than a grid."
+       *
+       * This grid is the measure's, so it takes the four. `DayTotals` below is
+       * the aside's and keeps the two. Same component, same rule about content,
+       * two column counts because the two columns are different widths — which
+       * is why the count is a prop rather than something the grid works out.
+       *
+       * `columns={4}` is the whole shape and not just the desktop half — see
+       * `kv-grid.tsx`, which owns the breakpoint. Four across a 375px phone is
+       * 83px a column against the guide's own 110px test, so a `4` that meant
+       * four at every width would be a count no screen could use.
+       */}
       <KeyValueGrid
+        columns={4}
         items={[
           { label: "Calories", value: `${meal.kcal}` },
           { label: "Protein", value: `${meal.proteinG} g`, emphasis: true },
@@ -327,6 +358,25 @@ function DayTotals({
  * view decides how many to show (resolve-now.ts:203-208), and the PRD's
  * criterion is "the next two upcoming items are shown with their scheduled
  * times". More than two turns a glance into a list to be read.
+ *
+ * ## It stands down at the frame's cap — FUEL-86
+ *
+ * `The day` below lists every item with its status, so it contains the next two
+ * and `Up next` beside it would be the same fact printed twice — § Desktop's
+ * "say a thing once", which names "the figure, a bar showing its ratio, and the
+ * remainder in words" as the draft it was written against.
+ *
+ * The phone keeps this one. The PRD's criterion is measured on the phone and it
+ * asks for exactly two; a desktop aside is 356px of column with the whole day's
+ * worth of room in it, and the two devices are answering different questions.
+ *
+ * A second DOM copy rather than a slice of one list, which is the choice
+ * FUEL-86 asked to be made deliberately. `display: none` on the copy that is
+ * off, so exactly one is in the accessibility tree at any width and neither is
+ * reordered — the device the three ruler copies already use. `xl:hidden` alone
+ * is safe from the emission-order trap that produced two rulers in FUEL-77:
+ * that needed two VARIANTS on one property, and there is no `md:` rule on this
+ * one for `xl:` to have to outrank.
  */
 function UpNext({ items }: { items: readonly ScheduledItem[] }) {
   const next = items.slice(0, 2);
@@ -334,7 +384,7 @@ function UpNext({ items }: { items: readonly ScheduledItem[] }) {
   if (next.length === 0) return null;
 
   return (
-    <section className="flex flex-col gap-[14px]">
+    <section className="flex flex-col gap-[14px] xl:hidden">
       <Eyebrow>Up next</Eyebrow>
       <ul className="flex flex-col">
         {next.map((item) => (
@@ -347,6 +397,88 @@ function UpNext({ items }: { items: readonly ScheduledItem[] }) {
               <span className="text-micro uppercase text-text-tertiary">{itemLabel(item)}</span>
             </span>
             <span className="text-body text-text-secondary">{item.at}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * The whole day, with what became of each item — FUEL-86, and the frame's cap
+ * only.
+ *
+ * § Desktop gives the aside "the record, the pattern, the day around it", and
+ * the redrawn `/` spends that on the day itself: every scheduled item, in
+ * order, with its status. It is the one section on this screen that is not a
+ * reflow of something the phone already draws — `Up next` above stands down for
+ * it, and the argument for the pair being two DOM copies is written there.
+ *
+ * `day-summary.ts`'s `theDay` does the joining and carries the reasoning for
+ * it. Nothing here fetches: the timeline and the log are both already props.
+ *
+ * ## Marked by weight, never by colour
+ *
+ * § The Four Rules allows "one umber element per screen, and it always says:
+ * you are here" — on `/` that is the ruler's NOW marker, which is now directly
+ * above this list in the header band. So the current row is marked the way
+ * `recent-sessions.tsx` marks one: the rows behind it recede to
+ * `text-secondary` and it does not. FUEL-85 records the first draft of this
+ * frame having had three umber elements and this list holding one of them.
+ *
+ * ## The row is day-complete's row
+ *
+ * 44px with 10px of padding, a name on the left and a Micro word on the right —
+ * `day-complete.tsx`'s `Logged` exactly, because it is the same row saying the
+ * same thing about the same day. § Desktop's "nothing else gets denser above
+ * 1024px" is not in tension with it: this is not a tightened 54px row, it is
+ * the height that row already has everywhere it appears, and the mock draws
+ * these two lists at the same 44.
+ *
+ * An item the cursor has walked past without logging keeps its time rather than
+ * inventing a word for it. That is the manual advance's own state — "I'm done"
+ * without a tap on anything — and § Tone of Voice would rather say nothing than
+ * name it something it was not.
+ */
+function TheDay({ rows }: { rows: readonly DayRow[] }) {
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="hidden flex-col gap-[14px] xl:flex">
+      <Eyebrow>The day</Eyebrow>
+      <ul className="flex flex-col">
+        {rows.map((row) => (
+          <li
+            key={row.key}
+            className="flex min-h-[44px] items-center justify-between gap-4 border-b border-border py-[10px] last:border-b-0"
+          >
+            <span
+              className={cn(
+                "truncate text-body",
+                row.place === "past" ? "text-text-secondary" : "text-text-primary",
+              )}
+            >
+              {row.name}
+            </span>
+
+            {row.place === "now" ? (
+              <span className="text-micro uppercase text-text-primary">Now</span>
+            ) : row.status ? (
+              <span
+                className={cn(
+                  "text-micro uppercase text-text-secondary",
+                  // The same step down day-complete makes, and for the reason
+                  // it gives: "a skip is a neutral fact about the day, and
+                  // greying it out is the closest this screen could come to a
+                  // judgement. Weight recedes without dimming."
+                  row.status === "skipped" && "font-normal",
+                )}
+              >
+                {STATUS_LABEL[row.status]}
+              </span>
+            ) : (
+              <span className="text-body text-text-secondary">{row.at}</span>
+            )}
           </li>
         ))}
       </ul>
@@ -532,33 +664,42 @@ function Actions({
         </div>
       )}
 
-      {item && (
-        <>
-          <Button
-            className="w-full"
-            onClick={() => onAct({ kind: "act", item, verb: "log" })}
-          >
-            {item.kind === "meal" ? "Log eaten" : "Mark done"}
-          </Button>
-          <div className="flex gap-3">
-            {/* No longer disabled — FUEL-23 gives it the sheet it was waiting
-                for. Secondary, per § Buttons, which names Swap as its example
-                of "a real action that isn't the main one". */}
-            {item.kind === "meal" && (
-              <Button variant="secondary" className="flex-1" onClick={onSwap}>
-                Swap
-              </Button>
-            )}
+      {/* The controls, which are a column of slabs on a phone and a row of
+          content-width buttons at the frame's cap — § Buttons, FUEL-85. The
+          banner above stays outside it: it is a block that spans the column,
+          and `action-bar.ts` carries the argument. */}
+      <div className={ACTION_BAR_CONTROLS}>
+        {item && (
+          <>
             <Button
-              variant="secondary"
-              className="flex-1"
-              onClick={() => onAct({ kind: "act", item, verb: "skip" })}
+              className={ACTION_BAR_PRIMARY}
+              onClick={() => onAct({ kind: "act", item, verb: "log" })}
             >
-              Skip
+              {item.kind === "meal" ? "Log eaten" : "Mark done"}
             </Button>
-          </div>
-        </>
-      )}
+            <div className={ACTION_BAR_SPLIT}>
+              {/* No longer disabled — FUEL-23 gives it the sheet it was waiting
+                  for. Secondary, per § Buttons, which names Swap as its example
+                  of "a real action that isn't the main one". */}
+              {item.kind === "meal" && (
+                <Button
+                  variant="secondary"
+                  className={ACTION_BAR_SECONDARY}
+                  onClick={onSwap}
+                >
+                  Swap
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                className={ACTION_BAR_SECONDARY}
+                onClick={() => onAct({ kind: "act", item, verb: "skip" })}
+              >
+                Skip
+              </Button>
+            </div>
+          </>
+        )}
 
       {/*
        * Tertiary, so the Text variant — § Buttons gives that one to "Revert",
@@ -571,13 +712,19 @@ function Actions({
        * takes back the log the primary button above it wrote, seconds ago, and
        * moving it away from that button would be moving it away from its cause.
        */}
-      {undoable && (
-        <div className="flex items-center gap-4">
-          <Button variant="link" onClick={() => onAct({ kind: "undo" })}>
-            Undo
-          </Button>
-        </div>
-      )}
+        {/* The fourth item in the row, at the cap — which is § Buttons' own
+            stated reason for the row existing: "a row is what lets a fourth
+            control — Undo, when there is a log to take back — be a fourth item
+            rather than a third row of slabs". Below the cap it is the third
+            row it has always been. */}
+        {undoable && (
+          <div className={cn("flex items-center gap-4", ACTION_BAR_PRIMARY)}>
+            <Button variant="link" onClick={() => onAct({ kind: "undo" })}>
+              Undo
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1151,11 +1298,13 @@ export function RightNow({
     // which is the inconsistency rather than the rhythm. Restored from 768px up,
     // where the rhythm it was tuned against is still what runs.
     //
-    // And spent again at 1272 — FUEL-77. The 8px is clearance from the block
-    // ABOVE the ruler, and in the aside there is no block above it: the ruler is
-    // the first thing in the second column, so the padding would drop it 8px
-    // below the eyebrow it is drawn level with in the mock. One string for all
-    // three copies, since the two that are hidden at this width cannot care.
+    // And spent again at 1272 — FUEL-77, and still spent after FUEL-86 moved
+    // this copy into the header band. The 8px is clearance from a block the
+    // ruler has to clear, and in the band the block above it is the folio,
+    // which the mock draws 2px away: a caption and the graphic it captions are
+    // one unit, so the band sets that 2px as its own gap and the ruler adds
+    // nothing to it. One string for all three copies, since the two that are
+    // hidden at this width cannot care.
     //
     // `md:max-xl:` and not `md:pt-2 xl:pt-0`, for the reason `RULER_AT` sets out
     // at length: Tailwind emits the redefined `xl` media block BEFORE `md`, so
@@ -1200,10 +1349,12 @@ export function RightNow({
   /*
    * A third position, and the same device — FUEL-77.
    *
-   * At ≥1272 the ruler is not on the measure at all: § Desktop gives the aside
-   * "the day ruler and the Anytime list, which is what the 544px of nothing sat
-   * in front of". So the copy that serves 768–1271 stands down at `xl` and the
-   * one in the second column takes over.
+   * At ≥1272 the ruler is not on the measure at all. FUEL-77 read § Desktop as
+   * putting it in the aside; FUEL-85 asked what each zone is for and moved it
+   * to the header band, which is the zone whose question it answers — "where am
+   * I in this?" — and whose hairline it now IS. Either way the copy that serves
+   * 768–1271 stands down at `xl` and another takes over; what changed is which
+   * group the third copy is written in.
    *
    * Three copies rather than two, for the reason there were two: `order` and
    * grid placement both move the box without moving the sequence, so a screen
@@ -1222,7 +1373,7 @@ export function RightNow({
     // it drops the `hidden md:block` half and keeps only the stand-down at the
     // cap — there is no merged grid here for the ruler to move around.
     <div
-      className={activeMeal ? RULER_AT.wide : RULER_AT.wideOnSession}
+      className={activeMeal ? RULER_AT.wide : RULER_AT.belowCap}
       data-ruler="wide"
     >
       {ruler}
@@ -1235,9 +1386,50 @@ export function RightNow({
     </div>
   ) : null;
 
-  const rulerAside = (
-    <div className={RULER_AT.aside} data-ruler="aside">
+  const rulerBelowCap = (
+    <div className={RULER_AT.belowCap} data-ruler="below-cap">
       {ruler}
+    </div>
+  );
+
+  /*
+   * The header band — § Desktop's "one job per zone", FUEL-85/86.
+   *
+   * "Where am I in this?", answered by a Micro folio line and the screen's own
+   * time graphic, "whose hairline closes the band, so the separator is the
+   * graphic rather than a rule drawn near it". Nothing else goes here: a second
+   * heading would arrive before the subject, and a figure would put the reader
+   * in front of three things that all want to be read first.
+   *
+   * Both children are `hidden` below the cap, so the band contributes nothing
+   * to the phone — not even a gap, since a `display: none` child of a
+   * `display: contents` group is not a flex item and the wrapper's `gap` has
+   * nothing to draw between. That is the whole of how the 375 and 820 baselines
+   * come back byte-identical with a new zone in the DOM.
+   *
+   * The 2px gap is the mock's, and it is a caption's gap rather than a section
+   * rhythm: the folio and the graphic it captions are one unit, which is why
+   * this is not the 30px that separates everything else.
+   */
+  const rulerHeader = (
+    <div className={RULER_AT.header} data-ruler="header">
+      {ruler}
+    </div>
+  );
+
+  const header = (
+    <div className={cn(PAGE_HEADER_BAND, "xl:gap-[2px]")} data-column="header">
+      {/* Micro, tertiary, and a caption rather than a heading — § Desktop:
+          "the folio is a caption, not a heading. Micro is this system's
+          register for metadata and a date on a screen that is always today is
+          metadata." Not an `h1`/`h2` for the same reason, so the screen's
+          heading order is untouched at every width. The same treatment
+          `day-complete.tsx` already gives the date in its own corner. */}
+      <p className="hidden text-micro uppercase text-text-tertiary xl:block">
+        {folioLabel(base.date)}
+      </p>
+
+      {base.timeline.length > 0 && rulerHeader}
     </div>
   );
 
@@ -1386,6 +1578,12 @@ export function RightNow({
        */
       <Screen className={PAGE_ASIDE_GRID}>
         <div className={`flex flex-col gap-[30px] ${PAGE_ASIDE_UNWRAP}`}>
+          {/* The same header band as the timeline state, and the same reason
+              this state takes it: the band answers "where am I in this?", and a
+              day the plan does not cover is still a day the reader is somewhere
+              in. The ruler only appears if there is a timeline to draw. */}
+          {header}
+
           <div className={PAGE_MEASURE_COLUMN} data-column="measure">
             <header className="flex flex-col gap-2">
               <p className="text-micro uppercase text-text-secondary">Today</p>
@@ -1399,11 +1597,11 @@ export function RightNow({
           </div>
 
           <div className={PAGE_ASIDE_COLUMN} data-column="aside">
-            {/* One copy, not three: there is no macro grid here for the ruler to
-                move around, so it has occupied one position at every width since
-                FUEL-82 and it keeps it. `xl:pt-0` in the shared string is what
-                lands it level with the heading beside it. */}
-            {base.timeline.length > 0 && ruler}
+            {/* Two copies, not three: there is no macro grid here for the ruler
+                to move around, so the phone and the wide band share this one
+                and the band above takes the cap. `xl:pt-0` in the shared string
+                is what lands it level with the heading beside it. */}
+            {base.timeline.length > 0 && rulerBelowCap}
 
             <Anytime items={base.anytime} date={base.date} walks={walks} />
 
@@ -1430,17 +1628,27 @@ export function RightNow({
        * fall inside the 354px that leaves.
        *
        * At 1272 this wrapper stops generating a box — `PAGE_ASIDE_UNWRAP` —
-       * and the two groups inside it become `<main>`'s grid items. That is what
-       * lets one DOM serve both shapes: below the breakpoint the groups are
-       * `display: contents` and this is the single flex column it has always
-       * been, with the sections in the order they are written and the rhythm
-       * above between them. Nothing is reordered at any width, which is the
-       * whole reason the composition is grouped rather than placed.
+       * and the three groups inside it become `<main>`'s grid items. That is
+       * what lets one DOM serve both shapes: below the breakpoint the groups
+       * are `display: contents` and this is the single flex column it has
+       * always been, with the sections in the order they are written and the
+       * rhythm above between them. Nothing is reordered at any width, which is
+       * the whole reason the composition is grouped rather than placed.
+       *
+       * Three since FUEL-86, and the third is first: the header band spans both
+       * columns above them. Everything in it is hidden below the cap, so the
+       * phone's column is the same list of visible sections it was.
        */}
       <div className={`flex flex-col gap-[22px] md:gap-[30px] ${PAGE_ASIDE_UNWRAP}`}>
+        {header}
+
         {/* The measure: the subject, the figures it is measured on, and — as a
-            grid item below this group — the action bar. § Desktop: "the measure
-            keeps the meal, the macro grid and the action bar". */}
+            grid item below this group — the action bar. § Desktop, redrawn:
+            "the measure keeps the meal, its four figures four-across, and the
+            actions in a row, each sized to its content". The day's own totals
+            left for the aside, which is the redraw's one real move on this
+            screen: a grid saying the day's numbers and a grid saying the meal's
+            were two identical four-figure grids stacked. */}
         <div className={PAGE_MEASURE_COLUMN} data-column="measure">
         <Subject
           item={now.active}
@@ -1508,45 +1716,56 @@ export function RightNow({
           />
         )}
 
-        {/* After the swap note, and that order is the argument: the note says
-            what the swap cost, and these are the figures it cost it from.
-
-            Hidden below 768px when there is a meal, because `MealDayGrid` above
-            is already carrying these four figures — FUEL-82. On a workout card
-            there is no meal to merge into, so the section renders at every width
-            and the day's numbers are still on the screen, which is the point
-            `DayTotals` makes about being present on a session too. */}
-        <DayTotals
-          planned={plannedToday}
-          target={target}
-          className={activeMeal ? "hidden md:flex" : undefined}
-        />
         </div>
 
         {/*
-         * The aside — § Desktop: "the aside takes the day ruler and the Anytime
-         * list, which is what the 544px of nothing sat in front of".
+         * The aside — § Desktop, as FUEL-85 redrew it: "the aside takes the
+         * day's totals, the day's own items with their status, and the Anytime
+         * list". The zone's question is "what is the context?", and each of the
+         * three answers a part of it — the day against target, the day itself,
+         * and what can still be logged.
          *
-         * Up next joins them, and the mock does not settle it: it draws a day
-         * with nothing upcoming, so the section is absent there rather than
-         * placed. It goes here because it answers the ruler's question — what is
-         * left of the day, and when — and because the measure is the card and
-         * its figures. The rule that decides it is § Desktop's own division: the
-         * measure keeps the subject and its primary action, the aside takes the
-         * day around it.
+         * The ruler left this column for the header band, where its question is
+         * the band's. Up next stayed and stood down: `The day` contains its two
+         * items and § Desktop's "say a thing once" decides between them.
          *
-         * The group starts where the phone's own sequence already had these
-         * three, so nothing moves below 1272: the ruler's phone copy, then Up
-         * next, then Anytime, then the foot link.
+         * ## Nothing moves below the cap, and the order is why
+         *
+         * `DayTotals` is first, which is the position it already occupied: it
+         * was the last section of the measure group and this group follows
+         * immediately, so in the flat column below `xl` the sequence is
+         * unchanged to the element. That is the whole trick of moving a section
+         * between columns without moving it on a phone — the two groups are
+         * `display: contents` there, so a section's column is decided by which
+         * side of the boundary it is written on and its POSITION is decided by
+         * the order of the whole list.
+         *
+         * Below 1272 the sequence reads: the figures, the ruler's phone copy,
+         * Up next, Anytime, the foot link. Exactly as it did.
          */}
         <div className={PAGE_ASIDE_COLUMN} data-column="aside">
-          {/* The phone's position for it — see `rulerBelow`. Below the figures,
-              because on the longest meal names one of the two has to go under the
-              action bar and it should not be the numbers. */}
+          {/* After the swap note, and that order is the argument: the note says
+              what the swap cost, and these are the figures it cost it from.
+
+              Hidden below 768px when there is a meal, because `MealDayGrid` in
+              the measure is already carrying these four figures — FUEL-82. On a
+              workout card there is no meal to merge into, so the section renders
+              at every width and the day's numbers are still on the screen, which
+              is the point `DayTotals` makes about being present on a session
+              too. In the aside at the cap both cases are already visible, so
+              FUEL-86 needed no third rule: `md:flex` is true at 1272. */}
+          <DayTotals
+            planned={plannedToday}
+            target={target}
+            className={activeMeal ? "hidden md:flex" : undefined}
+          />
+
+          {/* The phone's position for the ruler — see `rulerBelow`. Below the
+              figures, because on the longest meal names one of the two has to go
+              under the action bar and it should not be the numbers. */}
           {rulerBelow}
 
-          {/* And the second column's, which is the same ruler a third time. */}
-          {rulerAside}
+          <TheDay rows={theDay(base.timeline, progress.position, progress.entries)} />
 
           <UpNext items={now.upcoming} />
 

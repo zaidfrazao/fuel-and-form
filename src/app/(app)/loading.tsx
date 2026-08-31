@@ -38,13 +38,20 @@
 
 import type { ReactNode } from "react";
 
-import { APP_ACTION_BAR } from "@/components/action-bar";
+import {
+  ACTION_BAR_CONTROLS,
+  ACTION_BAR_PRIMARY,
+  ACTION_BAR_SECONDARY,
+  ACTION_BAR_SPLIT,
+  APP_ACTION_BAR,
+} from "@/components/action-bar";
 import { RULER_AT } from "@/components/day-ruler";
 import { PageMain } from "@/components/page-main";
 import {
   PAGE_ASIDE_COLUMN,
   PAGE_ASIDE_GRID,
   PAGE_ASIDE_UNWRAP,
+  PAGE_HEADER_BAND,
   PAGE_MEASURE_COLUMN,
   PAGE_MEASURE_FOOT,
 } from "@/lib/frame";
@@ -82,10 +89,31 @@ function Cell({ lines }: { lines: 2 | 3 }) {
   );
 }
 
-/** A four-cell grid, at the row gap its shape uses. */
-function Grid({ lines, gap }: { lines: 2 | 3; gap: string }) {
+/**
+ * A four-cell grid, at the row gap its shape uses.
+ *
+ * `columns` is `kv-grid.tsx`'s own `4` — 2×2 below the frame's cap and four
+ * across at it — spelled the same way here, because the meal's grid is the one
+ * that takes it and a skeleton that stayed 2×2 at 1272 would draw two rows
+ * where the screen draws one.
+ */
+function Grid({
+  lines,
+  gap,
+  columns = 2,
+}: {
+  lines: 2 | 3;
+  gap: string;
+  columns?: 2 | 4;
+}) {
   return (
-    <div className={cn("grid grid-cols-2 gap-x-4", gap)}>
+    <div
+      className={cn(
+        "grid grid-cols-2 gap-x-4",
+        columns === 4 && "xl:grid-cols-4",
+        gap,
+      )}
+    >
       {[0, 1, 2, 3].map((cell) => (
         <Cell key={cell} lines={lines} />
       ))}
@@ -93,10 +121,40 @@ function Grid({ lines, gap }: { lines: 2 | 3; gap: string }) {
   );
 }
 
-/** An eyebrow with something under it — the shape every named section takes. */
-function Section({ children }: { children: ReactNode }) {
+/**
+ * A list of rows at one height — `The day`'s 44 and `Up next`'s 54.
+ *
+ * Two shapes rather than one, because the aside holds a different list at each
+ * side of the frame's cap: `Up next`'s two rows below it, `The day`'s whole
+ * timeline above. `right-now.tsx` carries the argument for the pair.
+ */
+function Rows({ count, height }: { count: number; height: string }) {
   return (
-    <div className="flex flex-col gap-[14px]">
+    <>
+      {Array.from({ length: count }, (_, row) => (
+        <div
+          key={row}
+          className={cn(
+            "flex items-center justify-between border-b border-border last:border-b-0",
+            height,
+          )}
+        >
+          <Block className="h-[23px] w-40" />
+          <Block className="h-[23px] w-12" />
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** An eyebrow with something under it — the shape every named section takes. */
+function Section({
+  children,
+  className,
+  ...rest
+}: { children: ReactNode; className?: string } & { "data-section"?: string }) {
+  return (
+    <div className={cn("flex flex-col gap-[14px]", className)} {...rest}>
       <Block className="h-[10px] w-16" />
       {children}
     </div>
@@ -127,6 +185,16 @@ export default function Loading() {
          * empty boxes", and the failure would be silent to every test in this
          * repository. Two attributes is a cheap way not to depend on it.
          */}
+        {/* The header band — the folio and the ruler, both drawn only at the
+            frame's cap, exactly as the screen draws them. Below it this group
+            is `display: contents` with two `display: none` children, so it
+            contributes nothing at all — which is what keeps the phone's
+            skeleton the one it was. */}
+        <div aria-hidden className={cn(PAGE_HEADER_BAND, "xl:gap-[2px]")} data-column="header">
+          <Block className="hidden h-[10px] w-40 xl:block" />
+          <RulerBand className={RULER_AT.header} at="header" />
+        </div>
+
         <div aria-hidden className={PAGE_MEASURE_COLUMN} data-column="measure">
           {/* Subject — eyebrow, 40px title, slash metadata. */}
           <div className="flex flex-col gap-1">
@@ -139,37 +207,45 @@ export default function Loading() {
           <RulerBand className={RULER_AT.wide} at="wide" />
 
           {/* Below 768 the meal and the day are one grid at a 14px row gap;
-              above it they are two named sections at 22. */}
+              above it they are two named sections at 22 — and above the frame's
+              cap the day's half is in the aside, so this half stands alone and
+              goes four across. `data-shape="split"` names the meal's grid at
+              both widths it is drawn at. */}
           <div className="md:hidden" data-shape="merged">
             <Grid lines={3} gap="gap-y-[14px]" />
           </div>
 
           <div className="hidden md:flex md:flex-col md:gap-[30px]" data-shape="split">
             <Section>
-              <Grid lines={2} gap="gap-y-[22px]" />
-            </Section>
-            <Section>
-              <Grid lines={3} gap="gap-y-[22px]" />
+              <Grid lines={2} gap="gap-y-[22px]" columns={4} />
             </Section>
           </div>
         </div>
 
         <div aria-hidden className={PAGE_ASIDE_COLUMN} data-column="aside">
-          {/* The phone's position for the ruler, and the frame's. */}
-          <RulerBand className={RULER_AT.phone} at="phone" />
-          <RulerBand className={RULER_AT.aside} at="aside" />
+          {/* `Today` — first in this column, and first for the reason the screen
+              gives: it was the last section of the measure before FUEL-86 and
+              this group follows immediately, so the flat column below the cap is
+              unchanged. Gated at `md` like the screen's, because below 768 the
+              merged grid above is already carrying these four figures. */}
+          <div className="hidden md:flex md:flex-col" data-shape="day">
+            <Section>
+              <Grid lines={3} gap="gap-y-[22px]" />
+            </Section>
+          </div>
 
-          {/* Up next — eyebrow plus two 54px rows. */}
-          <Section>
-            {[0, 1].map((row) => (
-              <div
-                key={row}
-                className="flex min-h-[54px] items-center justify-between border-b border-border py-3 last:border-b-0"
-              >
-                <Block className="h-[23px] w-40" />
-                <Block className="h-[23px] w-12" />
-              </div>
-            ))}
+          {/* The phone's position for the ruler. The band above has the cap's. */}
+          <RulerBand className={RULER_AT.phone} at="phone" />
+
+          {/* `The day` at the cap and `Up next` below it — the two lists the
+              screen swaps between, at their own row heights, so neither width
+              swaps in against a skeleton drawn for the other. */}
+          <Section className="hidden xl:flex" data-section="the-day">
+            <Rows count={6} height="min-h-[44px] py-[10px]" />
+          </Section>
+
+          <Section className="xl:hidden" data-section="up-next">
+            <Rows count={2} height="min-h-[54px] py-3" />
           </Section>
         </div>
       </div>
@@ -195,10 +271,39 @@ export default function Loading() {
           about the bar, so it lives beside the columns it refers to and both
           `/`'s bar and this one wear the pair. */}
       <div aria-hidden className={cn(APP_ACTION_BAR, PAGE_MEASURE_FOOT)}>
-        <Block className="h-13 w-full rounded-md" />
-        <div className="flex gap-3">
-          <Block className="h-[2.875rem] flex-1 rounded-md" />
-          <Block className="h-[2.875rem] flex-1 rounded-md" />
+        {/*
+         * The controls, in the shapes the bar takes — `action-bar.ts`, FUEL-86.
+         * A column of slabs below the frame's cap and a row of content-width
+         * controls at it.
+         *
+         * ## The widths at the cap are measured rather than derived
+         *
+         * `xl:w-auto` on a real button is its label plus the size variant's
+         * padding. A `Block` has no label, so the same utility would draw it at
+         * zero and the row would swap in from nothing. The three numbers below
+         * are the rendered widths of `Log eaten`, `Swap` and `Skip` at 1272,
+         * read out of the browser rather than computed from the padding — the
+         * label's own width is a font metric and § Desktop's mock is drawn at a
+         * different type scale from the app's, which `kv-grid`'s 86-versus-100
+         * already cost one ticket.
+         *
+         * They are approximate by nature: a workout card's primary says `Mark
+         * done` and has no Swap beside it, so one skeleton cannot be exact for
+         * both cards. It is exact for the meal card, which is what `/` shows for
+         * most of a day, and the error on the other is horizontal — the bar's
+         * height and its distance from the content above are identical either
+         * way, so nothing moves vertically on swap-in at any width.
+         */}
+        <div className={ACTION_BAR_CONTROLS}>
+          <Block className={cn("h-13 rounded-md", ACTION_BAR_PRIMARY, "xl:w-[122px]")} />
+          <div className={ACTION_BAR_SPLIT}>
+            <Block
+              className={cn("h-[2.875rem] rounded-md", ACTION_BAR_SECONDARY, "xl:w-[86px]")}
+            />
+            <Block
+              className={cn("h-[2.875rem] rounded-md", ACTION_BAR_SECONDARY, "xl:w-[78px]")}
+            />
+          </div>
         </div>
       </div>
     </PageMain>
