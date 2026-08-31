@@ -1,6 +1,6 @@
 import { MacroGrid } from "@/components/macro-grid";
 import type { CalendarDate } from "@/lib/date";
-import { entryTotals, type LoggedEntry, type LogStatus } from "@/lib/day-summary";
+import { entryTotals, type LoggedEntry, STATUS_LABEL } from "@/lib/day-summary";
 import { figure } from "@/lib/format";
 import type { MacroTarget } from "@/lib/macros";
 import { dayLabel } from "@/lib/now-display";
@@ -72,21 +72,6 @@ function CropMark({ corner, className }: { corner: string; className: string }) 
     </span>
   );
 }
-
-/**
- * The word on the right of a logged row.
- *
- * The four statuses the two log tables hold, in the app's own vocabulary.
- * 'partial' has no verb on P1 — one tap means done — but the schema keeps room
- * for it and an export or a later screen can write one, so it is named here
- * rather than left to fall through to something wrong.
- */
-const STATUS_LABEL: Readonly<Record<LogStatus, string>> = {
-  eaten: "Eaten",
-  done: "Done",
-  partial: "Partial",
-  skipped: "Skipped",
-};
 
 /**
  * The day's log — every item logged today, with what it was logged as.

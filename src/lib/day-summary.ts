@@ -1,4 +1,4 @@
-import type { CalendarDate } from "./date";
+import type { CalendarDate, TimeOfDay } from "./date";
 import type { MealLogStatus, WorkoutLogStatus } from "./db/schema";
 import { type DayLogs, type LogVerb, logIntent } from "./log-intent";
 import { type MacroBearing, type MacroTotals, totalMacros } from "./macros";
@@ -47,6 +47,27 @@ import type { NowItem, ScheduledItem } from "./resolve-now";
 /** Every status a log row can carry, across both tables. */
 export type LogStatus = MealLogStatus | WorkoutLogStatus;
 
+/**
+ * The word on the right of a logged row.
+ *
+ * The four statuses the two log tables hold, in the app's own vocabulary.
+ * 'partial' has no verb on P1 — one tap means done — but the schema keeps room
+ * for it and an export or a later screen can write one, so it is named here
+ * rather than left to fall through to something wrong.
+ *
+ * Here rather than in `day-complete.tsx`, where FUEL-20 wrote it, because
+ * FUEL-86's `The day` prints the same four words in the aside on `/`. Two
+ * copies of this map is two chances for one screen to call a skip something the
+ * other does not — the same argument `format.ts` and `now-display.ts` are both
+ * recorded as having been extracted on.
+ */
+export const STATUS_LABEL: Readonly<Record<LogStatus, string>> = {
+  eaten: "Eaten",
+  done: "Done",
+  partial: "Partial",
+  skipped: "Skipped",
+};
+
 /** One line of the day's log, as the summary prints it. */
 export type LoggedEntry = {
   /**
@@ -57,6 +78,22 @@ export type LoggedEntry = {
   id: string;
   /** The item's own name, resolved from today's plan. */
   name: string;
+  /**
+   * Which table the row came from — FUEL-86.
+   *
+   * Carried for one reader, `theDay`, which joins this list back onto the day's
+   * timeline by NAME because a log row cannot reproduce a timeline key. A name
+   * alone is not a safe key across the two tables: `meals` and `workouts` are
+   * separate namespaces with no constraint between them, so a meal named after
+   * a workout would share a queue and could be handed the workout's status.
+   *
+   * Not reachable today — the meal library is seeded and no seeded meal shares
+   * a workout's name — which is exactly why it is worth spending a field on. It
+   * is a coincidence rather than an invariant, nothing anywhere enforces it,
+   * and the failure it would produce is a wrong word on a row with no error
+   * anywhere. Raised by the FUEL-86 precommit review.
+   */
+  kind: "meal" | "workout";
   status: LogStatus;
   /**
    * What this entry contributes to the day's totals.
@@ -156,6 +193,7 @@ export function dayLog(
         entry: {
           id: log.id,
           name: meal?.name ?? slotLabel(log.slot),
+          kind: "meal",
           status: log.status,
           // The macros of what was eaten, from the meal the log names — never
           // from the slot, which a swap could have refilled since.
@@ -168,6 +206,7 @@ export function dayLog(
       entry: {
         id: log.id,
         name: workouts.get(log.workoutId)?.name ?? "Training",
+        kind: "workout",
         status: log.status,
         ...(walks.has(log.workoutId) ? { walk: true as const } : {}),
       } satisfies LoggedEntry,
@@ -212,9 +251,144 @@ export function pendingEntry(
   return {
     id: `pending:${item.key}`,
     name: itemName(item),
+    kind: item.kind,
     status: intent.status,
     ...(item.kind === "meal" && intent.status === "eaten"
       ? { macros: macrosOf(item.meal.meal) }
       : {}),
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* The day, whole — FUEL-86                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One row of `The day` — the desktop aside's list of every scheduled item with
+ * what became of it.
+ *
+ * Brand Guide § Desktop gives the aside "the record, the pattern, the day
+ * around it, what can still be done", and FUEL-85's redraw of `/` spends that
+ * on the whole timeline rather than on the two items `Up next` shows. The phone
+ * keeps Up next; this is the section the two widths do not share.
+ */
+export type DayRow = {
+  /** The timeline item's own key — stable, and React's. */
+  key: string;
+  name: string;
+  at: TimeOfDay;
+  /** Where the item sits relative to the cursor. */
+  place: "past" | "now" | "upcoming";
+  /**
+   * What it was logged as, when the log names it.
+   *
+   * Absent on everything ahead of the cursor, and absent on a past item that
+   * was never logged — the manual advance walks past an item without writing a
+   * row, so that is an ordinary state rather than a missing join.
+   */
+  status?: LogStatus;
+};
+
+/**
+ * The timeline, joined to what has actually been recorded against it.
+ *
+ * ## No new data, and no new query
+ *
+ * FUEL-86: "the client already holds the full timeline and every logged entry".
+ * Both arguments are already on `/` — `view.timeline` and the `entries` the
+ * day-complete summary prints — so this is a join rather than a fetch, and the
+ * optimistic entry `pendingEntry` appends is in it for free.
+ *
+ * ## Position decides past, and the log only supplies the word
+ *
+ * The cursor is the authority on what has happened: everything before it is
+ * past, the item at it is now, everything after is upcoming. That is the same
+ * rule `positionAt` uses to pick the card, so the list and the card can never
+ * disagree about where the day has got to.
+ *
+ * ## Why the join is by name, and why it is a queue
+ *
+ * A log row cannot reproduce a timeline key. `ScheduledItem.key` is per PLAN
+ * ENTRY — `mealKey` exists precisely so "two entries in one slot — the two
+ * snacks — are two entry ids, so they stay distinguishable" — while
+ * `meal_logs` holds a slot and a meal id and no entry id at all. So slot is not
+ * unique, the key is not reachable, and the name is what both sides have.
+ *
+ * Names are not unique either, which is why this is a Map of QUEUES rather than
+ * a Map of statuses: a day with the same meal in two slots produces two log
+ * rows with one name, and taking the first for both would report a skip against
+ * the slot that was eaten. Shifting consumes each row once, in logged order,
+ * against the earliest unmatched item that bears the name. That is exact
+ * whenever the two orders agree and, when they do not, it is wrong only about
+ * WHICH of two identically named rows is which — a distinction the reader
+ * cannot see, because the two rows read the same.
+ *
+ * The walk is excluded. It is in `anytime` and not on the timeline, so its log
+ * row has nothing here to match and leaving it in would let it be consumed by a
+ * scheduled item that happened to share its name.
+ *
+ * ## And the name is qualified by the kind
+ *
+ * `meals` and `workouts` are separate namespaces with nothing constraining one
+ * against the other, so "name" is only unique WITHIN a table. Keyed by name
+ * alone, a meal named after a workout would share a queue with it and could be
+ * handed its status — a different class of mix-up from the duplicate-name case
+ * above, and one the queue discipline does nothing about.
+ *
+ * It cannot happen today: the meal library is seeded and no seeded meal shares
+ * a workout's name. That is a coincidence rather than an invariant — nothing
+ * enforces it, a later seed could break it, and the result would be one wrong
+ * word on one row with no error raised anywhere. Raised by the FUEL-86
+ * precommit review and fixed by qualifying the key rather than by trusting the
+ * data.
+ */
+
+/**
+ * The join key: a name, scoped to the table it came from.
+ *
+ * A function rather than two template literals, so the two sides of the join
+ * cannot be built differently — which is the only way this can go wrong now.
+ */
+function queueKey(kind: LoggedEntry["kind"], name: string): string {
+  return `${kind}:${name}`;
+}
+
+export function theDay(
+  timeline: readonly ScheduledItem[],
+  position: number,
+  entries: readonly LoggedEntry[],
+): DayRow[] {
+  const pending = new Map<string, LogStatus[]>();
+
+  for (const entry of entries) {
+    if (entry.walk) continue;
+
+    const key = queueKey(entry.kind, entry.name);
+    const queue = pending.get(key);
+
+    if (queue) queue.push(entry.status);
+    else pending.set(key, [entry.status]);
+  }
+
+  return timeline.map((item, index) => {
+    const name = itemName(item);
+    const place = index < position ? "past" : index === position ? "now" : "upcoming";
+    // Only a past item consumes a row. An upcoming item cannot have been
+    // logged, and taking a status for one would hand the next item along the
+    // queue's answer.
+    const status =
+      place === "past" ? pending.get(queueKey(item.kind, name))?.shift() : undefined;
+
+    return {
+      key: item.key,
+      name,
+      at: item.at,
+      place,
+      // `!== undefined` rather than a truthiness test. Every `LogStatus` is a
+      // non-empty string today, so the two agree — but the one that stays
+      // correct if the vocabulary ever gains a falsy member is this one, and a
+      // status silently dropped here reads as an item nobody logged.
+      ...(status !== undefined ? { status } : {}),
+    };
+  });
 }

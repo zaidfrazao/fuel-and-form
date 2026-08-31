@@ -100,6 +100,41 @@ const DAY_LABEL = new Intl.DateTimeFormat("en-GB", {
 });
 
 /**
+ * The folio line on `/` — `Today · Wednesday 17 June`.
+ *
+ * Brand Guide § Desktop, FUEL-85: the header band answers "where am I in
+ * this?", and "the folio is a caption, not a heading. Micro is this system's
+ * register for metadata and a date on a screen that is always today is
+ * metadata." A second heading up here is the failure the rule exists to
+ * prevent — it arrives before the subject, and the reader meets two things that
+ * both want to be read first.
+ *
+ * Long weekday and long month, where `dayLabel` abbreviates both. The two are
+ * doing different jobs: `dayLabel` labels a row in a list of dates, where the
+ * short form is what lets a column of them be scanned, and this is one line of
+ * type on a screen that has room for it and one date to say.
+ *
+ * "Today" is a literal because `/` is always today — the route takes no date,
+ * and `resolveNow` is handed the zone's own. A date shown here that was not
+ * today would make the whole screen a lie, so there is nothing to derive.
+ *
+ * Formatted in UTC from the date's own parts, for the reason `dayLabel` sets
+ * out: `new Date("2026-06-17")` is midnight UTC and the 16th in New York.
+ */
+export function folioLabel(date: CalendarDate): string {
+  const { year, month, day } = parseCalendarDate(date);
+
+  return `Today \u00b7 ${FOLIO_LABEL.format(Date.UTC(year, month - 1, day))}`;
+}
+
+const FOLIO_LABEL = new Intl.DateTimeFormat("en-GB", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: "UTC",
+});
+
+/**
  * `Thu 14 Aug`, and the year too when it is not this one.
  *
  * `dayLabel` alone is what `/training`'s lists use, and there it is unambiguous

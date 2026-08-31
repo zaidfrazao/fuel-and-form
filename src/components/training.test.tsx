@@ -458,9 +458,11 @@ describe("the action bar", () => {
     // a copy of it. `action-bar.test.tsx` owns what the string does.
     render(view());
 
-    // The primary is a direct child of the bar — `Training` renders it and the
-    // Partial/Skip row inside the one sticky container, with no wrapper between.
-    const bar = screen.getByRole("button", { name: "Mark done" }).parentElement;
+    // Located by the fade class rather than by walking up from the primary.
+    // FUEL-86 put a controls row between the two — the bar is a column holding
+    // a banner and a row of controls now — and a test that counts `parentElement`
+    // hops is asserting the nesting rather than the string it says it is about.
+    const bar = screen.getByRole("button", { name: "Mark done" }).closest(".action-bar-fade");
 
     // The shared string plus where the bar stands in the page's own grid —
     // FUEL-77, and `/`'s bar carries exactly the same pair. Identity still, so

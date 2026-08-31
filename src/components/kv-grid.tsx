@@ -143,6 +143,34 @@ export function SlashMeta({
   );
 }
 
+/**
+ * The count as a class, spelled out rather than interpolated.
+ *
+ * `grid-cols-${columns}` would be a string Tailwind's scanner never sees, so
+ * the utility would not be emitted and the grid would fall back to one column —
+ * silently, and only in a production build if the class happened to be reached
+ * from somewhere else in development.
+ *
+ * **`4` is a shape, not a count** — 2×2 below the frame's cap and four across
+ * at it, which is the whole of FUEL-85's ruling and the reason the breakpoint
+ * is here rather than in a class string at the callsite. Four across a 375px
+ * phone is 83px a column against the guide's own 110px test, so a `4` that
+ * meant four at every width would be a count no screen in this app could pass
+ * in. Keeping it here also means the one grid entitled to four cannot acquire
+ * them in an aside by someone adding a variant next to a `columns={2}`.
+ *
+ * Safe as a bare `xl:` despite the emission order that produced two rulers in
+ * FUEL-77: that fault needs two VARIANTS competing for one property, and
+ * nothing sets `grid-cols` at `md` on this element. The base `grid-cols-2` is a
+ * base utility, which every variant outranks whatever order the blocks are
+ * emitted in.
+ */
+const COLUMNS: Record<2 | 3 | 4, string> = {
+  2: "grid-cols-2",
+  3: "grid-cols-3",
+  4: "grid-cols-2 xl:grid-cols-4",
+};
+
 export function KeyValueGrid({
   items,
   columns = 2,
@@ -150,8 +178,28 @@ export function KeyValueGrid({
   className,
 }: {
   items: KeyValueItem[];
-  /** Three only when the figures are short — the guide's "compact stats" case. */
-  columns?: 2 | 3;
+  /**
+   * Three only when the figures are short — the guide's "compact stats" case.
+   *
+   * **Four is the macro grid's, and only on a measure — FUEL-86.** § Desktop's
+   * density rule decides between two and three by the CONTENT ("three when
+   * there are exactly three values and each is short"), and it names this grid
+   * out of scope in the same breath: "the four-macro grid is four values and so
+   * is never in scope". FUEL-85 then said what it does instead — "the
+   * four-macro grid, which this rule names out of scope, goes four-across on a
+   * measure and stays 2×2 in an aside: at 584 the 2×2 puts around 300px between
+   * a label and the next value, which is four islands rather than a grid, and
+   * at 356 the 2×2 is the density the phone already proves."
+   *
+   * So this is a transcription of a settled ruling rather than a reopening of
+   * the density rule, and the two column counts are two column widths rather
+   * than two screens.
+   *
+   * `4` carries its own breakpoint — 2×2 below the frame's cap and four across
+   * at it. See `COLUMNS` below for why that lives in here rather than as a
+   * variant a caller hangs on `className`.
+   */
+  columns?: 2 | 3 | 4;
   /**
    * This grid sits on `accent-subtle` rather than on a plain ground.
    *
@@ -172,7 +220,7 @@ export function KeyValueGrid({
     <dl
       className={cn(
         "grid gap-x-4 gap-y-[22px]",
-        columns === 3 ? "grid-cols-3" : "grid-cols-2",
+        COLUMNS[columns],
         className,
       )}
     >

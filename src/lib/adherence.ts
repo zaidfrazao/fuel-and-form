@@ -252,3 +252,61 @@ export function adherenceWeeks(
     );
   });
 }
+
+/**
+ * How the viewed week is going — `3 of 5 sessions this week`, FUEL-86.
+ *
+ * The right of `/training`'s header band. § Desktop's redraw gives the band
+ * "where am I in this?", and on a screen whose subject is one session the
+ * useful second half of that answer is the week the session is in.
+ *
+ * ## Built from the grid rather than from a second read
+ *
+ * `recentSessions` is recorded as being built "from the dots THEMSELVES rather
+ * than from a second read, so a row and the dot above it cannot end up
+ * disagreeing about a date". This is the third reader of the same weeks and it
+ * takes the same rule: the count in the header and the dots in the aside are
+ * the same six weeks counted once.
+ *
+ * ## Which week, and why it is found rather than indexed
+ *
+ * The week the VIEWED date falls in, which is the week `adherenceWeeks` was
+ * anchored on and so the last of the six. Found by looking for the date rather
+ * than by taking `weeks.at(-1)`, because the index is a fact about how the
+ * window happens to be built and the date is a fact about what is on screen.
+ *
+ * "This week" reads correctly on a past date for the same reason the paginator
+ * beside it does: the band describes where the READER is, and the reader is on
+ * that week.
+ *
+ * ## What counts
+ *
+ * A session is a day the template trains — a label, and not the walk, which is
+ * on every day and would make every week seven. `done` is the numerator and
+ * `partial` is not in it: § Buttons gives Partial its own control precisely to
+ * say *not* done, and a count that folded the two would erase the distinction
+ * the screen offers to make.
+ *
+ * `null` when the week trains on no day at all, so the caller draws nothing
+ * rather than `0 of 0` — § Tone of Voice would rather say nothing than report a
+ * ratio about a week with no sessions in it.
+ */
+export type WeekStanding = { done: number; sessions: number };
+
+export function weekStanding(
+  weeks: readonly Week[],
+  date: CalendarDate,
+): WeekStanding | null {
+  const week = weeks.find((days) => days.some((day) => day.date === date));
+
+  if (!week) return null;
+
+  const sessions = week.filter((day) => day.label !== undefined && day.status !== "walk");
+
+  if (sessions.length === 0) return null;
+
+  return {
+    done: sessions.filter((day) => day.status === "done").length,
+    sessions: sessions.length,
+  };
+}

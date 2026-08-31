@@ -48,16 +48,39 @@ export const RULER_AT = {
    */
   wide: "hidden md:max-xl:block",
   /**
-   * Everything below the cap, on a session card.
+   * Everything below the cap, in one copy.
    *
-   * There is no merged grid on a workout for the ruler to move around — the
-   * middle of that screen is `ExerciseList` — so FUEL-82 left it in one place
-   * and the phone and the wide band share this copy. It still stands down at the
-   * frame's cap like every other, which is what it needs a variant for at all.
+   * Two screens want this, and for the same reason: neither has a merged macro
+   * grid for the ruler to move around, so there is only one position under the
+   * cap rather than the phone's and the wide band's.
+   *
+   * The workout card is the first — the middle of that screen is
+   * `ExerciseList`, so FUEL-82 left the ruler in one place. The quiet
+   * nothing-planned state is the second, where there is no grid at all. Both
+   * still stand down at the frame's cap like every other copy, which is what
+   * they need a variant for at all.
+   *
+   * Named for the band rather than for the card since FUEL-86 gave it the
+   * second caller; it was `wideOnSession`, which was true of the only screen
+   * using it and would have been a lie about the next one.
    */
-  wideOnSession: "xl:hidden",
-  /** The frame's cap and above, at the top of the aside — FUEL-77. */
-  aside: "hidden xl:block",
+  belowCap: "xl:hidden",
+  /**
+   * The frame's cap and above, in the header band — FUEL-77, moved by FUEL-86.
+   *
+   * It spent one ticket at the top of the aside, which is where § Desktop put
+   * it before FUEL-85 asked what each zone is FOR. The answer moved it: the
+   * header's question is "where am I in this?", and the ruler is the screen's
+   * own time graphic — "the graphic's own hairline closes the band, so the
+   * separator is the graphic rather than a rule drawn near it".
+   *
+   * The class is unchanged, and that is the point of it being one: the copy
+   * that is drawn at this width is decided here, and where it is drawn is
+   * decided by which group `right-now.tsx` puts it in. Renamed rather than left
+   * saying `aside`, because a variant named for a column it is no longer in is
+   * the kind of thing the next reader trusts.
+   */
+  header: "hidden xl:block",
 } as const;
 
 /**
