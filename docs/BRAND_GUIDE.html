@@ -248,7 +248,9 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--pg-accent); out
 
 /* The current row of a list is marked by weight, not colour — the rows behind
    it recede and it does not. § The Four Rules keeps the umber for "you are
-   here" on the ruler, and recent-sessions.tsx already draws it this way. */
+   here" on the ruler. § Desktop attributed this device to recent-sessions.tsx
+   in v4.7; it does not do it (a "· Viewing" suffix and no link, every title at
+   text-primary), and nothing in src/ does. This is the first drawing of it. */
 .row.dim .row-title, .row.dim .row-trail { color: var(--text-2); }
 
 /* The timer is a row of the action bar, above the controls — the slot the
@@ -2057,7 +2059,9 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                      the session. The current row is marked by WEIGHT, not
                      colour — the others recede to text-2 — so § The Four Rules
                      keeps its one umber element per screen. This is why the
-                     desktop never needed the split: it holds both states. -->
+                     desktop never needed the split: it holds both states.
+                     § Desktop has carried this rule since v4.7 and nothing in
+                     the app implements it; FUEL-91 builds the first one. -->
                 <div class="daside">
                   <div class="blk">
                     <span class="u-micro">This session</span>
@@ -2113,7 +2117,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
         <div class="cap">
           <span class="tagline">P10 · /training · session · 1272</span>
           <h3>Training — the session state, at the frame</h3>
-          <p><b>The two states are one composition here</b>, which is the whole reason the split is a phone&rsquo;s device rather than a rule about the screen. The measure holds the exercise you are on and its sets; the aside holds the rest of the session, grouped, with everything already done receding to <code>text-2</code>. <b>The current row is marked by weight, never colour</b> &mdash; &sect; The Four Rules allows one umber element per screen and the paginator&rsquo;s <i>today</i> already spends it, which is the same correction &sect; Desktop made to <code>/</code>&rsquo;s first redraw.</p>
+          <p><b>The two states are one composition here</b>, which is the whole reason the split is a phone&rsquo;s device rather than a rule about the screen. The measure holds the exercise you are on and its sets; the aside holds the rest of the session, grouped, with everything already done receding to <code>text-2</code>. <b>The current row is marked by weight, never colour</b> &mdash; &sect; The Four Rules allows one umber element per screen and the paginator&rsquo;s <i>today</i> already spends it, which is the same correction &sect; Desktop made to <code>/</code>&rsquo;s first redraw. <b>This is the rule&rsquo;s first drawing, not its second.</b> v4.7 wrote it as a device <code>recent-sessions.tsx</code> already used; that component marks its viewed row with a <code>&middot; Viewing</code> suffix and the absence of a link, every title still at <code>text-primary</code>, and nothing in the app recedes a list&rsquo;s other rows. The attribution is withdrawn in the <code>.md</code>; the rule stands.</p>
           <p>Recent sessions stand down in this state and adherence does not: you are mid-session, so the pattern you are adding to is context and last Thursday is not. The measure&rsquo;s controls keep FUEL-85&rsquo;s content width, and the bar keeps the timer and its pinning. Nothing about the header, the rail, the 584 measure or the 356 aside moves between the two states &mdash; if anything here had needed a fourth zone or a wider column, that would have been the signal that the state was the wrong answer.</p>
         </div>
       </div>
