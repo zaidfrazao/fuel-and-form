@@ -140,6 +140,9 @@ function exercise(fields: Partial<WorkoutExercise> & { id: string }): WorkoutExe
     prescription: "3 x 12",
     sortOrder: 0,
     notes: null,
+    targetSets: null,
+    targetRepsLow: null,
+    targetRepsHigh: null,
     ...fields,
   };
 }

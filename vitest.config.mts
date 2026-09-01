@@ -75,6 +75,7 @@ export default defineConfig({
         "src/lib/resolve-now.ts",
         "src/lib/resolve-training.ts",
         "src/lib/rotation.ts",
+        "src/lib/exercise-set.ts",
         "src/lib/session-entry.ts",
         "src/lib/shopping-list.ts",
         "src/lib/shopping-text.ts",
@@ -248,6 +249,23 @@ export default defineConfig({
         // 1e9, each of them a figure the weekly export will later sum and
         // present as fact.
         "src/lib/session-entry.ts": FULLY_COVERED,
+        // FUEL-91, and half of it is `session-entry.ts`'s argument unchanged:
+        // `parseReps` and `parseSetIndex` are refusals reachable by anyone who
+        // can POST to the training action, and an unchecked rep count is simply
+        // STORED — a figure FUEL-95's estimate and FUEL-97's export will later
+        // present as fact.
+        //
+        // The other half is new and is the reason this file is gated rather
+        // than merely tested. The session state has no stored cursor: which
+        // exercise it shows, how many set rows that exercise has, and whether
+        // the reader can move past it are all DERIVED here from the rows
+        // themselves. Every one of those derivations fails quietly. An
+        // `isComplete` that never returns true leaves a session stuck on its
+        // first exercise; a `setRows` that offers one row too few makes the
+        // last set of every exercise unloggable; a `currentExercise` off by one
+        // shows the wrong movement to someone holding a phone mid-set. None
+        // throws, and none looks wrong in a diff.
+        "src/lib/exercise-set.ts": FULLY_COVERED,
         // FUEL-25, and the same argument as cursor.ts, repeat.ts and
         // slot-times.ts: `isDayOfWeek` and `isMealSlot` are the template
         // endpoint's refusals, and every branch in them is reachable by anyone

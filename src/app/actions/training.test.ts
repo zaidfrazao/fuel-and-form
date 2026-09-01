@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { Training } from "@/lib/db/queries/training";
-import type { Workout } from "@/lib/db/schema";
+import type { Workout, WorkoutExercise } from "@/lib/db/schema";
 
 /**
  * P3's action layer — what a tap on a STATUS is allowed to write.
@@ -25,21 +25,40 @@ import type { Workout } from "@/lib/db/schema";
  * unique index that makes it true lives in the database.
  */
 
-const { getSession, loadTraining, recordSession, clearSession, refresh } = vi.hoisted(
-  () => ({
-    getSession: vi.fn(),
-    loadTraining: vi.fn(),
-    recordSession: vi.fn(),
-    clearSession: vi.fn(),
-    refresh: vi.fn(),
-  }),
-);
+const {
+  getSession,
+  loadTraining,
+  recordSession,
+  clearSession,
+  logSet,
+  removeSet,
+  refresh,
+} = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  loadTraining: vi.fn(),
+  recordSession: vi.fn(),
+  clearSession: vi.fn(),
+  logSet: vi.fn(),
+  removeSet: vi.fn(),
+  refresh: vi.fn(),
+}));
 
 vi.mock("@/lib/auth/session", () => ({ getSession }));
-vi.mock("@/lib/db/queries/training", () => ({ loadTraining, recordSession, clearSession }));
+vi.mock("@/lib/db/queries/training", () => ({
+  loadTraining,
+  recordSession,
+  clearSession,
+  logSet,
+  removeSet,
+}));
 vi.mock("next/cache", () => ({ refresh }));
 
-const { clearSessionStatus, setSessionStatus } = await import("./training");
+const {
+  clearSessionStatus,
+  logExerciseSet,
+  removeExerciseSet,
+  setSessionStatus,
+} = await import("./training");
 
 const USER = "11111111-2222-3333-4444-555555555555";
 const SESSION = { userId: USER, kind: "owner" as const };
@@ -48,6 +67,22 @@ const DATE = "2026-03-09"; // a Monday inside the program
 const ENTRY = "entry-monday-circuit";
 const CIRCUIT = "workout-circuit-b";
 const WALK_ENTRY = "entry-daily-walk";
+
+const EXERCISE = "exercise-press-ups";
+
+/** An exercise of the circuit, narrowed to what the resolver hands over. */
+const exercise = (id: string): WorkoutExercise => ({
+  id,
+  userId: USER,
+  workoutId: CIRCUIT,
+  name: "Press-ups",
+  prescription: "3 x 12",
+  sortOrder: 0,
+  notes: null,
+  targetSets: 3,
+  targetRepsLow: 12,
+  targetRepsHigh: 12,
+});
 
 const workout = (id: string, name: string, type: string): Workout => ({
   id,
@@ -71,7 +106,7 @@ const training = (): Training => ({
         source: "rotation",
         entryId: ENTRY,
         kind: "session",
-        exercises: [],
+        exercises: [exercise(EXERCISE)],
       },
       {
         workout: workout("workout-daily-walk", "Daily Walk", "walk"),
@@ -83,6 +118,7 @@ const training = (): Training => ({
     ],
   },
   logs: [],
+  sets: [],
   adherence: [],
 });
 
@@ -92,6 +128,8 @@ beforeEach(() => {
   loadTraining.mockResolvedValue(training());
   recordSession.mockResolvedValue(undefined);
   clearSession.mockResolvedValue(true);
+  logSet.mockResolvedValue(undefined);
+  removeSet.mockResolvedValue(true);
 });
 
 describe("setting a status", () => {
@@ -300,6 +338,189 @@ describe("clearing a status", () => {
     clearSession.mockRejectedValue(new Error("connection lost"));
 
     expect(await clearSessionStatus({ date: DATE, entryId: ENTRY })).toEqual({ ok: false });
+    expect(logged).toHaveBeenCalled();
+
+    logged.mockRestore();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* FUEL-91 — a set, and the two things a caller may not choose                */
+/* -------------------------------------------------------------------------- */
+
+const logging = (overrides: Record<string, unknown> = {}) => ({
+  date: DATE,
+  entryId: ENTRY,
+  exerciseId: EXERCISE,
+  setIndex: 1,
+  reps: 12,
+  ...overrides,
+});
+
+describe("logging a set", () => {
+  test("writes it against the workout the date resolved to", async () => {
+    expect(await logExerciseSet(logging())).toEqual({ ok: true });
+
+    // The workout comes from the server's own resolution — the client sent an
+    // entry id and an exercise id, and nothing else about the address.
+    expect(logSet).toHaveBeenCalledWith(USER, {
+      date: DATE,
+      workoutId: CIRCUIT,
+      exerciseId: EXERCISE,
+      setIndex: 1,
+      reps: 12,
+    });
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  test("takes the numbers a form sends as strings", async () => {
+    expect(await logExerciseSet(logging({ setIndex: "2", reps: "8" }))).toEqual({
+      ok: true,
+    });
+    expect(logSet).toHaveBeenCalledWith(
+      USER,
+      expect.objectContaining({ setIndex: 2, reps: 8 }),
+    );
+  });
+
+  test("refuses an exercise the session does not hold", async () => {
+    // The hole the composite foreign key does NOT close: another user's
+    // exercise is refused by Postgres, but one of your OWN belonging to a
+    // different workout would store — a set performed in a session that never
+    // contained that movement, invisible to every screen and still exported.
+    expect(await logExerciseSet(logging({ exerciseId: "exercise-elsewhere" }))).toEqual({
+      ok: false,
+    });
+    expect(logSet).not.toHaveBeenCalled();
+  });
+
+  test("refuses an entry the date does not hold", async () => {
+    expect(await logExerciseSet(logging({ entryId: "entry-elsewhere" }))).toEqual({
+      ok: false,
+    });
+    expect(logSet).not.toHaveBeenCalled();
+  });
+
+  test("refuses the walk, which is not a session", async () => {
+    expect(await logExerciseSet(logging({ entryId: WALK_ENTRY }))).toEqual({ ok: false });
+    expect(logSet).not.toHaveBeenCalled();
+  });
+
+  test("refuses a date the program does not cover", async () => {
+    // No sessions resolve, so there is no entry to match — the same refusal the
+    // status makes, at the same end of the calendar.
+    loadTraining.mockResolvedValue({ ...training(), day: { date: DATE, sessions: [] } });
+
+    expect(await logExerciseSet(logging())).toEqual({ ok: false });
+    expect(logSet).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["zero reps", { reps: 0 }],
+    ["negative reps", { reps: -8 }],
+    ["a fraction", { reps: 8.5 }],
+    ["a number that is not one", { reps: "eight" }],
+    ["more reps than anyone performs", { reps: 100000 }],
+    ["a zeroth set", { setIndex: 0 }],
+    ["a set index past the ceiling", { setIndex: 1e9 }],
+  ])("refuses %s before it reaches the database", async (_case, overrides) => {
+    expect(await logExerciseSet(logging(overrides))).toEqual({ ok: false });
+    expect(logSet).not.toHaveBeenCalled();
+  });
+
+  test("refuses out-of-range values without asking the database anything", async () => {
+    // The refusal costs no query, on `plan.ts`'s reasoning: a refusal that
+    // costs a round trip is a refusal that can be used to make the database
+    // work.
+    await logExerciseSet(logging({ reps: 0 }));
+
+    expect(loadTraining).not.toHaveBeenCalled();
+  });
+
+  test("refuses without a session", async () => {
+    getSession.mockResolvedValue(null);
+
+    expect(await logExerciseSet(logging())).toEqual({ ok: false });
+    expect(logSet).not.toHaveBeenCalled();
+  });
+
+  test("answers rather than throwing when the write fails", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    logSet.mockRejectedValue(new Error("connection lost"));
+
+    expect(await logExerciseSet(logging())).toEqual({ ok: false });
+    expect(logged).toHaveBeenCalled();
+
+    logged.mockRestore();
+  });
+
+  test("does not touch the session's status", async () => {
+    // PRD § P10: the status is never derived from set data. The parent row is
+    // `logSet`'s to create, at a default it never revisits — see queries.
+    await logExerciseSet(logging());
+
+    expect(recordSession).not.toHaveBeenCalled();
+    expect(clearSession).not.toHaveBeenCalled();
+  });
+});
+
+describe("removing a set", () => {
+  const removal = { date: DATE, entryId: ENTRY, exerciseId: EXERCISE, setIndex: 1 };
+
+  test("removes it at the address the date resolved to", async () => {
+    expect(await removeExerciseSet(removal)).toEqual({ ok: true });
+    expect(removeSet).toHaveBeenCalledWith(USER, {
+      date: DATE,
+      workoutId: CIRCUIT,
+      exerciseId: EXERCISE,
+      setIndex: 1,
+    });
+  });
+
+  test("is ok when the set was already gone", async () => {
+    // The screen offers no tick to untick in that state, so reaching here means
+    // it was behind — `refresh()` is the correction, and a banner would report
+    // a problem the reader does not have.
+    removeSet.mockResolvedValue(false);
+
+    expect(await removeExerciseSet(removal)).toEqual({ ok: true });
+  });
+
+  test("refuses an exercise the session does not hold", async () => {
+    expect(
+      await removeExerciseSet({ ...removal, exerciseId: "exercise-elsewhere" }),
+    ).toEqual({ ok: false });
+    expect(removeSet).not.toHaveBeenCalled();
+  });
+
+  test("refuses a set index that was never storable", async () => {
+    expect(await removeExerciseSet({ ...removal, setIndex: 1e9 })).toEqual({ ok: false });
+    expect(removeSet).not.toHaveBeenCalled();
+  });
+
+  test("refuses without a session", async () => {
+    getSession.mockResolvedValue(null);
+
+    expect(await removeExerciseSet(removal)).toEqual({ ok: false });
+    expect(removeSet).not.toHaveBeenCalled();
+  });
+
+  test("leaves the session's own record alone", async () => {
+    // Deriving nothing from set data cuts both ways: a status the reader chose
+    // is not something a set removal may take away.
+    await removeExerciseSet(removal);
+
+    expect(clearSession).not.toHaveBeenCalled();
+    expect(recordSession).not.toHaveBeenCalled();
+  });
+
+  test("answers rather than throwing when the delete fails", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    removeSet.mockRejectedValue(new Error("connection lost"));
+
+    expect(await removeExerciseSet(removal)).toEqual({ ok: false });
     expect(logged).toHaveBeenCalled();
 
     logged.mockRestore();

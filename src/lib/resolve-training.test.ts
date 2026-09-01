@@ -76,6 +76,9 @@ const EXERCISES = new Map<string, WorkoutExercise[]>(
       prescription: exercise.prescription,
       sortOrder,
       notes: exercise.notes ?? null,
+      targetSets: exercise.targetSets ?? null,
+      targetRepsLow: exercise.targetRepsLow ?? null,
+      targetRepsHigh: exercise.targetRepsHigh ?? null,
     })),
   ]),
 );

@@ -72,6 +72,9 @@ const EXERCISE: WorkoutExercise = {
   prescription: "3 x 12",
   sortOrder: 0,
   notes: null,
+  targetSets: 3,
+  targetRepsLow: 12,
+  targetRepsHigh: 12,
 };
 
 const LOG: WorkoutLog = {
@@ -101,6 +104,7 @@ const training = (overrides: Partial<TrainingView> = {}): TrainingView => ({
     ],
   },
   logs: [LOG],
+  sets: [],
   adherence: [[{ date: TODAY, label: WORKOUT.name, status: "partial" }]],
   ...overrides,
 });

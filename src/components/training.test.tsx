@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { Week } from "@/components/dot-grid";
-import { APP_ACTION_BAR } from "@/components/action-bar";
+import { APP_ACTION_BAR, SESSION_ACTION_BAR } from "@/components/action-bar";
 import type { TrainingItem } from "@/components/training";
 import { PAGE_ASIDE_COLUMN, PAGE_MEASURE_COLUMN, PAGE_MEASURE_FOOT } from "@/lib/frame";
 
@@ -26,14 +26,28 @@ import { PAGE_ASIDE_COLUMN, PAGE_MEASURE_COLUMN, PAGE_MEASURE_FOOT } from "@/lib
  *     counts it.
  */
 
-const { setSessionStatus, clearSessionStatus, logWalk, clearWalk } = vi.hoisted(() => ({
+const {
+  setSessionStatus,
+  clearSessionStatus,
+  logExerciseSet,
+  removeExerciseSet,
+  logWalk,
+  clearWalk,
+} = vi.hoisted(() => ({
   setSessionStatus: vi.fn(),
   clearSessionStatus: vi.fn(),
+  logExerciseSet: vi.fn(),
+  removeExerciseSet: vi.fn(),
   logWalk: vi.fn(),
   clearWalk: vi.fn(),
 }));
 
-vi.mock("@/app/actions/training", () => ({ setSessionStatus, clearSessionStatus }));
+vi.mock("@/app/actions/training", () => ({
+  setSessionStatus,
+  clearSessionStatus,
+  logExerciseSet,
+  removeExerciseSet,
+}));
 vi.mock("@/app/actions/log-walk", () => ({ logWalk, clearWalk }));
 
 const { Training } = await import("./training");
@@ -47,11 +61,38 @@ const CIRCUIT: TrainingItem = {
   type: "circuit",
   kind: "session",
   exercises: [
-    { id: "e1", name: "Press-ups", prescription: "3 x 12", notes: null },
-    { id: "e2", name: "Reverse lunges", prescription: "3 x 10 ea", notes: "Slow down." },
-    { id: "e3", name: "Plank", prescription: "3 x 45s", notes: null },
+    {
+      id: "e1",
+      name: "Press-ups",
+      prescription: "3 x 12",
+      notes: null,
+      targetSets: 3,
+      targetRepsLow: 12,
+      targetRepsHigh: 12,
+    },
+    {
+      id: "e2",
+      name: "Reverse lunges",
+      prescription: "3 x 10 ea",
+      notes: "Slow down.",
+      targetSets: 2,
+      targetRepsLow: 8,
+      targetRepsHigh: 10,
+    },
+    // Sets and no rep target — a hold. The third state a set row has to draw,
+    // and the one a regex over "3 x 45s" would get wrong.
+    {
+      id: "e3",
+      name: "Plank",
+      prescription: "3 x 45s",
+      notes: null,
+      targetSets: 3,
+      targetRepsLow: null,
+      targetRepsHigh: null,
+    },
   ],
   entry: null,
+  sets: [],
 };
 
 const WALK: TrainingItem = {
@@ -61,6 +102,7 @@ const WALK: TrainingItem = {
   kind: "walk",
   exercises: [],
   entry: null,
+  sets: [],
 };
 
 /** Two weeks of dots, enough for the grid to have something to say. */
@@ -109,6 +151,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   setSessionStatus.mockResolvedValue({ ok: true });
   clearSessionStatus.mockResolvedValue({ ok: true });
+  logExerciseSet.mockResolvedValue({ ok: true });
+  removeExerciseSet.mockResolvedValue({ ok: true });
+  // Every test starts outside the session state. `localStorage` is shared
+  // across tests in one jsdom environment, so a test that enters it would
+  // otherwise leave the next one in a composition it never asked for.
+  window.localStorage.clear();
   logWalk.mockResolvedValue({ ok: true });
   clearWalk.mockResolvedValue({ ok: true });
 });
@@ -268,7 +316,10 @@ describe("setting a status", () => {
     // cannot quietly start carrying one.
     const user = userEvent.setup();
 
-    render(view());
+    // A past date, where the plan state's primary is Mark done — § Desktop
+    // gives Start session to today, which is where the session state is
+    // reachable. What crosses the wire is the same either way.
+    render(view({ date: YESTERDAY }));
     await user.click(screen.getByRole("button", { name: "Mark done" }));
 
     expect(setSessionStatus).toHaveBeenCalledWith(
@@ -297,7 +348,12 @@ describe("setting a status", () => {
   });
 
   test("carries the recorded status through to the controls", () => {
-    render(view({ sessions: recorded({ status: "partial", note: null, durationMin: 22 }) }));
+    render(
+      view({
+        date: YESTERDAY,
+        sessions: recorded({ status: "partial", note: null, durationMin: 22 }),
+      }),
+    );
 
     expect(screen.getByRole("button", { name: "Partial" }).getAttribute("aria-pressed")).toBe(
       "true",
@@ -327,7 +383,7 @@ describe("setting a status", () => {
     // every failed save with nothing on screen to explain it.
     const user = userEvent.setup();
 
-    render(view());
+    render(view({ date: YESTERDAY }));
 
     const duration = screen.getByLabelText<HTMLInputElement>("Duration");
 
@@ -456,7 +512,7 @@ describe("the action bar", () => {
     // prescription — but the fix belongs to all three bars at once, so what is
     // asserted here is that this one still takes the shared string rather than
     // a copy of it. `action-bar.test.tsx` owns what the string does.
-    render(view());
+    render(view({ date: YESTERDAY }));
 
     // Located by the fade class rather than by walking up from the primary.
     // FUEL-86 put a controls row between the two — the bar is a column holding
@@ -477,7 +533,12 @@ describe("the rules the guide states as absolutes", () => {
     // requirement, not a nicety. The three controls are the same component at
     // the same sizes, and the only thing that separates a skip from a done is
     // the word on it.
-    render(view({ sessions: recorded({ status: "skipped", note: null, durationMin: null }) }));
+    render(
+      view({
+        date: YESTERDAY,
+        sessions: recorded({ status: "skipped", note: null, durationMin: null }),
+      }),
+    );
 
     const done = screen.getByRole("button", { name: "Mark done" });
     const skip = screen.getByRole("button", { name: "Skip" });
@@ -786,5 +847,448 @@ describe("the second column", () => {
         expect(className).toContain(utility);
       }
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* FUEL-91 — the session state, and the sets it exists to hold                */
+/* -------------------------------------------------------------------------- */
+
+/** A set as the screen is given one. */
+const set = (exerciseId: string, setIndex: number, reps = 12) => ({
+  exerciseId,
+  setIndex,
+  reps,
+});
+
+/** The session with sets already against it. */
+const withSets = (sets: ReturnType<typeof set>[]) => [{ ...CIRCUIT, sets }, WALK];
+
+/** In the session state on the first render, the way a reload arrives in it. */
+const resumed = () => window.localStorage.setItem(`fuel:training-session:${TODAY}`, "1");
+
+describe("entering and leaving the session state", () => {
+  test("offers Start session on today, and Mark done on any other date", () => {
+    // Brand Guide § Desktop's state table. "The primary changes because the
+    // screen's question does" — before you train that is starting, while you
+    // are training it is finishing — and a past date is a record, so Start
+    // session is not offered where it would mean nothing.
+    const { unmount } = render(view());
+
+    expect(screen.getByRole("button", { name: "Start session" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Mark done" })).toBeNull();
+
+    unmount();
+    render(view({ date: YESTERDAY }));
+
+    expect(screen.getByRole("button", { name: "Mark done" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
+  });
+
+  test("swaps the whole list for the exercise being worked", async () => {
+    const user = userEvent.setup();
+
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+
+    // § P3's re-aimed criterion: "the active exercise is what is visible when
+    // you are working". The subject is the exercise; the session's name moves
+    // to the eyebrow above it.
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Press-ups");
+    // By role: the session's name is also a row in Recent, which is the aside
+    // doing its own job and not this assertion's subject.
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Bodyweight Circuit B" }),
+    ).toBeTruthy();
+    expect(screen.getByText(/3 x 12 · Exercise 1 of 3/)).toBeTruthy();
+
+    // The plan state's list is gone rather than merely scrolled past.
+    expect(screen.queryByRole("heading", { name: "Exercises" })).toBeNull();
+  });
+
+  test("resumes where the data says it is after a reload", () => {
+    // § Desktop: "a phone locked mid-session and woken twenty minutes later
+    // resumes where the data says it is, with nothing to go stale". The only
+    // thing stored is the boolean; which exercise is showing is derived.
+    resumed();
+
+    render(view({ sessions: withSets([set("e1", 1), set("e1", 2), set("e1", 3)]) }));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Reverse lunges");
+  });
+
+  test("is not reachable for a past date even when one was left entered", () => {
+    // The key is the date's, so yesterday's boolean cannot open today's state —
+    // but the guard is the composition's rather than the key's, and this is the
+    // assertion that says so.
+    window.localStorage.setItem(`fuel:training-session:${YESTERDAY}`, "1");
+
+    render(view({ date: YESTERDAY }));
+
+    expect(screen.getByRole("heading", { name: "Exercises" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Sets" })).toBeNull();
+  });
+
+  test("is not offered on a date with no session to work through", () => {
+    render(view({ sessions: [WALK] }));
+
+    expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
+  });
+
+  test("records the session and leaves when the primary is tapped", async () => {
+    // PRD § P10: "entered and left by the primary". Mark done is the session
+    // state's primary; it writes the status and returns to the plan state.
+    const user = userEvent.setup();
+
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(screen.getByRole("button", { name: "Mark done" }));
+
+    expect(setSessionStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "done", entryId: "entry-circuit" }),
+    );
+    expect(await screen.findByRole("heading", { name: "Exercises" })).toBeTruthy();
+  });
+
+  test("leaves on Partial and on Skip too", async () => {
+    // A session marked partial is a session that has stopped. Leaving the
+    // reader inside a surface for operating one they have just said is over
+    // would be a state whose only way out is the buttons they already pressed.
+    const user = userEvent.setup();
+
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(screen.getByRole("button", { name: "Partial" }));
+
+    expect(await screen.findByRole("heading", { name: "Exercises" })).toBeTruthy();
+  });
+
+  test("keeps the bar pinned at every width, unlike every other bar", () => {
+    // § Desktop's one named exception to FUEL-72's release, and the reason it
+    // is not `APP_ACTION_BAR`: a rest timer rides in this slot (FUEL-93) and a
+    // live readout that scrolls out of sight has failed at its only job at 1920
+    // exactly as at 375. Identity, so the string cannot quietly gain `lg:static`.
+    resumed();
+    render(view());
+
+    const bar = screen.getByRole("button", { name: "Mark done" }).closest(".action-bar-fade");
+
+    expect(bar?.className).toBe(`${SESSION_ACTION_BAR} ${PAGE_MEASURE_FOOT}`);
+    expect(bar?.className).not.toContain("lg:static");
+  });
+
+  test("does not offer Clear from inside a session", () => {
+    // The mock draws three controls and no fourth. Clear takes the whole record
+    // away and its cascade takes the sets with it — a control with no use
+    // mid-session and every reason not to be reached by accident.
+    resumed();
+    render(view({ sessions: [{ ...CIRCUIT, entry: { status: "partial", note: null, durationMin: null } }, WALK] }));
+
+    expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
+  });
+});
+
+describe("the sets sub-list", () => {
+  test("draws a row per set the target asks for, before anything is logged", () => {
+    resumed();
+    render(view());
+
+    // '3 x 12' — three rows, each offering the target rather than a blank.
+    expect(screen.getByLabelText("Set 1 reps")).toBeTruthy();
+    expect(screen.getByLabelText("Set 3 reps")).toBeTruthy();
+    expect(screen.queryByLabelText("Set 4 reps")).toBeNull();
+    expect(screen.getAllByText("Target 12")).toHaveLength(3);
+  });
+
+  test("shows a logged set as its own number, and offers the next", () => {
+    resumed();
+    render(view({ sessions: withSets([set("e1", 1, 12), set("e1", 2, 9)]) }));
+
+    expect(screen.getByLabelText<HTMLInputElement>("Set 1 reps").value).toBe("12");
+    expect(screen.getByLabelText<HTMLInputElement>("Set 2 reps").value).toBe("9");
+    expect(screen.getByLabelText<HTMLInputElement>("Set 3 reps").value).toBe("");
+    // The mock's two states: `8 reps` for a set performed, `Target 8` for one
+    // still on offer.
+    expect(screen.getAllByText("reps")).toHaveLength(2);
+    expect(screen.getByText("Target 12")).toBeTruthy();
+  });
+
+  test("logs the target's reps when the tick is tapped with an empty box", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    expect(logExerciseSet).toHaveBeenCalledWith({
+      date: TODAY,
+      entryId: "entry-circuit",
+      exerciseId: "e1",
+      setIndex: 1,
+      reps: 12,
+    });
+  });
+
+  test("logs what was typed rather than what was asked for", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view());
+    await user.type(screen.getByLabelText("Set 1 reps"), "9");
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    expect(logExerciseSet).toHaveBeenCalledWith(
+      expect.objectContaining({ setIndex: 1, reps: 9 }),
+    );
+  });
+
+  test("shows the set on the frame it is ticked, before the server answers", async () => {
+    // § Feedback's 300ms. `findBy` and a held promise: `getBy` passes on
+    // `npm run test` and flakes under coverage, and a mock that resolves at
+    // once kills the optimistic value before the assertion sees it.
+    const user = userEvent.setup();
+    const pending = deferred<{ ok: boolean }>();
+
+    logExerciseSet.mockReturnValue(pending.promise);
+
+    resumed();
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    expect(await screen.findByRole("button", { name: "Remove set 1" })).toBeTruthy();
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(logExerciseSet).toHaveBeenCalledOnce());
+  });
+
+  test("takes a set back when its tick is tapped again", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: withSets([set("e1", 1)]) }));
+    await user.click(screen.getByRole("button", { name: "Remove set 1" }));
+
+    expect(removeExerciseSet).toHaveBeenCalledWith({
+      date: TODAY,
+      entryId: "entry-circuit",
+      exerciseId: "e1",
+      setIndex: 1,
+    });
+  });
+
+  test("corrects a logged set when its number is edited", async () => {
+    // The acceptance criterion's "correctable". `logSet` collides on the unique
+    // index rather than inserting beside it, so this is one row twice.
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: withSets([set("e1", 1, 12)]) }));
+
+    const input = screen.getByLabelText("Set 1 reps");
+
+    await user.clear(input);
+    await user.type(input, "8");
+    await user.tab();
+
+    expect(logExerciseSet).toHaveBeenCalledWith(
+      expect.objectContaining({ setIndex: 1, reps: 8 }),
+    );
+  });
+
+  test("does not record a set nobody confirmed", async () => {
+    // A number typed into an unlogged row and then abandoned is not a set. If
+    // blur committed here, tapping anywhere on the screen after typing would
+    // log one.
+    const user = userEvent.setup();
+
+    resumed();
+    render(view());
+    await user.type(screen.getByLabelText("Set 1 reps"), "9");
+    await user.tab();
+
+    expect(logExerciseSet).not.toHaveBeenCalled();
+  });
+
+  test("moves to the next exercise when an exercise's sets are complete", async () => {
+    // The current exercise is DERIVED, so it advances on the frame the last set
+    // lands rather than on the render after the server agrees.
+    const user = userEvent.setup();
+    // Held open on purpose. The props are fixed in a test, so a mock that
+    // resolves at once ends the transition and takes the optimistic set back
+    // with it — the screen would return to Press-ups before the assertion ran.
+    const pending = deferred<{ ok: boolean }>();
+
+    logExerciseSet.mockReturnValue(pending.promise);
+
+    resumed();
+    render(view({ sessions: withSets([set("e1", 1), set("e1", 2)]) }));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Press-ups");
+
+    await user.click(screen.getByRole("button", { name: "Log set 3" }));
+
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveProperty(
+      "textContent",
+      "Reverse lunges",
+    );
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(logExerciseSet).toHaveBeenCalledOnce());
+  });
+
+  test("holds on the last exercise once everything is logged", () => {
+    resumed();
+    render(
+      view({
+        sessions: withSets([
+          set("e1", 1),
+          set("e1", 2),
+          set("e1", 3),
+          set("e2", 1),
+          set("e2", 2),
+          set("e3", 1),
+          set("e3", 2),
+          set("e3", 3),
+        ]),
+      }),
+    );
+
+    // Not an empty screen: the reader is still standing in the gym, and the
+    // primary they came for is in the bar below.
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Plank");
+    expect(screen.getByRole("button", { name: "Mark done" })).toBeTruthy();
+  });
+
+  test("offers an exercise with no rep target a row and no target to meet", () => {
+    // '3 x 45s' is three sets of a hold. A regex over that string would offer
+    // "Target 3–45"; the seed says sets and nothing else, and this is what the
+    // screen does with that.
+    resumed();
+    render(
+      view({
+        sessions: withSets([
+          set("e1", 1),
+          set("e1", 2),
+          set("e1", 3),
+          set("e2", 1),
+          set("e2", 2),
+        ]),
+      }),
+    );
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Plank");
+    expect(screen.queryByText(/^Target/)).toBeNull();
+    expect(screen.getByLabelText<HTMLInputElement>("Set 1 reps").placeholder).toBe("");
+    // Nothing to tick at until a number is typed — the alternative is a control
+    // that reports a refusal for a value the reader never entered.
+    expect(screen.getByRole("button", { name: "Log set 1" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+  });
+
+  test("logs against an exercise with no target once a number is typed", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(
+      view({
+        sessions: withSets([
+          set("e1", 1),
+          set("e1", 2),
+          set("e1", 3),
+          set("e2", 1),
+          set("e2", 2),
+        ]),
+      }),
+    );
+
+    await user.type(screen.getByLabelText("Set 1 reps"), "20");
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    expect(logExerciseSet).toHaveBeenCalledWith(
+      expect.objectContaining({ exerciseId: "e3", setIndex: 1, reps: 20 }),
+    );
+  });
+
+  test("reverts the set and names what failed when the server refuses", async () => {
+    const user = userEvent.setup();
+
+    logExerciseSet.mockResolvedValue({ ok: false });
+
+    resumed();
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    // § Tone of Voice: name what happened, and name it apart from the session's
+    // own record — this is a set the reader just performed.
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      expect.stringContaining("Couldn’t save that set."),
+    );
+    // § Feedback's "the value reverted". `findBy`, for the reason the status's
+    // own refusal test gives one line up: the optimistic value is discarded
+    // when the transition SETTLES rather than when the promise resolves, so a
+    // `getBy` here is a race the banner has already won.
+    expect(await screen.findByRole("button", { name: "Log set 1" })).toBeTruthy();
+
+    // "Try again" re-runs the same thing that failed.
+    logExerciseSet.mockResolvedValue({ ok: true });
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(logExerciseSet).toHaveBeenCalledTimes(2);
+    expect(logExerciseSet).toHaveBeenLastCalledWith(
+      expect.objectContaining({ setIndex: 1, reps: 12 }),
+    );
+  });
+
+  test("never touches the session's status", async () => {
+    // PRD § P10, and the criterion this whole feature is measured against: the
+    // status is not derived from set data. A set is a set.
+    const user = userEvent.setup();
+
+    resumed();
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    await waitFor(() => expect(logExerciseSet).toHaveBeenCalledOnce());
+    expect(setSessionStatus).not.toHaveBeenCalled();
+    expect(clearSessionStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe("what the plan state says about sets", () => {
+  test("puts set progress on the exercise's own row and adds no rows", () => {
+    // § Desktop's table: "Slash metadata on the exercise's own row — `/ 3 of 3
+    // sets`. No rows added." That is what keeps § Lists' window spendable.
+    render(view({ sessions: withSets([set("e1", 1), set("e1", 2)]) }));
+
+    // The exercise list itself, found through a row of it — the screen holds
+    // three lists and the other two are the aside's.
+    const list = screen.getByText("Press-ups").closest("ol")!;
+
+    expect(screen.getByText("2 of 3 sets")).toBeTruthy();
+    // Three exercises, three rows. The progress is metadata on a row rather
+    // than a row of its own.
+    expect(within(list).getAllByRole("listitem")).toHaveLength(3);
+  });
+
+  test("says nothing at all about an exercise with no sets", () => {
+    // A row that announced "0 of 3 sets" would be reporting an absence on every
+    // date nobody trained — and would move every one of this screen's baselines.
+    render(view());
+
+    expect(screen.queryByText(/of 3 sets/)).toBeNull();
+  });
+
+  test("still counts a session's sets after leaving the state", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: withSets([set("e1", 1)]) }));
+    await user.click(screen.getByRole("button", { name: "Mark done" }));
+
+    // The plan state is the list, and the list still says what was performed.
+    // Leaving the session state is a change of composition, not of record.
+    expect(await screen.findByText("1 of 3 sets")).toBeTruthy();
   });
 });
