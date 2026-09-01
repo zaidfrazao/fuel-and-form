@@ -35,6 +35,7 @@ import {
   PAGE_ASIDE_COLUMN,
   PAGE_ASIDE_GRID,
   PAGE_ASIDE_UNWRAP,
+  PAGE_BAND_GRAPHIC,
   PAGE_HEADER_BAND,
   PAGE_MEASURE_COLUMN,
   PAGE_MEASURE_FOOT,
@@ -278,11 +279,16 @@ function MealMacros({
       <Eyebrow>This meal</Eyebrow>
 
       {/*
-       * Four-across at the frame's cap, 2×2 below it — § Desktop's density
-       * rule as FUEL-85 amended it: "the four-macro grid, which this rule names
-       * out of scope, goes four-across on a measure and stays 2×2 in an aside.
-       * At 584 the 2×2 puts around 300px between a label and the next value,
-       * which is four islands rather than a grid."
+       * Four-across on the measure, 2×2 in an aside — § Desktop's density rule
+       * as FUEL-85 amended it: "the four-macro grid, which this rule names out
+       * of scope, goes four-across on a measure and stays 2×2 in an aside. At
+       * 584 the 2×2 puts around 300px between a label and the next value, which
+       * is four islands rather than a grid."
+       *
+       * On the MEASURE, which is 584px from 768px up and not only at the frame's
+       * cap — so the four arrive at 768 since FUEL-79. They used to wait for
+       * 1272, which drew those four islands for the whole of the tablet band on
+       * a column that was already the width the rule was written about.
        *
        * This grid is the measure's, so it takes the four. `DayTotals` below is
        * the aside's and keeps the two. Same component, same rule about content,
@@ -1373,7 +1379,10 @@ export function RightNow({
     // it drops the `hidden md:block` half and keeps only the stand-down at the
     // cap — there is no merged grid here for the ruler to move around.
     <div
-      className={activeMeal ? RULER_AT.wide : RULER_AT.belowCap}
+      className={cn(
+        activeMeal ? RULER_AT.wide : RULER_AT.belowCap,
+        PAGE_BAND_GRAPHIC,
+      )}
       data-ruler="wide"
     >
       {ruler}
@@ -1387,7 +1396,7 @@ export function RightNow({
   ) : null;
 
   const rulerBelowCap = (
-    <div className={RULER_AT.belowCap} data-ruler="below-cap">
+    <div className={cn(RULER_AT.belowCap, PAGE_BAND_GRAPHIC)} data-ruler="below-cap">
       {ruler}
     </div>
   );

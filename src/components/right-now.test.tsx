@@ -7,7 +7,12 @@ import { RightNow } from "@/components/right-now";
 import type { LoggedEntry } from "@/lib/day-summary";
 import { RULER_AT } from "@/components/day-ruler";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
-import { PAGE_ASIDE_COLUMN, PAGE_MEASURE_COLUMN, PAGE_MEASURE_FOOT } from "@/lib/frame";
+import {
+  PAGE_ASIDE_COLUMN,
+  PAGE_BAND_GRAPHIC,
+  PAGE_MEASURE_COLUMN,
+  PAGE_MEASURE_FOOT,
+} from "@/lib/frame";
 import type { MacroTarget } from "@/lib/macros";
 import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve-now";
 import type { WalkEntryView } from "@/lib/walk";
@@ -463,7 +468,13 @@ describe("the day's numbers, in two shapes", () => {
     // above: this one is drawn on a phone too.
     const wide = document.querySelector('[data-ruler="wide"]')!;
 
-    expect(wide.className).toBe(RULER_AT.belowCap);
+    // The position variant, plus the band's width since FUEL-79 — `toContain`
+    // rather than `toBe` because this element now carries two decisions: WHICH
+    // widths draw this copy (`RULER_AT`) and HOW WIDE it is drawn (the bleed).
+    // The header copy carries only the first, because at the cap the ruler is
+    // placed by the header band and is already spanning the frame.
+    expect(wide.className).toContain(RULER_AT.belowCap);
+    expect(wide.className).toContain(PAGE_BAND_GRAPHIC);
     expect(document.querySelector('[data-ruler="header"]')!.className).toBe(
       RULER_AT.header,
     );
@@ -486,8 +497,16 @@ describe("the day's numbers, in two shapes", () => {
     // than restated: two lists of the same three strings is the drift the
     // constant exists to end, and this test would be the place it started.
     expect(shownAt("phone")).toBe(RULER_AT.phone);
-    expect(shownAt("wide")).toBe(RULER_AT.wide);
+    expect(shownAt("wide")).toContain(RULER_AT.wide);
     expect(shownAt("header")).toBe(RULER_AT.header);
+
+    // FUEL-79: the wide copy also states its width. § Desktop's "a graphic, a
+    // folio and a table may take the frame" had been released only at the cap,
+    // so the band drew its one time graphic in the 584px prose column with the
+    // window's spare width as margin. The two decisions are separate strings on
+    // purpose — which band draws this copy is `RULER_AT`'s, how wide it is drawn
+    // is the frame's.
+    expect(shownAt("wide")).toContain(PAGE_BAND_GRAPHIC);
 
     /*
      * And the property that matters, which the strings alone do not give: each
@@ -2358,8 +2377,22 @@ describe("the second column", () => {
      * at 356 the 2×2 is the density the phone already proves."
      *
      * So the count is decided by the COLUMN, and the two grids on this screen
-     * are in different columns. Both are 2×2 below the cap, which is what keeps
-     * the 375 and 820 baselines byte-identical.
+     * are in different columns.
+     *
+     * ## Inverted by FUEL-79, and the old assertion is why it had to be
+     *
+     * This test used to bar `md:` and `lg:` outright, on the grounds that "the
+     * 820 baseline is the control for this whole ticket, and a grid that went
+     * four across in that band would move it". That was FUEL-85 protecting its
+     * own control, and it hard-coded a width rule into a paragraph that ends
+     * "the count is decided by the content, and so it is **not a width rule**".
+     *
+     * The measure is 584px at every width from 768 up, so the `xl:` variant had
+     * the identical 584px column drawing this grid 2×2 at 820 and four-across at
+     * 1272 — the four islands the amendment names, for five hundred pixels of
+     * window, on the exact column the amendment was written about. FUEL-79 is
+     * the ticket that claims that band, so the four arrive at 768 and the 820
+     * baseline moving is the deliberate outcome rather than the thing to avoid.
      */
     renderNow(active(0));
 
@@ -2372,11 +2405,13 @@ describe("the second column", () => {
     expect(meal).toContain("grid-cols-2");
     expect(day).toContain("grid-cols-2");
 
-    // The measure's, and only at the cap. `md:`/`lg:` are barred outright: the
-    // 820 baseline is the control for this whole ticket, and a grid that went
-    // four across in that band would move it.
-    expect(meal).toContain("xl:grid-cols-4");
-    expect(meal).not.toMatch(/(md|lg):grid-cols/);
+    // The measure's, from where the measure becomes 584 — `page-main.tsx` goes
+    // to a 28px gutter at 768, and 584/4 is 146 against § Density's own 110px
+    // test. `xl:` is barred now, as the mirror of what this used to say: at the
+    // cap the column is the same 584 it was at 768, so a variant there is a
+    // width rule wearing a density rule's clothes.
+    expect(meal).toContain("md:grid-cols-4");
+    expect(meal).not.toMatch(/(lg|xl):grid-cols/);
 
     // The aside's takes no variant at all — 356px is the width the phone's own
     // 2×2 was measured at.

@@ -3,6 +3,8 @@ import { describe, expect, test } from "vitest";
 import {
   PAGE_ASIDE_COLUMN,
   PAGE_ASIDE_GRID,
+  PAGE_BAND_GRAPHIC,
+  PAGE_BAND_SPAN,
   PAGE_MEASURE_COLUMN,
   PAGE_MEASURE_FOOT,
 } from "./frame";
@@ -196,5 +198,97 @@ describe("the page's own columns emit what they claim", () => {
     // and the bar goes down with it — measured at 183px on `/` before this.
     // A flexible last track confines the surplus to the bar's row, below it.
     expect(css).toContain("grid-template-rows: auto auto 1fr");
+  });
+});
+
+describe("the tablet band is bounded rather than fluid — FUEL-79", () => {
+  /*
+   * § Desktop claims 768–1023 for "the phone's navigation and the desktop's
+   * content shapes", and FUEL-85 released graphics, figures, folios and tables
+   * from the measure. Doing both without a ceiling produces a regression rather
+   * than a gain, and `/plan` was the proof: it has spanned since FUEL-71 with
+   * nothing capping it, and measured **967px at 1023 and 776px at 1024**,
+   * because below `lg` there is no rail and at `lg` the rail and its gutter take
+   * 248px back. One pixel of window cost 191px of table.
+   *
+   * These tests hold the two halves of the answer: the band is capped at what
+   * `lg` will give it, and the cap is released when `lg` arrives. Both are
+   * `max-width`, both are on `<main>`, and the second is the one easy to lose —
+   * without it the 776 would still be standing at 1920, which is the same shape
+   * of fault as a `max-w-none` that was never written.
+   */
+  test("the band's cap and its release are both emitted, in that order", async () => {
+    const css = await build(utilities(PAGE_BAND_SPAN));
+
+    expect(css).toContain("max-width: var(--frame-band-max)");
+    expect(css).toContain("max-width: var(--frame-span)");
+
+    // `lg` after `md`, so the release is the later rule and wins. This is the
+    // one ordering in the app that resolves the way it reads — an `xl:` here
+    // would not, which is what the emission-order test above is about.
+    const at = (width: string) => css.search(new RegExp(`@media[^{]*${width}`));
+    expect(at("48rem"), "md before lg").toBeLessThan(at("64rem"));
+  });
+
+  /*
+   * The bleed is two rules because the spare width is not in the same place at
+   * both ends of the band: below `lg` `<main>` is centred and the width is split
+   * either side, and at `lg` it is the frame's second track and the width is all
+   * to its right. A symmetric bleed at `lg` puts the graphic's left edge at
+   * x=208, inside the 220px rail.
+   *
+   * Both halves are bounded by `max-xl`, and that is the assertion that matters:
+   * at 1272 these graphics are placed by the header band and are already
+   * spanning the frame, so a bleed still standing would push them off the right
+   * of the window. An `xl:` cancel would NOT work — Tailwind emits `xl` first,
+   * so it would be the earlier rule — which is why the bound is on the variant
+   * rather than on an override.
+   */
+  test("the graphic's bleed stands down at the frame's cap", async () => {
+    for (const utility of utilities(PAGE_BAND_GRAPHIC)) {
+      const atRules = enclosingAtRules(await build([utility]), utility).join(" ");
+
+      expect(atRules, `${utility} is not bounded above`).toMatch(/width < 1272px/);
+    }
+  });
+
+  test("the bleed is symmetric below the rail and rightward once it arrives", async () => {
+    const css = await build(utilities(PAGE_BAND_GRAPHIC));
+
+    // Half the difference each side below `lg`; the whole of it to the right at
+    // `lg`, with the symmetric half zeroed first. Both derive from the same pair
+    // of declarations, so the band's width is stated once and the escapes follow
+    // it — a bleed written as a number would be 68 and 136 with nothing saying
+    // where either came from.
+    //
+    // Read as the emitted property rather than as the authored value: Tailwind
+    // negates an arbitrary margin by wrapping it in `calc(… * -1)`, so asserting
+    // the class string back would pass on a rule that never reached CSS.
+    expect(css).toContain(
+      "margin-inline: calc(calc((var(--frame-band-inset) - var(--frame-measure-inset)) / 2) * -1)",
+    );
+    expect(css).toContain(
+      "margin-right: calc(calc(var(--frame-band-inset) - var(--frame-measure-inset)) * -1)",
+    );
+
+    // The `lg` half zeroes the symmetric margin before taking the whole
+    // difference rightward. Without it the two would add up and the graphic
+    // would keep a left bleed under the rail.
+    expect(css).toContain("margin-inline: 0px");
+  });
+
+  /*
+   * § Density's amendment is "four-across on a measure and stays 2×2 in an
+   * aside", and it closes by insisting the count "is decided by the content, and
+   * so it is not a width rule". An `xl:` variant made it one: the measure is
+   * 584px at every width from 768 up, so the identical column drew this grid 2×2
+   * at 820 and four-across at 1272.
+   */
+  test("the four-macro grid takes its four where the measure becomes 584", async () => {
+    const css = await build(["md:grid-cols-4"]);
+    const atRules = enclosingAtRules(css, "md:grid-cols-4").join(" ");
+
+    expect(atRules).toMatch(/48rem/);
+    expect(atRules).not.toMatch(/1272px/);
   });
 });

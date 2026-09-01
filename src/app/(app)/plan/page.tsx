@@ -10,9 +10,10 @@ import { getSession } from "@/lib/auth/session";
 import { type CalendarDate, startOfWeek } from "@/lib/date";
 import { loadWeek } from "@/lib/db/queries/week";
 import type { Meal } from "@/lib/db/schema";
-import { FRAME_MEASURE_AND_ASIDE } from "@/lib/frame";
+import { FRAME_MEASURE_AND_ASIDE, PAGE_BAND_SPAN, PAGE_PROSE } from "@/lib/frame";
 import { weekFolio, weekLabel } from "@/lib/now-display";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
+import { cn } from "@/lib/utils";
 import { requestedWeek } from "@/lib/week-param";
 
 /**
@@ -172,6 +173,32 @@ export default async function PlanPage({
      * whatever the window leaves — 776px at 1024, the number `min-w-0` was
      * measured against.
      *
+     * The 1024 is `--frame-span` since FUEL-79 rather than a literal. It was the
+     * only place in the app that wrote the frame's own arithmetic down as a
+     * total, so an edit to the rail or the gutter would have moved the frame and
+     * left this screen on the old sum.
+     *
+     * ## The band is capped, and that is FUEL-79's whole change here
+     *
+     * `PAGE_BAND_SPAN` holds 768–1023 to 776px — less than the window has, on
+     * purpose. Without it this screen was the app's clearest monotonicity fault
+     * and it was live: the grid measured **967px at 1023 and 776px at 1024**,
+     * because below `lg` there is no rail and this `<main>` took the whole
+     * window, and at `lg` the rail and its gutter take 248px of it back. One
+     * pixel of extra window cost 191px of table and roughly 27px off every day
+     * column. FUEL-79's fourth criterion names this regression by width and asks
+     * for it to be gone; capping the band at what `lg` will give it is what
+     * makes the rail's arrival free.
+     *
+     * ## And the sentence above the grid is prose, which it had never said
+     *
+     * `PAGE_PROSE` on the header. § Desktop narrowed the measure to bind "a
+     * paragraph, a heading and a sentence of explanation... at every width", and
+     * this screen has spanned since FUEL-71 with nothing capping its own. The
+     * explanatory line measured 723px at 767, 967 at 1023 and 968 at 1272 — the
+     * longest run of type in the app, at the one width the mock is drawn at.
+     * The grid keeps the span; only the words are brought back to 584.
+     *
      * § Desktop went one sentence further than the numbers did, and FUEL-71
      * settled it here rather than deferring it again. The guide said the grid
      * "stops scrolling sideways for the first time" at this width and it did
@@ -198,9 +225,13 @@ export default async function PlanPage({
      * horizontal strip of the page's bottom, so the padding goes back to 8.
      */
     <PageMain
-      className={`${FRAME_MEASURE_AND_ASIDE} max-w-[1024px] gap-7 pt-8 pb-[calc(var(--nav-shell-h)+--spacing(8))] lg:pb-8`}
+      className={cn(
+        FRAME_MEASURE_AND_ASIDE,
+        PAGE_BAND_SPAN,
+        "max-w-[var(--frame-span)] gap-7 pt-8 pb-[calc(var(--nav-shell-h)+--spacing(8))] lg:pb-8",
+      )}
     >
-      <header className="flex flex-col gap-2">
+      <header className={cn("flex flex-col gap-2", PAGE_PROSE)}>
         {/*
          * No `week` — the parent is `/`, which takes no `searchParams` and has
          * no week to be on. The grid's own `?week=` is carried by `WeekNav`

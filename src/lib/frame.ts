@@ -421,6 +421,101 @@ export const PAGE_MEASURE_FOOT = "xl:col-start-1 xl:row-start-3 xl:mt-0 xl:self-
 export const PAGE_FRAME_SPAN = "xl:col-end-[-1] xl:max-w-none";
 
 /**
+ * How wide a screen may be before the rail arrives — FUEL-79.
+ *
+ * Worn by `<main>` on the screens whose content is wider than their prose. It
+ * is two caps rather than one, and the first is the whole of this ticket:
+ *
+ *   - `md` — `--frame-band-max`, 776px. NOT the width the band has. 768–1023
+ *     has up to 1023px and may not spend it, because at 1024 the rail and its
+ *     gutter take 248px back and a screen that had taken them would narrow as
+ *     the window widened. `globals.css` carries the arithmetic beside the
+ *     declaration.
+ *   - `lg` — `--frame-span`, 1024px, which is the measure and the aside
+ *     together and the cap the frame imposes anyway from 1272. Between 1024 and
+ *     1271 it never binds: the frame is fluid there and `<main>` is the viewport
+ *     less the rail and its gutter, which reaches 1023 at 1271 and so arrives at
+ *     the cap exactly as the frame does.
+ *
+ * ## Why the `lg` cap is stated when it never binds
+ *
+ * Because `FRAME_MEASURE` carries an unscoped `max-w-[var(--frame-measure)]`
+ * and a `md:` cap outranks it, so without a `lg:` rule the 776 would still be
+ * standing at 1920. That is the same shape of fault as `PAGE_ASIDE_GRID`'s
+ * `max-w-none`: a cap written for one band that nothing releases in the next.
+ *
+ * ## The order these are emitted in is safe, and it is worth saying why
+ *
+ * Tailwind puts a redefined breakpoint's block first — `xl`, then `sm`, `md`,
+ * `lg` — which is what shipped two day rulers in FUEL-77 and is the reason
+ * `RULER_AT.wide` is a bounded `md:max-xl:`. Nothing here is bounded, and
+ * nothing needs to be: `md` and `lg` are emitted in their natural order
+ * relative to each other, so `lg` is the later rule and wins. It is only an
+ * `xl:` override of an `md:` rule that resolves backwards, and there is none
+ * on this element.
+ */
+export const PAGE_BAND_SPAN =
+  "md:max-w-[var(--frame-band-max)] lg:max-w-[var(--frame-span)]";
+
+/**
+ * A graphic taking the band's width, from inside the measure — FUEL-79.
+ *
+ * § Desktop, amended by FUEL-85: "a paragraph, a heading and a sentence of
+ * explanation stay on the measure at every width. **A graphic, a figure, a
+ * folio and a table may take the frame.**" Every release of that rule was bound
+ * to `xl`, so between 768 and 1271 the app drew its graphics in a 584px column
+ * with the window's spare width as margin either side — the tablet band's
+ * headline complaint, and 118px a side at 820.
+ *
+ * ## Why this is a bleed rather than a wider `<main>`
+ *
+ * Because `<main>` is not where these graphics live. Below the cap the two
+ * column groups are `display: contents` (`PAGE_ASIDE_UNWRAP`), so a screen's
+ * sections are one flat flex column and the ruler is a sibling of the meal
+ * title. Widening `<main>` widens all of them, and almost every one narrows
+ * again at 1272 when it lands in the measure or the aside — the day's totals go
+ * from the window to 356px. Capping each of them back to 584 is a correction
+ * applied everywhere to release one element, and hoisting the graphic out of
+ * the group would reorder what a screen reader walks, which `right-now.tsx`
+ * guarantees it does not do at any width.
+ *
+ * So the graphic escapes instead, which is the device `/plan`'s week grid has
+ * used since FUEL-71 — "the grid alone bleeds back out of it" — one scale down.
+ * Nothing else on the screen moves, and the constant is worn by the one element
+ * entitled to the width.
+ *
+ * ## Two escapes, because the spare width is not in the same place
+ *
+ *   - **768–1023, symmetric.** `<main>` is 640 and centred, so the spare width
+ *     is split either side and the bleed is half of it each way: 68px, taking
+ *     584 to `--frame-band-inset`. It fits at the narrowest width in the band —
+ *     at 768 the margins are 64 and the content starts at 92, so a 68px bleed
+ *     begins at x=24 rather than off the screen.
+ *   - **1024–1271, rightward only.** The rail arrives and `<main>` becomes the
+ *     frame's second track, so the spare width is entirely to its right. A
+ *     symmetric bleed here would put the graphic's left edge at x=208, which is
+ *     inside the 220px rail. `mx-0` first, then the whole 136px to the right.
+ *
+ * Both land on the same 720, which is the point: the graphic is one width for
+ * the whole of 768–1271 and the rail's arrival does not move it.
+ *
+ * ## Bounded to below the cap, and that is not optional
+ *
+ * `max-xl` on both halves. At 1272 these graphics are placed by the header band
+ * or by a spanning row and are 968 wide; a bleed still standing there would add
+ * 136px to an element already spanning the frame and push it off the right of
+ * the window. And it has to be `md:max-xl:`/`lg:max-xl:` rather than an `xl:`
+ * override, for the reason `RULER_AT.wide` sets out at length: Tailwind emits
+ * the redefined `xl` block BEFORE `md` and `lg`, so an `xl:mx-0` written to
+ * cancel this would be the earlier rule and would never land.
+ */
+export const PAGE_BAND_GRAPHIC = [
+  "md:max-xl:-mx-[calc((var(--frame-band-inset)-var(--frame-measure-inset))/2)]",
+  "lg:max-xl:mx-0",
+  "lg:max-xl:-mr-[calc(var(--frame-band-inset)-var(--frame-measure-inset))]",
+].join(" ");
+
+/**
  * A block of prose on a screen that spans the frame — FUEL-78.
  *
  * The other half of `PAGE_FRAME_SPAN`, and the half that does the arguing.
@@ -436,8 +531,28 @@ export const PAGE_FRAME_SPAN = "xl:col-end-[-1] xl:max-w-none";
  * gutter. Capping at 640 here would make the prose 56px wider at 1272 than at
  * 1271 and nowhere else in the app — a line that gets longer exactly once, at
  * the width the mock is drawn at.
+ *
+ * ## `md` and not `xl` since FUEL-79
+ *
+ * The rule this implements says "at every width", and until FUEL-79 this said
+ * it at one. That cost nothing while the only screens spanning the frame did so
+ * at `xl` — below the cap their `<main>` was the measure, so their prose was
+ * 584 because there was no width to be wider in.
+ *
+ * `PAGE_BAND_SPAN` is what makes the difference real: a screen that takes 776px
+ * at 768 has 720px of content, and an `xl:`-bound cap would have let a sentence
+ * run the whole of it for five hundred pixels of window. `/plan` is the proof
+ * that this is not hypothetical — it has spanned since FUEL-71 with no cap at
+ * all, and its explanatory sentence measured **723px at 767, 967 at 1023 and
+ * 968 at 1272**, which is the longest line of type in the app and the one thing
+ * § Desktop's measure exists to prevent.
+ *
+ * Moving it down is safe for the two screens already wearing it. `/shopping`
+ * and `/plan/template` keep a 640px `<main>` below the cap, so 584 is what they
+ * already resolved to and the earlier variant changes nothing there; it binds
+ * only where a screen has actually taken the extra width.
  */
-export const PAGE_PROSE = "xl:max-w-[var(--frame-measure-inset)]";
+export const PAGE_PROSE = "md:max-w-[var(--frame-measure-inset)]";
 
 /**
  * A list of grouped items, flowed into columns — FUEL-78.

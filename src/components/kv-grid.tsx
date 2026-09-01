@@ -151,24 +151,38 @@ export function SlashMeta({
  * silently, and only in a production build if the class happened to be reached
  * from somewhere else in development.
  *
- * **`4` is a shape, not a count** — 2×2 below the frame's cap and four across
- * at it, which is the whole of FUEL-85's ruling and the reason the breakpoint
+ * **`4` is a shape, not a count** — 2×2 on a phone and four across on a
+ * measure, which is the whole of FUEL-85's ruling and the reason the breakpoint
  * is here rather than in a class string at the callsite. Four across a 375px
  * phone is 83px a column against the guide's own 110px test, so a `4` that
  * meant four at every width would be a count no screen in this app could pass
  * in. Keeping it here also means the one grid entitled to four cannot acquire
  * them in an aside by someone adding a variant next to a `columns={2}`.
  *
- * Safe as a bare `xl:` despite the emission order that produced two rulers in
- * FUEL-77: that fault needs two VARIANTS competing for one property, and
- * nothing sets `grid-cols` at `md` on this element. The base `grid-cols-2` is a
- * base utility, which every variant outranks whatever order the blocks are
- * emitted in.
+ * ## `md` and not `xl` since FUEL-79
+ *
+ * § Density's amendment is "the four-macro grid goes four-across **on a
+ * measure** and stays 2×2 **in an aside**", and it closes by insisting the
+ * count "is decided by the content, and so it is not a width rule". An `xl:`
+ * variant made it one, and the result was visible: the measure is 584px at
+ * every width from 768 up, so the identical 584px column drew this grid 2×2 at
+ * 820 and four-across at 1272. The width had changed and the column had not.
+ *
+ * 768 is where the measure becomes 584 — `page-main.tsx` goes to a 28px gutter
+ * there — so it is where the 110px test starts passing: 584/4 is 146. Below it
+ * the phone renders `MealDayGrid` instead and this shape is not on screen at
+ * all. The aside is untouched, because an aside grid is `columns={2}` and asks
+ * for none of this.
+ *
+ * Safe as a bare `md:` for the reason the `xl:` was safe, and more so: the
+ * emission order that produced two rulers in FUEL-77 needs two VARIANTS
+ * competing for one property, and this element has one variant over a base
+ * utility. A base is outranked whatever order the blocks come out in.
  */
 const COLUMNS: Record<2 | 3 | 4, string> = {
   2: "grid-cols-2",
   3: "grid-cols-3",
-  4: "grid-cols-2 xl:grid-cols-4",
+  4: "grid-cols-2 md:grid-cols-4",
 };
 
 export function KeyValueGrid({
