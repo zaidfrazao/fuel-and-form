@@ -278,9 +278,15 @@
      borrows the 1024 composition's width early instead of inventing one it
      cannot keep.
 
-     Derived, and then checked: `frame.css.test.ts` asserts it equals the content
-     width `<main>` actually resolves to at exactly 1024px, because a number this
-     one is supposed to meet is worth meeting rather than trusting. */
+     Derived, and then checked in a browser rather than trusted, because the
+     whole claim is about a rendered width. `monotonic.spec.ts` measures every
+     route's `<main>` at 1023 and at 1024 among seventeen widths and refuses any
+     narrowing, which is this number being right stated as the property it is
+     for: if the 776 drifts from what `lg` actually gives, the two readings stop
+     meeting and the sweep fails at that pair. `frame.css.test.ts` covers the
+     other half — that the utilities carrying it compile and are emitted in the
+     order they read — which is a question about CSS and answerable without a
+     layout. */
   --frame-band-max: calc(
     var(--frame-span) - var(--frame-rail) - var(--frame-gutter)
   );

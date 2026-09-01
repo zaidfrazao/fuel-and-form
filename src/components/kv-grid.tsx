@@ -178,8 +178,24 @@ export function SlashMeta({
  * emission order that produced two rulers in FUEL-77 needs two VARIANTS
  * competing for one property, and this element has one variant over a base
  * utility. A base is outranked whatever order the blocks come out in.
+ *
+ * ## Exported, because a second file draws this grid — FUEL-79
+ *
+ * `(app)/loading.tsx` renders the skeleton's stand-in for it, and until now it
+ * spelled the shape out again by hand with a comment saying it was "spelled the
+ * same way here". FUEL-79 moved the real grid to `md` and the copy stayed at
+ * `xl`, so the skeleton drew 2×2 for the whole of 768–1271 while the screen
+ * drew four across — a shift on swap-in, which is the single property a
+ * skeleton has over a spinner.
+ *
+ * Neither suite caught it and that is the instructive part: `loading.test.tsx`
+ * asserted the literal `xl:grid-cols-4`, so the drift is exactly what the test
+ * pinned, and the baselines photograph the settled page rather than the
+ * skeleton. This is `RULER_AT`'s lesson arriving a second time — "three
+ * literals in two files kept in step by hand is exactly what `action-bar.ts`
+ * was extracted to end" — so the map is the declaration and both files read it.
  */
-const COLUMNS: Record<2 | 3 | 4, string> = {
+export const KV_GRID_COLUMNS: Record<2 | 3 | 4, string> = {
   2: "grid-cols-2",
   3: "grid-cols-3",
   4: "grid-cols-2 md:grid-cols-4",
@@ -210,7 +226,7 @@ export function KeyValueGrid({
    * than two screens.
    *
    * `4` carries its own breakpoint — 2×2 below the frame's cap and four across
-   * at it. See `COLUMNS` below for why that lives in here rather than as a
+   * at it. See `KV_GRID_COLUMNS` below for why that lives in here rather than as a
    * variant a caller hangs on `className`.
    */
   columns?: 2 | 3 | 4;
@@ -234,7 +250,7 @@ export function KeyValueGrid({
     <dl
       className={cn(
         "grid gap-x-4 gap-y-[22px]",
-        COLUMNS[columns],
+        KV_GRID_COLUMNS[columns],
         className,
       )}
     >
