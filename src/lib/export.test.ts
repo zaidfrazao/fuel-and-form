@@ -649,6 +649,26 @@ describe("every tie-break", () => {
     inOrder("workoutExercises", [exercise(LO, 1), exercise(HI, 1)], BY_ID);
   });
 
+  test("exerciseSets: log, then exercise, then set index, then id", () => {
+    // The order they were performed in, which is also the order the screen
+    // draws — FUEL-91. Each clause is exercised against a row that would sort
+    // the other way on id alone, so a comparator missing one of them fails
+    // here rather than reordering a session's sets in a restore.
+    const otherLog = {
+      ...exerciseSet(LO, 1),
+      workoutLogId: "ffffffff-0000-4000-8000-00000000000e",
+    };
+    const otherExercise = {
+      ...exerciseSet(LO, 1),
+      exerciseId: "ffffffff-0000-4000-8000-00000000000d",
+    };
+
+    inOrder("exerciseSets", [exerciseSet(HI, 1), otherLog], AGAINST_ID);
+    inOrder("exerciseSets", [exerciseSet(HI, 1), otherExercise], AGAINST_ID);
+    inOrder("exerciseSets", [exerciseSet(HI, 1), exerciseSet(LO, 2)], AGAINST_ID);
+    inOrder("exerciseSets", [exerciseSet(LO, 1), exerciseSet(HI, 1)], BY_ID);
+  });
+
   test("planTemplateEntries: weekday, then slot, then sort order, then id", () => {
     inOrder(
       "planTemplateEntries",
