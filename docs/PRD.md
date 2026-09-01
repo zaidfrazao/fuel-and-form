@@ -140,7 +140,7 @@ Overrides are visually distinguished from template entries, and each is individu
 
 #### P3 — Training Log
 
-**Description:** Today's session — Circuit A, Circuit B, or skipping intervals + core — with its full exercise list and prescriptions. Mark done, partial, or skipped, with an optional free-text note (reps achieved, how it felt) and optional duration. The daily walk is a separate, always-present item logged with a single tap. Deliberately not a full workout tracker — which has narrowed rather than gone. Per-set logging arrived with § P10; the rest of the sentence still holds. There is no exercise search, no movement library beyond the workouts this app already has rows for, no personal-record tracking, and nothing that decides what to do next. The status, note and duration below are untouched by P10 and are not derived from anything it added.
+**Description:** Today's session — Circuit A, Circuit B, or skipping intervals + core — with its full exercise list and prescriptions. Mark done, partial, or skipped, with an optional free-text note (reps achieved, how it felt) and optional duration. The daily walk is a separate, always-present item logged with a single tap. Deliberately not a full workout tracker — which has narrowed rather than gone. Per-set logging is § P10's; the rest of the sentence still holds. There is no exercise search, no movement library beyond the workouts this app already has rows for, no personal-record tracking, and nothing that decides what to do next. The status, note and duration below are untouched by P10 and are not derived from anything it added.
 
 Circuit A/B **alternate across sessions**, not by fixed weekday — Mon=A, Wed=B, Fri=A, next Mon=B. Resolution is computed deterministically from the program start date so it never drifts (see Data Model).
 
@@ -250,7 +250,7 @@ Walk *logging* is part of P3 and ships regardless. This item is only the reminde
 
 ### Post-MVP Features
 
-Built after the MVP shipped, in the same series and to the same standard. Not weekend scope and never claimed to be — they are here rather than under Nice-to-Have because they are specified and being built, not wished for.
+The same series and the same standard, built on top of a shipped MVP rather than during the weekend. Never weekend scope and never claimed to be — these are here rather than under Nice-to-Have because they are specified and scheduled, not wished for.
 
 #### P10 — Training Tools
 
@@ -283,7 +283,7 @@ Built after the MVP shipped, in the same series and to the same standard. Not we
 
 ### Nice-to-Have Features
 
-Deferred to post-MVP; not built this weekend.
+Wished for rather than specified — which is what separates these from § Post-MVP above, where the deferral has since turned into a plan. Nothing here is scheduled.
 
 - **Weigh-in note field** — *promoted into P5 acceptance criteria; it costs minutes, not hours.*
 - **Photo attachment** on weigh-ins for progress pictures.
@@ -300,7 +300,7 @@ Deferred to post-MVP; not built this weekend.
 |---|---|
 | A searchable food database (MyFitnessPal-style) | The whole premise is a fixed ten-meal rotation. A search index solves a problem I don't have. |
 | Barcode scanning | Same reason. My food comes from recipes, not packets. |
-| An automatic progression or programming engine | The app records what was done; it does not decide what to do next. No prescribed load increases, no personal records, and no movement library beyond the workouts already in it. § P10 added per-set logging and none of this. |
+| An automatic progression or programming engine | The app records what was done; it does not decide what to do next. No prescribed load increases, no personal records, and no movement library beyond the workouts already in it. § P10 adds per-set logging and none of this. |
 | Real user accounts, signup, password reset, email | One human uses this. Demo sessions are ephemeral and credential-free. |
 | Native iOS/Android apps | A responsive web app reaches the phone in the kitchen at a fraction of the cost. |
 | Calorie estimation from photos, or any ML | Nothing here needs a model. |
@@ -328,7 +328,7 @@ Deferred to post-MVP; not built this weekend.
 
 ### Data Model
 
-Fifteen tables — fourteen built, and `exercise_sets` arriving with § P10. Every user-owned table carries `user_id` so the demo isolation is enforced at the query layer rather than by convention.
+Fifteen tables — fourteen built, and `exercise_sets` arriving with § P10. Anything below marked `-- P10` is specified rather than built, columns as well as the table; everything unmarked is in `schema.ts` today. Every user-owned table carries `user_id` so the demo isolation is enforced at the query layer rather than by convention.
 
 ```
 users
@@ -394,7 +394,7 @@ push_subscriptions             -- P9; where a browser can be reached
 
 **Circuit A/B alternation.** A `training_template_entries` row may name a `rotation_group` instead of a fixed `workout_id`. Resolution counts how many days matching that group have elapsed since `program_start_date` and takes that count modulo the number of workouts in the group. Deterministic from the date alone, so it never drifts and never depends on whether a session was logged.
 
-**Gym-restart readiness.** Adding weighted training means new `workouts` rows and new `training_template_entries` — no schema migration. Per-set load logging turned out to be wanted: § P10 spends this sentence, and it cost one additive table and additive columns, exactly as claimed. The restart itself is now a data change and nothing more — `exercise_sets.load_kg` is already there, waiting for the first row that fills it.
+**Gym-restart readiness.** Adding weighted training means new `workouts` rows and new `training_template_entries` — no schema migration. Per-set load logging turned out to be wanted, and § P10 is where this sentence gets spent. The claim is not an assumption there but the standard it is held to: if per-set logging needs anything beyond one additive table and additive columns, this paragraph was wrong when it was written. The restart itself then stays a data change, `exercise_sets.load_kg` waiting for the first row that fills it.
 
 ### Integrations
 
