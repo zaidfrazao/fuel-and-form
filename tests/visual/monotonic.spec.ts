@@ -99,30 +99,71 @@ test.describe("widening never makes a screen worse — FUEL-79", () => {
         }
 
         /*
-         * The CONTENT box rather than the border box. `<main>` pays its own
+         * Wait for the skeleton to go, and wait for it by COUNT.
+         *
+         * `(app)/loading.tsx` renders a `<main>` of its own — the same race
+         * `action-bar.spec.ts` documents for `APP_ACTION_BAR` — and the obvious
+         * two guards both fail here. `locator("main")` throws on strict mode
+         * while both are up. And filtering by `aria-hidden` does NOT work, which
+         * is the trap: the skeleton marks its column GROUPS `aria-hidden` and
+         * not its `<main>`, so a role query and an `aria-hidden` filter both
+         * resolve to it happily.
+         *
+         * That is worth stating because of how it failed rather than that it
+         * did. The skeleton's main is a plain `PageMain`, so it measures the
+         * 584px measure at every width — a number that is correct for most
+         * screens and wrong only for the ones that span. It reported `/plan`
+         * "narrowing from 720px at 1024 to 584px at 1100", which reads exactly
+         * like the regression this file exists to catch. A guard that silently
+         * measures the wrong element is worse than no guard, because it fails
+         * as the fault rather than as itself.
+         *
+         * One `main` on the page means the real one, and `toHaveCount` retries
+         * until that is true.
+         */
+        await expect(page.locator("main")).toHaveCount(1);
+
+        /*
+         * The lookup happens inside the page rather than through a handle. A
+         * handle resolved on the test side can be detached by a re-render before
+         * `evaluate` runs, and `getComputedStyle` on a detached node returns
+         * empty strings — which reached the assertion as `NaN`, comparing false
+         * against every number and failing as "narrows to NaNpx at 640".
+         *
+         * The CONTENT box rather than the border box: `<main>` pays its own
          * 22/28px gutter inside its width, so the border box says 640 on a
          * screen whose reader has 584 — and the gutter change at 768 is exactly
          * where the two disagree.
+         *
+         * § Accessibility's "nothing scrolls sideways at any width" is read in
+         * the same pass, because a bleed that takes width from the band is the
+         * likeliest way to buy one of these with the other.
          */
-        const content = await page.locator("main").evaluate((main) => {
+        const { content, overflow } = await page.evaluate(() => {
+          const main = document.querySelector("main");
+
+          if (!main) throw new Error("no main on the page");
+
           const style = getComputedStyle(main);
 
-          return (
-            main.getBoundingClientRect().width -
-            parseFloat(style.paddingLeft) -
-            parseFloat(style.paddingRight)
-          );
+          return {
+            content:
+              main.getBoundingClientRect().width -
+              parseFloat(style.paddingLeft) -
+              parseFloat(style.paddingRight),
+            overflow: document.documentElement.scrollWidth - window.innerWidth,
+          };
         });
 
-        // § Accessibility, and FUEL-71's withdrawn exception: no screen scrolls
-        // sideways at any width. Asserted in the same sweep because a bleed that
-        // takes width from the band is the likeliest way to buy one of these
-        // with the other.
-        const overflow = await page.evaluate(
-          () => document.documentElement.scrollWidth - window.innerWidth,
-        );
+        expect(
+          Number.isFinite(content),
+          `${screen.slug} produced no measurement at ${width}px`,
+        ).toBe(true);
 
-        expect(overflow, `${screen.slug} scrolls sideways at ${width}px`).toBeLessThanOrEqual(1);
+        expect(
+          overflow,
+          `${screen.slug} scrolls sideways at ${width}px`,
+        ).toBeLessThanOrEqual(1);
 
         measured.push({ width, content: Math.round(content) });
       }
