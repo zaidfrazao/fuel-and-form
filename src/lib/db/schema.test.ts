@@ -53,9 +53,12 @@ describe("schema", () => {
     // Thirteen since FUEL-45: `shopping_checks` holds P8's per-week tick state,
     // which the PRD's data model describes no table for. Fourteen since
     // FUEL-47: `push_subscriptions` holds the address P9's notification is sent
-    // to, which has to outlive the request that created it.
+    // to, which has to outlive the request that created it. Fifteen since
+    // FUEL-91: `exercise_sets` is § P10's per-set record, and the one table
+    // here the PRD's listing named before this file had it.
     expect(tables.map(([name]) => name).sort()).toEqual([
       "day_plan_overrides",
+      "exercise_sets",
       "meal_ingredients",
       "meal_logs",
       "meals",

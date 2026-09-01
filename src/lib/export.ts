@@ -1,6 +1,7 @@
 import type { CalendarDate } from "./date";
 import type {
   DayPlanOverride,
+  ExerciseSet,
   Meal,
   MealIngredient,
   MealLog,
@@ -176,6 +177,7 @@ export type ExportTables = {
   workoutExercises: readonly WorkoutExercise[];
   trainingTemplateEntries: readonly TrainingTemplateEntry[];
   workoutLogs: readonly WorkoutLog[];
+  exerciseSets: readonly ExerciseSet[];
   weightLogs: readonly WeightLog[];
   shoppingChecks: readonly ShoppingCheck[];
 };
@@ -264,6 +266,7 @@ export type ExportDocument = {
   workoutExercises: Exported<WorkoutExercise>[];
   trainingTemplateEntries: Exported<TrainingTemplateEntry>[];
   workoutLogs: (Omit<WorkoutLog, "userId" | "loggedAt"> & { loggedAt: Instant })[];
+  exerciseSets: (Omit<ExerciseSet, "userId" | "createdAt"> & { createdAt: Instant })[];
   weightLogs: (Omit<WeightLog, "userId" | "createdAt"> & { createdAt: Instant })[];
   shoppingChecks: (Omit<ShoppingCheck, "userId" | "checkedAt"> & {
     checkedAt: Instant;
@@ -506,6 +509,31 @@ export function buildExport({
         loggedAt: row.loggedAt.toISOString(),
       })),
       (a, b) => text(a.date, b.date) || text(a.id, b.id),
+    ),
+    /*
+     * A session's sets — § P10, FUEL-91.
+     *
+     * Exported rather than excluded, and the choice is the one this file's own
+     * test forces someone to make out loud. A backup is what stands between a
+     * restore and a loss, and per-set history is the part of a session a note
+     * field could only ever approximate; leaving it out would make the file
+     * quietly stop being a backup of the training record on the exact commit
+     * that gave the training record something to hold.
+     *
+     * Ordered by the log, then the exercise within it, then the set within
+     * that — which is the order they were performed in, and the order the
+     * screen draws. `id` closes the chain, as everywhere else.
+     */
+    exerciseSets: ordered(
+      tables.exerciseSets.map((row) => ({
+        ...withoutUser(row),
+        createdAt: row.createdAt.toISOString(),
+      })),
+      (a, b) =>
+        text(a.workoutLogId, b.workoutLogId) ||
+        text(a.exerciseId, b.exerciseId) ||
+        num(a.setIndex, b.setIndex) ||
+        text(a.id, b.id),
     ),
     weightLogs: ordered(
       tables.weightLogs.map((row) => ({

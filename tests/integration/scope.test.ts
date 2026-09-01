@@ -318,8 +318,10 @@ describe.skipIf(!configured)("demo isolation — Testing Strategy § 1.4", () =>
       // added `push_subscriptions`, which did the same — and matters more,
       // because that table holds the credential a notification is sent WITH.
       // A leak there is not a row someone else can read; it is a notification
-      // someone else can cause to appear on this user's phone.
-      expect(userOwnedTables).toHaveLength(13);
+      // someone else can cause to appear on this user's phone. Fourteen since
+      // FUEL-91 added `exercise_sets`, which needed a fixture row of its own
+      // before the sweep over it could mean anything — see `fixtures.ts`.
+      expect(userOwnedTables).toHaveLength(14);
     });
   });
 

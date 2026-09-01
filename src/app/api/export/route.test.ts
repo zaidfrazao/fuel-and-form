@@ -85,6 +85,7 @@ const PAYLOAD: ExportPayload = {
     workoutExercises: [],
     trainingTemplateEntries: [],
     workoutLogs: [],
+    exerciseSets: [],
     weightLogs: [],
     shoppingChecks: [],
   },

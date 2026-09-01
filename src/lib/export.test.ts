@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 import * as schema from "./db/schema";
 import type {
   DayPlanOverride,
+  ExerciseSet,
   Meal,
   MealIngredient,
   MealLog,
@@ -158,6 +159,23 @@ const exercise = (id: string, sortOrder: number): WorkoutExercise => ({
   prescription: "3 x 12",
   sortOrder,
   notes: null,
+  targetSets: 3,
+  targetRepsLow: 12,
+  targetRepsHigh: 12,
+});
+
+const EXERCISE_ID = "aaaaaaaa-0000-4000-8000-000000000002";
+const WORKOUT_LOG_ID = "cccccccc-0000-4000-8000-000000000002";
+
+const exerciseSet = (id: string, setIndex: number, reps = 12): ExerciseSet => ({
+  id,
+  userId: USER_ID,
+  workoutLogId: WORKOUT_LOG_ID,
+  exerciseId: EXERCISE_ID,
+  setIndex,
+  reps,
+  loadKg: null,
+  createdAt: new Date("2026-08-10T06:32:00.000Z"),
 });
 
 const trainingEntry = (id: string, dayOfWeek: 0 | 1 | 2): TrainingTemplateEntry => ({
@@ -206,9 +224,10 @@ const TABLES: ExportTables = {
   dayPlanOverrides: [override("eeeeeeee-0000-4000-8000-000000000001", "2026-08-10")],
   mealLogs: [mealLog("ffffffff-0000-4000-8000-000000000001", "2026-08-10")],
   workouts: [workout(WORKOUT_ID, "Circuit A")],
-  workoutExercises: [exercise("aaaaaaaa-0000-4000-8000-000000000002", 0)],
+  workoutExercises: [exercise(EXERCISE_ID, 0)],
   trainingTemplateEntries: [trainingEntry("bbbbbbbb-0000-4000-8000-000000000002", 1)],
-  workoutLogs: [workoutLog("cccccccc-0000-4000-8000-000000000002", "2026-08-10")],
+  workoutLogs: [workoutLog(WORKOUT_LOG_ID, "2026-08-10")],
+  exerciseSets: [exerciseSet("ffffffff-0000-4000-8000-000000000002", 1)],
   weightLogs: [weightLog("dddddddd-0000-4000-8000-000000000002", "2026-08-10")],
   shoppingChecks: [
     shoppingCheck("eeeeeeee-0000-4000-8000-000000000002", "2026-08-10", "rolled oats"),
@@ -227,6 +246,7 @@ const EMPTY: ExportTables = {
   workoutExercises: [],
   trainingTemplateEntries: [],
   workoutLogs: [],
+  exerciseSets: [],
   weightLogs: [],
   shoppingChecks: [],
 };

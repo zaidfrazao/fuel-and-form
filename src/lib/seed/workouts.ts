@@ -30,6 +30,27 @@ import { BODYWEIGHT_CIRCUIT, type SeedWorkout } from "./types";
  * The skipping session and the walk name no group. They are scheduled by a fixed
  * `workout_id` on their template rows, and the schema's `workouts_rotation_pair`
  * check keeps `rotation_group` and `rotation_index` null together.
+ *
+ * ## The structured targets are transcribed by hand, and three of them are null
+ *
+ * § P10's per-set logging (FUEL-91) compares a set against `target_sets` and
+ * the rep range beside it. Those are columns, filled in here by a person
+ * reading each prescription — NOT derived from the string, which is displayed
+ * verbatim and never parsed. This file is where the difference is visible, and
+ * it is worth seeing:
+ *
+ *   - '3 x 12–20' is three sets of twelve to twenty, and transcribes cleanly.
+ *   - '3 x 30–60 sec' is three sets of a HOLD. It has a set count and no rep
+ *     target at all, because seconds are not reps, and a regex that took the
+ *     first two numbers would offer "Target 30–60" against a plank.
+ *   - '8–12 rounds — 40 sec on / 40 sec off' has no target of either kind.
+ *     Rounds are not sets, the first number in the string is 8, and an
+ *     interval session logged as eight sets of eight reps would be a record of
+ *     something nobody did. It is null, and the screen still logs sets against
+ *     it — they simply have nothing to be compared to.
+ *
+ * `seed/workouts.test.ts` feeds every prescription here through the reader and
+ * asserts that no number in a target came out of a string.
  */
 
 /**
@@ -83,30 +104,45 @@ export const seedWorkouts: readonly SeedWorkout[] = [
       {
         name: "Squats",
         prescription: "3 x 12–20",
+        targetSets: 3,
+        targetRepsLow: 12,
+        targetRepsHigh: 20,
         notes:
           "Feet shoulder-width, sit back like you're reaching for a chair, chest up. Thighs to at least parallel.",
       },
       {
         name: "Push-ups",
         prescription: "3 x 8–15",
+        targetSets: 3,
+        targetRepsLow: 8,
+        targetRepsHigh: 15,
         notes:
           "On toes if you can. If you can't get 8 clean, put your hands on a couch or step — not on your knees; elevated hands keeps the full-body line.",
       },
       {
         name: "Reverse lunges",
         prescription: "3 x 8–12 each leg",
+        targetSets: 3,
+        targetRepsLow: 8,
+        targetRepsHigh: 12,
         notes:
           "Step back, drop the back knee toward the floor, push through the front heel to stand.",
       },
       {
         name: "Glute bridges",
         prescription: "3 x 15–20",
+        targetSets: 3,
+        targetRepsLow: 15,
+        targetRepsHigh: 20,
         notes:
           "On your back, heels close to your bum, drive the hips up, squeeze at the top for 1 sec.",
       },
       {
         name: "Plank",
         prescription: "3 x 30–60 sec",
+        targetSets: 3,
+        targetRepsLow: null,
+        targetRepsHigh: null,
         notes:
           "Straight line from heel to head. Squeeze the glutes — that's what stops the hips sagging.",
       },
@@ -124,35 +160,53 @@ export const seedWorkouts: readonly SeedWorkout[] = [
       {
         name: "Squat pulses",
         prescription: "3 x 15–20",
+        targetSets: 3,
+        targetRepsLow: 15,
+        targetRepsHigh: 20,
         notes:
           "Sit into a squat, then pulse up and down in the bottom third of the range. Burns fast.",
       },
       {
         name: "Pike push-ups",
         prescription: "3 x 6–12",
+        targetSets: 3,
+        targetRepsLow: 6,
+        targetRepsHigh: 12,
         notes:
           "Hands and feet on the floor, hips high in an upside-down V, lower the crown of your head toward the floor. This is the shoulder work standing in for overhead pressing.",
       },
       {
         name: "Split squats",
         prescription: "3 x 8–12 each leg",
+        targetSets: 3,
+        targetRepsLow: 8,
+        targetRepsHigh: 12,
         notes:
           "Like a lunge, but the back foot stays planted for the whole set. Harder than reverse lunges — expect fewer reps.",
       },
       {
         name: "Single-leg glute bridge",
         prescription: "3 x 8–12 each leg",
+        targetSets: 3,
+        targetRepsLow: 8,
+        targetRepsHigh: 12,
         notes: "As the glute bridge, one foot off the floor. Keep the hips level.",
       },
       {
         name: "Mountain climbers",
         prescription: "3 x 30–40 total",
+        targetSets: 3,
+        targetRepsLow: 30,
+        targetRepsHigh: 40,
         notes:
           "Plank position, drive the knees to the chest alternately. Keep the hips low — don't let them bounce up.",
       },
       {
         name: "Superman hold",
         prescription: "3 x 20–40 sec",
+        targetSets: 3,
+        targetRepsLow: null,
+        targetRepsHigh: null,
         notes:
           "Face down, lift chest and thighs off the floor. The only real posterior-chain and back work available without a pull-up bar — don't skip it.",
       },
@@ -195,23 +249,35 @@ export const seedWorkouts: readonly SeedWorkout[] = [
       {
         name: "Skipping intervals",
         prescription: "8–12 rounds — 40 sec on / 40 sec off",
+        targetSets: null,
+        targetRepsLow: null,
+        targetRepsHigh: null,
         notes:
           "Build to 12 rounds before shortening the rest. Trips don't cost you the interval.",
       },
       {
         name: "Plank",
         prescription: "3 x 30–45 sec",
+        targetSets: 3,
+        targetRepsLow: null,
+        targetRepsHigh: null,
         notes: "Core finisher, straight after the intervals.",
       },
       {
         name: "Dead bug",
         prescription: "3 x 10 each side",
+        targetSets: 3,
+        targetRepsLow: 10,
+        targetRepsHigh: 10,
         notes:
           "On your back, opposite arm and leg extend slowly. The lower back stays pressed to the floor throughout.",
       },
       {
         name: "Side plank",
         prescription: "2 x 20–30 sec each side",
+        targetSets: 2,
+        targetRepsLow: null,
+        targetRepsHigh: null,
         notes: null,
       },
     ],

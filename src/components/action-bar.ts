@@ -82,6 +82,30 @@ export const ACTION_BAR =
  */
 export const APP_ACTION_BAR = `${ACTION_BAR} lg:static`;
 
+/**
+ * The one bar that stays pinned at every width — `/training`'s session state,
+ * FUEL-90 and FUEL-91.
+ *
+ * Brand Guide § Desktop names this as the single exception to the release
+ * above, and calls it "the exception that proves what the rule is about":
+ * FUEL-72 released the other bars on the grounds that "above 1024px there is no
+ * thumb, so the bar has no posture to serve", and both halves of that sentence
+ * are claims about a THUMB TARGET. A running rest timer (FUEL-93) is not one. A
+ * live readout that scrolls out of sight has failed at its only job at 1920
+ * exactly as at 375, so this bar keeps the pinning the others give up.
+ *
+ * It is `ACTION_BAR` without `lg:static` rather than a string of its own, so
+ * everything the four bars share stays shared and the difference between them
+ * is exactly the one utility that is different.
+ *
+ * `action-bar-fade-pinned` is the other half, and it is not optional: the mask
+ * in the shared string is scoped below `lg`, so above it this bar would arrive
+ * as a hard edge cutting through a line of type — the fault § The Scroll Edge
+ * exists to prevent, now reachable at a width it never was before. globals.css
+ * carries that argument and the shared value the two selectors both use.
+ */
+export const SESSION_ACTION_BAR = `${ACTION_BAR} action-bar-fade-pinned`;
+
 /* -------------------------------------------------------------------------- */
 /* A control is its content plus air — § Buttons, FUEL-85; built in FUEL-86     */
 /* -------------------------------------------------------------------------- */
