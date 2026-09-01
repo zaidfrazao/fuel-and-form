@@ -44,6 +44,10 @@ export type SeededUser = {
   mealId: string;
   /** This user's only workout — the target of their template and log rows. */
   workoutId: string;
+  /** Its one exercise, which this user's one `exercise_sets` row hangs off. */
+  exerciseId: string;
+  /** The log that set belongs to — the parent a set's composite key names. */
+  workoutLogId: string;
   /** The weigh-in date already taken, so a test can pick an unused one. */
   weighInDate: string;
 };
@@ -239,6 +243,8 @@ async function seedUser(
     userId: user.id,
     mealId: meal.id,
     workoutId: workout.id,
+    exerciseId: exercise.id,
+    workoutLogId: workoutLog.id,
     weighInDate: options.date,
   };
 }

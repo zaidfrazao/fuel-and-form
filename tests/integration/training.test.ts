@@ -3,7 +3,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { recentSessions } from "@/lib/adherence";
 import { getDb } from "@/lib/db";
-import { clearSession, loadTraining, recordSession } from "@/lib/db/queries/training";
+import {
+  clearSession,
+  loadTraining,
+  logSet,
+  recordSession,
+  removeSet,
+} from "@/lib/db/queries/training";
 import * as schema from "@/lib/db/schema";
 import type { WorkoutExercise } from "@/lib/db/schema";
 import { scope } from "@/lib/db/scope";
@@ -283,6 +289,12 @@ describe.skipIf(!configured)("resolving a training day, scoped", () => {
  */
 
 const ALICE_LOGGED = "2026-03-02";
+
+/** Bob's own logged date, and the reps his one fixture set carries. */
+const BOB_DATE_LOGGED = "2026-03-03";
+
+/** `fixtures.ts` gives each user `name.length` reps, so the three differ. */
+const ALICE_FIXTURE_REPS = "Alice".length;
 
 describe.skipIf(!configured)("recording a session, scoped", () => {
   let fixture: Fixture;
@@ -757,5 +769,226 @@ describe.skipIf(!configured)("reviewing a past date, scoped", () => {
     const untouched = await loadTraining(userId, ALICE_LOGGED, new Date());
 
     expect(untouched?.logs[0]).toMatchObject({ date: ALICE_LOGGED, status: "done" });
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* FUEL-91 — sets, against the constraints that make them true                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * § P10's per-set logging, against real Postgres.
+ *
+ * Everything here is a claim about the DATABASE rather than about the module,
+ * which is why none of it can be asserted in the hermetic suite:
+ *
+ *   - the parent log is created by `on conflict do nothing`, so "the status is
+ *     not recomputed" is a claim about what that clause leaves alone;
+ *   - a correction collides on `exercise_sets_user_log_exercise_index_key`,
+ *     which only exists in the schema;
+ *   - clearing a session takes its sets with it by CASCADE, which no test with
+ *     a mocked query layer can see;
+ *   - and the composite foreign keys are what stop a demo visitor naming the
+ *     owner's exercise at all.
+ *
+ * The fixture seeds each user one exercise, one log on their own date, and one
+ * set against it. `ALICE_LOGGED` is that date and the log there is `done` —
+ * which is what makes the "a set does not move the status" case meaningful.
+ */
+describe.skipIf(!configured)("logging sets, scoped", () => {
+  let fixture: Fixture;
+
+  beforeEach(async () => {
+    await truncateAll(getDb());
+    fixture = await seedFixture();
+  });
+
+  /** Every set this user holds, in the order they were performed. */
+  const setsOf = (userId: string) =>
+    scope(userId, getDb()).select(schema.exerciseSets, undefined, {
+      orderBy: [asc(schema.exerciseSets.setIndex)],
+    });
+
+  const logsOf = (userId: string) =>
+    scope(userId, getDb()).select(schema.workoutLogs, undefined, {
+      orderBy: [asc(schema.workoutLogs.date)],
+    });
+
+  const UNLOGGED = "2026-03-09"; // a Monday the fixture has no log for
+
+  it("creates the session's log at partial when the first set arrives", async () => {
+    const { userId, workoutId, exerciseId } = fixture.alice;
+
+    await logSet(userId, {
+      date: UNLOGGED,
+      workoutId,
+      exerciseId,
+      setIndex: 1,
+      reps: 12,
+    });
+
+    const created = (await logsOf(userId)).find((log) => log.date === UNLOGGED);
+
+    // 'partial' because it is the only one of the three that is true of a
+    // session with one set in it, and because `status` is not null.
+    expect(created?.status).toBe("partial");
+    expect(created?.note).toBeNull();
+    expect(created?.durationMin).toBeNull();
+  });
+
+  it("leaves a status the reader chose exactly where it was", async () => {
+    // PRD § P10, in the direction that would be easiest to get wrong: the
+    // fixture's log on this date is `done`, and a fourth set does not make it
+    // partial. A status that drifted with set completion would turn the dot
+    // grid into a percentage.
+    const { userId, workoutId, exerciseId } = fixture.alice;
+    const before = (await logsOf(userId)).find((log) => log.date === ALICE_LOGGED);
+
+    await logSet(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      exerciseId,
+      setIndex: 4,
+      reps: 6,
+    });
+
+    const after = (await logsOf(userId)).find((log) => log.date === ALICE_LOGGED);
+
+    expect(after?.status).toBe("done");
+    // `logged_at` is when the OUTCOME was recorded. A set is not an outcome.
+    expect(after?.loggedAt).toEqual(before?.loggedAt);
+  });
+
+  it("corrects a set rather than adding a second row at the same address", async () => {
+    const { userId, workoutId, exerciseId } = fixture.alice;
+
+    // The fixture's own set is index 1. Writing it again is one row twice.
+    await logSet(userId, { date: ALICE_LOGGED, workoutId, exerciseId, setIndex: 1, reps: 7 });
+
+    const sets = await setsOf(userId);
+
+    expect(sets).toHaveLength(1);
+    expect(sets.at(0)?.reps).toBe(7);
+  });
+
+  it("adds a set beside the ones already there", async () => {
+    const { userId, workoutId, exerciseId } = fixture.alice;
+
+    await logSet(userId, { date: ALICE_LOGGED, workoutId, exerciseId, setIndex: 2, reps: 10 });
+
+    expect((await setsOf(userId)).map((row) => row.setIndex)).toEqual([1, 2]);
+  });
+
+  it("ships load_kg dormant", async () => {
+    // PRD § Gym-restart readiness: the column is here so the restart is a data
+    // change rather than a migration, and nothing writes it until then.
+    const { userId, workoutId, exerciseId } = fixture.alice;
+
+    await logSet(userId, { date: UNLOGGED, workoutId, exerciseId, setIndex: 1, reps: 12 });
+
+    for (const row of await setsOf(userId)) expect(row.loadKg).toBeNull();
+  });
+
+  it("removes one set and leaves the session's record standing", async () => {
+    const { userId, workoutId, exerciseId } = fixture.alice;
+
+    expect(
+      await removeSet(userId, { date: ALICE_LOGGED, workoutId, exerciseId, setIndex: 1 }),
+    ).toBe(true);
+
+    expect(await setsOf(userId)).toEqual([]);
+    // A status the reader chose is not something a set removal may take away.
+    expect((await logsOf(userId)).find((log) => log.date === ALICE_LOGGED)?.status).toBe(
+      "done",
+    );
+  });
+
+  it("is false rather than an error when the set is already gone", async () => {
+    const { userId, workoutId, exerciseId } = fixture.alice;
+
+    await removeSet(userId, { date: ALICE_LOGGED, workoutId, exerciseId, setIndex: 1 });
+
+    expect(
+      await removeSet(userId, { date: ALICE_LOGGED, workoutId, exerciseId, setIndex: 1 }),
+    ).toBe(false);
+  });
+
+  it("is false for a date with no session log at all", async () => {
+    const { userId, workoutId, exerciseId } = fixture.alice;
+
+    expect(
+      await removeSet(userId, { date: UNLOGGED, workoutId, exerciseId, setIndex: 1 }),
+    ).toBe(false);
+  });
+
+  it("takes a session's sets with it when the record is cleared", async () => {
+    // The cascade, and the only outcome the shape allows: a set whose log is
+    // gone has no date, no workout and nothing to hang off.
+    const { userId, workoutId } = fixture.alice;
+
+    expect(await clearSession(userId, ALICE_LOGGED, workoutId)).toBe(true);
+    expect(await setsOf(userId)).toEqual([]);
+  });
+
+  it("refuses a set against another user's exercise, in the database", async () => {
+    // § 1.4, and the half no application check is doing here. `exercise_sets`
+    // names `(exercise_id, user_id)` as one composite key, so Bob writing his
+    // own `user_id` beside Alice's exercise is not a row Postgres will store.
+    // The action refuses it first; this is what holds if one ever forgets to.
+    const bob = fixture.bob;
+
+    await expect(
+      logSet(bob.userId, {
+        date: BOB_DATE_LOGGED,
+        workoutId: bob.workoutId,
+        exerciseId: fixture.alice.exerciseId,
+        setIndex: 2,
+        reps: 12,
+      }),
+    ).rejects.toThrow();
+
+    expect(await setsOf(bob.userId)).toHaveLength(1);
+  });
+
+  it("never lets a demo visitor read or remove the owner's sets", async () => {
+    // The acceptance criterion, asserted rather than assumed. Bob is the demo
+    // visitor; Alice is the owner.
+    const alicesSets = await setsOf(fixture.alice.userId);
+    const bobsSets = await setsOf(fixture.bob.userId);
+
+    expect(alicesSets).toHaveLength(1);
+    expect(bobsSets).toHaveLength(1);
+    // Not one row of hers in his answer — the fixture gives them different rep
+    // counts so a leak could not be mistaken for a coincidence.
+    expect(bobsSets.map((row) => row.id)).not.toContain(alicesSets.at(0)?.id);
+    expect(bobsSets.every((row) => row.userId === fixture.bob.userId)).toBe(true);
+
+    // And a delete aimed straight at her address removes nothing of hers.
+    expect(
+      await removeSet(fixture.bob.userId, {
+        date: ALICE_LOGGED,
+        workoutId: fixture.alice.workoutId,
+        exerciseId: fixture.alice.exerciseId,
+        setIndex: 1,
+      }),
+    ).toBe(false);
+    expect(await setsOf(fixture.alice.userId)).toEqual(alicesSets);
+  });
+
+  it("hands the screen this date's sets and no other date's", async () => {
+    // `loadTraining` narrows sets to the viewed date rather than to the grid's
+    // six-week window, which the logs take. Nothing on the screen draws another
+    // date's reps.
+    const { userId, workoutId, exerciseId } = fixture.alice;
+
+    await logSet(userId, { date: UNLOGGED, workoutId, exerciseId, setIndex: 1, reps: 5 });
+
+    const viewed = await loadTraining(userId, ALICE_LOGGED, new Date());
+
+    expect(viewed?.sets.map((row) => row.reps)).toEqual([ALICE_FIXTURE_REPS]);
+
+    const other = await loadTraining(userId, UNLOGGED, new Date());
+
+    expect(other?.sets.map((row) => row.reps)).toEqual([5]);
   });
 });

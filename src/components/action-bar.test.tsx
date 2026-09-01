@@ -5,7 +5,11 @@ import { fileURLToPath } from "node:url";
 import { render } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 
-import { ACTION_BAR, APP_ACTION_BAR } from "@/components/action-bar";
+import {
+  ACTION_BAR,
+  APP_ACTION_BAR,
+  SESSION_ACTION_BAR,
+} from "@/components/action-bar";
 import { PAGE_MEASURE_FOOT } from "@/lib/frame";
 
 import Loading from "@/app/(app)/loading";
@@ -153,7 +157,27 @@ describe("the scroll edge", () => {
     const found = RULE?.[2]?.match(new RegExp(`${property}:\\s*([^;]+);`))?.[1];
 
     expect(found, `${property} not declared on .action-bar-fade`).toBeDefined();
-    return found ?? "";
+    return resolve(found ?? "");
+  }
+
+  /**
+   * A declaration with its custom properties substituted — FUEL-91.
+   *
+   * The ramp used to be written out in the one rule that used it. There are two
+   * masked selectors now, under different conditions — every page bar below
+   * `lg`, and `/training`'s session bar at every width — so the value moved to
+   * `--action-bar-mask` on `:root` and both read it. A test that could only
+   * read a literal would have had to be answered by writing the gradient twice,
+   * which is the drift it exists to catch.
+   */
+  function resolve(value: string): string {
+    return value.replace(/var\((--[a-z-]+)\)/g, (_match, property: string) => {
+      const declared = CSS.match(new RegExp(`\\${property}:\\s*([^;]+);`))?.[1];
+
+      expect(declared, `${property} is not declared in globals.css`).toBeDefined();
+
+      return declared ?? "";
+    });
   }
 
   test("is one rule, in one media query, in globals.css", () => {
@@ -188,11 +212,54 @@ describe("the scroll edge", () => {
   });
 
   test("is scoped to the widths where the bar is pinned over a scrolling page", () => {
-    // Below `lg` only. FUEL-72 may release the pinning at desktop widths, at
-    // which point the bar comes to rest at the foot of its column with real
-    // content above it — where a fade would ghost content with nothing passing
-    // under it to justify the ramp. Scoping now means that ticket finds nothing
+    // Below `lg` only. FUEL-72 released the pinning at desktop widths, where the
+    // bar comes to rest at the foot of its column with real content above it —
+    // and a fade there would ghost content with nothing passing under it to
+    // justify the ramp. Scoping ahead of that ticket meant it found nothing
     // here to undo.
     expect(RULE?.[1]).toBe("width < 64rem");
+  });
+
+  /**
+   * The second selector — FUEL-90's named exception, built in FUEL-91.
+   *
+   * § The Scroll Edge's mask "follows the pinning rather than the breakpoint",
+   * which is what it always meant: `/training`'s session bar stays pinned above
+   * `lg`, so above `lg` it has an edge, and the media-scoped rule above does not
+   * reach it. Without this the bar arrives at 1272 as a hard line cutting
+   * through the exercise list passing beneath it.
+   */
+  describe("and the one bar that keeps its edge at every width", () => {
+    const PINNED = CSS.match(/\.action-bar-fade-pinned\s*\{([^}]*)\}/);
+
+    test("is a rule outside any media query", () => {
+      expect(PINNED).not.toBeNull();
+      // Not inside the block above — a mask scoped below `lg` is exactly what
+      // this selector exists to escape.
+      expect(RULE?.[2]).not.toContain("action-bar-fade-pinned");
+    });
+
+    test("ramps identically to the scoped rule, from one declaration", () => {
+      // The same value, and the same value because both read the same custom
+      // property rather than because someone kept two literals in step.
+      expect(PINNED?.[1]).toContain("var(--action-bar-mask)");
+      expect(RULE?.[2]).toContain("var(--action-bar-mask)");
+    });
+
+    test("is carried by the session bar and by nothing else", () => {
+      expect(SESSION_ACTION_BAR).toContain("action-bar-fade-pinned");
+      expect(APP_ACTION_BAR).not.toContain("action-bar-fade-pinned");
+    });
+
+    test("keeps the pinning the other bars give up", () => {
+      // The exception itself. FUEL-72's release is a claim about thumb targets;
+      // a running rest timer is not one, and a live readout that scrolls out of
+      // sight has failed at its only job at 1920 exactly as at 375.
+      expect(SESSION_ACTION_BAR).not.toContain("lg:static");
+      expect(SESSION_ACTION_BAR).toContain("sticky");
+      // Everything else the four bars share is still shared, so the difference
+      // between the two strings is exactly the release.
+      expect(SESSION_ACTION_BAR).toContain(ACTION_BAR);
+    });
   });
 });

@@ -334,7 +334,7 @@ Wished for rather than specified — which is what separates these from § Post-
 
 ### Data Model
 
-Fifteen tables — fourteen built, and `exercise_sets` arriving with § P10. Anything below marked `-- P10` is specified rather than built, columns as well as the table; everything unmarked is in `schema.ts` today. Every user-owned table carries `user_id` so the demo isolation is enforced at the query layer rather than by convention.
+Fifteen tables, all fifteen built — `exercise_sets` landed with FUEL-91. Anything below marked `-- P10` is still specified rather than built, columns as well as tables; everything unmarked is in `schema.ts` today. Every user-owned table carries `user_id` so the demo isolation is enforced at the query layer rather than by convention.
 
 ```
 users
@@ -369,9 +369,9 @@ workouts                       -- the workout library
 workout_exercises
   id, workout_id, name, prescription ('3 x 12', '30s on / 30s off'),
   sort_order, notes,
-  section ('warmup' | 'work' | 'cooldown', defaulted),           -- P10
-  target_sets, target_reps_low, target_reps_high,                -- P10, nullable
-  media_path, media_kind, media_alt, media_credit                -- P10, nullable
+  target_sets, target_reps_low, target_reps_high (nullable),
+  section ('warmup' | 'work' | 'cooldown', defaulted),           -- P10, FUEL-92
+  media_path, media_kind, media_alt, media_credit                -- P10, FUEL-94, nullable
 
 training_template_entries
   id, user_id, day_of_week, workout_id (nullable), rotation_group (nullable), sort_order
@@ -380,7 +380,7 @@ workout_logs
   id, user_id, date, workout_id, status ('done'|'partial'|'skipped'),
   note, duration_min, logged_at
 
-exercise_sets                  -- P10; one row per set performed, keyed to the log
+exercise_sets                  -- one row per set performed, keyed to the log
   id, user_id, workout_log_id, exercise_id, set_index, reps,
   load_kg (null until the gym restart), created_at
 
@@ -400,7 +400,9 @@ push_subscriptions             -- P9; where a browser can be reached
 
 **Circuit A/B alternation.** A `training_template_entries` row may name a `rotation_group` instead of a fixed `workout_id`. Resolution counts how many days matching that group have elapsed since `program_start_date` and takes that count modulo the number of workouts in the group. Deterministic from the date alone, so it never drifts and never depends on whether a session was logged.
 
-**Gym-restart readiness.** Adding weighted training means new `workouts` rows and new `training_template_entries` — no schema migration. Per-set load logging turned out to be wanted, and § P10 is where this sentence gets spent. The claim is not an assumption there but the standard it is held to: if per-set logging needs anything beyond one additive table and additive columns, this paragraph was wrong when it was written. The restart itself then stays a data change, `exercise_sets.load_kg` waiting for the first row that fills it.
+**Gym-restart readiness.** Adding weighted training means new `workouts` rows and new `training_template_entries` — no schema migration. Per-set load logging turned out to be wanted, and § P10 is where this sentence gets spent. The claim was not an assumption there but the standard it was held to: if per-set logging needed anything beyond one additive table and additive columns, this paragraph was wrong when it was written.
+
+**It held, with one correction (FUEL-91).** `exercise_sets` is the table and the three `target_*` columns are the columns; nothing existing changed its meaning, and no session logged before P10 needs a backfill. What the paragraph did not cover is that a composite foreign key has to point at a unique constraint, so `workout_exercises` and `workout_logs` each gained `unique(id, user_id)` — additions rather than changes, trivially satisfied by every row already stored, and the only thing the original sentence was silent about. The restart itself stays a data change, `exercise_sets.load_kg` waiting for the first row that fills it.
 
 ### Integrations
 
