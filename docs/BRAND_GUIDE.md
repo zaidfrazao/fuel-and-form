@@ -335,42 +335,6 @@ The mock's eight, which are four routes, one sheet, two states of `/` and two of
 
 The mock still does not draw them, and that stays true: the mock's eight are not the app's seven. What changes is that a ruling in prose is now specific enough to build from.
 
-#### The two states of `/training` — FUEL-90
-
-§ P10 turns this screen from a checklist you read before and after into a surface you operate during. Those are two compositions, and this is where the second one is ruled — before FUEL-91 through FUEL-94 each add rows to the same list, none of them able to decide the composition alone.
-
-**There is a live state, and the alternative was ruled out by this document rather than by taste.** The other reading — one long list, sets expanding in place under the exercise you are working — is an accordion, and § Progressive Disclosure bans accordions by name alongside modals and tabs within a screen. It has been in this guide since before the milestone was written. So the choice was made three weeks before the ticket that asked the question, and what follows is the consequence rather than a preference.
-
-**A state, not a route.** § Navigation allows two levels and this is not a third: `/` already carries three states, the screen table above counts them as screens rather than as destinations, and a route would put a session behind a URL that is meaningless the day after. The rail, the pill and the route table are untouched.
-
-**Only today has one.** A past date is a record, which is what the paginator is for; you cannot start Tuesday's session on Thursday. This is the same refusal `plan.ts` and the training actions already make for dates before `program_start_date`, applied at the other end.
-
-**What each state holds:**
-
-| | Plan state | Session state |
-|---|---|---|
-| The measure | The whole list, grouped | The current exercise, its sets, its form-media affordance |
-| Set progress | Slash metadata on the exercise's own row — `/ 3 of 3 sets`. No rows added | The sub-list, at § Lists' dense 46px |
-| The primary | **Start session** | **Mark done** |
-| The secondaries | Partial · Skip | Partial · Skip |
-| The bar | As it is today: sticky below 1024, static at and above | **Sticky at every width** — see below |
-
-**The primary changes because the screen's question does.** § Buttons allows one primary and calls it "the one action the screen exists for". Before you train, that is starting; while you are training, it is finishing. Neither state has two, and Mark done never appears as a secondary — a demotion of the action the whole adherence record depends on.
-
-**The current exercise is derived, not stored.** It is the first working-section exercise whose sets are incomplete, read off the rows FUEL-91 writes. That is the schema's own principle — derive from an absolute, never accumulate — and it buys the reload for free: a phone locked mid-session and woken twenty minutes later resumes where the data says it is, with nothing to go stale. The only client state is whether the session state is entered at all: one boolean, in `localStorage`, keyed to the date and wrapped in try/catch like every other read of it. It writes no row, because § P10 already ruled that a rest interval is not worth one and this is the same class of thing.
-
-**At ≥1272 the two states are one composition.** The measure swaps its contents; the aside gains the rest of the list above what it already holds. The current row is marked by **weight rather than colour** — the rows behind it recede to `text-secondary` and it does not — which is § The Four Rules holding at one umber element per screen, and is the device `recent-sessions.tsx` already uses. So the desktop shows you the list and the exercise at once, which is why the desktop never needed the split: the two states are a phone's device, and they exist because 375×667 has one column and § Lists' window to spend in it.
-
-**The rest timer is a row of the action bar, not a fourth button.** § Feedback already puts the failure banner there as a block spanning the column, so the bar is a flex column of at most three things: the banner, the timer, the controls. A fourth control would be a third row of slabs on a phone and would misfile a readout as an action; the timer is neither the thing you came to press nor a signature graphic, and § Desktop's header zone belongs to the screen's own time graphic, which on this screen is the paginator. It is **not a modal** — § Progressive Disclosure — and it is visible while the list is scrolled, which is the whole reason it is in the pinned surface.
-
-**The session state's bar is sticky at every width, and this is the first counter-case to the carry-over rule above.** The release was argued on a posture: "above 1024px there is no thumb, so the bar has no posture to serve, and a control pinned over content the reader is reading is only a cost." Both halves are about a **thumb target**. A running timer is not one — it is a live value, and a live value that scrolls out of sight has failed at the only job it has. The carry-over test asks whether a rule's written rationale names the phone; this one names the thumb, which is narrower still, so it reaches the buttons and stops at the readout. Rather than pin a bar and release the controls inside it, the whole bar stays pinned in this state: a posture that changed when a timer started would move the primary under the reader's hand mid-session.
-
-The plan state is untouched by this and keeps FUEL-72's release exactly. The exception is the session state's, it is named, and it is the only one.
-
-**What it costs, paid where § The Scroll Edge is stated.** A pinned bar above 1024px has a page passing beneath it again, so the mask that stops a line of type being cut through its x-height can no longer be scoped by breakpoint. That section is amended rather than left to hold by luck.
-
-**What was decided against, and why.** *Sets expanding in place* — an accordion, banned above. *A tighter set row* — § Lists' 46px is an accessible minimum and the window is not, so the density would have come out of the wrong one. *A third graphic device for sets* — § The Four Rules gives this system two, the day ruler and the dot grid, at two time-scales; a row of set marks would have been a third at a third. *A separate route* — a URL for a thing that is meaningless tomorrow. *The timer in the header band* — the header answers "where am I in this?", which the paginator already answers, and § Desktop's one-job-per-zone rule is stated a page above this one. *The timer in the aside at ≥1272* — it would be the one element on this screen that changed column between two states, and § Desktop has refused that once already for `/training`'s Anytime row.
-
 #### The header, and one job per zone — FUEL-85
 
 The three amendments above say what a screen *may* do with the width. This says how to decide, and it is the rule the redrawn frames follow.
@@ -407,6 +371,42 @@ The three amendments above say what a screen *may* do with the width. This says 
 **The action bars unsticking is the visible consequence,** and it is where the rule earns its keep. § The Scroll Edge already scopes its mask below 1024px, and § Document History records that "FUEL-72 may remove the pinning that creates the edge at all" above it. This is that removal, decided on a rule rather than screen by screen: above 1024px there is no thumb, so the bar has no posture to serve, and a control pinned over content the reader is reading is only a cost. The primary action sits at the end of its column.
 
 **One exception has since been named, and it is the exception that proves what the rule is about.** `/training`'s session state (FUEL-90) puts a running rest timer in the bar, and both halves of the sentence above are claims about a *thumb target* rather than about a pinned box. A live value that scrolls out of sight has failed at its only job, at 1920 exactly as at 375. So that one state's bar stays sticky at every width; every other bar, the same screen's plan state included, is released here as written.
+
+#### The two states of `/training` — FUEL-90
+
+§ P10 turns this screen from a checklist you read before and after into a surface you operate during. Those are two compositions, and this is where the second one is ruled — before FUEL-91 through FUEL-94 each add rows to the same list, none of them able to decide the composition alone.
+
+**There is a live state, and the alternative was ruled out by this document rather than by taste.** The other reading — one long list, sets expanding in place under the exercise you are working — is an accordion, and § Progressive Disclosure bans accordions by name alongside modals and tabs within a screen. It has been in this guide since before the milestone was written. So the choice was made three weeks before the ticket that asked the question, and what follows is the consequence rather than a preference.
+
+**A state, not a route.** § Navigation allows two levels and this is not a third: `/` already carries three states, the screen table above counts them as screens rather than as destinations, and a route would put a session behind a URL that is meaningless the day after. The rail, the pill and the route table are untouched.
+
+**Only today has one.** A past date is a record, which is what the paginator is for; you cannot start Tuesday's session on Thursday. This is the same refusal `plan.ts` and the training actions already make for dates before `program_start_date`, applied at the other end.
+
+**What each state holds:**
+
+| | Plan state | Session state |
+|---|---|---|
+| The measure | The whole list, grouped | The current exercise, its sets, its form-media affordance |
+| Set progress | Slash metadata on the exercise's own row — `/ 3 of 3 sets`. No rows added | The sub-list, at § Lists' dense 46px |
+| The primary | **Start session** | **Mark done** |
+| The secondaries | Partial · Skip | Partial · Skip |
+| The bar | As it is today: sticky below 1024, static at and above | **Sticky at every width** — see below |
+
+**The primary changes because the screen's question does.** § Buttons allows one primary and calls it "the one action the screen exists for". Before you train, that is starting; while you are training, it is finishing. Neither state has two, and Mark done never appears as a secondary — a demotion of the action the whole adherence record depends on.
+
+**The current exercise is derived, not stored.** It is the first working-section exercise whose sets are incomplete, read off the rows FUEL-91 writes. That is the schema's own principle — derive from an absolute, never accumulate — and it buys the reload for free: a phone locked mid-session and woken twenty minutes later resumes where the data says it is, with nothing to go stale. The only client state is whether the session state is entered at all: one boolean, in `localStorage`, keyed to the date and wrapped in try/catch like every other read of it. It writes no row, because § P10 already ruled that a rest interval is not worth one and this is the same class of thing.
+
+**At ≥1272 the two states are one composition.** The measure swaps its contents; the aside gains the rest of the list above what it already holds. The current row is marked by **weight rather than colour** — the rows behind it recede to `text-secondary` and it does not — which is § The Four Rules holding at one umber element per screen, and is the device `recent-sessions.tsx` already uses. So the desktop shows you the list and the exercise at once, which is why the desktop never needed the split: the two states are a phone's device, and they exist because 375×667 has one column and § Lists' window to spend in it.
+
+**The rest timer is a row of the action bar, not a fourth button.** § Feedback already puts the failure banner there as a block spanning the column, so the bar is a flex column of at most three things: the banner, the timer, the controls. A fourth control would be a third row of slabs on a phone and would misfile a readout as an action; the timer is neither the thing you came to press nor a signature graphic, and § Desktop's header zone belongs to the screen's own time graphic, which on this screen is the paginator. It is **not a modal** — § Progressive Disclosure — and it is visible while the list is scrolled, which is the whole reason it is in the pinned surface.
+
+**The session state's bar is sticky at every width, and this is the first counter-case to the carry-over rule above.** The release was argued on a posture: "above 1024px there is no thumb, so the bar has no posture to serve, and a control pinned over content the reader is reading is only a cost." Both halves are about a **thumb target**. A running timer is not one — it is a live value, and a live value that scrolls out of sight has failed at the only job it has. The carry-over test asks whether a rule's written rationale names the phone; this one names the thumb, which is narrower still, so it reaches the buttons and stops at the readout. Rather than pin a bar and release the controls inside it, the whole bar stays pinned in this state: a posture that changed when a timer started would move the primary under the reader's hand mid-session.
+
+The plan state is untouched by this and keeps FUEL-72's release exactly. The exception is the session state's, it is named, and it is the only one.
+
+**What it costs, paid where § The Scroll Edge is stated.** A pinned bar above 1024px has a page passing beneath it again, so the mask that stops a line of type being cut through its x-height can no longer be scoped by breakpoint. That section is amended rather than left to hold by luck.
+
+**What was decided against, and why.** *Sets expanding in place* — an accordion, banned above. *A tighter set row* — § Lists' 46px is an accessible minimum and the window is not, so the density would have come out of the wrong one. *A third graphic device for sets* — § The Four Rules gives this system two, the day ruler and the dot grid, at two time-scales; a row of set marks would have been a third at a third. *A separate route* — a URL for a thing that is meaningless tomorrow. *The timer in the header band* — the header answers "where am I in this?", which the paginator already answers, and § Desktop's one job per zone, stated two subsections above, already gives that zone its answer. *The timer in the aside at ≥1272* — it would be the one element on this screen that changed column between two states, and § Desktop has refused that once already for `/training`'s Anytime row.
 
 #### Pointer states
 
