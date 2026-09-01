@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, between, eq, sql } from "drizzle-orm";
+import { and, asc, between, eq, inArray, sql } from "drizzle-orm";
 
 import { adherenceWeeks, adherenceWindow } from "@/lib/adherence";
 import type { Week } from "@/components/dot-grid";
@@ -9,7 +9,7 @@ import { type TrainingDay, trainingDay } from "@/lib/resolve-training";
 import type { TrainingPlan } from "@/lib/rotation";
 import { getDb } from "../index";
 import * as schema from "../schema";
-import type { WorkoutLog, WorkoutLogStatus } from "../schema";
+import type { ExerciseSet, WorkoutLog, WorkoutLogStatus } from "../schema";
 import { scope } from "../scope";
 import { byWorkout } from "./today";
 
@@ -70,6 +70,22 @@ export type Training = {
    * here and a second query would be a second answer that could disagree.
    */
   logs: WorkoutLog[];
+  /**
+   * Every set performed on THIS date — § P10's per-set logging, FUEL-91.
+   *
+   * Narrowed to the date rather than to the window the logs use, and the
+   * asymmetry is deliberate. The logs feed two readers: the dot grid needs all
+   * six weeks, and the date's own row is a filter over what already arrived.
+   * Nothing on this screen draws another date's SETS — the grid is a pattern of
+   * statuses and says nothing about reps — so fetching six weeks of them would
+   * be six weeks of rows crossing the wire to be thrown away, on the one table
+   * here that grows fastest.
+   *
+   * Ordered by exercise and then by index, though `setsFor` sorts again for
+   * itself: an ordering that survives a filter only by accident is one that
+   * breaks the first time somebody adds a second reader.
+   */
+  sets: ExerciseSet[];
   /** Six weeks of dots, shaped — Brand Guide § The Dot Grid. */
   adherence: Week[];
 };
@@ -109,7 +125,8 @@ export async function loadTraining(
   date: CalendarDate | null,
   now: Date,
 ): Promise<Training | undefined> {
-  const s = scope(userId, getDb());
+  const db = getDb();
+  const s = scope(userId, db);
 
   const profile = await s.selectOne(schema.profiles);
 
@@ -119,13 +136,49 @@ export async function loadTraining(
   const viewing = date ?? today;
   const window = adherenceWindow(viewing);
 
-  const [workouts, template, exerciseRows, logs] = await Promise.all([
+  const [workouts, template, exerciseRows, logs, sets] = await Promise.all([
     s.select(schema.workouts),
     s.select(schema.trainingTemplateEntries),
     s.select(schema.workoutExercises, undefined, {
       orderBy: [asc(schema.workoutExercises.sortOrder), asc(schema.workoutExercises.id)],
     }),
     s.select(schema.workoutLogs, between(schema.workoutLogs.date, window.from, window.to)),
+    /*
+     * The date's sets, addressed through the logs they hang off.
+     *
+     * A subquery rather than a third sequential await. The log ids are already
+     * being fetched in this same `Promise.all`, but waiting for them would add
+     * a third round trip to a module whose comment above says the shape that
+     * matters on Neon's HTTP driver is the number of sequential waits — and
+     * this is the read that happens on every tap of a set.
+     *
+     * The subquery names `user_id` explicitly, and the scope adds its own to
+     * `exercise_sets` besides. Two independent filters where one would do, on
+     * the principle scope.ts states: an inner query that a later edit got wrong
+     * would still be unable to reach another user's rows, because the outer
+     * WHERE clause is not written by hand at all.
+     */
+    s.select(
+      schema.exerciseSets,
+      inArray(
+        schema.exerciseSets.workoutLogId,
+        db
+          .select({ id: schema.workoutLogs.id })
+          .from(schema.workoutLogs)
+          .where(
+            and(
+              eq(schema.workoutLogs.userId, userId),
+              eq(schema.workoutLogs.date, viewing),
+            ),
+          ),
+      ),
+      {
+        orderBy: [
+          asc(schema.exerciseSets.exerciseId),
+          asc(schema.exerciseSets.setIndex),
+        ],
+      },
+    ),
   ]);
 
   const plan: TrainingPlan = {
@@ -139,6 +192,7 @@ export async function loadTraining(
     today,
     day: trainingDay(plan, byWorkout(exerciseRows), viewing),
     logs: logs.filter((log) => log.date === viewing),
+    sets,
     adherence: adherenceWeeks(plan, logs, viewing),
   };
 }
@@ -219,6 +273,156 @@ export async function clearSession(
   const removed = await s.delete(
     schema.workoutLogs,
     and(eq(schema.workoutLogs.date, date), eq(schema.workoutLogs.workoutId, workoutId)),
+  );
+
+  return removed.length > 0;
+}
+
+/**
+ * What one set write says. The address is a log, an exercise and an ordinal.
+ *
+ * `reps` is the only thing that is not an address, which is why it is the only
+ * field `exercise-set.ts` has to refuse. `loadKg` is deliberately absent: the
+ * column ships dormant (§ Gym-restart readiness), and a parameter for a value
+ * nothing sends is a parameter somebody eventually sends something wrong in.
+ */
+export type SetRecord = {
+  date: CalendarDate;
+  workoutId: string;
+  exerciseId: string;
+  setIndex: number;
+  reps: number;
+};
+
+/**
+ * Records one set, creating the session's log row if this is the first.
+ *
+ * ## The parent row, and the status it is born with
+ *
+ * `exercise_sets` hangs off `workout_logs`, and sets are logged BEFORE anyone
+ * marks a session — so the first set of a session has no parent to hang off and
+ * has to make one. It is written with status 'partial', `on conflict` leaving
+ * whatever is already there untouched.
+ *
+ * That status is a DEFAULT AT CREATION and nothing recomputes it, in either
+ * direction. A session marked done and then given a fourth set is still done. A
+ * session whose last set is removed is still whatever it was marked. PRD § P10
+ * requires that the status is never derived from set data, and § P3 calls
+ * partial "a first-class outcome, not a failure state" — a status that drifted
+ * with set completion would quietly turn the dot grid into a percentage, which
+ * is the one thing the Brand Guide says that graphic exists to refuse.
+ *
+ * 'partial' rather than 'done' because it is the only one of the three that is
+ * true of a session with one set in it, and rather than nothing at all because
+ * `status` is `not null` and this task may not change an existing table's
+ * constraints. The alternative — creating the row when the session state is
+ * ENTERED — was considered and rejected: a tap on Start session that trains
+ * nothing would then sit in the adherence grid as a partial session.
+ *
+ * ## Two statements, not a transaction
+ *
+ * The conflict clause is a no-op update naming the row's own workout, which
+ * exists so `on conflict` has something to do and RETURNING hands back the row
+ * that is already there. It deliberately does not touch `status`, `note`,
+ * `duration_min` or `logged_at` — `recordSession` owns all four, and
+ * `logged_at` means "when the outcome was recorded" rather than "when something
+ * last happened here".
+ *
+ * If the second statement fails, a 'partial' row with no sets under it is left
+ * behind. Worth naming, not worth a transaction: `queries/template.ts` makes
+ * the same call, the interactive transaction needs the WebSocket pool rather
+ * than the HTTP driver, and this is the write that happens on every tap of a
+ * tick. The residue is a session marked partial, which the screen shows and the
+ * reader can clear.
+ */
+export async function logSet(userId: string, record: SetRecord): Promise<void> {
+  const s = scope(userId, getDb());
+
+  const [log] = await s.upsert(
+    schema.workoutLogs,
+    {
+      date: record.date,
+      workoutId: record.workoutId,
+      status: "partial",
+    },
+    {
+      target: [schema.workoutLogs.date, schema.workoutLogs.workoutId],
+      // The conflict target's own value. Status is absent on purpose — see
+      // above; this clause exists to return the row, not to change it.
+      set: { workoutId: record.workoutId },
+    },
+  );
+
+  // Unreachable: an upsert either inserts or updates, and both return a row.
+  // A throw rather than a `!` so it stays unreachable — the caller turns it
+  // into the same `{ ok: false }` every other failure produces.
+  if (!log) throw new Error("Upserting the session's log returned no row.");
+
+  await s.upsert(
+    schema.exerciseSets,
+    {
+      workoutLogId: log.id,
+      exerciseId: record.exerciseId,
+      setIndex: record.setIndex,
+      reps: record.reps,
+    },
+    {
+      // The unique index from schema.ts, minus the `user_id` the scope
+      // prepends for itself. A correction collides with the set it corrects.
+      target: [
+        schema.exerciseSets.workoutLogId,
+        schema.exerciseSets.exerciseId,
+        schema.exerciseSets.setIndex,
+      ],
+      set: { reps: record.reps },
+    },
+  );
+}
+
+/**
+ * Takes one set back — § Feedback's "any log is revertible from where it was
+ * performed", at the scale of a single row.
+ *
+ * A hard delete, on `clearSession`'s reasoning: a set that was taken back did
+ * not happen, and a soft-deleted row is a filter every future reader has to
+ * remember. The absence of a row is what "not performed" means here — the same
+ * predicate `shopping_checks` uses, where presence is the whole state.
+ *
+ * The session's log row is deliberately left behind, even when this removes the
+ * last set of the session. Deriving nothing from set data cuts both ways: a
+ * status the reader chose is not something a set removal may take away.
+ *
+ * Returns whether a row went, so a caller can tell a real revert from one that
+ * raced another tab — and the scoped delete matches nothing both for a row that
+ * is already gone and for one that was never the caller's, which are the same
+ * answer on purpose.
+ */
+export async function removeSet(
+  userId: string,
+  address: { date: CalendarDate; workoutId: string; exerciseId: string; setIndex: number },
+): Promise<boolean> {
+  const s = scope(userId, getDb());
+
+  const log = await s.selectOne(
+    schema.workoutLogs,
+    and(
+      eq(schema.workoutLogs.date, address.date),
+      eq(schema.workoutLogs.workoutId, address.workoutId),
+    ),
+  );
+
+  // No log is no sets. Not an error: the screen offers no tick to untick in
+  // that state, so reaching here means it was behind, and `refresh()` is the
+  // correction rather than a banner about a problem the reader does not have.
+  if (!log) return false;
+
+  const removed = await s.delete(
+    schema.exerciseSets,
+    and(
+      eq(schema.exerciseSets.workoutLogId, log.id),
+      eq(schema.exerciseSets.exerciseId, address.exerciseId),
+      eq(schema.exerciseSets.setIndex, address.setIndex),
+    ),
   );
 
   return removed.length > 0;

@@ -147,6 +147,92 @@ describe("workout library", () => {
     }
   });
 
+  /* ------------------------------------------------------------------------ */
+  /* FUEL-91 — the targets are transcribed, and the proof is where they differ */
+  /* ------------------------------------------------------------------------ */
+
+  /** Every exercise in the library, with the workout it belongs to. */
+  const allExercises = seedWorkouts.flatMap((workout) =>
+    workout.exercises.map((exercise) => ({ workout: workout.key, ...exercise })),
+  );
+
+  const exerciseNamed = (name: string) => {
+    const found = allExercises.find((exercise) => exercise.name === name);
+
+    // A throw rather than an optional chain: a test that silently passes
+    // because it could not find its subject is worse than no test.
+    if (!found) throw new Error(`No seeded exercise named ${name}.`);
+
+    return found;
+  };
+
+  /** Every number in a string — what a regex over the prescription would find. */
+  const numbersIn = (prescription: string) =>
+    (prescription.match(/\d+/g) ?? []).map(Number);
+
+  it("does not read the interval session's targets out of its prescription", () => {
+    // The case the whole rule exists for. '8–12 rounds — 40 sec on / 40 sec
+    // off' has four numbers in it and describes no sets and no reps at all:
+    // rounds are not sets, and a parser taking the first two would offer eight
+    // sets of eight to twelve reps against a skipping session.
+    const intervals = exerciseNamed("Skipping intervals");
+
+    expect(numbersIn(intervals.prescription)).toEqual([8, 12, 40, 40]);
+
+    expect(intervals.targetSets ?? null).toBeNull();
+    expect(intervals.targetRepsLow ?? null).toBeNull();
+    expect(intervals.targetRepsHigh ?? null).toBeNull();
+  });
+
+  it("gives a held exercise its sets and no rep target", () => {
+    // The second case where a person and a regex disagree: '3 x 30–60 sec' is
+    // three sets of a hold. The set count transcribes; the seconds are not
+    // reps, and a target of "30–60" against a plank is a number nobody wrote.
+    for (const name of ["Plank", "Superman hold", "Side plank"]) {
+      const held = exerciseNamed(name);
+
+      expect(held.targetSets).not.toBeNull();
+      expect(held.targetRepsLow ?? null).toBeNull();
+      expect(held.targetRepsHigh ?? null).toBeNull();
+
+      // Whatever seconds the prescription names, they are not the target.
+      expect(numbersIn(held.prescription).length).toBeGreaterThan(1);
+    }
+  });
+
+  it("transcribes a rep range where the prescription has one", () => {
+    const squats = exerciseNamed("Squats");
+
+    expect(squats.prescription).toBe("3 x 12–20");
+    expect(squats.targetSets).toBe(3);
+    expect(squats.targetRepsLow).toBe(12);
+    expect(squats.targetRepsHigh).toBe(20);
+  });
+
+  it("keeps every target inside the bounds the schema will accept", () => {
+    // The check constraints, asserted here so a bad transcription fails in the
+    // unit suite rather than as a constraint violation inside a seed script.
+    for (const exercise of allExercises) {
+      const sets = exercise.targetSets ?? null;
+      const low = exercise.targetRepsLow ?? null;
+      const high = exercise.targetRepsHigh ?? null;
+
+      if (sets !== null) {
+        expect(sets).toBeGreaterThanOrEqual(1);
+        expect(sets).toBeLessThanOrEqual(20);
+      }
+
+      // `workout_exercises_target_reps_range`: the pair moves together.
+      expect(low === null).toBe(high === null);
+
+      if (low !== null && high !== null) {
+        expect(low).toBeGreaterThanOrEqual(1);
+        expect(high).toBeGreaterThanOrEqual(low);
+        expect(high).toBeLessThanOrEqual(999);
+      }
+    }
+  });
+
   it("models the walk as a session with no exercise list", () => {
     // AC4's structural claim, in its workout form: a parent row is valid with no
     // children. The walk is the case that proves it — one activity, logged with

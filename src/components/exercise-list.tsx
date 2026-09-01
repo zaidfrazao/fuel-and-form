@@ -35,7 +35,29 @@ export type ListedExercise = Pick<
  * move: no state, no handlers, just rows — so both an RSC and a client
  * component can render it.
  */
-export function ExerciseList({ exercises }: { exercises: readonly ListedExercise[] }) {
+export function ExerciseList({
+  exercises,
+  progress,
+}: {
+  exercises: readonly ListedExercise[];
+  /**
+   * How far through each exercise a session got, by exercise id — § P10,
+   * FUEL-91. A missing key is an exercise with nothing logged against it.
+   *
+   * Optional, because the two screens that render this list answer the question
+   * differently. § Desktop gives set progress to `/training`'s plan state as
+   * "slash metadata on the exercise's own row"; `/` renders the same list inside
+   * the day's card, where the question is what is happening NOW rather than what
+   * was performed, and where a second slash line under six rows would spend
+   * height the ruler needs. So `/` passes nothing and is unchanged, its
+   * baselines included.
+   *
+   * A map rather than a function, so the row does one lookup rather than
+   * computing a label twice to ask whether it exists — and so the caller
+   * derives every exercise's progress in one pass over the date's sets.
+   */
+  progress?: ReadonlyMap<string, string>;
+}) {
   if (exercises.length === 0) {
     // A workout with no exercise rows is valid data — the daily walk is exactly
     // that. Saying so beats an empty gap where a list was expected.
@@ -74,6 +96,13 @@ export function ExerciseList({ exercises }: { exercises: readonly ListedExercise
                 would render as a bare "/ " with nothing after it, which reads
                 as a note that failed to load rather than one that isn't there. */}
             {exercise.notes && <SlashMeta>{exercise.notes}</SlashMeta>}
+            {/* A line of its own rather than appended to the note above. A note
+                is a sentence — "Feet shoulder-width, sit back like you're
+                reaching for a chair" — and a fact tacked onto the end of one
+                lands wherever that sentence happens to stop wrapping. */}
+            {progress?.has(exercise.id) && (
+              <SlashMeta>{progress.get(exercise.id)}</SlashMeta>
+            )}
           </span>
           <span className="ml-auto shrink-0 text-body text-text-secondary">
             {exercise.prescription}

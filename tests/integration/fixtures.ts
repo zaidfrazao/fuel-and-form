@@ -44,6 +44,10 @@ export type SeededUser = {
   mealId: string;
   /** This user's only workout — the target of their template and log rows. */
   workoutId: string;
+  /** Its one exercise, which this user's one `exercise_sets` row hangs off. */
+  exerciseId: string;
+  /** The log that set belongs to — the parent a set's composite key names. */
+  workoutLogId: string;
   /** The weigh-in date already taken, so a test can pick an unused one. */
   weighInDate: string;
 };
@@ -163,11 +167,18 @@ async function seedUser(
     "workouts",
   );
 
-  await owned.insert(schema.workoutExercises, {
-    workoutId: workout.id,
-    name: "Press-ups",
-    prescription: "3 x 12",
-  });
+  const exercise = inserted(
+    await owned.insert(schema.workoutExercises, {
+      workoutId: workout.id,
+      name: "Press-ups",
+      prescription: "3 x 12",
+      // Structured beside the prescription, never read out of it — FUEL-91.
+      targetSets: 3,
+      targetRepsLow: 12,
+      targetRepsHigh: 12,
+    }),
+    "workout_exercises",
+  );
 
   // Names the rotation group rather than the workout: the check constraint
   // makes that an exclusive choice, and the group is the case the resolver
@@ -177,10 +188,27 @@ async function seedUser(
     rotationGroup: ROTATION_GROUP,
   });
 
-  await owned.insert(schema.workoutLogs, {
-    date: options.date,
-    workoutId: workout.id,
-    status: "done",
+  const workoutLog = inserted(
+    await owned.insert(schema.workoutLogs, {
+      date: options.date,
+      workoutId: workout.id,
+      status: "done",
+    }),
+    "workout_logs",
+  );
+
+  // One set, so the leak sweep over `exercise_sets` has a row to be wrong
+  // about — FUEL-91. An empty table passes that sweep for the wrong reason and
+  // keeps passing after a regression, which is what `scope.test.ts` calls a
+  // hole in the proof rather than a pass. `reps` differs per user for the
+  // reason the push endpoint below is namespaced: a leak should show up as a
+  // value that could not be this user's under any reading, and the three
+  // fixture users have names of three different lengths.
+  await owned.insert(schema.exerciseSets, {
+    workoutLogId: workoutLog.id,
+    exerciseId: exercise.id,
+    setIndex: 1,
+    reps: options.name.length,
   });
 
   await owned.insert(schema.weightLogs, {
@@ -215,6 +243,8 @@ async function seedUser(
     userId: user.id,
     mealId: meal.id,
     workoutId: workout.id,
+    exerciseId: exercise.id,
+    workoutLogId: workoutLog.id,
     weighInDate: options.date,
   };
 }

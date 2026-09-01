@@ -99,6 +99,7 @@ export async function loadExport(
     workoutExercises,
     trainingTemplateEntries,
     workoutLogs,
+    exerciseSets,
     weightLogs,
     shoppingChecks,
   ] = await Promise.all([
@@ -111,6 +112,7 @@ export async function loadExport(
     s.select(schema.workoutExercises),
     s.select(schema.trainingTemplateEntries),
     s.select(schema.workoutLogs),
+    s.select(schema.exerciseSets),
     s.select(schema.weightLogs),
     s.select(schema.shoppingChecks),
   ]);
@@ -139,6 +141,7 @@ export async function loadExport(
       workoutExercises,
       trainingTemplateEntries,
       workoutLogs,
+      exerciseSets,
       weightLogs,
       shoppingChecks,
     },

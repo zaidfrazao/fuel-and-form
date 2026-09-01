@@ -1,15 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, startTransition, useOptimistic, useState } from "react";
+import {
+  type ReactNode,
+  startTransition,
+  useOptimistic,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
-import { clearSessionStatus, setSessionStatus } from "@/app/actions/training";
+import {
+  clearSessionStatus,
+  logExerciseSet,
+  removeExerciseSet,
+  setSessionStatus,
+} from "@/app/actions/training";
 import {
   ACTION_BAR_CONTROLS,
   ACTION_BAR_PRIMARY,
   ACTION_BAR_SECONDARY,
   ACTION_BAR_SPLIT,
   APP_ACTION_BAR,
+  SESSION_ACTION_BAR,
 } from "@/components/action-bar";
 import { DotGrid, type Week } from "@/components/dot-grid";
 import { ExerciseList, type ListedExercise } from "@/components/exercise-list";
@@ -29,6 +41,15 @@ import {
   PAGE_MEASURE_COLUMN,
   PAGE_MEASURE_FOOT,
 } from "@/lib/frame";
+import {
+  currentExercise,
+  type LoggedSet,
+  type SetTarget,
+  setProgress,
+  setRows,
+  setsFor,
+  targetLabel,
+} from "@/lib/exercise-set";
 import { dayLabel } from "@/lib/now-display";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { MAX_NOTE_LENGTH } from "@/lib/session-entry";
@@ -39,7 +60,37 @@ import { cn } from "@/lib/utils";
  *
  * A date's session with its full exercise list, the three statuses it can be
  * given, an optional note and duration, and six weeks of adherence underneath.
- * Deliberately not a workout tracker: no per-set entry, no volume, no totals.
+ * Still deliberately not a workout tracker — but that sentence is narrower than
+ * it was. § P10 reversed the per-set half of it (FUEL-89), so per-set entry is
+ * here; what stays out is a progression engine, prescribed load increases,
+ * personal records, and anything that decides what to do next.
+ *
+ * ## Two states, and why the second is a state rather than a route
+ *
+ * Brand Guide § Desktop, "The two states of `/training`" (FUEL-90). This screen
+ * is a checklist you read BEFORE and AFTER, and a surface you operate DURING,
+ * and those are two compositions:
+ *
+ *   - the PLAN state holds the whole list, the session's record, and set
+ *     progress as slash metadata on each exercise's own row;
+ *   - the SESSION state holds the exercise you are on and its sets, with the
+ *     rest of the list moving to the aside at ≥1272 where there is room for it.
+ *
+ * The alternative — sets expanding in place under the row you are working — is
+ * an accordion, which § Progressive Disclosure has banned by name since long
+ * before this milestone. So the second state is a consequence rather than a
+ * preference.
+ *
+ * A state and not a route: § Navigation allows two levels, `/` already carries
+ * three states, and a session behind a URL is a URL that means nothing the next
+ * day. Only TODAY has one — a past date is a record, which is the same refusal
+ * `actions/training.ts` already makes at the other end of the calendar.
+ *
+ * The current exercise is DERIVED — the first whose sets are incomplete, read
+ * off the rows themselves. That is the schema's own "derive from an absolute,
+ * never accumulate", and it makes a phone locked mid-session and woken twenty
+ * minutes later resume where the data says it is. The only thing stored on the
+ * client is whether the state is entered at all: one boolean in `localStorage`.
  *
  * ## Why it is a screen of its own and not a branch of `/`
  *
@@ -111,9 +162,30 @@ export type TrainingItem = {
   type: string;
   /** The walk is offered as a row; a session is what the actions act on. */
   kind: "session" | "walk";
-  exercises: readonly ListedExercise[];
+  exercises: readonly TrainingExercise[];
   entry: SessionEntryView | null;
+  /**
+   * The sets performed against this session on this date — § P10, FUEL-91.
+   *
+   * Empty for every session before this ticket and for every one nobody logged
+   * a set against, which is the same array and deliberately so: PRD § P10 asks
+   * that "existing sessions render identically and need no backfill", and an
+   * absent set list is not a state this screen distinguishes from an empty one.
+   */
+  sets: readonly LoggedSetView[];
 };
+
+/**
+ * An exercise as this screen needs it: the row `/` also draws, plus the
+ * structured target the sub-list compares a set against.
+ *
+ * The target rather than the prescription, which stays exactly what it was —
+ * rendered verbatim, never parsed. See schema.ts on why these are columns.
+ */
+export type TrainingExercise = ListedExercise & SetTarget;
+
+/** One set, narrowed to what the sub-list draws. */
+export type LoggedSetView = LoggedSet & { exerciseId: string };
 
 /* -------------------------------------------------------------------------- */
 /* Pieces                                                                     */
@@ -246,6 +318,248 @@ function Recorded({ entry }: { entry: SessionEntryView | null }) {
   );
 }
 
+/**
+ * The sets performed against one exercise — Brand Guide § Lists, "Sub-lists".
+ *
+ * "A sub-list is the 46px dense row, indented to its parent's content column,
+ * and it appears only where its parent is the screen's subject." The indent is
+ * 30px because that is the parent row's own content column: the ordinal's 18px
+ * plus the row's 12px gap. One level, and never nested inside a row of another
+ * list — that is the accordion § Progressive Disclosure bans, and it is banned
+ * geometrically as well as by name.
+ *
+ * ## The row is an ordinal, a reps figure and one control
+ *
+ * The mock draws the figure as text — `8 reps` for a set performed, `Target 8`
+ * for one still offered. Here it is an input holding that same number, because
+ * the acceptance criteria ask for sets to be CORRECTABLE and because an
+ * exercise with no structured target has no number to tick at: a plank has
+ * three sets and no rep count, and '8–12 rounds — 40 sec on / 40 sec off' has
+ * neither. At rest the row reads as the mock draws it; the difference is only
+ * that the figure can be typed into.
+ *
+ * The tick is the one control, and it means the same thing in both directions:
+ * a set is logged or it is not. Correcting a logged set is the input, committed
+ * when it loses focus, and untapping the tick is what removes it.
+ *
+ * ## What the tick does with an empty box
+ *
+ * It falls back to the target's low rep, which is what "Target 8" is offering.
+ * Without a target and without a typed number there is nothing to record, so the
+ * control is disabled — the alternative is a button that reports a refusal for a
+ * value the reader never entered.
+ */
+function SetList({
+  exercise,
+  logged,
+  drafts,
+  onDraft,
+  onLog,
+  onRemove,
+}: {
+  exercise: TrainingExercise;
+  logged: readonly LoggedSet[];
+  drafts: ReadonlyMap<string, string>;
+  onDraft: (setIndex: number, value: string) => void;
+  onLog: (setIndex: number, reps: number) => void;
+  onRemove: (setIndex: number) => void;
+}) {
+  const target = targetLabel(exercise);
+
+  return (
+    // 30px — the parent row's content column. § Lists gives the figure and this
+    // is where it is spent; `exercise-list.tsx` draws the 18px ordinal and the
+    // 12px gap that add up to it.
+    <ol className="ml-[30px] flex flex-col">
+      {setRows(exercise, logged).map((row) => {
+        const key = `${exercise.id}#${row.index}`;
+        // The typed value if there is one, otherwise what is stored. An empty
+        // string is a real draft — it is how a box is cleared — so the fallback
+        // is on the key's absence rather than on the value being falsy.
+        const draft = drafts.get(key);
+        const value = draft ?? (row.reps === null ? "" : String(row.reps));
+        const typed = Number(value);
+        const entered = value !== "" && Number.isInteger(typed);
+        // What the tick would record: what is in the box, or the target it is
+        // offering. `null` is a control with nothing to write.
+        const wouldLog = entered ? typed : exercise.targetRepsLow;
+
+        return (
+          <li
+            key={key}
+            className="flex min-h-[46px] items-center gap-3 border-t border-border py-[11px] first:border-t-0"
+          >
+            <span className="w-[18px] shrink-0 font-mono text-slash text-text-tertiary">
+              {String(row.index).padStart(2, "0")}
+            </span>
+
+            <span className="flex flex-1 items-center gap-2">
+              <input
+                // The label is the ordinal beside it, which is decorative to a
+                // screen reader — a bare "01" says nothing about what the box
+                // holds. § Accessibility asks for a name, not a position.
+                aria-label={`Set ${row.index} reps`}
+                value={value}
+                /*
+                 * Digits only, stripped as they arrive — the identical
+                 * treatment the duration box takes above, for the identical
+                 * reason: `inputMode` asks for a numeric keypad and does not
+                 * stop a paste, and "1e2" reaching `Number()` as `NaN` would
+                 * render as a set of NaN reps while the request was in flight.
+                 */
+                onChange={(event) =>
+                  onDraft(row.index, event.target.value.replace(/\D/g, ""))
+                }
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" || wouldLog === null) return;
+
+                  // A number typed and confirmed is a set logged, so the reader
+                  // never has to reach for the tick to commit what they just
+                  // wrote. The tick stays the way back.
+                  event.preventDefault();
+                  onLog(row.index, wouldLog);
+                }}
+                onBlur={() => {
+                  // Only a CORRECTION commits here — a row already logged whose
+                  // number changed. An unlogged row committing on blur would
+                  // mean tapping anywhere on the screen after typing a number
+                  // recorded a set nobody confirmed.
+                  if (row.reps === null || !entered || typed === row.reps) return;
+
+                  onLog(row.index, typed);
+                }}
+                inputMode="numeric"
+                // Three digits, and `MAX_REPS` is three digits: the box cannot
+                // hold a value the action would refuse.
+                maxLength={3}
+                className="h-11 w-14 rounded-md border border-border bg-surface px-2 text-body tabular-nums text-text-primary outline-none placeholder:text-text-tertiary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                placeholder={
+                  exercise.targetRepsLow === null ? "" : String(exercise.targetRepsLow)
+                }
+              />
+              {/* The mock's two states, in words: `8 reps` for a set performed
+                  and `Target 8` for one still on offer. An exercise with no rep
+                  target says neither and just names the unit. */}
+              <span className="text-slash text-text-tertiary">
+                {row.reps === null ? (target ?? "reps") : "reps"}
+              </span>
+            </span>
+
+            <button
+              type="button"
+              // 44px of target around an 18px mark — § Touch Targets' minimum,
+              // which names no posture and so carries to every width. The
+              // negative margin pulls the box's edge back to the row's, so the
+              // mark lands where the mock draws it rather than 13px inside it.
+              className={`-mr-[13px] flex h-11 w-11 shrink-0 items-center justify-center ${FOCUS_RING}`}
+              aria-label={
+                row.reps === null ? `Log set ${row.index}` : `Remove set ${row.index}`
+              }
+              // One control with two states rather than two controls — the
+              // reason `Recorded`'s three status buttons carry it too.
+              aria-pressed={row.reps !== null}
+              disabled={row.reps === null && wouldLog === null}
+              onClick={() => {
+                if (row.reps !== null) {
+                  onRemove(row.index);
+
+                  return;
+                }
+
+                if (wouldLog !== null) onLog(row.index, wouldLog);
+              }}
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "size-[18px] rounded-[4px] border border-border",
+                  // Ink rather than umber. § The Four Rules allows one accent
+                  // element per screen and the day's dot has it; a filled tick
+                  // is a mark, which is what the dot grid's own filled dots are.
+                  row.reps !== null && "border-text-primary bg-text-primary",
+                )}
+              />
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/**
+ * The rest of the session, beside the exercise being worked — § Desktop.
+ *
+ * "At ≥1272 the two states are one composition. The measure swaps its contents;
+ * the aside gains the rest of the list above what it already holds. The current
+ * row is marked by WEIGHT rather than colour — the rows behind it recede to
+ * `text-secondary` and it does not."
+ *
+ * This is the FIRST implementation of that device, not a reuse. § Desktop
+ * carried an attribution to `recent-sessions.tsx` from v4.7 until FUEL-90
+ * withdrew it: that component marks its viewed row with a `· Viewing` suffix,
+ * `aria-current="page"` and the absence of a link — the current row loses the
+ * hover ground, the others do not lose their weight. Nothing in `src/` recedes
+ * a list's other rows.
+ *
+ * `aria-current="step"` is what carries the same fact to a screen reader, and
+ * it is not optional: a distinction made by weight alone is a distinction made
+ * by rendering alone, which is § Accessibility's objection to colour restated.
+ * The exercise's name is also the measure's `h1`, so it is said in words too.
+ *
+ * The rows are not links and have no hover ground, which matters more than it
+ * looks: § Accessibility requires 4.5:1 for body text and `text-secondary`
+ * measures 4.26:1 on the hover ground. A receded row on the canvas is fine; the
+ * same row on a tinted ground would not be.
+ */
+function SessionList({
+  exercises,
+  sets,
+  current,
+}: {
+  exercises: readonly TrainingExercise[];
+  sets: readonly LoggedSetView[];
+  current: number;
+}) {
+  return (
+    <ol className="flex flex-col">
+      {exercises.map((exercise, index) => {
+        const logged = setsFor(exercise.id, sets);
+        const isCurrent = index === current;
+
+        return (
+          <li
+            key={exercise.id}
+            aria-current={isCurrent ? "step" : undefined}
+            className="flex min-h-[44px] items-baseline justify-between gap-3 border-b border-border py-[10px] last:border-b-0"
+          >
+            <span
+              className={cn(
+                "text-body",
+                isCurrent ? "text-text-primary" : "text-text-secondary",
+              )}
+            >
+              {exercise.name}
+            </span>
+            {/* What was done, or what is asked for. The prescription is the
+                fallback rather than a blank, so a row nobody has reached yet
+                still says what it wants — and it is rendered verbatim here as
+                everywhere else. */}
+            <span
+              className={cn(
+                "shrink-0 text-slash tabular-nums",
+                isCurrent ? "text-text-secondary" : "text-text-tertiary",
+              )}
+            >
+              {setProgress(exercise, logged) ?? exercise.prescription}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /* The screen                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -263,12 +577,102 @@ function Recorded({ entry }: { entry: SessionEntryView | null }) {
  */
 type Attempt =
   | { kind: "record"; status: WorkoutLogStatus; note: string; duration: string }
-  | { kind: "clear" };
+  | { kind: "clear" }
+  | { kind: "log-set"; exerciseId: string; setIndex: number; reps: number }
+  | { kind: "remove-set"; exerciseId: string; setIndex: number };
+
+/** The two that move a row of the sub-list rather than the session's record. */
+type SetAttempt = Extract<Attempt, { kind: "log-set" | "remove-set" }>;
 
 /** § Tone of Voice: name what happened. Never "Something went wrong". */
 function banner(failure: Attempt): string {
-  return failure.kind === "clear" ? "Couldn’t clear that." : "Couldn’t save that.";
+  switch (failure.kind) {
+    case "clear":
+      return "Couldn’t clear that.";
+    // Named apart from the session's own record, because they are different
+    // things to have lost: one is a status, and this is a set the reader just
+    // performed and would otherwise re-enter blind.
+    case "log-set":
+      return "Couldn’t save that set.";
+    case "remove-set":
+      return "Couldn’t remove that set.";
+    default:
+      return "Couldn’t save that.";
+  }
 }
+
+/**
+ * Where the session state remembers that it is entered — Brand Guide § Desktop.
+ *
+ * "The only client state is whether the session state is entered at all: one
+ * boolean, in `localStorage`, keyed to the date and wrapped in try/catch like
+ * every other read of it. It writes no row."
+ *
+ * Keyed to the date so that entering Wednesday's session does not open
+ * Thursday's, and read only for today — a past date has no session state at
+ * all, so a key left behind by a date that has passed is unreachable rather
+ * than stale. They accumulate at about thirty bytes a training day, which is
+ * the reason this is not worth a reaper.
+ *
+ * Every access is wrapped: `localStorage` throws outright in a Safari private
+ * window and in any browser set to block site data, and a screen that cannot
+ * render because it could not remember a boolean is a worse answer than one
+ * that opens in the plan state.
+ */
+const SESSION_KEY = (date: CalendarDate) => `fuel:training-session:${date}`;
+
+/**
+ * `localStorage` is an external store, and this is how React reads one.
+ *
+ * `useSyncExternalStore` rather than a `useState` seeded in an effect. The
+ * effect version is what this was first written as, and the lint rule that
+ * refused it is right: a `setState` in an effect body is a second render pass
+ * on every mount, and the hook exists precisely so that a value living outside
+ * React does not need one.
+ *
+ * `getServerSnapshot` is `false` — the server has no `localStorage`, and a
+ * screen rendered on it is a screen in the plan state. That is also what makes
+ * the resumption safe rather than a hydration mismatch: React renders the
+ * server's snapshot, hydrates against it, and then switches to the client's.
+ *
+ * The `storage` event is subscribed to as well, so a session entered in another
+ * tab is not a tab left showing a stale composition of the same date. It does
+ * not fire in the tab that made the change, which is what `emit` is for.
+ */
+const listeners = new Set<() => void>();
+
+function subscribeToStorage(listener: () => void): () => void {
+  listeners.add(listener);
+  window.addEventListener("storage", listener);
+
+  return () => {
+    listeners.delete(listener);
+    window.removeEventListener("storage", listener);
+  };
+}
+
+function readEntered(date: CalendarDate): boolean {
+  try {
+    return window.localStorage.getItem(SESSION_KEY(date)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function rememberEntered(date: CalendarDate, entered: boolean): void {
+  try {
+    if (entered) window.localStorage.setItem(SESSION_KEY(date), "1");
+    else window.localStorage.removeItem(SESSION_KEY(date));
+  } catch {
+    // Nothing to do and nothing to say: the state still works for as long as
+    // the page is open, and a reload starts it in the plan state.
+  }
+
+  for (const listener of listeners) listener();
+}
+
+/** One identity for "no sets", so the optimistic base does not change per render. */
+const NO_SETS: readonly LoggedSetView[] = [];
 
 /**
  * The screen for one date.
@@ -326,12 +730,74 @@ export function Training({
   );
   const [failure, setFailure] = useState<Attempt | null>(null);
 
+  /**
+   * What is typed in the sub-list's rep boxes but not yet recorded, keyed
+   * `exerciseId#setIndex`.
+   *
+   * Not in `SetList`, because it has to survive that component being handed a
+   * different exercise: the current exercise is derived, so logging the last
+   * set of one moves the screen to the next, and state living inside the row
+   * would be lost on the same frame it was used. Cleared per key once the
+   * server has the number, so the stored value takes over — and cleared on a
+   * removal too, or a row would show a figure with an untouched tick beside it.
+   */
+  const [drafts, setDrafts] = useState<ReadonlyMap<string, string>>(new Map());
+
+  /**
+   * Whether the session state is entered — the one thing this screen stores.
+   *
+   * Read from the browser rather than held here, so a reload mid-session comes
+   * back to the same composition and nothing about it can go stale against the
+   * rows: everything else the state shows is derived from the sets themselves.
+   * See `subscribeToStorage` for why this is not a `useState` in an effect.
+   */
+  const entered = useSyncExternalStore(
+    subscribeToStorage,
+    () => readEntered(date),
+    () => false,
+  );
+
   // What the screen says is recorded, before the server has answered. One
   // optimistic value covering the whole entry, so a status and the note that
   // explains it cannot revert independently.
   const [entry, apply] = useOptimistic(
     recorded,
     (_current: SessionEntryView | null, next: SessionEntryView | null) => next,
+  );
+
+  /**
+   * The date's sets, as the screen believes them — § Feedback's 300ms, applied
+   * to a tick.
+   *
+   * A list rather than one value, unlike the entry above, because a set is not
+   * a correction of the set beside it: two rows can be in flight at once and
+   * each has to revert on its own. The reducer is an upsert and a delete over
+   * the same address the database uses, so the optimistic answer and the stored
+   * one are the same shape and the same rule.
+   *
+   * This is also what advances the screen. The current exercise is derived from
+   * these rows, so the last set of an exercise moves the subject to the next one
+   * on the frame it is ticked rather than on the render after the server agrees.
+   */
+  const [sets, applySet] = useOptimistic(
+    session?.sets ?? NO_SETS,
+    (current: readonly LoggedSetView[], attempt: SetAttempt) => {
+      const rest = current.filter(
+        (set) =>
+          !(set.exerciseId === attempt.exerciseId && set.setIndex === attempt.setIndex),
+      );
+
+      return attempt.kind === "remove-set"
+        ? rest
+        : [
+            ...rest,
+            {
+              exerciseId: attempt.exerciseId,
+              setIndex: attempt.setIndex,
+              reps: attempt.reps,
+            },
+          ];
+    },
   );
 
   const act = (attempt: Attempt) => {
@@ -342,6 +808,30 @@ export function Training({
     setFailure(null);
 
     startTransition(async () => {
+      if (attempt.kind === "log-set" || attempt.kind === "remove-set") {
+        applySet(attempt);
+
+        const result =
+          attempt.kind === "log-set"
+            ? await logExerciseSet({
+                date,
+                entryId: session.entryId,
+                exerciseId: attempt.exerciseId,
+                setIndex: attempt.setIndex,
+                reps: attempt.reps,
+              })
+            : await removeExerciseSet({
+                date,
+                entryId: session.entryId,
+                exerciseId: attempt.exerciseId,
+                setIndex: attempt.setIndex,
+              });
+
+        if (!result.ok) setFailure(attempt);
+
+        return;
+      }
+
       apply(
         attempt.kind === "clear"
           ? null
@@ -372,6 +862,73 @@ export function Training({
 
   const record = (status: WorkoutLogStatus) =>
     act({ kind: "record", status, note, duration });
+
+  /**
+   * Whether this date can be trained rather than merely read.
+   *
+   * Today, a session rather than the walk, and something to work through.
+   * § Desktop: "Only today has one. A past date is a record, which is what the
+   * paginator is for; you cannot start Tuesday's session on Thursday." The
+   * refusal lives here rather than in the action, because it is a rule about
+   * this composition and not about the row — see `logExerciseSet`.
+   */
+  const canEnter =
+    session !== undefined && date === today && session.exercises.length > 0;
+
+  const inSession = entered && canEnter;
+
+  const enter = () => rememberEntered(date, true);
+
+  /**
+   * Leaves the state, and records the session on the way out.
+   *
+   * PRD § P10: the state is "entered and left by the primary". All three
+   * controls leave, not only Mark done — a session marked partial or skipped is
+   * a session that has stopped, and leaving the reader inside a surface for
+   * operating a session they have just said is over would be a state with no
+   * way out but the same three buttons.
+   */
+  const finish = (status: WorkoutLogStatus) => {
+    record(status);
+    rememberEntered(date, false);
+  };
+
+  /**
+   * Which exercise the session state is showing, and the rows under it.
+   *
+   * Derived from the optimistic sets, so it moves on the frame the last set of
+   * an exercise is ticked. `currentExercise` carries the rule and the reason it
+   * is a derivation rather than a stored cursor.
+   */
+  const current = session ? currentExercise(session.exercises, sets) : -1;
+  const currentEx = session?.exercises[current];
+
+  const draft = (exerciseId: string, setIndex: number, value: string) =>
+    setDrafts((previous) => new Map(previous).set(`${exerciseId}#${setIndex}`, value));
+
+  const forget = (exerciseId: string, setIndex: number) =>
+    setDrafts((previous) => {
+      const next = new Map(previous);
+
+      next.delete(`${exerciseId}#${setIndex}`);
+
+      return next;
+    });
+
+  /**
+   * Set progress for the plan state's rows, in one pass over the date's sets.
+   *
+   * Built for the session rather than per row — `exercise-list.tsx` takes a map
+   * for this reason — and from the optimistic sets, so a set logged in the
+   * session state is already counted when the reader leaves it.
+   */
+  const progress = new Map<string, string>();
+
+  for (const exercise of session?.exercises ?? []) {
+    const label = setProgress(exercise, setsFor(exercise.id, sets));
+
+    if (label) progress.set(exercise.id, label);
+  }
 
   /*
    * Whether the boxes hold something the server has not been told.
@@ -467,6 +1024,53 @@ export function Training({
             own record, and the bar below acts on exactly what they hold. */}
         <div className={cn(PAGE_MEASURE_COLUMN, "xl:gap-7")} data-column="measure">
 
+        {session && inSession && currentEx ? (
+          /*
+           * The session state's measure — § Desktop, and the mock's own
+           * arrangement at both widths.
+           *
+           * The subject is the EXERCISE, not the session: the eyebrow carries
+           * which session and the slash line carries the prescription and the
+           * position, so nothing above has to repeat them and the 40px line is
+           * spent on the thing being performed. § P3's re-aimed criterion is
+           * exactly this — "the active exercise is what is visible when you are
+           * working".
+           *
+           * The eyebrow is the session's name alone today. FUEL-92 adds the
+           * group to it ("Circuit B · Work") when a session has sections.
+           */
+          <>
+            <div className="flex flex-col gap-3">
+              <Eyebrow>{session.name}</Eyebrow>
+              <h1 className="text-title text-text-primary">{currentEx.name}</h1>
+              {/* Verbatim, and then where you are. `resolve-training.ts` keeps
+                  the exercises in `sort_order`, so the position is the list's
+                  own and not a second ordering invented here. */}
+              <SlashMeta>
+                {`${currentEx.prescription} · Exercise ${current + 1} of ${session.exercises.length}`}
+              </SlashMeta>
+            </div>
+
+            <section className="flex flex-col gap-[14px]">
+              <Eyebrow>Sets</Eyebrow>
+              <SetList
+                exercise={currentEx}
+                logged={setsFor(currentEx.id, sets)}
+                drafts={drafts}
+                onDraft={(setIndex, value) => draft(currentEx.id, setIndex, value)}
+                onLog={(setIndex, reps) => {
+                  forget(currentEx.id, setIndex);
+                  act({ kind: "log-set", exerciseId: currentEx.id, setIndex, reps });
+                }}
+                onRemove={(setIndex) => {
+                  forget(currentEx.id, setIndex);
+                  act({ kind: "remove-set", exerciseId: currentEx.id, setIndex });
+                }}
+              />
+            </section>
+          </>
+        ) : (
+          <>
         {session ? (
           <Subject item={session} />
         ) : (
@@ -489,7 +1093,10 @@ export function Training({
         {session && (
           <section className="flex flex-col gap-[14px]">
             <Eyebrow>Exercises</Eyebrow>
-            <ExerciseList exercises={session.exercises} />
+            {/* § Desktop gives the plan state set progress "on the exercise's
+                own row, no rows added" — which is what keeps the list's window
+                spendable, and what § P3's criterion is re-aimed against. */}
+            <ExerciseList exercises={session.exercises} progress={progress} />
           </section>
         )}
 
@@ -559,6 +1166,8 @@ export function Training({
             </div>
           </section>
         )}
+          </>
+        )}
 
         </div>
 
@@ -573,7 +1182,28 @@ export function Training({
          * which screen you reached it from would be two rows as far as a reader
          * is concerned.
          */}
-        <div className={cn(PAGE_ASIDE_COLUMN, "xl:gap-7")} data-column="aside">
+        {/* Hidden below the cap while a session is being operated, and only
+            there. § Desktop: "At ≥1272 the two states are one composition — the
+            measure swaps its contents; the aside gains the rest of the list
+            above what it already holds." A phone has one column and § Lists'
+            window to spend in it, which is the whole reason the two states
+            exist; below 1272 the session state is the exercise and its sets,
+            and everything here is one tap away in the plan state. */}
+        <div
+          className={cn(PAGE_ASIDE_COLUMN, "xl:gap-7", inSession && "hidden")}
+          data-column="aside"
+        >
+        {session && inSession && (
+          <section className="flex flex-col gap-[14px]">
+            <Eyebrow>This session</Eyebrow>
+            <SessionList
+              exercises={session.exercises}
+              sets={sets}
+              current={current}
+            />
+          </section>
+        )}
+
         <section className="flex flex-col gap-[14px]">
           <div className="flex items-center justify-between gap-3">
             <Eyebrow>Adherence</Eyebrow>
@@ -686,7 +1316,12 @@ export function Training({
       {session ? (
         // Under the measure at ≥1272 — FUEL-77, and inert below it. The bar acts
         // on the session in the first column, so it is never in the second.
-        <div className={cn(APP_ACTION_BAR, PAGE_MEASURE_FOOT)}>
+        //
+        // The session state's bar is the same bar minus the desktop release —
+        // § Desktop's one named exception to FUEL-72, argued in `action-bar.ts`:
+        // that release is a claim about thumb targets, and a rest timer
+        // (FUEL-93) rides in this slot at every width.
+        <div className={cn(inSession ? SESSION_ACTION_BAR : APP_ACTION_BAR, PAGE_MEASURE_FOOT)}>
           {failure && (
             <div
               role="alert"
@@ -716,19 +1351,40 @@ export function Training({
               argument and the strings; the banner above stays outside the row
               because it is a block that spans the column. */}
           <div className={ACTION_BAR_CONTROLS}>
-            <Button
-              className={ACTION_BAR_PRIMARY}
-              aria-pressed={entry?.status === "done"}
-              onClick={() => record("done")}
-            >
-              Mark done
-            </Button>
+            {/*
+             * The primary changes because the screen's question does — § Desktop.
+             *
+             * § Buttons allows one primary and calls it "the one action the
+             * screen exists for". Before you train that is starting; while you
+             * are training it is finishing. Neither state has two, and Mark done
+             * never appears as a secondary — a demotion of the action the whole
+             * adherence record depends on.
+             *
+             * A date that is not today keeps Mark done, because Start session is
+             * not offered where it would mean nothing: § Desktop gives the
+             * session state to today alone, and PRD § P3 has always had past
+             * sessions "viewable and editable by date". So the plan state's
+             * primary is Start session exactly where the state is reachable.
+             */}
+            {canEnter && !inSession ? (
+              <Button className={ACTION_BAR_PRIMARY} onClick={enter}>
+                Start session
+              </Button>
+            ) : (
+              <Button
+                className={ACTION_BAR_PRIMARY}
+                aria-pressed={entry?.status === "done"}
+                onClick={() => (inSession ? finish("done") : record("done"))}
+              >
+                Mark done
+              </Button>
+            )}
             <div className={ACTION_BAR_SPLIT}>
               <Button
                 variant="secondary"
                 className={ACTION_BAR_SECONDARY}
                 aria-pressed={entry?.status === "partial"}
-                onClick={() => record("partial")}
+                onClick={() => (inSession ? finish("partial") : record("partial"))}
               >
                 Partial
               </Button>
@@ -736,7 +1392,7 @@ export function Training({
                 variant="secondary"
                 className={ACTION_BAR_SECONDARY}
                 aria-pressed={entry?.status === "skipped"}
-                onClick={() => record("skipped")}
+                onClick={() => (inSession ? finish("skipped") : record("skipped"))}
               >
                 Skip
               </Button>
@@ -744,8 +1400,15 @@ export function Training({
 
           {/* Tertiary, so the Text variant — § Buttons gives it to Revert, and
               these are the same kind of thing: the way back from a tap that was
-              made, for the uncommon case where it was the wrong one. */}
-          {entry && (
+              made, for the uncommon case where it was the wrong one.
+
+              Not offered in the session state, which the mock draws with three
+              controls and no fourth. Clear takes the whole record away and its
+              cascade takes the sets with it — a control the reader has no use
+              for mid-session and every reason not to reach by accident while
+              looking at a phone between sets. It is a tap away in the plan
+              state, where taking a record back is what the screen is for. */}
+          {entry && !inSession && (
             <div className={cn("flex items-center gap-4", ACTION_BAR_PRIMARY)}>
               {/* Offered only when the boxes hold something the server has
                   not been told. Before a status exists the note has a control

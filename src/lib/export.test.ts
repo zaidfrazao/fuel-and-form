@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 import * as schema from "./db/schema";
 import type {
   DayPlanOverride,
+  ExerciseSet,
   Meal,
   MealIngredient,
   MealLog,
@@ -158,6 +159,23 @@ const exercise = (id: string, sortOrder: number): WorkoutExercise => ({
   prescription: "3 x 12",
   sortOrder,
   notes: null,
+  targetSets: 3,
+  targetRepsLow: 12,
+  targetRepsHigh: 12,
+});
+
+const EXERCISE_ID = "aaaaaaaa-0000-4000-8000-000000000002";
+const WORKOUT_LOG_ID = "cccccccc-0000-4000-8000-000000000002";
+
+const exerciseSet = (id: string, setIndex: number, reps = 12): ExerciseSet => ({
+  id,
+  userId: USER_ID,
+  workoutLogId: WORKOUT_LOG_ID,
+  exerciseId: EXERCISE_ID,
+  setIndex,
+  reps,
+  loadKg: null,
+  createdAt: new Date("2026-08-10T06:32:00.000Z"),
 });
 
 const trainingEntry = (id: string, dayOfWeek: 0 | 1 | 2): TrainingTemplateEntry => ({
@@ -206,9 +224,10 @@ const TABLES: ExportTables = {
   dayPlanOverrides: [override("eeeeeeee-0000-4000-8000-000000000001", "2026-08-10")],
   mealLogs: [mealLog("ffffffff-0000-4000-8000-000000000001", "2026-08-10")],
   workouts: [workout(WORKOUT_ID, "Circuit A")],
-  workoutExercises: [exercise("aaaaaaaa-0000-4000-8000-000000000002", 0)],
+  workoutExercises: [exercise(EXERCISE_ID, 0)],
   trainingTemplateEntries: [trainingEntry("bbbbbbbb-0000-4000-8000-000000000002", 1)],
-  workoutLogs: [workoutLog("cccccccc-0000-4000-8000-000000000002", "2026-08-10")],
+  workoutLogs: [workoutLog(WORKOUT_LOG_ID, "2026-08-10")],
+  exerciseSets: [exerciseSet("ffffffff-0000-4000-8000-000000000002", 1)],
   weightLogs: [weightLog("dddddddd-0000-4000-8000-000000000002", "2026-08-10")],
   shoppingChecks: [
     shoppingCheck("eeeeeeee-0000-4000-8000-000000000002", "2026-08-10", "rolled oats"),
@@ -227,6 +246,7 @@ const EMPTY: ExportTables = {
   workoutExercises: [],
   trainingTemplateEntries: [],
   workoutLogs: [],
+  exerciseSets: [],
   weightLogs: [],
   shoppingChecks: [],
 };
@@ -627,6 +647,26 @@ describe("every tie-break", () => {
     inOrder("workoutExercises", [exercise(HI, 0), otherWorkout], AGAINST_ID);
     inOrder("workoutExercises", [exercise(HI, 1), exercise(LO, 2)], AGAINST_ID);
     inOrder("workoutExercises", [exercise(LO, 1), exercise(HI, 1)], BY_ID);
+  });
+
+  test("exerciseSets: log, then exercise, then set index, then id", () => {
+    // The order they were performed in, which is also the order the screen
+    // draws — FUEL-91. Each clause is exercised against a row that would sort
+    // the other way on id alone, so a comparator missing one of them fails
+    // here rather than reordering a session's sets in a restore.
+    const otherLog = {
+      ...exerciseSet(LO, 1),
+      workoutLogId: "ffffffff-0000-4000-8000-00000000000e",
+    };
+    const otherExercise = {
+      ...exerciseSet(LO, 1),
+      exerciseId: "ffffffff-0000-4000-8000-00000000000d",
+    };
+
+    inOrder("exerciseSets", [exerciseSet(HI, 1), otherLog], AGAINST_ID);
+    inOrder("exerciseSets", [exerciseSet(HI, 1), otherExercise], AGAINST_ID);
+    inOrder("exerciseSets", [exerciseSet(HI, 1), exerciseSet(LO, 2)], AGAINST_ID);
+    inOrder("exerciseSets", [exerciseSet(LO, 1), exerciseSet(HI, 1)], BY_ID);
   });
 
   test("planTemplateEntries: weekday, then slot, then sort order, then id", () => {

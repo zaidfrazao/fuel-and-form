@@ -3,8 +3,15 @@
 import { refresh } from "next/cache";
 
 import { getSession } from "@/lib/auth/session";
-import { clearSession, loadTraining, recordSession } from "@/lib/db/queries/training";
+import {
+  clearSession,
+  loadTraining,
+  logSet,
+  recordSession,
+  removeSet,
+} from "@/lib/db/queries/training";
 import { type CalendarDate, parseCalendarDate } from "@/lib/date";
+import { parseReps, parseSetIndex } from "@/lib/exercise-set";
 import { parseSessionEntry } from "@/lib/session-entry";
 
 /**
@@ -99,7 +106,9 @@ const FAILED: TrainingResult = { ok: false };
 async function resolveSession(
   date: CalendarDate,
   entryId: string,
-): Promise<{ userId: string; workoutId: string } | undefined> {
+): Promise<
+  { userId: string; workoutId: string; exerciseIds: Set<string> } | undefined
+> {
   const session = await getSession();
 
   if (!session) return undefined;
@@ -115,7 +124,25 @@ async function resolveSession(
     (item) => item.entryId === entryId && item.kind === "session",
   );
 
-  return resolved && { userId: session.userId, workoutId: resolved.workout.id };
+  return (
+    resolved && {
+      userId: session.userId,
+      workoutId: resolved.workout.id,
+      /*
+       * The exercises this session actually holds — FUEL-91.
+       *
+       * The same argument the module comment makes about `workoutId`, one level
+       * down. The composite foreign key stops another user's exercise being
+       * named, but nothing in the database stops a caller naming one of their
+       * OWN exercises belonging to a different workout: the row would store, it
+       * would never resolve onto a screen, and it would still reach the export
+       * as evidence of a set performed in a session that never contained that
+       * movement. Taking the candidates from the server's own resolution is
+       * what closes it, exactly as re-resolving the workout does above.
+       */
+      exerciseIds: new Set(resolved.exercises.map((exercise) => exercise.id)),
+    }
+  );
 }
 
 /**
@@ -211,6 +238,133 @@ export async function clearSessionStatus(input: {
     return DONE;
   } catch (error) {
     console.error("Could not clear the session.", error);
+
+    return FAILED;
+  }
+}
+
+/**
+ * Records one set against an exercise of the date's session — § P10, FUEL-91.
+ *
+ * ## Addressed the same way a status is, and validated one level further
+ *
+ * The client sends the entry id, the exercise id and the ordinal; the server
+ * re-resolves the date, takes the workout from its own answer, and checks that
+ * the exercise is one that session holds. See `resolveSession` for why the last
+ * of those is not something the composite foreign key already does.
+ *
+ * ## Not refused for a past date, and that is not an oversight
+ *
+ * Brand Guide § Desktop gives the session state to today alone — "a past date is
+ * a record", and you cannot start Tuesday's session on Thursday. That is a rule
+ * about the STATE, which is a composition, and the screen is where it is
+ * enforced. It is not a rule about the row: PRD § P3 has always had past
+ * sessions "viewable and editable by date", the set of a session performed on
+ * Tuesday belongs to Tuesday whenever it is entered, and an action that refused
+ * the date would be a refusal the export and any later correction feature would
+ * each have to unlearn. The refusal this action does make is the one at the
+ * other end of the calendar, and it is `resolveSession`'s: a date before
+ * `program_start_date` resolves no sessions, so there is no entry to name.
+ *
+ * ## What a repeat tap does
+ *
+ * Logging a set that is already logged is an ordinary update writing the same
+ * reps — see `logSet`, which collides on the unique index rather than inserting
+ * beside it. It is not refused, for `setSessionStatus`'s reason: a caller cannot
+ * tell a no-op from a failure through `{ ok }`, and correcting eight to six is
+ * the same statement as entering eight twice.
+ */
+export async function logExerciseSet(input: {
+  date: CalendarDate;
+  entryId: string;
+  exerciseId: string;
+  setIndex: unknown;
+  reps: unknown;
+}): Promise<TrainingResult> {
+  try {
+    // Before anything is fetched, on `setSessionStatus`'s reasoning: a refusal
+    // that costs a query is a refusal that can be used to make the database
+    // work, and both of these are reachable by anyone who can POST here.
+    const setIndex = parseSetIndex(input.setIndex);
+    const reps = parseReps(input.reps);
+
+    if (setIndex === undefined || reps === undefined) return FAILED;
+
+    const resolved = await resolveSession(input.date, input.entryId);
+
+    // An entry the date does not hold, or an exercise the session does not.
+    // One answer for both, and `refresh()` for the same reason
+    // `setSessionStatus` gives: the second most likely cause is a screen whose
+    // plan changed underneath it, and this path returns before reaching the
+    // refresh below.
+    if (!resolved || !resolved.exerciseIds.has(input.exerciseId)) {
+      refresh();
+
+      return FAILED;
+    }
+
+    await logSet(resolved.userId, {
+      date: input.date,
+      workoutId: resolved.workoutId,
+      exerciseId: input.exerciseId,
+      setIndex,
+      reps,
+    });
+
+    refresh();
+
+    return DONE;
+  } catch (error) {
+    console.error("Could not record the set.", error);
+
+    return FAILED;
+  }
+}
+
+/**
+ * Takes one set back — the tick, untapped.
+ *
+ * Removing a set that is already gone is `ok`, not a failure, on
+ * `clearSessionStatus`'s reasoning: the screen offers no tick to untick in that
+ * state, so reaching here means it was behind, and `refresh()` is the
+ * correction rather than a banner about a problem the reader does not have.
+ *
+ * The session's own record is deliberately untouched, even when this removes
+ * the last set of the session — see `removeSet`. Nothing about the status is
+ * derived from set data, and a status the reader chose is not something a set
+ * removal may take away.
+ */
+export async function removeExerciseSet(input: {
+  date: CalendarDate;
+  entryId: string;
+  exerciseId: string;
+  setIndex: unknown;
+}): Promise<TrainingResult> {
+  try {
+    const setIndex = parseSetIndex(input.setIndex);
+
+    if (setIndex === undefined) return FAILED;
+
+    const resolved = await resolveSession(input.date, input.entryId);
+
+    if (!resolved || !resolved.exerciseIds.has(input.exerciseId)) {
+      refresh();
+
+      return FAILED;
+    }
+
+    await removeSet(resolved.userId, {
+      date: input.date,
+      workoutId: resolved.workoutId,
+      exerciseId: input.exerciseId,
+      setIndex,
+    });
+
+    refresh();
+
+    return DONE;
+  } catch (error) {
+    console.error("Could not remove the set.", error);
 
     return FAILED;
   }

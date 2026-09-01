@@ -47,8 +47,8 @@ import {
  * FUEL-89 reconciled them: its prose counted nine tables where its own listing
  * enumerated twelve, and neither figure included P8's check state — see
  * `shoppingChecks` — or the address P9's web push needs in order to outlive the
- * request — see `pushSubscriptions`. The listing now names the fourteen here,
- * and `exercise_sets` besides, which § P10 adds and this file does not have yet.
+ * request — see `pushSubscriptions`. The listing named fourteen here and
+ * `exercise_sets` besides; FUEL-91 built the fifteenth, so the two agree.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -662,7 +662,13 @@ export const workouts = pgTable(
  * parent by the same composite foreign key. See that table for the argument.
  *
  * Per-set load and rep logging, if the gym restart ever wants it, is one
- * additive table alongside this one — not a change to it.
+ * additive table alongside this one — not a change to it. FUEL-91 spent that
+ * sentence and it held: `exercise_sets` below is the table, the three
+ * `target_*` columns above are the additive columns, and nothing existing
+ * changed its meaning. What the claim did NOT cover is the two
+ * `unique(id, user_id)` constraints the composite keys point at — see below —
+ * which are additions rather than changes, and are the only correction the
+ * paragraph needs.
  */
 export const workoutExercises = pgTable(
   "workout_exercises",
@@ -677,6 +683,35 @@ export const workoutExercises = pgTable(
     prescription: text().notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
     notes: text(),
+
+    /**
+     * What a set-by-set record is compared against — § P10, FUEL-91.
+     *
+     * ## Structured columns BESIDE the prescription, never derived from it
+     *
+     * The obvious alternative is to read these off `prescription` with a
+     * regular expression, and it is wrong in a way that is silent. The seed's
+     * real strings include '8–12 rounds — 40 sec on / 40 sec off': the first
+     * number a `\d+` finds there is 8, so a session of intervals would be
+     * offered eight set rows against a target of eight reps, neither of which
+     * anybody wrote. The column above says outright that it is "displayed
+     * verbatim, never parsed", and this is what spending that sentence looks
+     * like — a second, structured place to say the same thing when it can be
+     * said structurally, and nulls when it cannot.
+     *
+     * All three are nullable and none implies the others. '3 × 45s' is three
+     * sets with no rep target at all, and an exercise with no target still logs
+     * sets — it simply has nothing to compare them against, which is what
+     * `exercise_sets` means when a row has no target row above it.
+     *
+     * `target_reps_low` and `target_reps_high` are equal for a fixed target
+     * ('3 × 12' is 12 to 12) rather than leaving the high null, so a reader
+     * never has to decide whether a missing high means "no upper bound" or
+     * "same as the low". The check below makes them move together.
+     */
+    targetSets: integer("target_sets"),
+    targetRepsLow: integer("target_reps_low"),
+    targetRepsHigh: integer("target_reps_high"),
   },
   (t) => [
     foreignKey({
@@ -686,6 +721,27 @@ export const workoutExercises = pgTable(
     }).onDelete("cascade"),
 
     index("workout_exercises_user_workout_idx").on(t.userId, t.workoutId),
+
+    // What `exercise_sets` points at. Trivially satisfied by every row that
+    // exists — `id` is already the primary key — so this adds a constraint
+    // without changing one, which is the standard FUEL-91 holds itself to.
+    // `meals` and `workouts` both carry the identical line for the identical
+    // reason; see `ownedReference`.
+    unique("workout_exercises_id_user_id_key").on(t.id, t.userId),
+
+    // Both scoped strictly to the columns above, which did not exist until this
+    // migration: every row already stored satisfies them by holding nulls.
+    check(
+      "workout_exercises_target_sets_range",
+      sql`"target_sets" is null or "target_sets" between 1 and 20`,
+    ),
+    check(
+      "workout_exercises_target_reps_range",
+      sql`("target_reps_low" is null) = ("target_reps_high" is null)
+          and ("target_reps_low" is null
+               or ("target_reps_low" between 1 and 999
+                   and "target_reps_high" between "target_reps_low" and 999))`,
+    ),
   ],
 );
 
@@ -781,6 +837,139 @@ export const workoutLogs = pgTable(
     // reason it leads every index here — it is in the WHERE clause of every
     // statement — and the scope prepends it to the conflict target itself.
     uniqueIndex("workout_logs_user_date_workout_key").on(t.userId, t.date, t.workoutId),
+
+    // What `exercise_sets` hangs off — FUEL-91, and the same trivially
+    // satisfied addition `workout_exercises` takes above.
+    unique("workout_logs_id_user_id_key").on(t.id, t.userId),
+  ],
+);
+
+/**
+ * One row per set performed — § P10's per-set logging, FUEL-91.
+ *
+ * ## It hangs off the LOG, not the plan
+ *
+ * A set is history. `workout_exercises` is the library — what a session asks
+ * for — and it is the same rows on every date the workout comes round, so a set
+ * keyed to it alone could not say WHICH Wednesday it was performed on. The log
+ * is the session that happened, and it already carries the date, the workout
+ * and the outcome. The exercise is named beside it, so a set knows what movement
+ * it was, and the two keys together are what let the export print a session as
+ * the thing it was rather than as a status.
+ *
+ * ## Where the parent row comes from
+ *
+ * `workout_logs` exists once a session has a status, and sets are logged BEFORE
+ * anyone marks one — so the first set writes the parent, with status 'partial',
+ * `on conflict do nothing`. See `logSet` in `queries/training.ts`: that status
+ * is a DEFAULT AT CREATION and nothing recomputes it afterwards. A session
+ * marked done and then given a fourth set is still done; a session whose last
+ * set is removed is still whatever it was marked. PRD § P10 requires that the
+ * status is never derived from set data, and "never derived" has to hold in
+ * both directions or the dot grid quietly becomes a completion percentage.
+ *
+ * ## Both keys composite, and only one of them cascades
+ *
+ * `(workout_log_id, user_id)` cascades: a session's record taken back takes its
+ * sets with it. There is no third option — a set whose log is gone has no date,
+ * no workout and nothing to hang off — and `clearSession` is what performs it,
+ * deliberately, from a control that lives only in the plan state.
+ *
+ * `(exercise_id, user_id)` is `no action`, which is `ownedReference`'s rule for
+ * history and the reason it exists: under a cascade, removing one movement from
+ * the library would erase every record of ever having performed it. Retiring a
+ * library entry is `is_archived`'s job — `workout_exercises` has no such column
+ * today because nothing in the app retires an exercise, and it is one more
+ * additive column on the day something does.
+ *
+ * The `no action` timing argument `ownedReference` sets out at length applies
+ * here unchanged: the demo reaper's `delete from users` removes the exercises
+ * and these rows in one statement, and by the time the end-of-statement check
+ * runs there is no dangling reference left to refuse.
+ *
+ * ## `load_kg` ships dormant
+ *
+ * Nothing writes it until the gym restart. The column is here now because
+ * adding it now is free and adding it later is a migration — which is exactly
+ * what PRD § Gym-restart readiness promises the restart will not need. When the
+ * first weighted session happens, it is a value in an insert.
+ */
+export const exerciseSets = pgTable(
+  "exercise_sets",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+
+    // Plain, not `ownerId()` — the same call `meal_ingredients` and
+    // `workout_exercises` make, and for the same reason: the composite key
+    // below pins this column to the log's own owner, so the two cannot
+    // disagree, and the delete cascade arrives through that key rather than
+    // through a second reference to `users`.
+    userId: uuid("user_id").notNull(),
+    workoutLogId: uuid("workout_log_id").notNull(),
+    exerciseId: uuid("exercise_id").notNull(),
+
+    /** 1-based, and the ordinal the screen prints. Bounded by the check below. */
+    setIndex: integer("set_index").notNull(),
+    reps: integer().notNull(),
+
+    /** Null until the gym restart — see above. Nothing writes it today. */
+    loadKg: kilograms("load_kg"),
+
+    createdAt: instant("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      name: "exercise_sets_log_fk",
+      columns: [t.workoutLogId, t.userId],
+      foreignColumns: [workoutLogs.id, workoutLogs.userId],
+    }).onDelete("cascade"),
+
+    ownedReference({
+      name: "exercise_sets_exercise_fk",
+      columns: [t.exerciseId, t.userId],
+      foreignColumns: [workoutExercises.id, workoutExercises.userId],
+      onDelete: "no action",
+    }),
+
+    /**
+     * What an upsert collides on when a set is CORRECTED rather than added.
+     *
+     * Eight reps entered as eighty is one row twice, not two rows — the same
+     * argument `workout_logs` makes one table up, and for the same reason: with
+     * two rows there is no rule for which the screen, the estimate (FUEL-95) and
+     * the export (FUEL-97) should each believe, and each of them would have to
+     * remember the same tie-break separately.
+     *
+     * `user_id` leads because it is in the WHERE clause of every statement and
+     * because `scope.upsert` prepends it to the conflict target itself.
+     */
+    uniqueIndex("exercise_sets_user_log_exercise_index_key").on(
+      t.userId,
+      t.workoutLogId,
+      t.exerciseId,
+      t.setIndex,
+    ),
+
+    // The screen reads every set of a session at once, and orders them by
+    // exercise and index — see `loadTraining`.
+    index("exercise_sets_user_log_idx").on(t.userId, t.workoutLogId),
+
+    /*
+     * The floors and ceilings, in the database as well as in `exercise-set.ts`.
+     *
+     * Both layers, on `session-entry.ts`'s reasoning: the parse is what gives
+     * the screen a refusal it can render, and the constraint is what holds when
+     * a future caller forgets to parse. The figures are far above anything this
+     * program prescribes (§ P3's sessions are 25-30 minutes of circuits) and far
+     * below the point where a number stops meaning anything — the same shape of
+     * bound `MAX_DURATION_MIN` picks, and the same reason for it.
+     *
+     * Zero reps is refused. A set of no reps did not happen, and the honest way
+     * to say a set was not performed is the absence of a row.
+     */
+    check("exercise_sets_set_index_range", sql`"set_index" between 1 and 20`),
+    check("exercise_sets_reps_range", sql`"reps" between 1 and 999`),
+    check("exercise_sets_load_positive", sql`"load_kg" is null or "load_kg" > 0`),
   ],
 );
 
@@ -1012,6 +1201,9 @@ export type NewTrainingTemplateEntry = typeof trainingTemplateEntries.$inferInse
 
 export type WorkoutLog = typeof workoutLogs.$inferSelect;
 export type NewWorkoutLog = typeof workoutLogs.$inferInsert;
+
+export type ExerciseSet = typeof exerciseSets.$inferSelect;
+export type NewExerciseSet = typeof exerciseSets.$inferInsert;
 
 export type WeightLog = typeof weightLogs.$inferSelect;
 export type NewWeightLog = typeof weightLogs.$inferInsert;

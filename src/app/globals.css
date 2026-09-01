@@ -181,6 +181,16 @@
     0.75rem + 3.125rem + max(1.5rem, env(safe-area-inset-bottom))
   );
 
+  /* § The Scroll Edge's ramp, as a value rather than as a declaration — FUEL-91.
+
+     There are two masked bars now and they are masked under different
+     conditions: every page bar below `lg`, where it is pinned, and `/training`'s
+     session bar at EVERY width, because that bar is pinned at every width.
+     § Desktop's FUEL-90 amendment is what makes those two cases one rule — "the
+     scope becomes the pinning rather than the breakpoint" — and a rule stated
+     twice is a rule that drifts. The two selectors below share this. */
+  --action-bar-mask: linear-gradient(to bottom, transparent, black 24px);
+
   /* Brand Guide § Desktop — the frame, and the reason it is declared here
      rather than in either layout — FUEL-70.
 
@@ -626,11 +636,31 @@ html body[data-scroll-locked] {
  * the pipeline already guarantees.
  *
  * Scoped below `lg`, where the bar is pinned over a scrolling page and this
- * edge exists. FUEL-72 may release the pinning at desktop widths, at which
- * point there is no edge there to treat; scoping now means that ticket has
- * nothing to undo here. */
+ * edge exists. FUEL-72 released the pinning at desktop widths, and there is no
+ * edge there to treat; scoping ahead of it meant that ticket had nothing to
+ * undo here.
+ *
+ * ## The second selector, and why the scope was the pinning all along
+ *
+ * FUEL-90 named one bar that stays pinned above `lg`: `/training`'s session
+ * state, whose action bar carries a running rest timer, and a live readout that
+ * scrolls out of sight has failed at its only job at 1920 exactly as at 375. A
+ * pinned bar above `lg` is an opaque edge with a page moving under it — this
+ * edge — so § The Scroll Edge's mask follows the PINNING rather than the
+ * breakpoint, which is what it always meant.
+ *
+ * Two selectors rather than one unconditional rule, and the reason is
+ * measurement rather than tidiness: a mask promotes its box to its own
+ * compositing layer, and applying one to the three released bars where nothing
+ * would visibly change is still a change to how their type is rasterised —
+ * against 56 committed baselines that exist to catch exactly that. The bar that
+ * needs it takes it; the bars that do not are left alone. */
 @media (width < 64rem) {
   .action-bar-fade {
-    mask-image: linear-gradient(to bottom, transparent, black 24px);
+    mask-image: var(--action-bar-mask);
   }
+}
+
+.action-bar-fade-pinned {
+  mask-image: var(--action-bar-mask);
 }

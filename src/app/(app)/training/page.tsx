@@ -7,7 +7,7 @@ import { getSession } from "@/lib/auth/session";
 import { type CalendarDate, parseCalendarDate } from "@/lib/date";
 import { loadTraining } from "@/lib/db/queries/training";
 import type { TrainingSession } from "@/lib/resolve-training";
-import type { WorkoutLog } from "@/lib/db/schema";
+import type { ExerciseSet, WorkoutLog } from "@/lib/db/schema";
 
 /**
  * `/training` — a date's session. PRD § P3, and FUEL-27.
@@ -91,8 +91,19 @@ function requestedDate(value: string | string[] | undefined): CalendarDate | nul
  * the workout: `resolve-training.ts` explains that a rotated day's workout
  * changes with the date, so the entry is the stable thing for a screen to hold,
  * and the action re-resolves the workout from it server-side.
+ *
+ * The three `target_*` columns cross for the first time here — § P10, FUEL-91.
+ * They are what an unlogged set row offers ("Target 8") and what decides how
+ * many rows an exercise has, so they are drawn rather than merely known. The
+ * sets themselves cross narrowed to three fields: `exercise_sets` also carries
+ * a `user_id`, the id of the log it hangs off, a `created_at` and a dormant
+ * `load_kg`, and the screen draws none of them.
  */
-function narrow(session: TrainingSession, logs: readonly WorkoutLog[]): TrainingItem {
+function narrow(
+  session: TrainingSession,
+  logs: readonly WorkoutLog[],
+  sets: readonly ExerciseSet[],
+): TrainingItem {
   const log = logs.find((row) => row.workoutId === session.workout.id);
 
   return {
@@ -105,10 +116,25 @@ function narrow(session: TrainingSession, logs: readonly WorkoutLog[]): Training
       name: exercise.name,
       prescription: exercise.prescription,
       notes: exercise.notes,
+      targetSets: exercise.targetSets,
+      targetRepsLow: exercise.targetRepsLow,
+      targetRepsHigh: exercise.targetRepsHigh,
     })),
     entry: log
       ? { status: log.status, note: log.note, durationMin: log.durationMin }
       : null,
+    /*
+     * Only this session's sets, and only when there is a log for them to hang
+     * off. Both filters are the same one really — a set's `workout_log_id`
+     * cannot name a log that does not exist — but written this way the walk
+     * and a second session on the same date each get their own rows rather
+     * than the date's, which is what a `find` on `workoutId` would give them.
+     */
+    sets: log
+      ? sets
+          .filter((set) => set.workoutLogId === log.id)
+          .map(({ exerciseId, setIndex, reps }) => ({ exerciseId, setIndex, reps }))
+      : [],
   };
 }
 
@@ -152,7 +178,9 @@ export default async function TrainingPage({
       key={training.date}
       date={training.date}
       today={training.today}
-      sessions={training.day.sessions.map((item) => narrow(item, training.logs))}
+      sessions={training.day.sessions.map((item) =>
+        narrow(item, training.logs, training.sets),
+      )}
       adherence={training.adherence}
     />
   );
