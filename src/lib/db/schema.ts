@@ -43,10 +43,12 @@ import {
  *    enum that is `ALTER TYPE ... ADD VALUE` — a migration, which would falsify
  *    the claim. So the vocabulary stays open; see `workouts`.
  *
- * The PRD prose says "nine tables" and then enumerates twelve. Twelve is right
- * for the data model it describes; there are fourteen here. P8's check state is
- * a table the PRD names no home for — see `shoppingChecks` — and P9's web push
- * needs an address that outlives the request — see `pushSubscriptions`.
+ * The PRD's § Data Model disagreed with this file in two directions until
+ * FUEL-89 reconciled them: its prose counted nine tables where its own listing
+ * enumerated twelve, and neither figure included P8's check state — see
+ * `shoppingChecks` — or the address P9's web push needs in order to outlive the
+ * request — see `pushSubscriptions`. The listing now names the fourteen here,
+ * and `exercise_sets` besides, which § P10 adds and this file does not have yet.
  */
 
 /* -------------------------------------------------------------------------- */
