@@ -213,6 +213,11 @@ const EXERCISES = new Map<string, WorkoutExercise[]>([
       prescription: prescription as string,
       sortOrder,
       notes: notes as string | null,
+      // No structured targets — this specimen is `/`, which draws the exercise
+      // list and never the sets. § P10's set progress is `/training`'s.
+      targetSets: null,
+      targetRepsLow: null,
+      targetRepsHigh: null,
     })),
   ],
 ]);
