@@ -142,6 +142,8 @@ Overrides are visually distinguished from template entries, and each is individu
 
 **Description:** Today's session — Circuit A, Circuit B, or skipping intervals + core — with its full exercise list and prescriptions. Mark done, partial, or skipped, with an optional free-text note (reps achieved, how it felt) and optional duration. The daily walk is a separate, always-present item logged with a single tap. Deliberately not a full workout tracker — which has narrowed rather than gone. Per-set logging is § P10's; the rest of the sentence still holds. There is no exercise search, no movement library beyond the workouts this app already has rows for, no personal-record tracking, and nothing that decides what to do next. The status, note and duration below are untouched by P10 and are not derived from anything it added.
 
+**The "visible without scrolling" criterion is re-aimed rather than met or dropped (FUEL-90).** As written it was one criterion about one screen, and § P10 makes `/training` two: a list you read before and after, and a surface you operate during. The whole list cannot survive what P10 adds to it — per-set entry, section headings, a form-media affordance and a rest timer are four tickets each spending the same measured window, and a warm-up, six exercises and a cool-down is eight rows and three headings under any density the Brand Guide is willing to define. So the criterion splits along the states rather than being softened: **the whole list is what is visible when you are planning; the active exercise is what is visible when you are working.** The escape clause is unchanged and still does its own work — "where the list allows" has always meant a long enough list scrolls, and a group heading spends that window exactly as a row does. What it does not license is rows drawn under the Brand Guide's 46px accessible minimum to buy the height back.
+
 Circuit A/B **alternate across sessions**, not by fixed weekday — Mon=A, Wed=B, Fri=A, next Mon=B. Resolution is computed deterministically from the program start date so it never drifts (see Data Model).
 
 **User Value:** Tells me what to do without opening the program document, and produces the adherence record the weekly export depends on.
@@ -149,7 +151,8 @@ Circuit A/B **alternate across sessions**, not by fixed weekday — Mon=A, Wed=B
 **Acceptance Criteria:**
 - [ ] Today's session resolves correctly per the 5-day schedule, with weekends showing walk-only
 - [ ] Circuit A/B alternation is deterministic by date and correct after skipped sessions
-- [ ] Full exercise list with prescriptions (sets/reps/duration) is visible without scrolling on a 375px screen where the list allows
+- [ ] **Planning:** the full exercise list with prescriptions (sets/reps/duration), grouped, is visible without scrolling on a 375px screen where the list allows
+- [ ] **Working:** the exercise being performed and its sets are what is visible without scrolling, on the same screen (§ P10's session state)
 - [ ] Status can be set to done / partial / skipped
 - [ ] Optional note and duration persist against that date's session
 - [ ] The daily walk is loggable in one tap, every day including weekends
@@ -262,6 +265,8 @@ The same series and the same standard, built on top of a shipped MVP rather than
 - **Form reference media** per exercise, shipped as bundled assets. No storage service and no third-party embeds, so § Integrations stays at "none" — and because this repository is public, no asset lands without a recorded licence it can carry.
 - **An estimated energy cost** per session, shown as a range, from the standard MET formula against the bodyweight of the weigh-in nearest the session's own date. A March session stays costed at March's weight rather than re-pricing itself every time a new weigh-in lands.
 
+**These five arrive on a second state of the screen, not on top of the first.** Brand Guide § Desktop rules it (FUEL-90): `/training` keeps the plan state it has today, and gains a session state — reachable only for today, entered by the primary — where the measure holds the current exercise and its sets instead of the whole list, the rest timer rides in the action bar, and at ≥1272 the remaining exercises sit in the aside so the desktop shows both at once. It is a state rather than a route, § Navigation's two levels are untouched, and the current exercise is derived from the sets already logged rather than stored. The alternative — sets expanding in place under each row — is an accordion, which the Brand Guide has banned since before this milestone was written.
+
 **The session's own record is unchanged.** The status stays three-way, the note stays free text, the duration stays optional, and none of the three is derived from set data. § P3 calls partial a first-class outcome; a status computed from set completion would quietly turn adherence into a percentage, which is the one thing this app has decided not to do.
 
 **The estimate is never netted against intake.** Not in the view, not in the export, not in a summary anywhere. The intake side is measured — stored per-serving macros, summed in fixed point precisely because a total that disagrees with the sum of its parts is a real defect. The burn side is a population average with a wide error bar. Subtracting a modelled number from a measured one produces a figure that looks like arithmetic and is not, and in a deficit it is the specific mistake that eats the deficit. It is shown beside the day's numbers and never inside them. It is a range for the same reason: a single figure would claim a precision the method does not have.
@@ -280,6 +285,7 @@ The same series and the same standard, built on top of a shipped MVP rather than
 - [ ] The estimate is not subtracted from, added to, or combined with `target_kcal` or any macro total anywhere, the export included
 - [ ] Sets, sections and the estimate all reach both export formats and both scopes, and a session logged before P10 exports cleanly as a session with no sets
 - [ ] A demo visitor can neither read nor write the owner's sets
+- [ ] The session state is reachable only for today, entered and left by the primary, and resumes correctly after a reload with nothing about it stored in the database
 
 ### Nice-to-Have Features
 
@@ -481,6 +487,7 @@ To resolve before or during the build — none of these block starting.
 ## Document History
 
 - **Created:** 2026-08-10
-- **Last Updated:** 2026-09-01 — the per-set non-goal reversed and § P10 written (FUEL-89), because every ticket in that milestone built something this document ruled out by name. § Non-Goals now rules out a progression engine instead; § P3's "not a full workout tracker" is narrowed rather than withdrawn; § Gym-restart readiness' conditional is spent; and § Data Model is reconciled with `schema.ts` — it counted nine tables, enumerated twelve, and had never listed P8's check state or P9's push subscriptions.
+- **Last Updated:** 2026-09-01 — § P3's "visible without scrolling" criterion re-aimed along the two states of `/training`, and § P10 given the state its five additions arrive on (FUEL-90). The criterion was one line about one screen, and § P10 makes that screen two: per-set entry, section headings, a form affordance and a rest timer are four tickets spending one measured window, and a warm-up, six exercises and a cool-down does not fit it under any density the Brand Guide will define. So it splits — the whole list when you are planning, the active exercise when you are working — rather than being softened or quietly dropped. Its "where the list allows" clause is unchanged and still does its own work. The Brand Guide carries the composition, the group heading and the sub-list; nothing about the session's own record, the three-way status or the non-goals moves.
+- **Previously:** 2026-09-01 — the per-set non-goal reversed and § P10 written (FUEL-89), because every ticket in that milestone built something this document ruled out by name. § Non-Goals now rules out a progression engine instead; § P3's "not a full workout tracker" is narrowed rather than withdrawn; § Gym-restart readiness' conditional is spent; and § Data Model is reconciled with `schema.ts` — it counted nine tables, enumerated twelve, and had never listed P8's check state or P9's push subscriptions.
 - **Updated:** 2026-08-18 — slot-time defaults confirmed and corrected, and P1's § Slot times table rewritten (FUEL-21); Open Question 3 resolved.
 - **Updated:** 2026-08-16 — demo persona figures substituted for the owner's throughout (FUEL-14); Open Questions 1, 2 and 7 resolved.
