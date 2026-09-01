@@ -81,18 +81,27 @@ export const THEMES = ["light", "dark"] as const;
  * FUEL-78 between them recompose, which is what these baselines exist to hold
  * still.
  *
- * They are not quite the seven that `BRAND_GUIDE.html` draws, and the difference
- * is worth naming. The mock's seven are Right Now, Meal picker, Meal detail,
- * Training, Weight, Week plan and Day complete — three of which are states on
- * `/` rather than addresses, and none of which are `/shopping`, `/settings` or
- * `/plan/template`. Baselining the mock's set literally would have left three of
- * the five screens FUEL-78 recomposes with no coverage at all, to gain coverage
- * of a sheet that FUEL-73 is about to redraw anyway.
+ * They are not the set `BRAND_GUIDE.html` draws, and the difference is worth
+ * naming. The mock's are Right Now, Meal picker, Meal detail, Training, Weight,
+ * Week plan and Day complete — three of which are states on `/` rather than
+ * addresses, and none of which are `/shopping`, `/settings` or `/plan/template`.
+ * Baselining the mock's set literally would have left three of the five screens
+ * FUEL-78 recomposes with no coverage at all, to gain coverage of a sheet that
+ * FUEL-73 is about to redraw anyway.
  *
- * So: the picker sheet, the meal detail and the day-complete summary are **not
- * covered here**. FUEL-48 owns the flow specs that will have to open those
- * states regardless, and adding them there costs a fixture rather than a second
- * harness.
+ * **The mock draws eight since FUEL-90**, which changed the count rather than
+ * the routes: `/training` gained a session state — the surface you operate
+ * during, against the list you read before and after — and it is a state on an
+ * address this list already covers, exactly like the three above. So nothing
+ * here moves, and the session state joins the not-covered set below rather than
+ * becoming an eighth project.
+ *
+ * So: the picker sheet, the meal detail, the day-complete summary and
+ * `/training`'s session state are **not covered here**. FUEL-48 owns the flow
+ * specs that will have to open those states regardless, and adding them there
+ * costs a fixture rather than a second harness. The session state carries a
+ * running timer, which is a moving pixel in any baseline — FUEL-93 records that
+ * it is photographed at a fixed reading or not at all.
  *
  * **The sheet's half of that is now spent, and `sheet-open.spec.ts` holds it.**
  * FUEL-73 redrew the sheet — it stands in the measure's column above 1024px
