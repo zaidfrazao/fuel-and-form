@@ -66,7 +66,7 @@ A recruiter, hiring manager, or engineer arriving from the public repository or 
 
 ## Features
 
-Listed in build priority order. P1–P5 are the weekend's non-negotiables; P6–P9 are in scope if the core lands cleanly.
+Listed in build priority order. P1–P5 are the weekend's non-negotiables; P6–P9 are in scope if the core lands cleanly. The series does not stop at the weekend: P10 onwards are built on top of a shipped MVP and are listed under Post-MVP below, rather than promoted into must-haves they were never part of.
 
 ### Core Features (Must-Have)
 
@@ -140,7 +140,7 @@ Overrides are visually distinguished from template entries, and each is individu
 
 #### P3 — Training Log
 
-**Description:** Today's session — Circuit A, Circuit B, or skipping intervals + core — with its full exercise list and prescriptions. Mark done, partial, or skipped, with an optional free-text note (reps achieved, how it felt) and optional duration. The daily walk is a separate, always-present item logged with a single tap. Deliberately not a full workout tracker: no per-set entry, no volume calculations.
+**Description:** Today's session — Circuit A, Circuit B, or skipping intervals + core — with its full exercise list and prescriptions. Mark done, partial, or skipped, with an optional free-text note (reps achieved, how it felt) and optional duration. The daily walk is a separate, always-present item logged with a single tap. Deliberately not a full workout tracker — which has narrowed rather than gone. Per-set logging arrived with § P10; the rest of the sentence still holds. There is no exercise search, no movement library beyond the workouts this app already has rows for, no personal-record tracking, and nothing that decides what to do next. The status, note and duration below are untouched by P10 and are not derived from anything it added.
 
 Circuit A/B **alternate across sessions**, not by fixed weekday — Mon=A, Wed=B, Fri=A, next Mon=B. Resolution is computed deterministically from the program start date so it never drifts (see Data Model).
 
@@ -248,6 +248,39 @@ Walk *logging* is part of P3 and ships regardless. This item is only the reminde
 - [ ] Push failure degrades silently to the banner — no errors surfaced to the user
 - [ ] Notification deep-links to the walk logging action
 
+### Post-MVP Features
+
+Built after the MVP shipped, in the same series and to the same standard. Not weekend scope and never claimed to be — they are here rather than under Nice-to-Have because they are specified and being built, not wished for.
+
+#### P10 — Training Tools
+
+**Description:** The training screen stops being a checklist and becomes a record of the session. Five additions, none of which replaces anything § P3 already does.
+
+- **Per-set logging** — reps against an exercise, set by set, in a new table hanging off the session log rather than off the plan, because a set is history. A `load_kg` column ships dormant so the gym restart stays a data change. Structured targets arrive as nullable columns beside the prescription; the prescription string itself is still rendered verbatim and still never parsed, because a set count derived by regex from prose reads 8 for "8–12 rounds".
+- **A manual rest timer** between exercises, started and stopped by hand. Client-only — nothing about a rest interval is worth a row — and counted from a stored end instant rather than an accumulated one, since the phone is locked for most of a ninety-second rest and a throttled tab stops counting.
+- **Warm-up and cool-down** as first-class parts of a session rather than rows indistinguishable from the work. This matters the moment per-set logging exists: a mobility drill would otherwise be offered set entry it does not want, and would be costed at the working exercise's rate.
+- **Form reference media** per exercise, shipped as bundled assets. No storage service and no third-party embeds, so § Integrations stays at "none" — and because this repository is public, no asset lands without a recorded licence it can carry.
+- **An estimated energy cost** per session, shown as a range, from the standard MET formula against the bodyweight of the weigh-in nearest the session's own date. A March session stays costed at March's weight rather than re-pricing itself every time a new weigh-in lands.
+
+**The session's own record is unchanged.** The status stays three-way, the note stays free text, the duration stays optional, and none of the three is derived from set data. § P3 calls partial a first-class outcome; a status computed from set completion would quietly turn adherence into a percentage, which is the one thing this app has decided not to do.
+
+**The estimate is never netted against intake.** Not in the view, not in the export, not in a summary anywhere. The intake side is measured — stored per-serving macros, summed in fixed point precisely because a total that disagrees with the sum of its parts is a real defect. The burn side is a population average with a wide error bar. Subtracting a modelled number from a measured one produces a figure that looks like arithmetic and is not, and in a deficit it is the specific mistake that eats the deficit. It is shown beside the day's numbers and never inside them. It is a range for the same reason: a single figure would claim a precision the method does not have.
+
+**User Value:** The session is recorded as it was actually performed, which a note field could only ever approximate — and the record reaches the weekly export, where the person it was written for never opens the app.
+
+**Acceptance Criteria:**
+- [ ] Sets are loggable, correctable and removable against an exercise for the date being viewed, with a load column present and unwritten until the gym restart
+- [ ] The prescription is not parsed anywhere; structured targets are separate columns, and an exercise without them still logs sets
+- [ ] Session status, note and duration are unchanged, and none of them is derived from set data
+- [ ] A session presents as warm-up, work and cool-down in a fixed order, with set logging offered on the working section only, and a section with no rows renders no empty heading
+- [ ] Existing sessions render identically and need no backfill
+- [ ] The rest timer starts and stops by hand, reads correctly after a backgrounded tab and a reload, and writes nothing to the database
+- [ ] Every shipped media asset has recorded provenance and a licence this public repository can carry; an exercise without media renders no affordance and no gap
+- [ ] The energy figure is a range, is presented as an estimate, and yields nothing at all — never a zero — for a workout type it has no value for
+- [ ] The estimate is not subtracted from, added to, or combined with `target_kcal` or any macro total anywhere, the export included
+- [ ] Sets, sections and the estimate all reach both export formats and both scopes, and a session logged before P10 exports cleanly as a session with no sets
+- [ ] A demo visitor can neither read nor write the owner's sets
+
 ### Nice-to-Have Features
 
 Deferred to post-MVP; not built this weekend.
@@ -255,7 +288,7 @@ Deferred to post-MVP; not built this weekend.
 - **Weigh-in note field** — *promoted into P5 acceptance criteria; it costs minutes, not hours.*
 - **Photo attachment** on weigh-ins for progress pictures.
 - **Recipe scaling** — adjust a recipe to a different serving count with recalculated macros.
-- **Gym-mode program** — weighted training templates with per-set load and rep logging, needed when the gym restart lands in 1–2 months. The workout data model is built to absorb this without migration.
+- **Gym-mode program** — weighted training templates for when the gym restart lands. The logging half of this is no longer deferred: § P10 builds it and ships the load column unwritten, so what remains here is the templates themselves and the figures that go in them. Still new rows, still no migration.
 - **Target recalibration assistant** — prompt a macro recalculation every 5kg lost, using the actual measured rate rather than the original projection.
 - **Streaks and adherence scoring** — plan-versus-actual percentages over time.
 - **Offline support / PWA install** — service worker caching for the kitchen, where signal is fine but latency is annoying.
@@ -267,7 +300,7 @@ Deferred to post-MVP; not built this weekend.
 |---|---|
 | A searchable food database (MyFitnessPal-style) | The whole premise is a fixed ten-meal rotation. A search index solves a problem I don't have. |
 | Barcode scanning | Same reason. My food comes from recipes, not packets. |
-| Per-set weight and rep tracking | No weights, no gym, until the restart. A note field covers "how it felt" today. |
+| An automatic progression or programming engine | The app records what was done; it does not decide what to do next. No prescribed load increases, no personal records, and no movement library beyond the workouts already in it. § P10 added per-set logging and none of this. |
 | Real user accounts, signup, password reset, email | One human uses this. Demo sessions are ephemeral and credential-free. |
 | Native iOS/Android apps | A responsive web app reaches the phone in the kitchen at a fraction of the cost. |
 | Calorie estimation from photos, or any ML | Nothing here needs a model. |
@@ -295,7 +328,7 @@ Deferred to post-MVP; not built this weekend.
 
 ### Data Model
 
-Nine tables. Every user-owned table carries `user_id` so the demo isolation is enforced at the query layer rather than by convention.
+Fifteen tables — fourteen built, and `exercise_sets` arriving with § P10. Every user-owned table carries `user_id` so the demo isolation is enforced at the query layer rather than by convention.
 
 ```
 users
@@ -329,7 +362,10 @@ workouts                       -- the workout library
 
 workout_exercises
   id, workout_id, name, prescription ('3 x 12', '30s on / 30s off'),
-  sort_order, notes
+  sort_order, notes,
+  section ('warmup' | 'work' | 'cooldown', defaulted),           -- P10
+  target_sets, target_reps_low, target_reps_high,                -- P10, nullable
+  media_path, media_kind, media_alt, media_credit                -- P10, nullable
 
 training_template_entries
   id, user_id, day_of_week, workout_id (nullable), rotation_group (nullable), sort_order
@@ -338,8 +374,18 @@ workout_logs
   id, user_id, date, workout_id, status ('done'|'partial'|'skipped'),
   note, duration_min, logged_at
 
+exercise_sets                  -- P10; one row per set performed, keyed to the log
+  id, user_id, workout_log_id, exercise_id, set_index, reps,
+  load_kg (null until the gym restart), created_at
+
 weight_logs
   id, user_id, date, weight_kg, note, created_at
+
+shopping_checks                -- P8; ticked items, scoped to a week by its Monday
+  id, user_id, week_start, item_key, checked_at
+
+push_subscriptions             -- P9; where a browser can be reached
+  id, user_id, endpoint, p256dh, auth, created_at, last_notified_on
 ```
 
 **Plan resolution.** For any date, the plan for a slot is: the `day_plan_overrides` row for that `(user_id, date, slot)` if one exists, otherwise the `plan_template_entries` row for that `(user_id, day_of_week, slot)`. Overrides are sparse, so a week with no swaps stores no override rows at all. This is the mechanism that makes swaps one-off by construction rather than by discipline — the template is physically untouched.
@@ -348,7 +394,7 @@ weight_logs
 
 **Circuit A/B alternation.** A `training_template_entries` row may name a `rotation_group` instead of a fixed `workout_id`. Resolution counts how many days matching that group have elapsed since `program_start_date` and takes that count modulo the number of workouts in the group. Deterministic from the date alone, so it never drifts and never depends on whether a session was logged.
 
-**Gym-restart readiness.** Adding weighted training means new `workouts` rows and new `training_template_entries` — no schema migration. Per-set load logging, if it's ever wanted, is one additive table.
+**Gym-restart readiness.** Adding weighted training means new `workouts` rows and new `training_template_entries` — no schema migration. Per-set load logging turned out to be wanted: § P10 spends this sentence, and it cost one additive table and additive columns, exactly as claimed. The restart itself is now a data change and nothing more — `exercise_sets.load_kg` is already there, waiting for the first row that fills it.
 
 ### Integrations
 
@@ -435,5 +481,6 @@ To resolve before or during the build — none of these block starting.
 ## Document History
 
 - **Created:** 2026-08-10
-- **Last Updated:** 2026-08-18 — slot-time defaults confirmed and corrected, and P1's § Slot times table rewritten (FUEL-21); Open Question 3 resolved.
+- **Last Updated:** 2026-09-01 — the per-set non-goal reversed and § P10 written (FUEL-89), because every ticket in that milestone built something this document ruled out by name. § Non-Goals now rules out a progression engine instead; § P3's "not a full workout tracker" is narrowed rather than withdrawn; § Gym-restart readiness' conditional is spent; and § Data Model is reconciled with `schema.ts` — it counted nine tables, enumerated twelve, and had never listed P8's check state or P9's push subscriptions.
+- **Updated:** 2026-08-18 — slot-time defaults confirmed and corrected, and P1's § Slot times table rewritten (FUEL-21); Open Question 3 resolved.
 - **Updated:** 2026-08-16 — demo persona figures substituted for the owner's throughout (FUEL-14); Open Questions 1, 2 and 7 resolved.
