@@ -245,6 +245,65 @@
      still nobody's declaration — it is what is left. */
   --frame-measure-inset: calc(var(--frame-measure) - 2 * var(--frame-gutter));
 
+  /* The measure and the aside together — § Spacing's week-grid maximum, derived
+     rather than typed — FUEL-79.
+
+     1024 is already in this app as a literal: `/plan` wears `max-w-[1024px]`
+     because the week grid spans both content columns. § Desktop derives it in
+     prose — "1272 is a sum rather than a round number: the rail, a gutter, and
+     the 1024px § Spacing already fixes" — so the number the app writes down is
+     the sum read backwards, and an edit to the rail or the gutter would move the
+     frame while leaving `/plan` on the old total. This is that subtraction, once
+     and where the other frame numbers live. */
+  --frame-span: calc(var(--frame-max) - var(--frame-rail) - var(--frame-gutter));
+
+  /* What 768–1023 may not draw wider than — FUEL-79.
+
+     § Desktop claims this band for "the phone's navigation and the desktop's
+     content shapes", and FUEL-85 released graphics, figures, folios and tables
+     from the measure. Doing both without this number produces a regression
+     rather than a gain, and it is arithmetic rather than taste: at 1023 there is
+     no rail, so a released element has 967px; at 1024 the rail and its gutter
+     take 248 of them and the same element has 720. Widening the window by one
+     pixel would take 247 away — which is the fault FUEL-79's fourth criterion
+     names, measured on `/plan` where it is live today.
+
+     So the band does not take what it has. It takes what it is about to be
+     given: the frame at `lg` is `--frame-span`, and `<main>` is that less the
+     rail and its gutter again. 776px, at which the rail's arrival costs nothing
+     and every screen widens monotonically from 320 to 1920.
+
+     This is § Desktop's own instruction for the band rather than a new idea —
+     "a composition of two drawn widths rather than a third drawing". The band
+     borrows the 1024 composition's width early instead of inventing one it
+     cannot keep.
+
+     Derived, and then checked in a browser rather than trusted, because the
+     whole claim is about a rendered width. `monotonic.spec.ts` measures every
+     route's `<main>` at 1023 and at 1024 among seventeen widths and refuses any
+     narrowing, which is this number being right stated as the property it is
+     for: if the 776 drifts from what `lg` actually gives, the two readings stop
+     meeting and the sweep fails at that pair. `frame.css.test.ts` covers the
+     other half — that the utilities carrying it compile and are emitted in the
+     order they read — which is a question about CSS and answerable without a
+     layout. */
+  --frame-band-max: calc(
+    var(--frame-span) - var(--frame-rail) - var(--frame-gutter)
+  );
+
+  /* The band's content width, as `--frame-measure-inset` is the measure's —
+     FUEL-79. 720px: the 776 above less the 28px `page-main.tsx` spends at each
+     end, for the same border-box reason the measure is 584 rather than 640.
+
+     This is what a released graphic is drawn at through the whole of 768–1271,
+     and it is a constant rather than a fill on purpose. The alternative was
+     letting the graphic take whatever `<main>` has, which is 720 at 1024 and
+     967 at 1271 — a graphic that grows with the window between two breakpoints
+     and then jumps again at the cap. A width that changes at four widths rather
+     than two is not a composition, and § Desktop asks this band for "a
+     composition of two drawn widths rather than a third drawing". */
+  --frame-band-inset: calc(var(--frame-band-max) - 2 * var(--frame-gutter));
+
   /* Brand Guide § Color Palette — light */
   --ink: #1c1917;
   --ink-fg: #ffffff;

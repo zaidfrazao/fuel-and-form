@@ -219,6 +219,24 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
     },
     /**
+     * Widening never makes a screen worse — FUEL-79, and a project of its own
+     * for the reason all of these are: it asks whether a width ever goes
+     * backwards, which has no theme, and it sets its own viewport seventeen
+     * times per screen.
+     *
+     * It is the one spec here that sweeps rather than sampling, and that is the
+     * point of it. Every other file asks a question at a width someone chose;
+     * this one exists because the fault it caught — `/plan` losing 191px of
+     * table crossing 1024 — lived at a width nobody had chosen, between two
+     * baselines that both looked right.
+     */
+    {
+      name: "monotonic",
+      testMatch: /monotonic\.spec\.ts/,
+      dependencies: ["setup"],
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+    },
+    /**
      * The weight chart's type scale — FUEL-76, and a project for the reason the
      * three above are. It asks whether a font-size, a stroke and a disc stay the
      * size they are declared at while the column around them grows, which has no

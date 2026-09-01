@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 
 import { APP_ACTION_BAR } from "@/components/action-bar";
 import { RULER_AT } from "@/components/day-ruler";
+import { KV_GRID_COLUMNS } from "@/components/kv-grid";
 import {
   PAGE_ASIDE_COLUMN,
   PAGE_ASIDE_GRID,
@@ -131,10 +132,27 @@ describe("the skeleton stands in the same frame as the screen", () => {
     expect(split.querySelectorAll(".grid")).toHaveLength(1);
     expect(split.querySelector(".grid")!.className).toContain("gap-y-[22px]");
 
-    // The meal's goes four across at the cap and the day's does not, which is
-    // the screen's own arrangement — `kv-grid.tsx` owns the rule.
-    expect(split.querySelector(".grid")!.className).toContain("xl:grid-cols-4");
-    expect(day.querySelector(".grid")!.className).not.toContain("xl:grid-cols");
+    // The meal's goes four across on the measure and the day's does not, which
+    // is the screen's own arrangement — `kv-grid.tsx` owns the rule.
+    //
+    // Read from that declaration rather than restated, since FUEL-79. This
+    // asserted the literal `xl:grid-cols-4`, which meant the drift was the
+    // thing the test PINNED: FUEL-79 moved the real grid to `md` — the measure
+    // is 584px at both widths, so the count was never a width decision — this
+    // file's copy stayed at `xl`, and the skeleton drew 2×2 against the
+    // screen's four across for the whole of 768–1271. Green suite, and a shift
+    // on swap-in at every width in the band.
+    //
+    // The comment above this block has claimed since FUEL-86 that "the two
+    // cannot be given different columns by an edit to one of them". Naming the
+    // constant is what finally makes that true rather than aspirational.
+    // Utility by utility rather than as one substring: `cn` merges these class
+    // strings and is free to reorder them, so asserting the map's value whole
+    // would be asserting the merge's output order as well as the shape.
+    for (const utility of KV_GRID_COLUMNS[4].split(" ")) {
+      expect(split.querySelector(".grid")!.className).toContain(utility);
+    }
+    expect(day.querySelector(".grid")!.className).not.toMatch(/(md|lg|xl):grid-cols/);
 
     // Both gated at `md`, because below it the merged grid carries all four
     // figures and neither of these is drawn.

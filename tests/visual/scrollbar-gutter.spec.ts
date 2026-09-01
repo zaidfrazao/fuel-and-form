@@ -126,6 +126,21 @@ test("the sheet still opens and closes without moving the page", async ({ page }
   // Radix takes the page out of the accessibility tree while it is open and a
   // role query waits for a landmark that is deliberately no longer there.
   // `sheet.spec.ts` carries the same note and the same workaround.
+  //
+  // Which leaves the skeleton, and it had no guard at all until FUEL-79 — this
+  // failed a full run as `strict mode violation: locator('main') resolved to 2
+  // elements`, having passed the two before it on identical code.
+  // `(app)/loading.tsx` renders a `<main>` of its own, and the fix the rest of
+  // the suite uses does not reach here twice over: `:not([aria-hidden])` works
+  // for `.action-bar-fade` because the skeleton's BAR is inside an aria-hidden
+  // tree, but the skeleton's `<main>` is not marked at all — and the role query
+  // that would otherwise settle it is already spoken for by the sheet.
+  //
+  // Waiting for the count is what is left, and it is the honest condition
+  // anyway: one `main` on the page means the skeleton has gone.
+  // `monotonic.spec.ts` has the longer note.
+  await expect(page.locator("main")).toHaveCount(1);
+
   const mainX = () => page.locator("main").evaluate((n) => n.getBoundingClientRect().x);
   const before = await mainX();
 

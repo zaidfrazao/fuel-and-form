@@ -46,6 +46,7 @@ import {
   APP_ACTION_BAR,
 } from "@/components/action-bar";
 import { RULER_AT } from "@/components/day-ruler";
+import { KV_GRID_COLUMNS } from "@/components/kv-grid";
 import { PageMain } from "@/components/page-main";
 import {
   PAGE_ASIDE_COLUMN,
@@ -92,10 +93,19 @@ function Cell({ lines }: { lines: 2 | 3 }) {
 /**
  * A four-cell grid, at the row gap its shape uses.
  *
- * `columns` is `kv-grid.tsx`'s own `4` — 2×2 below the frame's cap and four
- * across at it — spelled the same way here, because the meal's grid is the one
- * that takes it and a skeleton that stayed 2×2 at 1272 would draw two rows
- * where the screen draws one.
+ * `columns` is `kv-grid.tsx`'s own shape, READ from it rather than spelled the
+ * same way here — FUEL-79.
+ *
+ * It was a hand-copied literal, with a comment promising it matched. FUEL-79
+ * moved the real grid from `xl` to `md` (the measure is 584px at both widths,
+ * so the count was never a width decision) and this copy stayed behind, which
+ * drew 2×2 here against four across on the screen for the whole of 768–1271 —
+ * a shift on swap-in, the one thing a skeleton exists to prevent.
+ *
+ * Importing the map is what makes that impossible rather than merely noticed:
+ * the two grids cannot be given different counts by an edit to one of them,
+ * which is what the test below has always claimed and could not enforce while
+ * there were two literals.
  */
 function Grid({
   lines,
@@ -110,7 +120,7 @@ function Grid({
     <div
       className={cn(
         "grid grid-cols-2 gap-x-4",
-        columns === 4 && "xl:grid-cols-4",
+        columns === 4 && KV_GRID_COLUMNS[4],
         gap,
       )}
     >
