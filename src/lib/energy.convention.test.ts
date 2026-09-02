@@ -43,8 +43,46 @@ import { describe, expect, test } from "vitest";
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SRC = join(dirname(THIS_FILE), "..");
 
-/** The module under guard, as both spellings reach it. */
-const SPECIFIERS = [/from\s+"@\/lib\/energy"/, /from\s+"\.\/energy"/];
+/**
+ * Every import specifier in a file, however it is spelled.
+ *
+ * `from` covers the ordinary and the type-only import, `import(` the dynamic
+ * one, and `require(` a CommonJS call — none present in `src/` today, and all
+ * three cheap to cover rather than to discover later.
+ *
+ * All three quote characters, and that is not hypothetical tidiness: this file
+ * matched only double quotes until an external review pointed at it, and
+ * `eslint.config.mjs` enforces NO quote style, so a single-quoted import is
+ * legal here and would have walked past the import test. It happened to trip
+ * the identifier test below, which is an accidental backstop rather than a
+ * guard — a `import type { Band }` under a name nothing else uses would not
+ * have tripped anything.
+ */
+const SPECIFIER = /(?:from|import|require)\s*\(?\s*["'`]([^"'`]+)["'`]/g;
+
+/**
+ * Whether one specifier names this module — ANY spelling of it.
+ *
+ * Not a list of the two forms the app happens to use today. The first version of
+ * this file matched `"@/lib/energy"` and `"./energy"` literally, and it was
+ * wrong in the one way that mattered: `lib/db/queries/export.ts` is two
+ * directories down, so it reaches this module as `"../../energy"` and sailed
+ * through a scan that was supposedly guarding it. That file is named in
+ * `FORBIDDEN` below AND is the file FUEL-97 will edit, so the hole was directly
+ * under the thing the test exists to protect.
+ *
+ * It was found by planting the relative spelling rather than the aliased one —
+ * a guard is only proven by a plant that looks like the code that will
+ * eventually break it, and the first plant did not.
+ *
+ * So the test is on the resolved TAIL of the path instead: anything ending in a
+ * segment called `energy`, with or without an extension. That is deliberately
+ * broader than "this module" — a future `lib/foo/energy.ts` would trip it too,
+ * which is a false positive somebody has to come here and think about rather
+ * than a false negative nobody ever sees.
+ */
+const namesEnergy = (specifier: string) =>
+  /(^|\/)energy(\.tsx?)?$/.test(specifier.replace(/^@\/|^\.{1,2}\//, "/"));
 
 /**
  * Where the intake arithmetic lives — the measured side, which this figure may
@@ -102,7 +140,11 @@ function* walk(directory: string): Generator<string> {
     const path = join(directory, entry.name);
 
     if (entry.isDirectory()) yield* walk(path);
-    else if (/\.tsx?$/.test(entry.name)) yield path;
+    // Not just `.ts`/`.tsx`. The repository already uses `.mts` at its root, so
+    // a module written under `src/` in one is a shape this scan has to see
+    // rather than a shape it can assume away — the same mistake, twice removed,
+    // as matching two literal import spellings.
+    else if (/\.(m|c)?[jt]sx?$/.test(entry.name)) yield path;
   }
 }
 
@@ -114,11 +156,49 @@ function* walk(directory: string): Generator<string> {
 const stripComments = (source: string) =>
   source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
+/**
+ * String literals blanked, for the identifier scan below and for nothing else.
+ *
+ * `stripComments` does not touch them, so a FORBIDDEN module that merely
+ * contained the text `"sessionEnergy"` — an error message, a label, a snapshot —
+ * would fail a test about netting it. That is a false positive that teaches the
+ * next reader to edit the test rather than respect the constraint, which is how
+ * a guard like this one actually dies.
+ *
+ * Only the identifier scan gets this. The import and re-export scans need the
+ * specifiers, which ARE string literals.
+ */
+const stripStrings = (source: string) =>
+  source.replace(/"[^"\n]*"|'[^'\n]*'|`[^`]*`/g, '""');
+
 const SOURCES = [...walk(SRC)]
-  .map((path) => ({ rel: relative(SRC, path), code: stripComments(readFileSync(path, "utf8")) }))
+  .map((path) => {
+    const code = stripComments(readFileSync(path, "utf8"));
+
+    return { rel: relative(SRC, path), code, identifiers: stripStrings(code) };
+  })
   .filter(({ rel }) => rel !== relative(SRC, THIS_FILE));
 
-const imports = (code: string) => SPECIFIERS.some((pattern) => pattern.test(code));
+const imports = (code: string) =>
+  [...code.matchAll(SPECIFIER)].some((match) => namesEnergy(match[1]!));
+
+/** A re-export — `export ... from "..."` — which is how a ban gets laundered. */
+const REEXPORT = /export\s[^;]*?\sfrom\s+["'`]([^"'`]+)["'`]/g;
+
+const reexports = (code: string) =>
+  [...code.matchAll(REEXPORT)].some((match) => namesEnergy(match[1]!));
+
+/**
+ * Everything `energy.ts` exports, read off the module itself.
+ *
+ * Derived rather than listed, so a new export is covered the moment it is
+ * written. See the identifier test below for what this is for.
+ */
+const EXPORTED = [
+  ...(readFileSync(join(SRC, "lib/energy.ts"), "utf8").matchAll(
+    /export\s+(?:const|function|type)\s+([A-Za-z_][A-Za-z0-9_]*)/g,
+  )),
+].map((match) => match[1]!);
 
 describe("the estimate is never netted against intake", () => {
   test("no module that sums or reports intake imports it", () => {
@@ -142,6 +222,50 @@ describe("the estimate is never netted against intake", () => {
     const importers = SOURCES.filter(({ code }) => imports(code)).map(({ rel }) => rel);
 
     expect(importers.sort()).toEqual([...ALLOWED.keys()].sort());
+  });
+
+  test("nothing re-exports it, which is how a ban gets laundered", () => {
+    /*
+     * The second hole this file had, found by planting it.
+     *
+     * `queries/training.ts` is on the allowlist — it must be, it resolves the
+     * bodyweight — so it is the natural launderer: one `export { sessionEnergy }
+     * from "@/lib/energy"` there and `queries/export.ts` reaches the estimate
+     * through `./training`, importing nothing this scan was looking at. Both
+     * files pass every other test here while the criterion is broken.
+     *
+     * A re-export is also a plausible ACCIDENT rather than only a dodge, which
+     * is what makes it worth a rule: tidying a query module by widening what it
+     * exposes is an ordinary thing to do.
+     */
+    const launderers = SOURCES.filter(({ code }) => reexports(code)).map(({ rel }) => rel);
+
+    expect(launderers).toEqual([]);
+  });
+
+  test("no module that sums intake so much as names one of its exports", () => {
+    /*
+     * The value-level half, and the reason it exists rather than trusting the
+     * import check alone: an import can be renamed at the boundary, and a
+     * `FORBIDDEN` module that has the figure under another name is still netting
+     * it. To USE the estimate a module has to name something this one exports.
+     *
+     * Derived from `energy.ts`'s own export list, so it widens by itself.
+     *
+     * Honest about its limit: a value deliberately re-exported under a new name
+     * from a module that is NOT `export ... from` — `export const burn =
+     * sessionEnergy` — defeats both halves. No source scan closes that, and this
+     * file is not trying to. It exists to stop the edit somebody makes without
+     * thinking, which is the one PRD § P10 is actually exposed to.
+     */
+    const offenders = SOURCES.filter(
+      ({ rel, identifiers }) =>
+        FORBIDDEN.includes(rel) &&
+        EXPORTED.some((name) => new RegExp(`\\b${name}\\b`).test(identifiers)),
+    ).map(({ rel }) => rel);
+
+    expect(EXPORTED).toContain("sessionEnergy");
+    expect(offenders).toEqual([]);
   });
 
   test("the estimate does not reach for a target from its own side", () => {

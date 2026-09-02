@@ -245,6 +245,12 @@ export type EnergyInput = {
  *
  * `profiles.start_weight_kg` is the fallback, and it is a real case rather than
  * a defensive one: a new account has a profile and no logs at all.
+ *
+ * Takes a list of ANY length, though `loadTraining` passes exactly two — the
+ * last weigh-in on or before the date and the first after it, which is where the
+ * nearest one must be. The function does not know that and does not rely on it:
+ * a caller with a whole history in hand gets the same answer, because the scan
+ * is over every candidate rather than over an assumed pair.
  */
 export function nearestWeight(
   weighIns: readonly WeighIn[],

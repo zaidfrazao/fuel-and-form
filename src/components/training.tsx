@@ -33,8 +33,8 @@ import { Button } from "@/components/ui/button";
 import { WalkRow } from "@/components/walk-row";
 import { recentSessions, weekStanding } from "@/lib/adherence";
 import { addDays, type CalendarDate } from "@/lib/date";
-import { type EnergyRange, sessionEnergy } from "@/lib/energy";
 import type { WorkoutLogStatus } from "@/lib/db/schema";
+import { type EnergyRange, sessionEnergy } from "@/lib/energy";
 import { figure } from "@/lib/format";
 import {
   PAGE_ASIDE_COLUMN,
@@ -342,6 +342,18 @@ function Recorded({ entry }: { entry: SessionEntryView | null }) {
  * evidence of how long it took, and § Tone of Voice refuses to describe an
  * absence as a failure. `lib/energy.ts` argues why a zero would be worse than
  * silence.
+ *
+ * ## The plan state only, and deliberately
+ *
+ * This sits in the "This session" block, which the session state does not draw.
+ * Usually the point is moot — mid-session nobody has written a duration down
+ * yet, so the range is null anyway — but not always: a duration saved before
+ * entering the session state would produce a figure the working surface does not
+ * show. That is the right way round. PRD § P3's criterion is re-aimed along the
+ * states, and "the active exercise is what is visible when you are working"
+ * spends that window on the sets being performed. An estimate of what the
+ * session cost is a thing to read after it, which is exactly when the plan
+ * state is what you are looking at.
  */
 function Estimate({ range }: { range: EnergyRange | null }) {
   if (!range) return null;
