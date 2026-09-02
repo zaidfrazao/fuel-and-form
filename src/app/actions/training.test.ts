@@ -122,6 +122,7 @@ const training = (): Training => ({
   logs: [],
   sets: [],
   adherence: [],
+  bodyweightKg: 75,
 });
 
 beforeEach(() => {

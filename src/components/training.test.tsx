@@ -126,6 +126,7 @@ const view = (overrides: Partial<Parameters<typeof Training>[0]> = {}) => (
     today={TODAY}
     sessions={[CIRCUIT, WALK]}
     adherence={ADHERENCE}
+    bodyweightKg={75}
     {...overrides}
   />
 );
@@ -462,6 +463,82 @@ describe("editing what was recorded", () => {
       date: TODAY,
       entryId: "entry-circuit",
     });
+  });
+});
+
+describe("the energy estimate", () => {
+  /**
+   * § P10's figure, FUEL-95 — and the one criterion the screen owns rather than
+   * `lib/energy.ts`: that it is drawn as an estimate, and that it is drawn
+   * nowhere near a macro total.
+   */
+
+  test("says what the session is estimated to have cost, once a duration exists", () => {
+    render(view({ sessions: recorded({ status: "done", note: null, durationMin: 30 }) }));
+
+    // Three working rows and a 30-minute session, at the harness's fixture
+    // weight. The figure itself is `energy.test.ts`'s to pin; what matters here
+    // is that it reaches the screen and reaches it labelled.
+    expect(screen.getByText(/^Estimated /).textContent).toMatch(
+      /^Estimated \d+–\d+ kcal$/,
+    );
+  });
+
+  test("renders nothing at all when the method has nothing to say", () => {
+    // No duration and no sets: no evidence of how long anything took. § Tone of
+    // Voice refuses to describe an absence as a failure, so there is no line,
+    // no placeholder and no "unavailable".
+    render(view());
+
+    expect(screen.queryByText(/Estimated/)).toBeNull();
+  });
+
+  test("renders nothing for a workout type it has no value for", () => {
+    render(
+      view({
+        sessions: [
+          { ...CIRCUIT, type: "strength", entry: { status: "done", note: null, durationMin: 30 } },
+          WALK,
+        ],
+      }),
+    );
+
+    // Not a zero. `workouts.type` is open text and the gym restart is new rows,
+    // so an unrecognised type is the ordinary case rather than the broken one.
+    expect(screen.queryByText(/Estimated/)).toBeNull();
+    expect(screen.queryByText(/0 kcal/)).toBeNull();
+  });
+
+  test("follows the record as it is set, without a reload", () => {
+    // The reason the figure is computed in the component at all: this screen
+    // revalidates nothing, so a server-resolved range would stay frozen at
+    // whatever the page loaded with. Rendering the two states is the same
+    // observation a re-render after a save would make.
+    const { unmount } = render(view());
+
+    expect(screen.queryByText(/Estimated/)).toBeNull();
+    unmount();
+
+    render(view({ sessions: recorded({ status: "done", note: null, durationMin: 30 }) }));
+
+    expect(screen.getByText(/^Estimated /).textContent).toMatch(/kcal$/);
+  });
+
+  test("is not drawn as a measured figure, and carries no target", () => {
+    render(view({ sessions: recorded({ status: "partial", note: null, durationMin: 30 }) }));
+
+    const line = screen.getByText(/^Estimated /);
+
+    // A slash line in `text-slash`, which is § Content Guidelines' device for a
+    // secondary fact — not the Display type § Data Display reserves for "the one
+    // number a screen is about".
+    expect(line.parentElement?.className).toContain("text-slash");
+
+    // And the criterion PRD § P10 states in bold: never combined with a target.
+    // A screen that had subtracted this from an allowance would have to print
+    // one somewhere.
+    expect(screen.queryByText(/target/i)).toBeNull();
+    expect(screen.queryByText(/remaining/i)).toBeNull();
   });
 });
 
