@@ -1533,3 +1533,75 @@ describe("the session state, when a session has sections", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Plank");
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* FUEL-93 — the rest timer's row of the bar                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Where the timer renders, and where it does not.
+ *
+ * `rest-timer.test.tsx` proves what the timer does; this proves that the screen
+ * puts it in the one place FUEL-90 ruled for it — a row of the SESSION bar, in
+ * the slot § Feedback gives the failure banner, and nowhere in the plan state.
+ */
+describe("the rest timer", () => {
+  test("is not offered in the plan state", () => {
+    render(view());
+
+    // A list you read before and after. A rest is taken BETWEEN exercises, so
+    // its control belongs to the surface you operate during.
+    expect(screen.queryByRole("button", { name: "1:30" })).toBeNull();
+  });
+
+  test("is a row of the session bar, above the controls", async () => {
+    const user = userEvent.setup();
+
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+
+    const timer = screen.getByRole("button", { name: "1:30" });
+    const primary = screen.getByRole("button", { name: "Mark done" });
+
+    expect(timer).toBeTruthy();
+
+    /*
+     * § Desktop, FUEL-90: "the timer is a row of the action bar, above the
+     * controls". Asserted as document order rather than by reading a class,
+     * because the order is what the rule is about — a readout below the
+     * primary would be a readout under the reader's thumb.
+     */
+    expect(timer.compareDocumentPosition(primary)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  test("keeps the session's own record out of the timer's business", async () => {
+    const user = userEvent.setup();
+
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(screen.getByRole("button", { name: "1:30" }));
+
+    // "Zero database writes and zero Server Actions." Starting a rest is a
+    // number in `localStorage` and nothing else — the actions this screen has
+    // are for the session, and none of them hears about a rest.
+    expect(setSessionStatus).not.toHaveBeenCalled();
+    expect(logExerciseSet).not.toHaveBeenCalled();
+    expect(screen.getByRole("timer").textContent).toBe("1:30");
+  });
+
+  test("leaves with the session state", async () => {
+    const user = userEvent.setup();
+
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(screen.getByRole("button", { name: "1:30" }));
+    await user.click(screen.getByRole("button", { name: "Mark done" }));
+
+    // The bar goes back to the plan state's, and the timer's row goes with it.
+    // The rest itself is not cancelled — nothing here writes to its key — but
+    // there is no longer a surface it belongs to.
+    expect(screen.queryByRole("timer")).toBeNull();
+  });
+});

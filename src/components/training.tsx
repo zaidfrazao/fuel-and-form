@@ -28,6 +28,7 @@ import { ExerciseList, type ListedExercise } from "@/components/exercise-list";
 import { SlashMeta } from "@/components/kv-grid";
 import { PageMain } from "@/components/page-main";
 import { RecentSessions } from "@/components/recent-sessions";
+import { RestTimer } from "@/components/rest-timer";
 import { Button } from "@/components/ui/button";
 import { WalkRow } from "@/components/walk-row";
 import { recentSessions, weekStanding } from "@/lib/adherence";
@@ -1398,6 +1399,24 @@ export function Training({
               </Button>
             </div>
           )}
+
+          {/*
+           * The bar's second row, and only in the session state — FUEL-93.
+           *
+           * § Desktop, FUEL-90: "the timer is a row of the action bar, above
+           * the controls, in the slot § Feedback gives the failure banner. So
+           * the bar is a flex column of at most three things — banner, timer,
+           * controls — rather than growing a fourth button." Written after the
+           * banner because a refusal outranks a readout, and both can be on
+           * screen at once.
+           *
+           * Not in the plan state, which is a list you read before and after: a
+           * rest is something you take BETWEEN exercises, so the control for it
+           * belongs to the surface you operate during. It is also why the timer
+           * needs no props — the session it belongs to is the one this bar is
+           * already the bar for, and it stores nothing about which.
+           */}
+          {inSession && <RestTimer />}
 
           {/*
            * The mock's own arrangement: one primary, two secondaries beneath.
