@@ -1373,6 +1373,66 @@ describe("the plan state, when a session has sections", () => {
   });
 });
 
+describe("a session with rows but no work", () => {
+  /**
+   * A mobility day: warm-up rows and nothing else.
+   *
+   * Not reachable from the seed — all three seeded sessions have working rows —
+   * and there is no exercise editor to build one yet. It is pinned anyway
+   * because FUEL-92 is what made it possible: until sections existed, "has
+   * exercise rows" and "has rows the session state steps through" were the same
+   * set, and `canEnter` was written against the first.
+   */
+  const mobilityOnly = () => [
+    {
+      ...CIRCUIT,
+      exercises: [
+        {
+          id: "u1",
+          name: "Joint prep",
+          prescription: "~2 min",
+          notes: null,
+          section: "warmup",
+          targetSets: null,
+          targetRepsLow: null,
+          targetRepsHigh: null,
+        },
+      ],
+      sets: [],
+    },
+    WALK,
+  ];
+
+  test("is not offered a session to start, because there is none to work", () => {
+    // The invariant the composition depends on: `canEnter` implies the session
+    // state has an exercise to show. Offering it here would enter a state whose
+    // subject is `undefined` — session chrome around the plan list, with no way
+    // back but recording a status.
+    render(view({ sessions: mobilityOnly() }));
+
+    expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
+  });
+
+  test("still records a status, because the session still happened", () => {
+    // Refusing the session STATE is not refusing the session. The three
+    // outcomes stay exactly where they were.
+    render(view({ sessions: mobilityOnly() }));
+
+    expect(screen.getByRole("button", { name: "Mark done" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Partial" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Skip" })).toBeTruthy();
+  });
+
+  test("still draws the rows it does have", () => {
+    // The list is the screen's subject in the plan state, and a warm-up row is
+    // an exercise. One section, so no heading — the flat list, as always.
+    render(view({ sessions: mobilityOnly() }));
+
+    expect(screen.getByText("Joint prep")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Warm-up" })).toBeNull();
+  });
+});
+
 describe("the session state, when a session has sections", () => {
   test("opens on the first WORKING exercise, not on the warm-up", async () => {
     const user = userEvent.setup();

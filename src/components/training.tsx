@@ -872,9 +872,39 @@ export function Training({
    * paginator is for; you cannot start Tuesday's session on Thursday." The
    * refusal lives here rather than in the action, because it is a rule about
    * this composition and not about the row — see `logExerciseSet`.
+   *
+   * "Something to work through" means the WORKING rows since FUEL-92, and the
+   * distinction is the whole reason this line changed. Until sections existed
+   * the two were the same set. Now a session could hold rows and no work — a
+   * mobility day is warm-up rows and nothing else — and counting those would
+   * offer Start session for a state that has no exercise to show: `currentEx`
+   * would be `undefined`, the measure would fall back to the plan list, and the
+   * reader would be left inside the session chrome with the list they started
+   * from and no way out but recording a status.
+   *
+   * So this is the invariant the composition below relies on: `canEnter`
+   * implies `currentEx` exists. No seeded workout can break it — all three have
+   * working rows — which is exactly why it needs stating rather than trusting.
    */
+  /**
+   * The rows the session is WORKED through — § P10, FUEL-92.
+   *
+   * The working section and nothing else. A warm-up is done or not done: three
+   * sets of a hip opener is not information anybody wants recorded, and offering
+   * rep entry against one is the mistake `workout_exercises.section` exists to
+   * prevent. So the session state steps through these, the position reads
+   * against these, and the plan state's set progress is derived from these.
+   *
+   * A session with no sections is entirely working rows, so this is the whole
+   * list for every session stored before the column existed — which is what
+   * keeps this screen's behaviour unchanged for them.
+   *
+   * Declared above `canEnter` because that rule depends on it — see below.
+   */
+  const workingExercises = working(session?.exercises ?? []);
+
   const canEnter =
-    session !== undefined && date === today && session.exercises.length > 0;
+    session !== undefined && date === today && workingExercises.length > 0;
 
   const inSession = entered && canEnter;
 
@@ -893,21 +923,6 @@ export function Training({
     record(status);
     rememberEntered(date, false);
   };
-
-  /**
-   * The rows the session is WORKED through — § P10, FUEL-92.
-   *
-   * The working section and nothing else. A warm-up is done or not done: three
-   * sets of a hip opener is not information anybody wants recorded, and offering
-   * rep entry against one is the mistake `workout_exercises.section` exists to
-   * prevent. So the session state steps through these, the position reads
-   * against these, and the plan state's set progress is derived from these.
-   *
-   * A session with no sections is entirely working rows, so this is the whole
-   * list for every session stored before the column existed — which is what
-   * keeps this screen's behaviour unchanged for them.
-   */
-  const workingExercises = working(session?.exercises ?? []);
 
   /**
    * Which exercise the session state is showing, and the rows under it.
