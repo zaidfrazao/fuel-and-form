@@ -36,6 +36,29 @@ describe("the vocabulary", () => {
     expect(SECTIONS).toContain(WORKING_SECTION);
   });
 
+  it("holds only values that are safe to write into DDL as literals", () => {
+    /*
+     * `schema.ts` builds the column's CHECK by interpolating these values into
+     * `sql.raw` — it must, because a tagged `sql` template turns them into bound
+     * parameters and drizzle-kit then writes `CHECK ("section" in ($1, $2, $3))`
+     * into the migration, which is a syntax error in a file nothing runs until
+     * deploy. That was caught once already, in FUEL-92's first draft.
+     *
+     * `sql.raw` does no escaping, so the safety of that construction rests
+     * entirely on what this array contains. Today it is three lowercase words
+     * and no user input can reach it. This is the assertion that keeps it that
+     * way: a value with a quote in it would generate invalid SQL, and the place
+     * to find that out is here rather than in a migration nobody runs locally.
+     *
+     * A test rather than a runtime guard on purpose — the values are a
+     * compile-time constant, so the failure belongs at the commit that changes
+     * them and not in anybody's request path.
+     */
+    for (const section of SECTIONS) {
+      expect(section).toMatch(/^[a-z]+$/);
+    }
+  });
+
   it("labels each section for its heading", () => {
     expect(sectionLabel("warmup")).toBe("Warm-up");
     expect(sectionLabel("work")).toBe("Work");

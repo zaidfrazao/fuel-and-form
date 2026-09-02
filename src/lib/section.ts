@@ -123,7 +123,10 @@ export type SectionGroup<T> = {
  * Order within a group is the order it was given, untouched — the queries
  * deliver `(sort_order, id)` and that is the ordering `sort_order` is for.
  * Unknown sections keep their relative order behind the known ones, so two of
- * them do not swap places between renders.
+ * them do not swap places between renders. That last property rests on
+ * `Array.prototype.sort` being STABLE — which the language has guaranteed since
+ * ES2019, but which is worth naming, because the rank arithmetic below does not
+ * provide it and a reader could reasonably assume it does.
  */
 export function bySection<T extends { section: string }>(
   exercises: readonly T[],
