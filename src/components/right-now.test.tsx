@@ -15,6 +15,7 @@ import {
 } from "@/lib/frame";
 import type { MacroTarget } from "@/lib/macros";
 import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve-now";
+import { WORKING_SECTION } from "@/lib/section";
 import type { WalkEntryView } from "@/lib/walk";
 
 /**
@@ -140,6 +141,7 @@ function exercise(fields: Partial<WorkoutExercise> & { id: string }): WorkoutExe
     prescription: "3 x 12",
     sortOrder: 0,
     notes: null,
+    section: WORKING_SECTION,
     targetSets: null,
     targetRepsLow: null,
     targetRepsHigh: null,

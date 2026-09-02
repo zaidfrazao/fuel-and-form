@@ -51,6 +51,7 @@ import {
   targetLabel,
 } from "@/lib/exercise-set";
 import { dayLabel } from "@/lib/now-display";
+import { sectionLabel, WORKING_SECTION, working } from "@/lib/section";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { MAX_NOTE_LENGTH } from "@/lib/session-entry";
 import { cn } from "@/lib/utils";
@@ -515,17 +516,36 @@ function SetList({
 function SessionList({
   exercises,
   sets,
-  current,
+  currentId,
 }: {
   exercises: readonly TrainingExercise[];
   sets: readonly LoggedSetView[];
-  current: number;
+  /**
+   * The exercise the measure is showing, BY ID — § P10, FUEL-92.
+   *
+   * An id and not an index, because this list and the one the index came from
+   * are no longer the same list. The measure steps through the WORKING rows;
+   * this aside holds the rest of the session, warm-up and cool-down included,
+   * because that is what § Desktop means by "the rest of the list". An index
+   * into the first, read against the second, marks the wrong row — with the
+   * seed's circuit it lands on "Joint prep" while the measure shows "Squats".
+   *
+   * That is not a bug a test here would have caught either: jsdom has no width
+   * and this column is `hidden` below the cap, and the screen baselines
+   * photograph the plan state rather than this one. Identity removes the class
+   * of fault rather than correcting one instance of it — there is no index to
+   * translate, so there is nothing to get wrong the next time the two lists
+   * diverge.
+   *
+   * `undefined` for a session with no current exercise, which marks no row.
+   */
+  currentId: string | undefined;
 }) {
   return (
     <ol className="flex flex-col">
-      {exercises.map((exercise, index) => {
+      {exercises.map((exercise) => {
         const logged = setsFor(exercise.id, sets);
-        const isCurrent = index === current;
+        const isCurrent = exercise.id === currentId;
 
         return (
           <li
@@ -871,9 +891,39 @@ export function Training({
    * paginator is for; you cannot start Tuesday's session on Thursday." The
    * refusal lives here rather than in the action, because it is a rule about
    * this composition and not about the row — see `logExerciseSet`.
+   *
+   * "Something to work through" means the WORKING rows since FUEL-92, and the
+   * distinction is the whole reason this line changed. Until sections existed
+   * the two were the same set. Now a session could hold rows and no work — a
+   * mobility day is warm-up rows and nothing else — and counting those would
+   * offer Start session for a state that has no exercise to show: `currentEx`
+   * would be `undefined`, the measure would fall back to the plan list, and the
+   * reader would be left inside the session chrome with the list they started
+   * from and no way out but recording a status.
+   *
+   * So this is the invariant the composition below relies on: `canEnter`
+   * implies `currentEx` exists. No seeded workout can break it — all three have
+   * working rows — which is exactly why it needs stating rather than trusting.
    */
+  /**
+   * The rows the session is WORKED through — § P10, FUEL-92.
+   *
+   * The working section and nothing else. A warm-up is done or not done: three
+   * sets of a hip opener is not information anybody wants recorded, and offering
+   * rep entry against one is the mistake `workout_exercises.section` exists to
+   * prevent. So the session state steps through these, the position reads
+   * against these, and the plan state's set progress is derived from these.
+   *
+   * A session with no sections is entirely working rows, so this is the whole
+   * list for every session stored before the column existed — which is what
+   * keeps this screen's behaviour unchanged for them.
+   *
+   * Declared above `canEnter` because that rule depends on it — see below.
+   */
+  const workingExercises = working(session?.exercises ?? []);
+
   const canEnter =
-    session !== undefined && date === today && session.exercises.length > 0;
+    session !== undefined && date === today && workingExercises.length > 0;
 
   const inSession = entered && canEnter;
 
@@ -900,8 +950,8 @@ export function Training({
    * an exercise is ticked. `currentExercise` carries the rule and the reason it
    * is a derivation rather than a stored cursor.
    */
-  const current = session ? currentExercise(session.exercises, sets) : -1;
-  const currentEx = session?.exercises[current];
+  const current = session ? currentExercise(workingExercises, sets) : -1;
+  const currentEx = workingExercises[current];
 
   const draft = (exerciseId: string, setIndex: number, value: string) =>
     setDrafts((previous) => new Map(previous).set(`${exerciseId}#${setIndex}`, value));
@@ -921,10 +971,14 @@ export function Training({
    * Built for the session rather than per row — `exercise-list.tsx` takes a map
    * for this reason — and from the optimistic sets, so a set logged in the
    * session state is already counted when the reader leaves it.
+   *
+   * Over the working rows only (FUEL-92). A warm-up row logs no sets, so it has
+   * no progress to report, and a "0 of 3 sets" under a mobility drill would be
+   * an absence reported about a row that was never going to have one.
    */
   const progress = new Map<string, string>();
 
-  for (const exercise of session?.exercises ?? []) {
+  for (const exercise of workingExercises) {
     const label = setProgress(exercise, setsFor(exercise.id, sets));
 
     if (label) progress.set(exercise.id, label);
@@ -1036,18 +1090,29 @@ export function Training({
            * exactly this — "the active exercise is what is visible when you are
            * working".
            *
-           * The eyebrow is the session's name alone today. FUEL-92 adds the
-           * group to it ("Circuit B · Work") when a session has sections.
+           * The eyebrow carries the session and, where a session has sections,
+           * the part being worked — "Bodyweight Circuit B · Work" (FUEL-92).
+           * Only where it HAS them: a session whose rows are all one section has
+           * no divisions to name, and appending "· Work" to it would be a
+           * distinction drawn about nothing.
            */
           <>
             <div className="flex flex-col gap-3">
-              <Eyebrow>{session.name}</Eyebrow>
+              <Eyebrow>
+                {workingExercises.length === session.exercises.length
+                  ? session.name
+                  : `${session.name} · ${sectionLabel(WORKING_SECTION)}`}
+              </Eyebrow>
               <h1 className="text-title text-text-primary">{currentEx.name}</h1>
               {/* Verbatim, and then where you are. `resolve-training.ts` keeps
-                  the exercises in `sort_order`, so the position is the list's
-                  own and not a second ordering invented here. */}
+                  the exercises in section order and in `sort_order` within one,
+                  so the position is the list's own and not a second ordering
+                  invented here — and it counts the WORKING rows, which are the
+                  rows this state steps through. A warm-up in the denominator
+                  would be a session reporting itself as longer than the work it
+                  is asking for. */}
               <SlashMeta>
-                {`${currentEx.prescription} · Exercise ${current + 1} of ${session.exercises.length}`}
+                {`${currentEx.prescription} · Exercise ${current + 1} of ${workingExercises.length}`}
               </SlashMeta>
             </div>
 
@@ -1199,7 +1264,7 @@ export function Training({
             <SessionList
               exercises={session.exercises}
               sets={sets}
-              current={current}
+              currentId={currentEx?.id}
             />
           </section>
         )}

@@ -1,4 +1,4 @@
-import { BODYWEIGHT_CIRCUIT, type SeedWorkout } from "./types";
+import { BODYWEIGHT_CIRCUIT, type SeedExercise, type SeedWorkout } from "./types";
 
 /**
  * The workout library — PRD § P7 → repository privacy.
@@ -8,15 +8,38 @@ import { BODYWEIGHT_CIRCUIT, type SeedWorkout } from "./types";
  * those are metrics, they belong in the database via the gitignored owner script
  * (FUEL-15), and this is a committed file.
  *
- * ## The shared warm-up and cool-down live in `description`, not `exercises`
+ * ## The shared warm-up and cool-down are ROWS — § P10, FUEL-92
  *
  * Every session opens with the same ~5 minute warm-up and closes with the same
- * ~3–4 minute cool-down. Modelling those as `workout_exercises` rows would
- * trip P3's "next exercise" affordance over eleven rows of mobility work before
- * reaching the first working set, and would duplicate them across all three
- * sessions. So `exercises` holds the working set — the part that changes between
- * A and B, and the part progression applies to — and the invariant bookends are
- * markdown in `description`, rendered alongside.
+ * ~3–4 minute cool-down. Until FUEL-92 those were markdown inside
+ * `description`, on two arguments this file made and one it got wrong.
+ *
+ * The argument that held: rows would "trip P3's next-exercise affordance over
+ * eleven rows of mobility work before reaching the first working set". True, and
+ * `workout_exercises.section` is what answers it — the session state steps
+ * through the working rows and no others, so a mobility drill is never what the
+ * screen puts in front of somebody mid-session, and it is never offered the
+ * per-set entry FUEL-91 gives the work.
+ *
+ * The argument that was wrong: that the bookends were "rendered alongside". They
+ * were not rendered at all. `workouts.description` reaches no screen in this app
+ * — `/training` narrows it away deliberately (see `TrainingItem.type`, which
+ * says so, and the route's own test, which asserts it), and nothing else reads
+ * it. So the warm-up this program calls non-negotiable was invisible in the
+ * product for as long as it was prose. That is the fault FUEL-92 actually fixes,
+ * and it is worth stating plainly because the sentence claiming otherwise sat
+ * here, unchecked, through every ticket that touched this file.
+ *
+ * Duplication across the three sessions was the other objection, and it is
+ * answered the way it always was: two constants, spread into each session, so a
+ * change to the warm-up cannot land on two of them and miss the third.
+ *
+ * They are FOUR rows and not the ten the prose listed. The Brand Guide measured
+ * the grouped list before this ticket was written — five drawn rows become "nine
+ * rows and three headings", and PRD § P3 counts "a warm-up, six exercises and a
+ * cool-down" as eight rows — so the bookends are two rows each and the
+ * individual drills are the `notes` beneath them. A row per drill would spend
+ * the list's whole height on the part of the session nobody needs to read.
  *
  * ## Why the circuits share a rotation group
  *
@@ -49,32 +72,87 @@ import { BODYWEIGHT_CIRCUIT, type SeedWorkout } from "./types";
  *     something nobody did. It is null, and the screen still logs sets against
  *     it — they simply have nothing to be compared to.
  *
- * `seed/workouts.test.ts` feeds every prescription here through the reader and
- * asserts that no number in a target came out of a string.
+ * `seed/seed.test.ts` feeds every prescription here through the reader and
+ * asserts that no number in a target came out of a string. (It is that file and
+ * not `seed/workouts.test.ts`, which does not exist and never has — the same
+ * class of unchecked citation as the "rendered alongside" above.)
  */
 
 /**
- * Prepended to every session's description. One constant rather than three
- * copies, so a change to the warm-up cannot land on two sessions and miss one.
+ * The warm-up every session opens with — two rows, § P10 (FUEL-92).
+ *
+ * One constant rather than three copies, so a change to the warm-up cannot land
+ * on two sessions and miss one. Two rows and not five, split the way it is
+ * actually performed: the five drills are the `notes`, which `ExerciseList`
+ * already renders as slash metadata under the name.
+ *
+ * No structured targets on any of them. `target_sets` is what a set is compared
+ * against, and these rows log no sets at all — they are done or they are not,
+ * which is the whole reason the section exists.
  */
-const WARM_UP = [
-  "### Warm-up (~5 min, non-negotiable)",
-  "",
-  "- 30 sec light skipping or marching on the spot",
-  "- 10 arm circles forward, 10 backward",
-  "- 10 bodyweight squats, slow and controlled",
-  "- 10 leg swings each leg, front to back",
-  "- 10 shoulder rolls + 5 slow torso twists each side",
-].join("\n");
+const WARM_UP: readonly SeedExercise[] = [
+  {
+    name: "Joint prep",
+    prescription: "~2 min",
+    section: "warmup",
+    targetSets: null,
+    targetRepsLow: null,
+    targetRepsHigh: null,
+    notes:
+      "10 arm circles forward, 10 backward, 10 shoulder rolls, 5 slow torso twists each side.",
+  },
+  {
+    name: "Movement prep",
+    prescription: "~3 min",
+    section: "warmup",
+    targetSets: null,
+    targetRepsLow: null,
+    targetRepsHigh: null,
+    notes:
+      "30 sec light skipping or marching on the spot, 10 slow bodyweight squats, 10 leg swings each leg front to back.",
+  },
+];
 
-/** Likewise, appended to every session. */
-const COOL_DOWN = [
-  "### Cool-down (~3–4 min)",
-  "",
-  "Hold each for 30 sec: quad stretch (each leg), hamstring stretch (each leg),",
-  "calf stretch against a wall (each leg — especially after skipping), chest",
-  "doorway stretch, child's pose.",
-].join("\n");
+/** Likewise, and closing every session. Hold each stretch for about 30 sec. */
+const COOL_DOWN: readonly SeedExercise[] = [
+  {
+    name: "Lower-body stretches",
+    prescription: "30 sec each",
+    section: "cooldown",
+    targetSets: null,
+    targetRepsLow: null,
+    targetRepsHigh: null,
+    notes:
+      "Quad, hamstring and calf stretch, each leg. The calf against a wall, and don't skip it after skipping.",
+  },
+  {
+    name: "Upper-body stretches",
+    prescription: "30 sec each",
+    section: "cooldown",
+    targetSets: null,
+    targetRepsLow: null,
+    targetRepsHigh: null,
+    notes: "Chest doorway stretch, then child's pose.",
+  },
+];
+
+/**
+ * A session's rows: the warm-up, the work, the cool-down.
+ *
+ * The working rows are given without a `section` and take the column's default,
+ * which keeps this file honest about where that default applies — the work is
+ * the unmarked case here exactly as it is in the database.
+ *
+ * `sort_order` is assigned by the loader from this array's index, and the order
+ * of the sections themselves is imposed by `resolve-training.ts` rather than
+ * read off it, so a session whose rows come back in any other order still
+ * presents its warm-up first.
+ */
+const session = (work: readonly SeedExercise[]): SeedExercise[] => [
+  ...WARM_UP,
+  ...work,
+  ...COOL_DOWN,
+];
 
 /** The circuits share a format line as well as their bookends. */
 const CIRCUIT_FORMAT = [
@@ -85,8 +163,14 @@ const CIRCUIT_FORMAT = [
   "work up over the weeks.",
 ].join("\n");
 
-const describe = (...sections: string[]) =>
-  [WARM_UP, ...sections, COOL_DOWN].join("\n\n");
+/**
+ * What is left of the protocol prose now the bookends are rows.
+ *
+ * Deliberately NOT re-stating the warm-up and cool-down it used to wrap: they
+ * are rows now, and a second copy of them in a column nothing renders is a copy
+ * that drifts from the one people can actually see.
+ */
+const describe = (...sections: string[]) => sections.join("\n\n");
 
 export const seedWorkouts: readonly SeedWorkout[] = [
   /* ------------------------------------------------------------------------ */
@@ -100,7 +184,7 @@ export const seedWorkouts: readonly SeedWorkout[] = [
     rotationGroup: BODYWEIGHT_CIRCUIT,
     rotationIndex: 0,
     description: describe(CIRCUIT_FORMAT),
-    exercises: [
+    exercises: session([
       {
         name: "Squats",
         prescription: "3 x 12–20",
@@ -146,7 +230,7 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         notes:
           "Straight line from heel to head. Squeeze the glutes — that's what stops the hips sagging.",
       },
-    ],
+    ]),
   },
 
   {
@@ -156,7 +240,7 @@ export const seedWorkouts: readonly SeedWorkout[] = [
     rotationGroup: BODYWEIGHT_CIRCUIT,
     rotationIndex: 1,
     description: describe(CIRCUIT_FORMAT),
-    exercises: [
+    exercises: session([
       {
         name: "Squat pulses",
         prescription: "3 x 15–20",
@@ -210,7 +294,7 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         notes:
           "Face down, lift chest and thighs off the floor. The only real posterior-chain and back work available without a pull-up bar — don't skip it.",
       },
-    ],
+    ]),
   },
 
   /* ------------------------------------------------------------------------ */
@@ -245,7 +329,7 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         "back up, carry on. Don't restart the interval.",
       ].join("\n"),
     ),
-    exercises: [
+    exercises: session([
       {
         name: "Skipping intervals",
         prescription: "8–12 rounds — 40 sec on / 40 sec off",
@@ -280,7 +364,7 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetRepsHigh: null,
         notes: null,
       },
-    ],
+    ]),
   },
 
   /* ------------------------------------------------------------------------ */

@@ -1,0 +1,2 @@
+ALTER TABLE "workout_exercises" ADD COLUMN "section" text DEFAULT 'work' NOT NULL;--> statement-breakpoint
+ALTER TABLE "workout_exercises" ADD CONSTRAINT "workout_exercises_section" CHECK ("section" in ('warmup', 'work', 'cooldown'));

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { Training as TrainingView } from "@/lib/db/queries/training";
 import type { Workout, WorkoutExercise, WorkoutLog } from "@/lib/db/schema";
+import { WORKING_SECTION } from "@/lib/section";
 
 /**
  * The `/training` route — the wire between the fetch and the screen.
@@ -72,6 +73,7 @@ const EXERCISE: WorkoutExercise = {
   prescription: "3 x 12",
   sortOrder: 0,
   notes: null,
+  section: WORKING_SECTION,
   targetSets: 3,
   targetRepsLow: 12,
   targetRepsHigh: 12,

@@ -10,6 +10,7 @@ import { FRAME } from "@/lib/frame";
 import type { MacroTarget } from "@/lib/macros";
 import { FOCUS_RING, HOVER_GROUND } from "@/lib/pointer";
 import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve-now";
+import { WORKING_SECTION } from "@/lib/section";
 
 /**
  * The Right Now specimen.
@@ -213,6 +214,7 @@ const EXERCISES = new Map<string, WorkoutExercise[]>([
       prescription: prescription as string,
       sortOrder,
       notes: notes as string | null,
+      section: WORKING_SECTION,
       // No structured targets — this specimen is `/`, which draws the exercise
       // list and never the sets. § P10's set progress is `/training`'s.
       targetSets: null,

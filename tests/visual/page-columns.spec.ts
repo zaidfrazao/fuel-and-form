@@ -232,9 +232,14 @@ for (const path of ["/", "/training"]) {
        * this test measures.
        *
        * A tall viewport is the only place the two answers differ, which is why
-       * the height here is 1400 rather than 900.
+       * the height here is far taller than 900 — and why it grew again in
+       * FUEL-92. The discriminating condition is SPARE SPACE below the content:
+       * `mt-auto` and `xl:mt-0` put the bar in the same place once the measure
+       * fills the window, so a viewport shorter than the content makes this test
+       * pass under both behaviours and assert nothing. Sections took
+       * `/training`'s measure past 1400, which is how that was found.
        */
-      await page.setViewportSize({ width: 1440, height: 1400 });
+      await page.setViewportSize({ width: 1440, height: 2000 });
 
       const bar = await boxOf(
         page.locator("main .action-bar-fade:not([aria-hidden])"),
@@ -247,9 +252,17 @@ for (const path of ["/", "/training"]) {
       // padding starts.
       expect(bar.y - (measure.y + measure.height), "content to bar").toBeCloseTo(0, 0);
 
-      // And the control: it is nowhere near the foot of a 1400px window, which
-      // is where `mt-auto` would still have it.
-      expect(bar.y + bar.height, "the bar's bottom").toBeLessThan(1200);
+      // And the control: there is real space left under the bar, which is where
+      // `mt-auto` would still have put it. Measured against the viewport rather
+      // than against a literal — the literal was 1200, calibrated to the content
+      // of the day, and content is the one thing a ticket is expected to change.
+      // What must not change is that the window is taller than the bar's foot.
+      const window = page.viewportSize()!;
+
+      expect(
+        window.height - (bar.y + bar.height),
+        "clearance between the bar and the foot of the window",
+      ).toBeGreaterThan(300);
 
       /*
        * The reason the aside spans both rows, asserted rather than reasoned

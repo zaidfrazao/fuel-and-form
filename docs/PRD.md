@@ -334,7 +334,7 @@ Wished for rather than specified — which is what separates these from § Post-
 
 ### Data Model
 
-Fifteen tables, all fifteen built — `exercise_sets` landed with FUEL-91. Anything below marked `-- P10` is still specified rather than built, columns as well as tables; everything unmarked is in `schema.ts` today. Every user-owned table carries `user_id` so the demo isolation is enforced at the query layer rather than by convention.
+Fifteen tables, all fifteen built — `exercise_sets` landed with FUEL-91, and `workout_exercises.section` with FUEL-92. Anything below marked `-- P10` is still specified rather than built, columns as well as tables; everything unmarked is in `schema.ts` today. Every user-owned table carries `user_id` so the demo isolation is enforced at the query layer rather than by convention.
 
 ```
 users
@@ -370,7 +370,7 @@ workout_exercises
   id, workout_id, name, prescription ('3 x 12', '30s on / 30s off'),
   sort_order, notes,
   target_sets, target_reps_low, target_reps_high (nullable),
-  section ('warmup' | 'work' | 'cooldown', defaulted),           -- P10, FUEL-92
+  section ('warmup' | 'work' | 'cooldown', defaulted),
   media_path, media_kind, media_alt, media_credit                -- P10, FUEL-94, nullable
 
 training_template_entries
@@ -403,6 +403,8 @@ push_subscriptions             -- P9; where a browser can be reached
 **Gym-restart readiness.** Adding weighted training means new `workouts` rows and new `training_template_entries` — no schema migration. Per-set load logging turned out to be wanted, and § P10 is where this sentence gets spent. The claim was not an assumption there but the standard it was held to: if per-set logging needed anything beyond one additive table and additive columns, this paragraph was wrong when it was written.
 
 **It held, with one correction (FUEL-91).** `exercise_sets` is the table and the three `target_*` columns are the columns; nothing existing changed its meaning, and no session logged before P10 needs a backfill. What the paragraph did not cover is that a composite foreign key has to point at a unique constraint, so `workout_exercises` and `workout_logs` each gained `unique(id, user_id)` — additions rather than changes, trivially satisfied by every row already stored, and the only thing the original sentence was silent about. The restart itself stays a data change, `exercise_sets.load_kg` waiting for the first row that fills it.
+
+**And it held again for the sections (FUEL-92), with the cost stated rather than glossed.** `workout_exercises.section` is one additive column with a default, so no stored row needed a backfill and no existing constraint changed. But it is a column and therefore a migration, which the sentence above does not promise to avoid — what that sentence rules out is a migration to add a new *training shape*, and a section is not one. The honest footnote is the CHECK: the column is `text` rather than a `pgEnum` on `workouts.type`'s reasoning, and that keeps the vocabulary out of the type system, but a future 'activation' or 'finisher' still means dropping and re-adding one constraint. Cheaper than `ALTER TYPE`, and not free. `workouts.type` remains the only genuinely open column in the schema, because it is the only one with no constraint at all.
 
 ### Integrations
 
@@ -489,7 +491,8 @@ To resolve before or during the build — none of these block starting.
 ## Document History
 
 - **Created:** 2026-08-10
-- **Last Updated:** 2026-09-01 — § P3's "visible without scrolling" criterion re-aimed along the two states of `/training`, and § P10 given the state its five additions arrive on (FUEL-90). The criterion was one line about one screen, and § P10 makes that screen two: per-set entry, section headings, a form affordance and a rest timer are four tickets spending one measured window, and a warm-up, six exercises and a cool-down does not fit it under any density the Brand Guide will define. So it splits — the whole list when you are planning, the active exercise when you are working — rather than being softened or quietly dropped. Its "where the list allows" clause is unchanged and still does its own work. The Brand Guide carries the composition, the group heading and the sub-list; nothing about the session's own record, the three-way status or the non-goals moves.
+- **Last Updated:** 2026-09-02 — `workout_exercises.section` built (FUEL-92), so § Data Model's listing carries it unmarked and § Gym-restart readiness states what it cost. One additive column with a default: no backfill, no existing constraint changed, and every session stored before it renders identically. The claim it is held against is narrower than it looks — "no schema migration" rules out a migration to add a new training SHAPE, and a section is not one — so the paragraph now says plainly that the column is a migration and that its CHECK makes a future 'finisher' one too. Cheaper than `ALTER TYPE`, and not free. The seed's warm-up and cool-down become rows on the way, which fixes something neither document had noticed: they were markdown in `workouts.description`, and nothing in the app renders that column, so the warm-up the program calls non-negotiable was invisible.
+- **Previously:** 2026-09-01 — § P3's "visible without scrolling" criterion re-aimed along the two states of `/training`, and § P10 given the state its five additions arrive on (FUEL-90). The criterion was one line about one screen, and § P10 makes that screen two: per-set entry, section headings, a form affordance and a rest timer are four tickets spending one measured window, and a warm-up, six exercises and a cool-down does not fit it under any density the Brand Guide will define. So it splits — the whole list when you are planning, the active exercise when you are working — rather than being softened or quietly dropped. Its "where the list allows" clause is unchanged and still does its own work. The Brand Guide carries the composition, the group heading and the sub-list; nothing about the session's own record, the three-way status or the non-goals moves.
 - **Previously:** 2026-09-01 — the per-set non-goal reversed and § P10 written (FUEL-89), because every ticket in that milestone built something this document ruled out by name. § Non-Goals now rules out a progression engine instead; § P3's "not a full workout tracker" is narrowed rather than withdrawn; § Gym-restart readiness' conditional is spent; and § Data Model is reconciled with `schema.ts` — it counted nine tables, enumerated twelve, and had never listed P8's check state or P9's push subscriptions.
 - **Updated:** 2026-08-18 — slot-time defaults confirmed and corrected, and P1's § Slot times table rewritten (FUEL-21); Open Question 3 resolved.
 - **Updated:** 2026-08-16 — demo persona figures substituted for the owner's throughout (FUEL-14); Open Questions 1, 2 and 7 resolved.
