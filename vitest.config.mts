@@ -64,6 +64,7 @@ export default defineConfig({
         "src/lib/day-summary.ts",
         "src/lib/demo.ts",
         "src/lib/demo-banner.ts",
+        "src/lib/energy.ts",
         "src/lib/export.ts",
         "src/lib/export-week.ts",
         "src/lib/log-intent.ts",

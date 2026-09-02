@@ -108,6 +108,7 @@ const training = (overrides: Partial<TrainingView> = {}): TrainingView => ({
   logs: [LOG],
   sets: [],
   adherence: [[{ date: TODAY, label: WORKOUT.name, status: "partial" }]],
+  bodyweightKg: 75,
   ...overrides,
 });
 

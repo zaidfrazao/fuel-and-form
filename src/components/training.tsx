@@ -33,7 +33,9 @@ import { Button } from "@/components/ui/button";
 import { WalkRow } from "@/components/walk-row";
 import { recentSessions, weekStanding } from "@/lib/adherence";
 import { addDays, type CalendarDate } from "@/lib/date";
+import { type EnergyRange, sessionEnergy } from "@/lib/energy";
 import type { WorkoutLogStatus } from "@/lib/db/schema";
+import { figure } from "@/lib/format";
 import {
   PAGE_ASIDE_COLUMN,
   PAGE_ASIDE_GRID,
@@ -317,6 +319,39 @@ function Recorded({ entry }: { entry: SessionEntryView | null }) {
         "Not recorded."
       )}
     </p>
+  );
+}
+
+/**
+ * What the session is estimated to have cost — § P10's energy figure, FUEL-95.
+ *
+ * A `SlashMeta` under the record, which is § Content Guidelines' device for a
+ * secondary fact and the whole of "presented as an estimate, not drawn with the
+ * weight of a measured figure". No new device is invented for it: § Data Display
+ * gives Display type to "the one number a screen is about", and this screen is
+ * about whether the session happened. No colour either — § Semantic Colors spends
+ * its one umber element per screen elsewhere, and a modelled figure is the last
+ * thing that should be the brightest on the page.
+ *
+ * "Estimated" in full rather than "Est.", because § Tone of Voice asks for plain
+ * and direct and the line has the room at 375px. The word is doing the
+ * acceptance criterion's work, so it is not the place to save four characters.
+ *
+ * A null range renders NOTHING — no line, no placeholder, no "unavailable". The
+ * method has nothing to say about a session with an unrecognised type or with no
+ * evidence of how long it took, and § Tone of Voice refuses to describe an
+ * absence as a failure. `lib/energy.ts` argues why a zero would be worse than
+ * silence.
+ */
+function Estimate({ range }: { range: EnergyRange | null }) {
+  if (!range) return null;
+
+  return (
+    <SlashMeta>
+      <span className="tabular-nums">{`Estimated ${figure(range.lowKcal)}–${figure(
+        range.highKcal,
+      )} kcal`}</span>
+    </SlashMeta>
   );
 }
 
@@ -708,12 +743,21 @@ export function Training({
   today,
   sessions,
   adherence,
+  bodyweightKg,
 }: {
   date: CalendarDate;
   today: CalendarDate;
   sessions: readonly TrainingItem[];
   /** Six weeks of dots from `lib/adherence.ts`. */
   adherence: Week[];
+  /**
+   * The weigh-in nearest the VIEWED date — `lib/energy.ts`'s `nearestWeight`,
+   * resolved in `queries/training.ts` against this date and no other.
+   *
+   * One number rather than a history, and already addressed to the date, so
+   * nothing here can cost a past session at today's weight by forgetting to.
+   */
+  bodyweightKg: number;
 }) {
   /*
    * The session is what the BAR's actions act on. The walk is on the template
@@ -820,6 +864,33 @@ export function Training({
           ];
     },
   );
+
+  /**
+   * What this session cost, from what the screen currently believes — FUEL-95.
+   *
+   * Computed HERE, from the optimistic `entry` and `sets`, rather than on the
+   * server. `/training` revalidates nothing — there is no `router.refresh()` and
+   * no `revalidatePath` behind either action — so a figure resolved during the
+   * render would stay frozen at the duration the page loaded with, and a reader
+   * who typed 30 into the box and saved would watch the estimate not appear.
+   *
+   * It follows the RECORD and not the draft: `entry.durationMin` is what was
+   * saved, not what is typed in the duration box. An estimate that moved per
+   * keystroke would be a live readout, and this is a fact about a session that
+   * has been logged.
+   *
+   * `lib/energy.ts` is pure and imports no pg-core precisely so this is
+   * possible — the contract every module this component already imports keeps.
+   */
+  const energy = session
+    ? sessionEnergy({
+        type: session.type,
+        exercises: session.exercises,
+        sets,
+        durationMin: entry?.durationMin ?? null,
+        weightKg: bodyweightKg,
+      })
+    : null;
 
   const act = (attempt: Attempt) => {
     // Unreachable through the screen — every control below is inside a branch
@@ -1169,7 +1240,14 @@ export function Training({
         {session && (
           <section className="flex flex-col gap-[14px]">
             <Eyebrow>This session</Eyebrow>
-            <Recorded entry={entry} />
+            {/* The record, and then what it is estimated to have cost. Grouped
+                so the slash line sits under the sentence it qualifies rather
+                than a section's 14px away from it — the estimate is a fact
+                ABOUT the record, not a second thing recorded. */}
+            <div className="flex flex-col gap-2">
+              <Recorded entry={entry} />
+              <Estimate range={energy} />
+            </div>
 
             <div className="flex flex-col gap-2">
               <label htmlFor="session-note" className="text-slash text-text-secondary">

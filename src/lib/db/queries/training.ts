@@ -1,8 +1,9 @@
 import "server-only";
 
-import { and, asc, between, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, between, desc, eq, gt, inArray, lte, sql } from "drizzle-orm";
 
 import { adherenceWeeks, adherenceWindow } from "@/lib/adherence";
+import { nearestWeight } from "@/lib/energy";
 import type { Week } from "@/components/dot-grid";
 import { type CalendarDate, todayIn } from "@/lib/date";
 import { type TrainingDay, trainingDay } from "@/lib/resolve-training";
@@ -88,6 +89,20 @@ export type Training = {
   sets: ExerciseSet[];
   /** Six weeks of dots, shaped — Brand Guide § The Dot Grid. */
   adherence: Week[];
+  /**
+   * What a session on THIS date is costed at — § P10's energy figure, FUEL-95.
+   *
+   * Resolved here rather than carried as rows, because `nearestWeight` is a pure
+   * resolver and this module already calls two of them: the shaping belongs to
+   * `lib/`, and what crosses to the screen is the answer. The screen needs one
+   * number and would otherwise be handed a weigh-in history to search.
+   *
+   * It is the weigh-in nearest the VIEWED date and not the latest one, which is
+   * what stops a March session re-pricing itself every time somebody steps on
+   * the scale — see `nearestWeight`. `profiles.start_weight_kg` is the fallback,
+   * and a new account with no weigh-ins is the ordinary case for it.
+   */
+  bodyweightKg: number;
 };
 
 /**
@@ -136,7 +151,7 @@ export async function loadTraining(
   const viewing = date ?? today;
   const window = adherenceWindow(viewing);
 
-  const [workouts, template, exerciseRows, logs, sets] = await Promise.all([
+  const [workouts, template, exerciseRows, logs, sets, before, after] = await Promise.all([
     s.select(schema.workouts),
     s.select(schema.trainingTemplateEntries),
     s.select(schema.workoutExercises, undefined, {
@@ -179,6 +194,31 @@ export async function loadTraining(
         ],
       },
     ),
+
+    /*
+     * The two weigh-ins the date could be costed at — FUEL-95.
+     *
+     * The nearest weigh-in in either direction is one of exactly these two: the
+     * last on or before the date, and the first after it. So two `limit 1` reads
+     * rather than the history `/weight` fetches whole — `weight_logs` grows for
+     * the life of the account, and this screen needs one number off it.
+     *
+     * Both directions, because a session in the program's first fortnight can
+     * predate its first weigh-in, and `nearestWeight` argues why the reading a
+     * week later beats a starting figure typed in months earlier.
+     *
+     * Inside the same `Promise.all` as everything else, so the count of
+     * SEQUENTIAL waits — the shape that matters on Neon's HTTP driver, as this
+     * module's header says — is unchanged at two.
+     */
+    s.select(schema.weightLogs, lte(schema.weightLogs.date, viewing), {
+      orderBy: desc(schema.weightLogs.date),
+      limit: 1,
+    }),
+    s.select(schema.weightLogs, gt(schema.weightLogs.date, viewing), {
+      orderBy: asc(schema.weightLogs.date),
+      limit: 1,
+    }),
   ]);
 
   const plan: TrainingPlan = {
@@ -194,6 +234,11 @@ export async function loadTraining(
     logs: logs.filter((log) => log.date === viewing),
     sets,
     adherence: adherenceWeeks(plan, logs, viewing),
+    bodyweightKg: nearestWeight(
+      [...before, ...after],
+      viewing,
+      profile.startWeightKg,
+    ),
   };
 }
 

@@ -186,6 +186,20 @@ export default async function TrainingPage({
       sessions={training.day.sessions.map((item) =>
         narrow(item, training.logs, training.sets),
       )}
+      /*
+       * What a session on this date is costed at — § P10's energy figure,
+       * FUEL-95. One number rather than a weigh-in history: `loadTraining` has
+       * already resolved it against the VIEWED date, so the screen cannot
+       * accidentally cost a March session at today's weight.
+       *
+       * It crosses to the client because the estimate does. `lib/energy.ts` is
+       * pure and imports no pg-core, and the figure has to follow the duration
+       * box as it is edited — this screen revalidates nothing, so an estimate
+       * computed here would sit stale beside a duration the reader had just
+       * saved. § Feedback is "optimistic by default"; this is what lets the
+       * estimate be.
+       */
+      bodyweightKg={training.bodyweightKg}
       adherence={training.adherence}
     />
   );
