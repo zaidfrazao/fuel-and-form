@@ -6,6 +6,7 @@ import {
   type TrainingPlan,
   type TrainingSource,
 } from "./rotation";
+import { bySection } from "./section";
 
 /**
  * A date's training, in the shape P3 renders it — FUEL-26, PRD § P3.
@@ -96,7 +97,12 @@ export type TrainingSession = {
   entryId: string;
   kind: SessionKind;
   /**
-   * The workout's exercises, in `sort_order`.
+   * The workout's exercises: by section, and by `sort_order` within one.
+   *
+   * Flat, and ordered — warm-up rows first, then the work, then the cool-down,
+   * whatever order the rows were inserted or fetched in (§ P10, FUEL-92). A
+   * caller that wants the divisions drawn passes this to `bySection`; a caller
+   * that wants the list gets the list.
    *
    * Empty is ordinary rather than missing data. The daily walk has no exercise
    * rows at all — src/lib/seed/workouts.ts calls an empty array "the honest
@@ -134,7 +140,29 @@ function withExercises(
     source: resolved.source,
     entryId: resolved.entryId,
     kind: resolved.workout.type === WALK_TYPE ? "walk" : "session",
-    exercises: exercises.get(resolved.workout.id) ?? [],
+    /*
+     * Warm-up, then the work, then the cool-down — § P10, FUEL-92.
+     *
+     * The map arrives ordered by `(sort_order, id)`, and that ordering is kept
+     * WITHIN each section: `sort_order` is a position in a section, not in a
+     * session, which is what the column's comment in schema.ts says. What is
+     * imposed here is the order of the sections themselves, and it is imposed
+     * rather than read because it is not a property of anybody's data — a
+     * cool-down after the work is what those words mean.
+     *
+     * Flattened back to one array rather than handed on as groups. Every reader
+     * of `exercises` today wants a list — the export, the session state's walk
+     * through the working rows, `/`'s card — and the one that wants the
+     * divisions is the renderer, which takes them from `bySection` itself. A
+     * grouped shape here would make the other four unwrap it.
+     *
+     * Doing it HERE and not in the two queries is what stops the two screens
+     * disagreeing: `/` and `/training` read different query modules and both
+     * come through this function.
+     */
+    exercises: bySection(exercises.get(resolved.workout.id) ?? []).flatMap(
+      (group) => group.exercises,
+    ),
   };
 }
 

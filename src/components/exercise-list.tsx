@@ -1,5 +1,6 @@
 import { SlashMeta } from "@/components/kv-grid";
 import type { WorkoutExercise } from "@/lib/db/schema";
+import { bySection } from "@/lib/section";
 
 /**
  * What a row needs, which is less than a `workout_exercises` row holds.
@@ -11,7 +12,7 @@ import type { WorkoutExercise } from "@/lib/db/schema";
  */
 export type ListedExercise = Pick<
   WorkoutExercise,
-  "id" | "name" | "prescription" | "notes"
+  "id" | "name" | "prescription" | "notes" | "section"
 >;
 
 /**
@@ -20,6 +21,21 @@ export type ListedExercise = Pick<
  * Rows on the canvas separated by hairlines, no card and no outer rule, with
  * ordinal indices in `text-tertiary` where sequence matters (§ Lists). 46px
  * minimum, the guide's dense figure, which is what it names exercises as.
+ *
+ * ## Divided into its sections when it has more than one — § P10, FUEL-92
+ *
+ * A session is a warm-up, the work and a cool-down, and § Lists makes those the
+ * group heading's second case: the same Slash-uppercase heading `/shopping` has
+ * drawn over its aisles since that screen shipped, with the rows of each section
+ * beneath it. Both screens that render this list get the divisions, because the
+ * guide says a screen showing a session "may not draw its own" — the
+ * alternative, a `sections` prop that `/` passes false, would be the second
+ * device wearing the first one's clothes.
+ *
+ * Marking the rows instead was the alternative and § Lists refuses it there
+ * rather than here: a section that exists only as a mark on a row is not a
+ * section to a screen reader, and § P10 asks for the warm-up as a PART of the
+ * session.
  *
  * The prescription is rendered verbatim. `workout_exercises.prescription` is
  * '3 x 12' or '30s on / 30s off' as written, and the schema says outright that
@@ -64,6 +80,74 @@ export function ExerciseList({
     return <p className="text-body text-text-secondary">No exercises listed.</p>;
   }
 
+  const groups = bySection(exercises);
+
+  /*
+   * One section is not a grouping — § P10, FUEL-92.
+   *
+   * Every session stored before this ticket holds one section, so this branch is
+   * what makes "existing sessions render identically" true rather than nearly
+   * true: the same single `<ol>`, no heading above it, no wrapper around it, and
+   * the same DOM a screen reader walked yesterday. A "WORK" heading standing
+   * alone over an ungrouped list would also be a heading that groups nothing,
+   * which is the reading § Lists refuses on the empty case for the same reason.
+   *
+   * The empty case needs no branch at all: `bySection` returns only sections
+   * that have rows, so there is never a heading with nothing under it to draw.
+   */
+  if (groups.length === 1) return <Rows exercises={exercises} progress={progress} />;
+
+  return (
+    /*
+     * `gap-7` between the sections and `gap-1` under each heading, which are
+     * `shopping-list-view`'s own numbers rather than numbers chosen here. § Lists
+     * says the group heading is "one device, not one per screen" and that this is
+     * the aisle heading's second case, so the spacing is part of what is taken
+     * unchanged — two screens drawing one device at two rhythms is how the device
+     * stops being one device.
+     */
+    <div className="flex flex-col gap-7">
+      {groups.map((group) => (
+        <section key={group.section} className="flex flex-col gap-1">
+          {/*
+           * § Lists' group heading, unchanged from the one `shopping-list-view`
+           * has drawn since that screen shipped — Slash, uppercase, `0.16em`,
+           * `text-secondary`. FUEL-90 named warm-up / work / cool-down as that
+           * heading's second case and said outright that a screen showing a
+           * session "may not draw its own", so this is the aisle heading's
+           * register copied deliberately rather than a second device that
+           * happens to look similar.
+           *
+           * `h2` for the same reason it is one there: the sections are the
+           * divisions of the list, and a screen reader's rotor is the whole
+           * argument for the group over marking the rows.
+           */}
+          <h2 className="text-slash uppercase tracking-[0.16em] text-text-secondary">
+            {group.label}
+          </h2>
+          <Rows exercises={group.exercises} progress={progress} />
+        </section>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The rows themselves — one `<ol>`, whether it is the list or a section of it.
+ *
+ * Its own component so the two shapes above share one row, rather than the
+ * grouped list growing a second copy that drifts from the flat one. The ordinals
+ * restart at `01` in each list it renders, which is what a numbered section
+ * means: the third working exercise is 03 whether or not a warm-up was scheduled
+ * before it, and the session state's "Exercise 3 of 5" counts the same rows.
+ */
+function Rows({
+  exercises,
+  progress,
+}: {
+  exercises: readonly ListedExercise[];
+  progress?: ReadonlyMap<string, string>;
+}) {
   return (
     <ol className="flex flex-col">
       {exercises.map((exercise, index) => (

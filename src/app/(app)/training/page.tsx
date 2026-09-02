@@ -116,6 +116,11 @@ function narrow(
       name: exercise.name,
       prescription: exercise.prescription,
       notes: exercise.notes,
+      // Which part of the session it belongs to — § P10, FUEL-92. It crosses
+      // because the screen DRAWS it: the list is divided by it and the session
+      // state steps through the working rows only. That is this function's rule,
+      // not an exception to it.
+      section: exercise.section,
       targetSets: exercise.targetSets,
       targetRepsLow: exercise.targetRepsLow,
       targetRepsHigh: exercise.targetRepsHigh,

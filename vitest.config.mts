@@ -76,6 +76,7 @@ export default defineConfig({
         "src/lib/resolve-training.ts",
         "src/lib/rotation.ts",
         "src/lib/exercise-set.ts",
+        "src/lib/section.ts",
         "src/lib/session-entry.ts",
         "src/lib/shopping-list.ts",
         "src/lib/shopping-text.ts",
@@ -266,6 +267,15 @@ export default defineConfig({
         // shows the wrong movement to someone holding a phone mid-set. None
         // throws, and none looks wrong in a diff.
         "src/lib/exercise-set.ts": FULLY_COVERED,
+        // § P10, FUEL-92, and gated for the same reason as its neighbour above:
+        // everything in it fails quietly. A `bySection` that dropped a group
+        // hides exercises somebody scheduled; a rank that put the cool-down
+        // first reorders a session into something nobody wrote; and `working`
+        // is what decides whether a hip opener is offered rep entry — the one
+        // mistake the section column exists to prevent. None of the three
+        // throws, and an unrecognised section is a path no seeded row takes,
+        // which is exactly the branch a coverage gate is for.
+        "src/lib/section.ts": FULLY_COVERED,
         // FUEL-25, and the same argument as cursor.ts, repeat.ts and
         // slot-times.ts: `isDayOfWeek` and `isMealSlot` are the template
         // endpoint's refusals, and every branch in them is reachable by anyone

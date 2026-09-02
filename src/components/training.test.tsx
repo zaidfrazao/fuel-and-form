@@ -6,6 +6,7 @@ import type { Week } from "@/components/dot-grid";
 import { APP_ACTION_BAR, SESSION_ACTION_BAR } from "@/components/action-bar";
 import type { TrainingItem } from "@/components/training";
 import { PAGE_ASIDE_COLUMN, PAGE_MEASURE_COLUMN, PAGE_MEASURE_FOOT } from "@/lib/frame";
+import { WORKING_SECTION } from "@/lib/section";
 
 /**
  * The Training screen — FUEL-27's acceptance criteria, as the DOM answers them.
@@ -65,6 +66,7 @@ const CIRCUIT: TrainingItem = {
       id: "e1",
       name: "Press-ups",
       prescription: "3 x 12",
+      section: WORKING_SECTION,
       notes: null,
       targetSets: 3,
       targetRepsLow: 12,
@@ -74,6 +76,7 @@ const CIRCUIT: TrainingItem = {
       id: "e2",
       name: "Reverse lunges",
       prescription: "3 x 10 ea",
+      section: WORKING_SECTION,
       notes: "Slow down.",
       targetSets: 2,
       targetRepsLow: 8,
@@ -85,6 +88,7 @@ const CIRCUIT: TrainingItem = {
       id: "e3",
       name: "Plank",
       prescription: "3 x 45s",
+      section: WORKING_SECTION,
       notes: null,
       targetSets: 3,
       targetRepsLow: null,
@@ -1290,5 +1294,152 @@ describe("what the plan state says about sets", () => {
     // The plan state is the list, and the list still says what was performed.
     // Leaving the session state is a change of composition, not of record.
     expect(await screen.findByText("1 of 3 sets")).toBeTruthy();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* FUEL-92 — the sections of a session                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The circuit as the seed now writes one: a warm-up, the work, a cool-down.
+ *
+ * Built from `CIRCUIT` rather than beside it, so the working rows and their
+ * targets are the same three every test above uses and the only difference is
+ * the two rows wrapped around them.
+ */
+const SECTIONED: TrainingItem = {
+  ...CIRCUIT,
+  exercises: [
+    {
+      id: "u1",
+      name: "Joint prep",
+      prescription: "~2 min",
+      notes: null,
+      section: "warmup",
+      targetSets: null,
+      targetRepsLow: null,
+      targetRepsHigh: null,
+    },
+    ...CIRCUIT.exercises,
+    {
+      id: "c1",
+      name: "Lower-body stretches",
+      prescription: "30 sec each",
+      notes: null,
+      section: "cooldown",
+      targetSets: null,
+      targetRepsLow: null,
+      targetRepsHigh: null,
+    },
+  ],
+};
+
+const sectioned = (sets: ReturnType<typeof set>[] = []) => [
+  { ...SECTIONED, sets },
+  WALK,
+];
+
+describe("the plan state, when a session has sections", () => {
+  test("heads each section in § Lists' group register", () => {
+    render(view({ sessions: sectioned() }));
+
+    // The device `/shopping` has drawn over its aisles since it shipped, which
+    // § Lists names as the group heading's second case. A screen showing a
+    // session "may not draw its own", so this screen draws that one.
+    for (const label of ["Warm-up", "Work", "Cool-down"]) {
+      expect(screen.getByRole("heading", { level: 2, name: label })).toBeTruthy();
+    }
+  });
+
+  test("still lists every row of the session, bookends included", () => {
+    render(view({ sessions: sectioned() }));
+
+    expect(screen.getByText("Joint prep")).toBeTruthy();
+    expect(screen.getByText("Lower-body stretches")).toBeTruthy();
+    expect(screen.getByText("Press-ups")).toBeTruthy();
+  });
+
+  test("reports set progress on working rows and says nothing about a warm-up", () => {
+    render(view({ sessions: sectioned([set("e1", 1), set("e1", 2)]) }));
+
+    expect(screen.getByText("2 of 3 sets")).toBeTruthy();
+    // The warm-up logs no sets, so it has nothing to report — and a row that
+    // said "0 of" anything would be reporting an absence about a row that was
+    // never going to have a figure.
+    const warmUp = screen.getByText("Joint prep").closest("li")!;
+
+    expect(warmUp.textContent).toBe("01Joint prep~2 min");
+  });
+});
+
+describe("the session state, when a session has sections", () => {
+  test("opens on the first WORKING exercise, not on the warm-up", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: sectioned() }));
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+
+    // The whole point of the column. A mobility drill offered per-set rep entry
+    // is the fault § P10 describes, and the state stepping through it first is
+    // how that fault would reach a phone.
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Press-ups");
+  });
+
+  test("counts the working rows in the position, not the whole session", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: sectioned() }));
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+
+    // Three working rows out of five. "Exercise 1 of 5" would be a session
+    // reporting itself as longer than the work it is asking for, and the count
+    // would never reach its own last exercise.
+    expect(screen.getByText(/3 x 12 · Exercise 1 of 3/)).toBeTruthy();
+  });
+
+  test("names the part being worked in the eyebrow", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: sectioned() }));
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Bodyweight Circuit B · Work" }),
+    ).toBeTruthy();
+  });
+
+  test("leaves the eyebrow alone when the session has no sections", async () => {
+    const user = userEvent.setup();
+
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+
+    // A session whose rows are all one section has no divisions to name, so
+    // there is no distinction for "· Work" to draw. Every session stored before
+    // FUEL-92 is this one.
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Bodyweight Circuit B" }),
+    ).toBeTruthy();
+  });
+
+  test("never lands on the cool-down, even with every working set logged", async () => {
+    const user = userEvent.setup();
+
+    // Every set of all three working exercises. `currentExercise` holds the last
+    // one when a session is complete rather than emptying the screen — and the
+    // last one is the last WORKING one, not the stretch after it.
+    render(
+      view({
+        sessions: sectioned([
+          set("e1", 1), set("e1", 2), set("e1", 3),
+          set("e2", 1), set("e2", 2),
+          set("e3", 1), set("e3", 2), set("e3", 3),
+        ]),
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Plank");
   });
 });

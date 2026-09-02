@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { TrainingTemplateEntry, Workout, WorkoutExercise } from "./db/schema";
 import { trainingDay, WALK_TYPE } from "./resolve-training";
+import { WORKING_SECTION, working } from "./section";
 import type { TrainingPlan } from "./rotation";
 import { seedTrainingTemplate } from "./seed/plan";
 import { seedWorkouts } from "./seed/workouts";
@@ -76,6 +77,7 @@ const EXERCISES = new Map<string, WorkoutExercise[]>(
       prescription: exercise.prescription,
       sortOrder,
       notes: exercise.notes ?? null,
+      section: exercise.section ?? WORKING_SECTION,
       targetSets: exercise.targetSets ?? null,
       targetRepsLow: exercise.targetRepsLow ?? null,
       targetRepsHigh: exercise.targetRepsHigh ?? null,
@@ -204,19 +206,61 @@ describe("the exercise list", () => {
   it("carries every exercise of the resolved workout, in prescribed order", () => {
     const [circuit] = trainingDay(PLAN, EXERCISES, PROGRAM_START).sessions;
 
-    // Circuit A's five exercises, the whole list — PRD § P3 asks for the FULL
-    // list with its prescriptions, and a list truncated here would be a screen
-    // that silently drops the last movement of the session.
+    // Circuit A's whole session — PRD § P3 asks for the FULL list with its
+    // prescriptions, and a list truncated here would be a screen that silently
+    // drops the last movement of the session.
+    //
+    // Nine rows since FUEL-92, and the order is the assertion: the warm-up
+    // opens, the five working exercises follow in the seed's own order, and the
+    // cool-down closes. The seed writes them in this order too, so what this
+    // pins on its own is the list; the two tests below scramble the input to pin
+    // the ordering itself.
     expect(circuit!.exercises.map((exercise) => exercise.name)).toEqual([
+      "Joint prep",
+      "Movement prep",
       "Squats",
       "Push-ups",
       "Reverse lunges",
       "Glute bridges",
       "Plank",
+      "Lower-body stretches",
+      "Upper-body stretches",
     ]);
     expect(circuit!.exercises.map((exercise) => exercise.sortOrder)).toEqual([
-      0, 1, 2, 3, 4,
+      0, 1, 2, 3, 4, 5, 6, 7, 8,
     ]);
+  });
+
+  it("gives the working section the rows progression applies to", () => {
+    // The half of the list FUEL-91's set logging is offered on, and FUEL-95
+    // will count at a working MET. The bookends are shared by all three
+    // sessions, so this is also what tells the two circuits apart — see below.
+    const [circuit] = trainingDay(PLAN, EXERCISES, PROGRAM_START).sessions;
+
+    expect(
+      working(circuit!.exercises).map((exercise) => exercise.name),
+    ).toEqual(["Squats", "Push-ups", "Reverse lunges", "Glute bridges", "Plank"]);
+  });
+
+  it("opens and closes every session with the same bookends", () => {
+    // One constant spread into each session, so a change to the warm-up cannot
+    // land on two of them and miss the third. Asserted across all three rather
+    // than on one, because "the same" is the property that decays.
+    const sessions = [
+      trainingDay(PLAN, EXERCISES, "2026-03-02").sessions[0]!, // circuit A
+      trainingDay(PLAN, EXERCISES, "2026-03-03").sessions[0]!, // intervals
+      trainingDay(PLAN, EXERCISES, "2026-03-04").sessions[0]!, // circuit B
+    ];
+
+    for (const trained of sessions) {
+      const names = trained.exercises.map((exercise) => exercise.name);
+
+      expect(names.slice(0, 2)).toEqual(["Joint prep", "Movement prep"]);
+      expect(names.slice(-2)).toEqual([
+        "Lower-body stretches",
+        "Upper-body stretches",
+      ]);
+    }
   });
 
   it("carries the prescription verbatim", () => {
@@ -225,7 +269,10 @@ describe("the exercise list", () => {
     // never parsed", so nothing on the way to the screen may reformat it.
     const [intervals] = trainingDay(PLAN, EXERCISES, "2026-03-03").sessions;
 
-    expect(intervals!.exercises[0]?.prescription).toBe(
+    // The working rows, not `exercises[0]` — that is the shared warm-up now
+    // (FUEL-92), and an index into a list whose first row is the same on every
+    // session would assert nothing about this one.
+    expect(working(intervals!.exercises)[0]?.prescription).toBe(
       "8–12 rounds — 40 sec on / 40 sec off",
     );
   });
@@ -234,8 +281,11 @@ describe("the exercise list", () => {
     const a = trainingDay(PLAN, EXERCISES, "2026-03-02").sessions[0]!;
     const b = trainingDay(PLAN, EXERCISES, "2026-03-04").sessions[0]!;
 
-    expect(a.exercises[0]?.name).toBe("Squats");
-    expect(b.exercises[0]?.name).toBe("Squat pulses");
+    // Compared on the WORK, which is the part that differs: since FUEL-92 both
+    // circuits open with the same warm-up, so a comparison of first rows would
+    // now pass on two sessions that shared one exercise list entirely.
+    expect(working(a.exercises)[0]?.name).toBe("Squats");
+    expect(working(b.exercises)[0]?.name).toBe("Squat pulses");
   });
 
   it("is empty for the walk, which has no exercise rows", () => {
@@ -243,6 +293,61 @@ describe("the exercise list", () => {
 
     expect(walk.workout.type).toBe(WALK_TYPE);
     expect(walk.exercises).toEqual([]);
+  });
+
+  it("presents the sections in a fixed order, whatever order the rows arrive in", () => {
+    // § P10, FUEL-92, and the acceptance criterion in one assertion. The rows
+    // below are handed over backwards — cool-down first, warm-up last — which
+    // is a thing a query can legitimately return once `sort_order` restarts per
+    // section and ties break by id. Nothing downstream re-sorts, so if this
+    // function does not impose the order, a reader stretches before squatting.
+    const id = idFor("bodyweight-circuit-a");
+    const scrambled = new Map<string, WorkoutExercise[]>([
+      [
+        id,
+        [
+          { ...EXERCISES.get(id)![0]!, name: "Child's pose", section: "cooldown", sortOrder: 0 },
+          { ...EXERCISES.get(id)![1]!, name: "Squats", section: WORKING_SECTION, sortOrder: 0 },
+          { ...EXERCISES.get(id)![2]!, name: "Arm circles", section: "warmup", sortOrder: 0 },
+        ],
+      ],
+    ]);
+
+    const [circuit] = trainingDay(PLAN, scrambled, PROGRAM_START).sessions;
+
+    expect(circuit!.exercises.map((exercise) => exercise.name)).toEqual([
+      "Arm circles",
+      "Squats",
+      "Child's pose",
+    ]);
+  });
+
+  it("orders by sort_order WITHIN a section, not across the session", () => {
+    // The other half of the same rule: two sections may both hold a row with
+    // `sort_order` 0, and the section is what decides which comes first. A
+    // resolver that sorted the flat list by `sort_order` would interleave the
+    // warm-up with the work and look, in a diff, like it was doing its job.
+    const id = idFor("bodyweight-circuit-a");
+    const rows = new Map<string, WorkoutExercise[]>([
+      [
+        id,
+        [
+          { ...EXERCISES.get(id)![0]!, name: "Squats", section: WORKING_SECTION, sortOrder: 0 },
+          { ...EXERCISES.get(id)![1]!, name: "Push-ups", section: WORKING_SECTION, sortOrder: 1 },
+          { ...EXERCISES.get(id)![2]!, name: "Arm circles", section: "warmup", sortOrder: 0 },
+          { ...EXERCISES.get(id)![3]!, name: "Leg swings", section: "warmup", sortOrder: 1 },
+        ],
+      ],
+    ]);
+
+    const [circuit] = trainingDay(PLAN, rows, PROGRAM_START).sessions;
+
+    expect(circuit!.exercises.map((exercise) => exercise.name)).toEqual([
+      "Arm circles",
+      "Leg swings",
+      "Squats",
+      "Push-ups",
+    ]);
   });
 
   it("is empty rather than absent when the map does not cover the workout", () => {

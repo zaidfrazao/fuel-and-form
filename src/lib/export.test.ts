@@ -19,6 +19,7 @@ import type {
   WeightLog,
 } from "./db/schema";
 import { startOfWeek } from "./date";
+import { WORKING_SECTION } from "./section";
 import {
   buildExport,
   type ExportTables,
@@ -159,6 +160,7 @@ const exercise = (id: string, sortOrder: number): WorkoutExercise => ({
   prescription: "3 x 12",
   sortOrder,
   notes: null,
+  section: WORKING_SECTION,
   targetSets: 3,
   targetRepsLow: 12,
   targetRepsHigh: 12,

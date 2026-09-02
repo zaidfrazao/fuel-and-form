@@ -18,6 +18,12 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+// The one place the session's parts are named — § P10, FUEL-92. The column
+// below takes its default and its CHECK from here rather than restating the
+// strings, which is the direction the dependency has to run: `section.ts` is
+// pure and type-only, so a client component importing it pulls no pg-core.
+import { SECTIONS, WORKING_SECTION } from "../section";
+
 /**
  * The data model — PRD § Technical Considerations → Data Model.
  *
@@ -685,6 +691,42 @@ export const workoutExercises = pgTable(
     notes: text(),
 
     /**
+     * Which part of the session this row belongs to — § P10, FUEL-92.
+     *
+     * A session is a warm-up, the work, and a cool-down. Without this column
+     * `workout_exercises` is one flat ordered list, so a mobility drill is a row
+     * indistinguishable from a working set — which is not merely untidy: FUEL-91
+     * would offer it per-set rep logging it does not want, and FUEL-95 would
+     * count it at the working exercise's MET.
+     *
+     * ## Text with a CHECK, not a `pgEnum` — the reasoning is `workouts.type`'s
+     *
+     * That column's header block above argues it in full: a Postgres enum makes
+     * a new value `ALTER TYPE ... ADD VALUE`, which is a migration, which is
+     * what the PRD's gym-restart claim rules out. A section vocabulary has the
+     * same future — 'activation' before the work, a 'finisher' after it — so it
+     * takes the same answer rather than a different one two tables apart. The
+     * CHECK is not the enum in disguise: dropping and re-adding a CHECK is a
+     * migration too, but it is one statement against a column that stays `text`,
+     * and the values are not a type other tables can accidentally depend on.
+     *
+     * ## Why a column and not a second table
+     *
+     * A warm-up row is an exercise in every respect — a name, a prescription,
+     * notes, an order. A `warmup_exercises` table would be these same five
+     * columns under a different name, and a second place for `exercise-list.tsx`
+     * to read from.
+     *
+     * The default is what keeps this additive. Every row already stored is
+     * working-section without a backfill, and a list holding one section renders
+     * exactly as it did before this ticket.
+     *
+     * `sort_order` continues to order WITHIN a section; the order the sections
+     * themselves present in is `lib/section.ts`'s, not data's.
+     */
+    section: text().notNull().default(WORKING_SECTION),
+
+    /**
      * What a set-by-set record is compared against — § P10, FUEL-91.
      *
      * ## Structured columns BESIDE the prescription, never derived from it
@@ -728,6 +770,23 @@ export const workoutExercises = pgTable(
     // `meals` and `workouts` both carry the identical line for the identical
     // reason; see `ownedReference`.
     unique("workout_exercises_id_user_id_key").on(t.id, t.userId),
+
+    // The section vocabulary — § P10, FUEL-92. A CHECK and not an enum; the
+    // column's comment gives the reasoning and whose it is. Built from the one
+    // array rather than three literals, so adding a section is one edit and the
+    // constraint cannot fall behind the code that reads it.
+    //
+    // `sql.raw` and not an interpolation. A tagged `sql` template turns an
+    // interpolated value into a BOUND PARAMETER, and drizzle-kit writes what it
+    // is given: the first draft of this line generated
+    // `CHECK ("section" in ($1, $2, $3))`, which is not a constraint, it is a
+    // syntax error in a file nothing runs until deploy. The values are a
+    // compile-time constant in this repository and never user input, so raw is
+    // safe here in the one way it has to be.
+    check(
+      "workout_exercises_section",
+      sql.raw(`"section" in (${SECTIONS.map((section) => `'${section}'`).join(", ")})`),
+    ),
 
     // Both scoped strictly to the columns above, which did not exist until this
     // migration: every row already stored satisfies them by holding nulls.

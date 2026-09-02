@@ -2,6 +2,7 @@ import { getTableName, is } from "drizzle-orm";
 import { PgTable, getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
+import { WORKING_SECTION } from "../section";
 import { DEFAULT_WALK_REMINDER_AT } from "../walk-reminder";
 import * as schema from "./schema";
 import type { ScopedTable } from "./scope";
@@ -281,6 +282,31 @@ describe("schema", () => {
 
       expect(type?.enumValues).toBeUndefined();
       expect(type?.getSQLType()).toBe("text");
+    });
+
+    it("workout_exercises.section is text too, so 'finisher' needs no ALTER TYPE", () => {
+      // § P10, FUEL-92. The section vocabulary has `workouts.type`'s future —
+      // an 'activation' before the work, a 'finisher' after it — so it takes
+      // `workouts.type`'s answer. A `pgEnum` here would make the next section a
+      // migration, which is the thing the claim above rules out, and the column
+      // comment cites that reasoning rather than restating it.
+      const { columns } = getTableConfig(schema.workoutExercises);
+      const section = columns.find((column) => column.name === "section");
+
+      expect(section?.enumValues).toBeUndefined();
+      expect(section?.getSQLType()).toBe("text");
+    });
+
+    it("workout_exercises.section defaults, so no stored row needs a backfill", () => {
+      // What makes this ticket additive. Every row written before the column
+      // existed is working-section without anybody touching it, which is the
+      // acceptance criterion "existing rows need no backfill" reduced to the one
+      // property of the schema that delivers it.
+      const { columns } = getTableConfig(schema.workoutExercises);
+      const section = columns.find((column) => column.name === "section");
+
+      expect(section?.notNull).toBe(true);
+      expect(section?.default).toBe(WORKING_SECTION);
     });
 
     it("rotation is data, so a Circuit C is one row with rotation_index 2", () => {

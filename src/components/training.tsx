@@ -51,6 +51,7 @@ import {
   targetLabel,
 } from "@/lib/exercise-set";
 import { dayLabel } from "@/lib/now-display";
+import { sectionLabel, WORKING_SECTION, working } from "@/lib/section";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { MAX_NOTE_LENGTH } from "@/lib/session-entry";
 import { cn } from "@/lib/utils";
@@ -894,14 +895,29 @@ export function Training({
   };
 
   /**
+   * The rows the session is WORKED through — § P10, FUEL-92.
+   *
+   * The working section and nothing else. A warm-up is done or not done: three
+   * sets of a hip opener is not information anybody wants recorded, and offering
+   * rep entry against one is the mistake `workout_exercises.section` exists to
+   * prevent. So the session state steps through these, the position reads
+   * against these, and the plan state's set progress is derived from these.
+   *
+   * A session with no sections is entirely working rows, so this is the whole
+   * list for every session stored before the column existed — which is what
+   * keeps this screen's behaviour unchanged for them.
+   */
+  const workingExercises = working(session?.exercises ?? []);
+
+  /**
    * Which exercise the session state is showing, and the rows under it.
    *
    * Derived from the optimistic sets, so it moves on the frame the last set of
    * an exercise is ticked. `currentExercise` carries the rule and the reason it
    * is a derivation rather than a stored cursor.
    */
-  const current = session ? currentExercise(session.exercises, sets) : -1;
-  const currentEx = session?.exercises[current];
+  const current = session ? currentExercise(workingExercises, sets) : -1;
+  const currentEx = workingExercises[current];
 
   const draft = (exerciseId: string, setIndex: number, value: string) =>
     setDrafts((previous) => new Map(previous).set(`${exerciseId}#${setIndex}`, value));
@@ -921,10 +937,14 @@ export function Training({
    * Built for the session rather than per row — `exercise-list.tsx` takes a map
    * for this reason — and from the optimistic sets, so a set logged in the
    * session state is already counted when the reader leaves it.
+   *
+   * Over the working rows only (FUEL-92). A warm-up row logs no sets, so it has
+   * no progress to report, and a "0 of 3 sets" under a mobility drill would be
+   * an absence reported about a row that was never going to have one.
    */
   const progress = new Map<string, string>();
 
-  for (const exercise of session?.exercises ?? []) {
+  for (const exercise of workingExercises) {
     const label = setProgress(exercise, setsFor(exercise.id, sets));
 
     if (label) progress.set(exercise.id, label);
@@ -1036,18 +1056,29 @@ export function Training({
            * exactly this — "the active exercise is what is visible when you are
            * working".
            *
-           * The eyebrow is the session's name alone today. FUEL-92 adds the
-           * group to it ("Circuit B · Work") when a session has sections.
+           * The eyebrow carries the session and, where a session has sections,
+           * the part being worked — "Bodyweight Circuit B · Work" (FUEL-92).
+           * Only where it HAS them: a session whose rows are all one section has
+           * no divisions to name, and appending "· Work" to it would be a
+           * distinction drawn about nothing.
            */
           <>
             <div className="flex flex-col gap-3">
-              <Eyebrow>{session.name}</Eyebrow>
+              <Eyebrow>
+                {workingExercises.length === session.exercises.length
+                  ? session.name
+                  : `${session.name} · ${sectionLabel(WORKING_SECTION)}`}
+              </Eyebrow>
               <h1 className="text-title text-text-primary">{currentEx.name}</h1>
               {/* Verbatim, and then where you are. `resolve-training.ts` keeps
-                  the exercises in `sort_order`, so the position is the list's
-                  own and not a second ordering invented here. */}
+                  the exercises in section order and in `sort_order` within one,
+                  so the position is the list's own and not a second ordering
+                  invented here — and it counts the WORKING rows, which are the
+                  rows this state steps through. A warm-up in the denominator
+                  would be a session reporting itself as longer than the work it
+                  is asking for. */}
               <SlashMeta>
-                {`${currentEx.prescription} · Exercise ${current + 1} of ${session.exercises.length}`}
+                {`${currentEx.prescription} · Exercise ${current + 1} of ${workingExercises.length}`}
               </SlashMeta>
             </div>
 

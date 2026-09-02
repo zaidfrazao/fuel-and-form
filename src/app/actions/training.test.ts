@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { Training } from "@/lib/db/queries/training";
 import type { Workout, WorkoutExercise } from "@/lib/db/schema";
+import { WORKING_SECTION } from "@/lib/section";
 
 /**
  * P3's action layer — what a tap on a STATUS is allowed to write.
@@ -79,6 +80,7 @@ const exercise = (id: string): WorkoutExercise => ({
   prescription: "3 x 12",
   sortOrder: 0,
   notes: null,
+  section: WORKING_SECTION,
   targetSets: 3,
   targetRepsLow: 12,
   targetRepsHigh: 12,
