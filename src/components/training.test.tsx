@@ -1483,6 +1483,36 @@ describe("the session state, when a session has sections", () => {
     ).toBeTruthy();
   });
 
+  test("marks the worked exercise in the aside, not the row at that index", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: sectioned() }));
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+
+    // The aside holds the WHOLE session — § Desktop's "the rest of the list" —
+    // while the measure steps through the working rows only. So the current
+    // marker cannot be an index: index 0 of this list is the warm-up, and the
+    // measure is showing the first working exercise.
+    //
+    // Invisible to both suites without this test: jsdom has no width and the
+    // column is `hidden` below the cap, and the screen baselines photograph the
+    // plan state rather than this one.
+    const marked = document.querySelectorAll('[aria-current="step"]');
+
+    expect(marked).toHaveLength(1);
+    expect(marked[0]!.textContent).toContain("Press-ups");
+    expect(marked[0]!.textContent).not.toContain("Joint prep");
+  });
+
+  test("marks nothing in the aside when there is no exercise to work", () => {
+    // `currentId` is undefined rather than an index that would still match a
+    // row. Belt and braces with `canEnter`, which now refuses this session
+    // outright — but the component must not depend on that to behave.
+    render(view({ sessions: sectioned() }));
+
+    expect(document.querySelectorAll('[aria-current="step"]')).toHaveLength(0);
+  });
+
   test("never lands on the cool-down, even with every working set logged", async () => {
     const user = userEvent.setup();
 

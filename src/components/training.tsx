@@ -516,17 +516,36 @@ function SetList({
 function SessionList({
   exercises,
   sets,
-  current,
+  currentId,
 }: {
   exercises: readonly TrainingExercise[];
   sets: readonly LoggedSetView[];
-  current: number;
+  /**
+   * The exercise the measure is showing, BY ID — § P10, FUEL-92.
+   *
+   * An id and not an index, because this list and the one the index came from
+   * are no longer the same list. The measure steps through the WORKING rows;
+   * this aside holds the rest of the session, warm-up and cool-down included,
+   * because that is what § Desktop means by "the rest of the list". An index
+   * into the first, read against the second, marks the wrong row — with the
+   * seed's circuit it lands on "Joint prep" while the measure shows "Squats".
+   *
+   * That is not a bug a test here would have caught either: jsdom has no width
+   * and this column is `hidden` below the cap, and the screen baselines
+   * photograph the plan state rather than this one. Identity removes the class
+   * of fault rather than correcting one instance of it — there is no index to
+   * translate, so there is nothing to get wrong the next time the two lists
+   * diverge.
+   *
+   * `undefined` for a session with no current exercise, which marks no row.
+   */
+  currentId: string | undefined;
 }) {
   return (
     <ol className="flex flex-col">
-      {exercises.map((exercise, index) => {
+      {exercises.map((exercise) => {
         const logged = setsFor(exercise.id, sets);
-        const isCurrent = index === current;
+        const isCurrent = exercise.id === currentId;
 
         return (
           <li
@@ -1245,7 +1264,7 @@ export function Training({
             <SessionList
               exercises={session.exercises}
               sets={sets}
-              current={current}
+              currentId={currentEx?.id}
             />
           </section>
         )}
