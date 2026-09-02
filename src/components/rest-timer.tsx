@@ -384,12 +384,36 @@ function signal(context: AudioContext | null): void {
  * `sentinel.released` is checked rather than the ref alone, because a dropped
  * lock leaves a sentinel object behind: a ref that is merely non-null would
  * make the re-request a no-op in exactly the case it was added for.
+ *
+ * ## `wanted` is not defensive — it closes a leak
+ *
+ * `request` is asynchronous, and the rest can end while the platform is still
+ * deciding: a Stop tapped just after a start, an expiry on the next tick, or
+ * `/training` being left altogether. The effect's cleanup runs first and finds
+ * the ref still null, so `release` has nothing to let go of — and then this
+ * `await` resolves and files a LIVE lock in a ref nothing will ever read again.
+ * The result is a screen that never sleeps, with no timer on it, until the tab
+ * is closed. It is the exact battery cost the paragraph above says to avoid,
+ * reached by the one path that leaves nothing on screen to explain it.
+ *
+ * So the answer is re-checked after the await, and a lock that is no longer
+ * wanted is released immediately rather than stored.
  */
-async function hold(ref: RefObject<WakeLockSentinel | null>): Promise<void> {
+async function hold(
+  ref: RefObject<WakeLockSentinel | null>,
+  wanted: RefObject<boolean>,
+): Promise<void> {
   if (ref.current && !ref.current.released) return;
 
   try {
-    ref.current = await navigator.wakeLock.request("screen");
+    const sentinel = await navigator.wakeLock.request("screen");
+
+    if (!wanted.current) {
+      void sentinel.release().catch(() => {});
+      return;
+    }
+
+    ref.current = sentinel;
   } catch {
     // Unsupported — Firefox, and every iOS before 16.4 — or refused because the
     // document was not visible at the moment of asking. Nothing depends on it.
@@ -441,11 +465,14 @@ export function RestTimer() {
 
   const audio = useRef<AudioContext | null>(null);
   const lock = useRef<WakeLockSentinel | null>(null);
+  /** Whether a lock is still wanted by the time the platform grants one. */
+  const wantsLock = useRef(false);
 
   useEffect(() => {
     if (endsAt === null) return;
 
-    void hold(lock);
+    wantsLock.current = true;
+    void hold(lock, wantsLock);
 
     const interval = window.setInterval(() => {
       if (Date.now() < endsAt) {
@@ -481,7 +508,7 @@ export function RestTimer() {
 
       // The platform dropped the lock when the tab hid and does not give it
       // back on its own — see `hold`.
-      void hold(lock);
+      void hold(lock, wantsLock);
       emit();
     };
 
@@ -494,6 +521,9 @@ export function RestTimer() {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", restore);
       window.removeEventListener("pageshow", restore);
+      // Before the release, so a request still in flight is let go rather than
+      // filed — see `hold`.
+      wantsLock.current = false;
       release(lock);
     };
   }, [endsAt]);

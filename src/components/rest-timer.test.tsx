@@ -516,6 +516,45 @@ describe("the wake lock", () => {
     expect(request).toHaveBeenCalledTimes(2);
   });
 
+  test("lets go of a lock granted after the rest already ended", async () => {
+    /*
+     * The leak this guard exists for, and it is not a hypothetical: `request`
+     * is asynchronous, so a Stop tapped just after a start — or leaving
+     * `/training` at all — runs the effect's cleanup while the platform is
+     * still deciding. The cleanup finds the ref null and has nothing to
+     * release; without the `wanted` re-check the await then files a LIVE lock
+     * in a ref nothing will ever read again, and the screen never sleeps.
+     */
+    const lock = sentinel();
+    let grant: (value: typeof lock) => void = () => {};
+    const request = vi.fn(
+      () =>
+        new Promise<typeof lock>((resolve) => {
+          grant = resolve;
+        }),
+    );
+
+    vi.stubGlobal(
+      "navigator",
+      Object.assign(Object.create(navigator), { wakeLock: { request } }),
+    );
+
+    render(<RestTimer />);
+    press("1:30");
+    expect(request).toHaveBeenCalledTimes(1);
+
+    // Stopped while the request is still in flight.
+    press("Stop");
+    expect(lock.release).not.toHaveBeenCalled();
+
+    // The platform answers now, for a rest that is over.
+    await act(async () => {
+      grant(lock);
+    });
+
+    expect(lock.release).toHaveBeenCalledTimes(1);
+  });
+
   test("is released when the screen is left mid-rest", async () => {
     const lock = sentinel();
 
