@@ -71,6 +71,7 @@ export default defineConfig({
         "src/lib/plan-vs-actual.ts",
         "src/lib/push.ts",
         "src/lib/repeat.ts",
+        "src/lib/rest-timer.ts",
         "src/lib/resolve-plan.ts",
         "src/lib/resolve-now.ts",
         "src/lib/resolve-training.ts",
@@ -150,6 +151,27 @@ export default defineConfig({
         // most: `Array.from({ length: Infinity })` would turn a refusal into a
         // 500 on a Server Action whose contract is that it never throws.
         "src/lib/repeat.ts": FULLY_COVERED,
+        // FUEL-93, and gated for a reason none of the others in this list
+        // share: it is the only module here whose correctness is a claim about
+        // a clock that a running app never exercises.
+        //
+        // The whole file exists because an interval-counted timer is wrong in
+        // exactly the situation it is used in — a phone locked for most of a
+        // ninety-second rest, where browsers throttle timers to once a minute
+        // and suspend them outright. Every test that could be written against a
+        // browser open on a desk passes for both spellings; the one that
+        // separates them advances a clock without running the interval, and it
+        // can only be written against a function that takes `now`.
+        //
+        // Its refusals are the ordinary reason. `parseRestEnd` reads a value
+        // out of `localStorage`, which is untrusted input on the same argument
+        // `cursor.ts` makes about the cookie: anyone with devtools can write
+        // it, it survives a deployment, and two of its four rejections are
+        // statements about the clock rather than about the string. `Infinity`
+        // is the one that matters — it is an integer to nobody but is a number
+        // to `Number()`, it formats as `NaN:NaN`, and a timer counting down
+        // from it never elapses and never clears.
+        "src/lib/rest-timer.ts": FULLY_COVERED,
         "src/lib/resolve-plan.ts": FULLY_COVERED,
         // FUEL-27. The dot grid is a claim about the user's own history, made
         // at a glance and with no figures beside it to check it against — so a

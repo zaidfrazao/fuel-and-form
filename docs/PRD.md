@@ -279,7 +279,7 @@ The same series and the same standard, built on top of a shipped MVP rather than
 - [ ] Session status, note and duration are unchanged, and none of them is derived from set data
 - [ ] A session presents as warm-up, work and cool-down in a fixed order, with set logging offered on the working section only, and a section with no rows renders no empty heading
 - [ ] Existing sessions render identically and need no backfill
-- [ ] The rest timer starts and stops by hand, reads correctly after a backgrounded tab and a reload, and writes nothing to the database
+- [x] The rest timer starts and stops by hand, reads correctly after a backgrounded tab and a reload, and writes nothing to the database
 - [ ] Every shipped media asset has recorded provenance and a licence this public repository can carry; an exercise without media renders no affordance and no gap
 - [ ] The energy figure is a range, is presented as an estimate, and yields nothing at all — never a zero — for a workout type it has no value for
 - [ ] The estimate is not subtracted from, added to, or combined with `target_kcal` or any macro total anywhere, the export included
