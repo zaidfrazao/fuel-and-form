@@ -496,6 +496,90 @@ describe.skipIf(!configured)("recording a session, scoped", () => {
 });
 
 /**
+ * The bodyweight a session is costed at — § P10's energy figure, FUEL-95.
+ *
+ * `src/lib/energy.test.ts` proves `nearestWeight` against arrays built in
+ * TypeScript, which is where the tie-breaks and the fallback belong. What it
+ * cannot prove is that the two rows the resolver is handed are the right two —
+ * that is `lte(date) ORDER BY date DESC LIMIT 1` and `gt(date) ORDER BY date ASC
+ * LIMIT 1`, and every part of that pair is a thing SQL can get wrong on its own:
+ * a flipped comparison, a missing ORDER BY, a `limit` applied before the sort.
+ *
+ * Each of those failures produces a plausible weight rather than an error, and a
+ * plausible weight produces a plausible kcal range. So the read is asserted here
+ * against real rows, in a suite that talks to Postgres.
+ *
+ * The scoping case is the one this file exists for generally: `weight_logs` is a
+ * table the training screen did not read before this ticket, and a query that
+ * reached another user's weigh-in would cost Alice's session at Bob's weight —
+ * a leak that shows up as a wrong number and never as an error.
+ */
+describe.skipIf(!configured)("the bodyweight a session is costed at", () => {
+  let fixture: Fixture;
+
+  beforeEach(async () => {
+    await truncateAll(getDb());
+    fixture = await seedFixture();
+  });
+
+  /** A weigh-in for one user, written the way the app writes one. */
+  const weighIn = (userId: string, date: string, weightKg: number) =>
+    scope(userId, getDb()).insert(schema.weightLogs, { date, weightKg });
+
+  const costedAt = async (userId: string, date: string) =>
+    (await loadTraining(userId, date, new Date()))?.bodyweightKg;
+
+  it("takes the weigh-in nearest the viewed date, from either side", async () => {
+    const { userId } = fixture.alice;
+
+    // The fixture already writes one on ALICE_LOGGED itself. These bracket it.
+    await weighIn(userId, "2026-02-16", 81.2);
+    await weighIn(userId, "2026-03-16", 78.1);
+
+    // On the day: its own row, which is nearer than either bracket.
+    expect(await costedAt(userId, ALICE_LOGGED)).toBe(79.4);
+    // Four days after the earlier bracket and ten before the fixture's row.
+    expect(await costedAt(userId, "2026-02-20")).toBe(81.2);
+    // Nearer the later one, which only the `gt` read can reach.
+    expect(await costedAt(userId, "2026-03-14")).toBe(78.1);
+  });
+
+  it("does not re-price a past date when a new weigh-in lands", async () => {
+    const { userId } = fixture.alice;
+
+    const before = await costedAt(userId, ALICE_LOGGED);
+
+    // Months later, and lighter — the reading an implementation that took "the
+    // latest weigh-in" would switch to. The criterion is that it does not.
+    await weighIn(userId, "2026-08-31", 71.5);
+    await weighIn(userId, "2026-09-30", 70.2);
+
+    expect(await costedAt(userId, ALICE_LOGGED)).toBe(before);
+    expect(await costedAt(userId, ALICE_LOGGED)).toBe(79.4);
+  });
+
+  it("falls back to the starting weight when there are no weigh-ins", async () => {
+    const { userId } = fixture.alice;
+
+    await scope(userId, getDb()).delete(schema.weightLogs);
+
+    // `profiles.start_weight_kg`, which a new account has and no log to go with.
+    expect(await costedAt(userId, ALICE_LOGGED)).toBe(80);
+  });
+
+  it("never reaches another user's weigh-in", async () => {
+    const { userId } = fixture.alice;
+
+    await scope(userId, getDb()).delete(schema.weightLogs);
+    // Bob's own row sits on 2026-03-03, one day from Alice's viewed date and
+    // far nearer than her fallback. An unscoped read would take it.
+    await weighIn(fixture.bob.userId, ALICE_LOGGED, 64.3);
+
+    expect(await costedAt(userId, ALICE_LOGGED)).toBe(80);
+  });
+});
+
+/**
  * The daily walk's own write — FUEL-29.
  *
  * `src/components/walk-row.tsx` and its two callers are asserted in the
