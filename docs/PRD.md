@@ -371,7 +371,7 @@ workout_exercises
   sort_order, notes,
   target_sets, target_reps_low, target_reps_high (nullable),
   section ('warmup' | 'work' | 'cooldown', defaulted),
-  media_path, media_kind, media_alt, media_credit                -- P10, FUEL-94, nullable
+  media_key, media_kind, media_alt, media_credit                 -- P10, FUEL-94, nullable
 
 training_template_entries
   id, user_id, day_of_week, workout_id (nullable), rotation_group (nullable), sort_order
