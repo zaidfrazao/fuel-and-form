@@ -279,6 +279,27 @@ export type FormMediaColumns = Pick<
   "mediaKey" | "mediaKind" | "mediaAlt" | "mediaCredit"
 >;
 
+/**
+ * Whether a stored string names an asset this app ships — a type guard.
+ *
+ * `Object.hasOwn` rather than a bare index, and that is the whole point: reading
+ * `FORM_MEDIA[key]` on a plain object consults `Object.prototype`, so a row
+ * storing `constructor`, `toString`, `valueOf`, `hasOwnProperty` or
+ * `__defineGetter__` gets back a truthy FUNCTION. A caller testing only for
+ * truthiness would then read `.path` off it and hand `undefined` to an `<img>`,
+ * which the browser resolves against the current URL — a request to the app's
+ * own origin rather than a visible blank.
+ *
+ * Written as a guard so the narrowing is carried in the TYPE rather than undone
+ * by a cast at the call site. The earlier version asserted
+ * `FORM_MEDIA as Record<string, FormMediaAsset>` and then re-checked the result
+ * for null, which worked but left an unsafe access pattern in the file for the
+ * next edit to copy.
+ */
+function isFormMediaKey(key: string): key is FormMediaKey {
+  return Object.hasOwn(FORM_MEDIA, key);
+}
+
 /** The attribution line a licence requires, or `null` where none is required. */
 export function creditFor(asset: FormMediaAsset, override: string | null): string | null {
   const licence = LICENCES[asset.licence];
@@ -304,25 +325,39 @@ export function creditFor(asset: FormMediaAsset, override: string | null): strin
  *   § Accessibility, so a row missing one renders nothing rather than rendering
  *   an image a screen reader announces as its filename. Whitespace is not a
  *   description, so it is trimmed before the test.
- * - **A kind disagreeing with the manifest.** The column is denormalised — the
- *   file's kind is a property of the file — so the two can only differ if one
- *   was edited without the other. Rendering the manifest's kind and ignoring the
- *   column would hide that; rendering the column's kind would put a `<video>`
- *   around a JPEG. Neither is better than drawing nothing and neither is
- *   something the reader can act on, so the row is refused.
+ * - **A kind that is absent, or disagrees with the manifest.** The column is
+ *   denormalised — the file's kind is a property of the file — so the two can
+ *   only differ if one was edited without the other. Rendering the manifest's
+ *   kind and ignoring the column would hide that; rendering the column's kind
+ *   would put a `<video>` around a JPEG. Neither is better than drawing nothing,
+ *   so the row is refused. Absence is refused on the same footing: the database's
+ *   pairing CHECK already forbids a key without a kind, and a resolver weaker
+ *   than the constraint it mirrors only differs where the constraint is missing
+ *   — which is precisely where the fault should be visible.
  */
 export function resolveFormMedia(row: FormMediaColumns): ResolvedFormMedia | null {
   const key = row.mediaKey?.trim();
   if (!key) return null;
 
-  if (!Object.hasOwn(FORM_MEDIA, key)) return null;
-  const asset = (FORM_MEDIA as Record<string, FormMediaAsset>)[key];
-  if (!asset) return null;
+  if (!isFormMediaKey(key)) return null;
+  const asset: FormMediaAsset = FORM_MEDIA[key];
 
   const alt = row.mediaAlt?.trim();
   if (!alt) return null;
 
-  if (row.mediaKind && row.mediaKind !== asset.kind) return null;
+  /*
+   * The kind must be PRESENT and must agree — not merely "must not disagree".
+   *
+   * The looser test (`row.mediaKind && row.mediaKind !== asset.kind`) accepted a
+   * row with a key and a null kind, falling through to the manifest's. The
+   * database's pairing CHECK forbids that shape, so the two rules only differed
+   * where the CHECK was absent — a partially applied migration, a restored dump
+   * from before it, a manual edit. Those are exactly the situations where an
+   * integrity problem should be visible rather than papered over, and a resolver
+   * weaker than the constraint it mirrors is how a half-populated row gets
+   * rendered anyway and the fault is found somewhere else entirely.
+   */
+  if (row.mediaKind !== asset.kind) return null;
 
   return {
     key,

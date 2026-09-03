@@ -86,6 +86,17 @@ describe("resolveFormMedia", () => {
     expect(resolveFormMedia(row({ mediaKind: "video" }))).toBeNull();
   });
 
+  /*
+   * A key with no kind is a half-populated row. The database's pairing CHECK
+   * forbids it, so the two rules only differ where the CHECK is absent — a
+   * partially applied migration, a dump restored from before it, a manual edit.
+   * A resolver weaker than the constraint it mirrors would render such a row
+   * anyway and the integrity fault would surface somewhere else entirely.
+   */
+  it("refuses a key with no kind, matching the database's pairing rule", () => {
+    expect(resolveFormMedia(row({ mediaKind: null }))).toBeNull();
+  });
+
   it("trims the description it returns", () => {
     expect(resolveFormMedia(row({ mediaAlt: "  A side plank.  " }))?.alt).toBe(
       "A side plank.",

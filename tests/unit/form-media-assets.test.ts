@@ -115,6 +115,16 @@ describe("the form media manifest against the bundle", () => {
       const unexpected = [...new Set(used)].filter((tag) => !SVG_ELEMENTS.has(tag));
       expect(unexpected, `${key}: unexpected elements`).toEqual([]);
 
+      /*
+       * A processing instruction is not an element, so the allowlist above is
+       * blind to it — `<?xml-stylesheet href="…"?>` sits before the root and
+       * pulls a stylesheet into the document, on this app's origin, when the
+       * file is navigated to. It is the one vector that survives an element
+       * check, which is why it gets its own assertion rather than being folded
+       * into the reference test below.
+       */
+      expect(svg, `${key}: XML processing instruction`).not.toMatch(/<\?/);
+
       // Attribute-level vectors, which no element allowlist can see.
       expect(svg, `${key}: inline event handler`).not.toMatch(/\son[a-z]+\s*=/i);
       expect(svg, `${key}: javascript: URL`).not.toMatch(/javascript\s*:/i);
