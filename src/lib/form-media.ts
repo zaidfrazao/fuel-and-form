@@ -127,6 +127,17 @@ export type FormMediaAsset = {
    */
   readonly path: string;
   readonly kind: MediaKind;
+  /**
+   * The asset's intrinsic pixel size, so the box is reserved before it loads.
+   *
+   * Not decoration and not duplication: without them the sheet reflows when the
+   * media arrives, which is layout shift on the one screen FUEL-52 measures.
+   * They are a property of the file, so they live with it rather than being
+   * guessed at a call site, and `npm run check:form-media` reads them back off
+   * the real file so they cannot drift from it.
+   */
+  readonly width: number;
+  readonly height: number;
   /** Who made it, spelled as the licence's attribution requires. */
   readonly author: string;
   readonly licence: LicenceKey;
@@ -154,6 +165,8 @@ export type ResolvedFormMedia = {
   readonly key: string;
   readonly path: string;
   readonly kind: MediaKind;
+  readonly width: number;
+  readonly height: number;
   /**
    * What the movement IS, in words — § Accessibility, to FUEL-50's standard.
    *
@@ -225,6 +238,8 @@ export function resolveFormMedia(row: FormMediaColumns): ResolvedFormMedia | nul
     key,
     path: asset.path,
     kind: asset.kind,
+    width: asset.width,
+    height: asset.height,
     alt,
     credit: creditFor(asset, row.mediaCredit),
     licence: LICENCES[asset.licence],

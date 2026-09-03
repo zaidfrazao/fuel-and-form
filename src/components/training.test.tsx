@@ -71,6 +71,7 @@ const CIRCUIT: TrainingItem = {
       targetSets: 3,
       targetRepsLow: 12,
       targetRepsHigh: 12,
+      media: null,
     },
     {
       id: "e2",
@@ -81,6 +82,7 @@ const CIRCUIT: TrainingItem = {
       targetSets: 2,
       targetRepsLow: 8,
       targetRepsHigh: 10,
+      media: null,
     },
     // Sets and no rep target — a hold. The third state a set row has to draw,
     // and the one a regex over "3 x 45s" would get wrong.
@@ -93,6 +95,7 @@ const CIRCUIT: TrainingItem = {
       targetSets: 3,
       targetRepsLow: null,
       targetRepsHigh: null,
+      media: null,
     },
   ],
   entry: null,
@@ -1397,6 +1400,7 @@ const SECTIONED: TrainingItem = {
       targetSets: null,
       targetRepsLow: null,
       targetRepsHigh: null,
+      media: null,
     },
     ...CIRCUIT.exercises,
     {
@@ -1408,6 +1412,7 @@ const SECTIONED: TrainingItem = {
       targetSets: null,
       targetRepsLow: null,
       targetRepsHigh: null,
+      media: null,
     },
   ],
 };
@@ -1473,6 +1478,7 @@ describe("a session with rows but no work", () => {
           targetSets: null,
           targetRepsLow: null,
           targetRepsHigh: null,
+          media: null,
         },
       ],
       sets: [],
