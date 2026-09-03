@@ -79,21 +79,49 @@ describe("the form media manifest against the bundle", () => {
   });
 
   /*
-   * These files are redistributed under CC BY-SA, which permits verbatim copies.
-   * An SVG that pulled in a script or an external image would also be a file
-   * fetching something at display time from an origin PRD § Integrations says
-   * the app does not talk to — so this is two guarantees in one assertion.
+   * Third-party SVG, served from the app's own origin. An ALLOWLIST, not a
+   * denylist — and the difference is the whole point of the test.
+   *
+   * ## Why this is stricter than "no <script>"
+   *
+   * The component renders these through `<img>`, which browsers treat as a
+   * secure static context: scripts do not run and external fetches are blocked.
+   * That is not the exposure. The exposure is that `public/` serves them at
+   * their own URL, so `/form/side-plank.svg` can be NAVIGATED to — and an SVG
+   * loaded as a document is a document, where a script or an `onload` handler
+   * executes on this app's origin, against this app's cookies.
+   *
+   * The first draft of this test listed the things not to have: `<script>`, an
+   * external `href`, `<image>`, `@import`, `foreignObject`. It would have passed
+   * a file carrying `<svg onload="…">` or an `xlink:href="javascript:…"`,
+   * neither of which is exotic. A denylist can only refuse what somebody thought
+   * of, and the author of the next asset is not required to have thought of
+   * anything.
+   *
+   * So the shape is inverted. These are line drawings: `<svg>`, `<g>` and
+   * `<path>` is the entire vocabulary they need, plus the two accessible-text
+   * elements. Anything else fails, whether or not it is dangerous — which also
+   * catches a well-meaning asset that arrives with an embedded raster or a
+   * stylesheet, and is why the assertion prints what it found.
    */
+  const SVG_ELEMENTS = new Set(["svg", "g", "path", "title", "desc"]);
+
   it.each(entries.filter(([, a]) => a.path.endsWith(".svg")))(
-    "%s contains no script and no external reference",
+    "%s uses only inert drawing elements and carries no handler",
     (key, asset) => {
       const svg = readFileSync(path.join(PUBLIC, asset.path.replace(/^\//, ""))).toString("utf8");
 
-      expect(svg, `${key}: <script>`).not.toMatch(/<script/i);
-      expect(svg, `${key}: external href`).not.toMatch(/href\s*=\s*"https?:/i);
-      expect(svg, `${key}: <image>`).not.toMatch(/<image\b/i);
-      expect(svg, `${key}: @import`).not.toMatch(/@import/i);
-      expect(svg, `${key}: foreignObject`).not.toMatch(/<foreignObject/i);
+      const used = [...svg.matchAll(/<\s*([a-zA-Z][\w:-]*)/g)].map((m) => m[1]!.toLowerCase());
+      const unexpected = [...new Set(used)].filter((tag) => !SVG_ELEMENTS.has(tag));
+      expect(unexpected, `${key}: unexpected elements`).toEqual([]);
+
+      // Attribute-level vectors, which no element allowlist can see.
+      expect(svg, `${key}: inline event handler`).not.toMatch(/\son[a-z]+\s*=/i);
+      expect(svg, `${key}: javascript: URL`).not.toMatch(/javascript\s*:/i);
+      // A DOCTYPE is the door to entity expansion; these files need neither.
+      expect(svg, `${key}: DOCTYPE or ENTITY`).not.toMatch(/<!(DOCTYPE|ENTITY)/i);
+      // Any scheme-bearing reference at all — the drawings reference nothing.
+      expect(svg, `${key}: external reference`).not.toMatch(/(href|src)\s*=\s*["']?\s*(https?|data|\/\/)/i);
     },
   );
 });
