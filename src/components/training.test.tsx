@@ -1688,3 +1688,215 @@ describe("the rest timer", () => {
     expect(screen.queryByRole("timer")).toBeNull();
   });
 });
+
+/**
+ * The form affordance and what it opens — § P10, FUEL-94.
+ *
+ * The mock draws a Text button, "Show form", under the prescription in the
+ * SESSION state, and FUEL-90's ruling says why it is not on each row of the plan
+ * list. Both halves are asserted, because "not on the plan list" is the sort of
+ * thing a later refactor restores without noticing.
+ *
+ * `currentEx.media` is a resolved value by the time this component sees it —
+ * `page.tsx` runs `resolveFormMedia` at the boundary — so these fixtures carry
+ * the resolved shape rather than a `media_key`. That is the type doing its job:
+ * there is no way to hand this component a raw string.
+ */
+describe("form reference media", () => {
+  const MEDIA = {
+    key: "side-plank",
+    path: "/form/side-plank.svg",
+    kind: "image" as const,
+    width: 1200,
+    height: 554,
+    alt: "A side plank: propped on one forearm, feet stacked, hips lifted.",
+    credit: "Everkinetic · CC BY-SA 3.0",
+    licence: {
+      name: "CC BY-SA 3.0",
+      url: "https://creativecommons.org/licenses/by-sa/3.0/",
+      requiresAttribution: true,
+    },
+  };
+
+  /** The circuit with media on its FIRST working exercise, which is the subject. */
+  const withMedia = (media: typeof MEDIA | null = MEDIA) => [
+    {
+      ...CIRCUIT,
+      exercises: CIRCUIT.exercises.map((exercise, index) =>
+        index === 0 ? { ...exercise, media } : exercise,
+      ),
+    },
+    WALK,
+  ];
+
+  const start = async () => {
+    const user = userEvent.setup();
+    render(view({ sessions: withMedia() }));
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+
+    return user;
+  };
+
+  test("offers Show form on the current exercise when it has media", async () => {
+    await start();
+
+    expect(await screen.findByRole("button", { name: "Show form" })).toBeTruthy();
+  });
+
+  test("draws nothing at all when the exercise has none", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: withMedia(null) }));
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+
+    // Not a disabled control — absent. A disabled button would promise a
+    // reference that does not exist, which § Desktop refuses by name.
+    expect(screen.queryByRole("button", { name: "Show form" })).toBeNull();
+  });
+
+  test("is the session state's alone — the plan list offers it on no row", () => {
+    // FUEL-90: the plan list has no room for a per-row affordance and does not
+    // get one. Asserted before the session is entered, which is the plan state.
+    render(view({ sessions: withMedia() }));
+
+    expect(screen.queryByRole("button", { name: "Show form" })).toBeNull();
+  });
+
+  test("reveals the media, its description and its attribution", async () => {
+    const user = await start();
+    await user.click(screen.getByRole("button", { name: "Show form" }));
+
+    // The sheet is lazy, so it arrives on a later frame than the click.
+    const sheet = await screen.findByRole("dialog");
+
+    const image = within(sheet).getByRole("img", { name: MEDIA.alt });
+    expect(image.getAttribute("src")).toBe(MEDIA.path);
+    expect(image.getAttribute("loading")).toBe("lazy");
+    // Reserved before it loads, or the sheet reflows when it arrives.
+    expect(image.getAttribute("width")).toBe(String(MEDIA.width));
+    expect(image.getAttribute("height")).toBe(String(MEDIA.height));
+
+    // The description is CONTENT, not only an alt — § Accessibility's "a mark
+    // on a screen is not the data", which media is the strongest case of.
+    expect(within(sheet).getByText(MEDIA.alt)).toBeTruthy();
+
+    // Attribution is the licence's condition, so it renders with its link.
+    expect(within(sheet).getByText(/Everkinetic · CC BY-SA 3\.0/)).toBeTruthy();
+    expect(within(sheet).getByRole("link", { name: "Licence" }).getAttribute("href")).toBe(
+      MEDIA.licence.url,
+    );
+  });
+
+  test("names the exercise it is about", async () => {
+    const user = await start();
+    await user.click(screen.getByRole("button", { name: "Show form" }));
+
+    // One string for the visible title and the accessible name — ui/sheet.tsx's
+    // rule. The subject is the exercise, so the sheet says which.
+    expect(await screen.findByRole("dialog", { name: /Press-ups/ })).toBeTruthy();
+  });
+
+  test("a clip is muted, playsinline, looping and preloads nothing", async () => {
+    // No clip ships with FUEL-94, so this fixture is the only thing standing
+    // between the `video` kind and a column whose value nothing renders — and
+    // between the ticket's muted/playsinline criterion and being vacuously true.
+    const user = userEvent.setup();
+
+    render(
+      view({
+        sessions: [
+          {
+            ...CIRCUIT,
+            exercises: CIRCUIT.exercises.map((exercise, index) =>
+              index === 0
+                ? {
+                    ...exercise,
+                    media: { ...MEDIA, kind: "video" as const, path: "/form/side-plank.mp4" },
+                  }
+                : exercise,
+            ),
+          },
+          WALK,
+        ],
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(screen.getByRole("button", { name: "Show form" }));
+
+    const sheet = await screen.findByRole("dialog");
+    const video = sheet.querySelector("video");
+
+    expect(video).not.toBeNull();
+    expect(video!.getAttribute("src")).toBe("/form/side-plank.mp4");
+    expect(video!.hasAttribute("muted") || video!.muted).toBe(true);
+    expect(video!.hasAttribute("playsinline")).toBe(true);
+    expect(video!.hasAttribute("loop")).toBe(true);
+    expect(video!.getAttribute("preload")).toBe("none");
+    // "A clip that starts talking in a gym is a bug" — and this one does not
+    // start at all; see form-media-sheet.tsx on why not merely muted.
+    expect(video!.hasAttribute("autoplay")).toBe(false);
+    // The description still reaches a screen reader, which `alt` does not do
+    // for a <video>.
+    expect(video!.getAttribute("aria-label")).toBe(MEDIA.alt);
+  });
+
+  test("closes when the exercise underneath it changes", async () => {
+    /*
+     * The state is keyed to the exercise id rather than being a boolean, and
+     * this is the failure that motivates it: the subject is derived from the
+     * sets, so completing an exercise advances it on the same frame. A boolean
+     * would leave the sheet open over the NEXT exercise, showing one movement
+     * under another one's name.
+     *
+     * The change arrives as PROPS rather than as a click, and it has to: while
+     * the sheet is open `aria-modal` hides the page behind it, so no control on
+     * this screen can advance the subject. What can is the server — a
+     * revalidation landing with sets logged elsewhere, or the same session open
+     * on a second device — which reaches this component as a new `sessions`
+     * array under an already-open sheet. That is the case a boolean gets wrong,
+     * and the only one that can actually occur.
+     *
+     * BOTH exercises carry media, and that is what makes this test about the
+     * id-keying rather than about something else. The sheet is also gated on
+     * `currentEx.media`, so if the next exercise had none it would unmount for
+     * that reason and a plain boolean would pass — which is exactly what
+     * happened to the first draft of this test. With media on both, the only
+     * thing that can close it is the subject's identity changing.
+     */
+    const user = userEvent.setup();
+    const sessions = (sets: ReturnType<typeof set>[]) => [
+      {
+        ...CIRCUIT,
+        exercises: CIRCUIT.exercises.map((exercise, index) =>
+          index === 0 || index === 1 ? { ...exercise, media: MEDIA } : exercise,
+        ),
+        sets,
+      },
+      WALK,
+    ];
+
+    resumed();
+    const { rerender } = render(view({ sessions: sessions([set("e1", 1), set("e1", 2)]) }));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Press-ups");
+
+    await user.click(screen.getByRole("button", { name: "Show form" }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+
+    // Press-ups completes underneath the open sheet, and the subject becomes
+    // Reverse lunges — which HAS media of its own. The sheet must still close:
+    // it was opened about a movement that is no longer the one on screen.
+    rerender(view({ sessions: sessions([set("e1", 1), set("e1", 2), set("e1", 3)]) }));
+
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveProperty(
+      "textContent",
+      "Reverse lunges",
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    // And the affordance is still offered, because the new subject has media
+    // too — which is what says the sheet closed on identity rather than on the
+    // media going away.
+    expect(screen.getByRole("button", { name: "Show form" })).toBeTruthy();
+  });
+});

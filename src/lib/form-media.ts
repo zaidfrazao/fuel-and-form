@@ -107,6 +107,35 @@ export const LICENCES = {
     url: "https://creativecommons.org/licenses/by/4.0/",
     requiresAttribution: true,
   },
+  /*
+   * Share-alike, admitted deliberately and on a narrow reading.
+   *
+   * FUEL-94's first ruling put the allowlist at CC0, public domain and CC BY.
+   * The audit that followed found that pool to be almost entirely CONTEXTUAL
+   * photography — someone performing an exercise in a gym or a barracks — while
+   * the one purpose-built instructional library on Commons is CC BY-SA
+   * throughout. The allowlist and the only usable assets did not overlap.
+   *
+   * Share-alike binds ADAPTATIONS. These files ship byte-identical, displayed
+   * with attribution and a link to the licence, which is verbatim
+   * redistribution and is exactly what the licence grants. Nothing here is
+   * cropped, recoloured, combined or re-encoded — and that is a constraint on
+   * whoever adds the next one, not merely a description of these four.
+   *
+   * `dark:invert` in `form-media-sheet.tsx` is a CSS filter applied at display
+   * time. It does not modify the file and nothing derived from it is
+   * distributed, so it is presentation rather than adaptation.
+   */
+  "cc-by-sa-3.0": {
+    name: "CC BY-SA 3.0",
+    url: "https://creativecommons.org/licenses/by-sa/3.0/",
+    requiresAttribution: true,
+  },
+  "cc-by-sa-4.0": {
+    name: "CC BY-SA 4.0",
+    url: "https://creativecommons.org/licenses/by-sa/4.0/",
+    requiresAttribution: true,
+  },
 } as const satisfies Record<string, Licence>;
 
 export type Licence = {
@@ -155,8 +184,69 @@ export type FormMediaAsset = {
  * no third-party player, which is what keeps PRD § Integrations' "None. No
  * third-party APIs" literally true. With a fixed workout library it is the right
  * trade; it stops being the right trade the day the library stops being fixed.
+ *
+ * ## Look at the picture. The filename is not the exercise.
+ *
+ * Everkinetic is a GYM library, and its names describe neither the equipment nor
+ * the variant. FUEL-94's audit rejected three files that a licence check alone
+ * would have passed: `Squats-1/2.png` is a **barbell back squat**,
+ * `Lunges-1/2.png` is a **barbell lunge**, and `Push-up-1/2.png` is a push-up
+ * **on an exercise ball** — all of them wrong for a bodyweight programme, and
+ * all of them implying equipment the user does not have. The usable push-up is a
+ * different file under a different naming convention.
+ *
+ * Which is why coverage is five exercises rather than fourteen: no bodyweight
+ * squat and no front plank exist in the set under any name probed. Those rows
+ * hold nulls and draw nothing, which is a state this module treats as ordinary.
+ *
+ * ## Byte-identical, and that is a constraint on the next entry
+ *
+ * Everything here is CC BY-SA. Nothing is cropped, recoloured, combined or
+ * re-encoded; see `LICENCES` above on why that distinction is the licence's
+ * rather than a preference.
  */
-export const FORM_MEDIA = {} as const satisfies Record<string, FormMediaAsset>;
+export const FORM_MEDIA = {
+  "push-up": {
+    path: "/form/push-up.svg",
+    kind: "image",
+    width: 1200,
+    height: 669,
+    author: "Everkinetic",
+    licence: "cc-by-sa-3.0",
+    source: "https://commons.wikimedia.org/wiki/File:Push_ups_2.svg",
+    retrieved: "2026-09-03",
+  },
+  "glute-bridge": {
+    path: "/form/glute-bridge.png",
+    kind: "image",
+    width: 900,
+    height: 444,
+    author: "Everkinetic",
+    licence: "cc-by-sa-3.0",
+    source: "https://commons.wikimedia.org/wiki/File:Bridge-1.png",
+    retrieved: "2026-09-03",
+  },
+  "side-plank": {
+    path: "/form/side-plank.svg",
+    kind: "image",
+    width: 1200,
+    height: 554,
+    author: "Everkinetic",
+    licence: "cc-by-sa-3.0",
+    source: "https://commons.wikimedia.org/wiki/File:Side_plank_1.svg",
+    retrieved: "2026-09-03",
+  },
+  superman: {
+    path: "/form/superman.svg",
+    kind: "image",
+    width: 1200,
+    height: 266,
+    author: "Everkinetic",
+    licence: "cc-by-sa-3.0",
+    source: "https://commons.wikimedia.org/wiki/File:Supermans_2.svg",
+    retrieved: "2026-09-03",
+  },
+} as const satisfies Record<string, FormMediaAsset>;
 
 export type FormMediaKey = keyof typeof FORM_MEDIA;
 

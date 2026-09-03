@@ -58,7 +58,11 @@ export function FormMediaSheet({
       title={`Form · ${exerciseName}`}
     >
       <div className="flex flex-col gap-5">
-        <FormMedia media={media} />
+        {/* The frame the media sits in. It holds the hairline and the radius so
+            that `dark:invert` on the media itself does not flip them. */}
+        <div className="overflow-hidden rounded-md border border-border">
+          <FormMedia media={media} />
+        </div>
 
         {/* The movement, in words. `text-body` and not a caption: this is the
             content of the sheet and is sized as content. */}
@@ -112,7 +116,29 @@ function FormMedia({ media }: { media: ResolvedFormMedia }) {
   const shared = {
     width: media.width,
     height: media.height,
-    className: "h-auto w-full rounded-md border border-border bg-surface",
+    /*
+     * `bg-white dark:invert` — the raster answer to `currentColor`.
+     *
+     * The motifs work in both modes because they are inline SVG and inherit the
+     * ink. These cannot: an `<img>` is an opaque boundary, so a file's black
+     * strokes stay black on a ground that has gone dark, and this app's theme is
+     * a MANUAL toggle, which rules out a `prefers-color-scheme` block inside the
+     * file — the OS and the app disagree whenever the reader has chosen.
+     *
+     * These assets are monochrome line art, so inverting them is exact rather
+     * than approximate: black-on-white becomes white-on-black, and the drawing
+     * is the same drawing. `bg-white` is what makes it uniform across the set —
+     * three of the four are transparent SVGs and one is an opaque white PNG, and
+     * without an explicit ground the transparent ones would inherit the canvas
+     * and inverting would leave them black-on-black.
+     *
+     * The border is on the wrapper rather than here, or it would invert too and
+     * a hairline in `border` would come back as its opposite.
+     *
+     * This applies at display time and modifies nothing; `lib/form-media.ts`
+     * records why that distinction matters to a share-alike licence.
+     */
+    className: "h-auto w-full bg-white dark:invert",
   };
 
   if (media.kind === "video") {
