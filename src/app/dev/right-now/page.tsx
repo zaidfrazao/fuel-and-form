@@ -220,6 +220,10 @@ const EXERCISES = new Map<string, WorkoutExercise[]>([
       targetSets: null,
       targetRepsLow: null,
       targetRepsHigh: null,
+      mediaKey: null,
+      mediaKind: null,
+      mediaAlt: null,
+      mediaCredit: null,
     })),
   ],
 ]);

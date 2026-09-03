@@ -84,6 +84,10 @@ const exercise = (id: string): WorkoutExercise => ({
   targetSets: 3,
   targetRepsLow: 12,
   targetRepsHigh: 12,
+  mediaKey: null,
+  mediaKind: null,
+  mediaAlt: null,
+  mediaCredit: null,
 });
 
 const workout = (id: string, name: string, type: string): Workout => ({

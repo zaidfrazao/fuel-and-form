@@ -164,6 +164,10 @@ const exercise = (id: string, sortOrder: number): WorkoutExercise => ({
   targetSets: 3,
   targetRepsLow: 12,
   targetRepsHigh: 12,
+  mediaKey: null,
+  mediaKind: null,
+  mediaAlt: null,
+  mediaCredit: null,
 });
 
 const EXERCISE_ID = "aaaaaaaa-0000-4000-8000-000000000002";

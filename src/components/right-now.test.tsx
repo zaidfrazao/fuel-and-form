@@ -145,6 +145,10 @@ function exercise(fields: Partial<WorkoutExercise> & { id: string }): WorkoutExe
     targetSets: null,
     targetRepsLow: null,
     targetRepsHigh: null,
+    mediaKey: null,
+    mediaKind: null,
+    mediaAlt: null,
+    mediaCredit: null,
     ...fields,
   };
 }

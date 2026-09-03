@@ -22,6 +22,7 @@ import {
 // below takes its default and its CHECK from here rather than restating the
 // strings, which is the direction the dependency has to run: `section.ts` is
 // pure and type-only, so a client component importing it pulls no pg-core.
+import { MEDIA_KINDS } from "../form-media";
 import { SECTIONS, WORKING_SECTION } from "../section";
 
 /**
@@ -754,6 +755,59 @@ export const workoutExercises = pgTable(
     targetSets: integer("target_sets"),
     targetRepsLow: integer("target_reps_low"),
     targetRepsHigh: integer("target_reps_high"),
+
+    /**
+     * Form reference media — § P10, FUEL-94. All four nullable, and null is the
+     * ordinary case: media exists for the exercises the project could licence,
+     * and one without it renders no affordance rather than a broken box.
+     *
+     * ## `media_key` and not `media_path`, which is the security argument
+     *
+     * The ticket specified a path and `lib/form-media.ts` renames it, because a
+     * column is writable and this repository is public. A stored string
+     * interpolated into `src` is an embed handed to whoever can write the
+     * column. So the column names an entry in that module's manifest, the
+     * manifest owns the path as a compile-time literal, and an unrecognised key
+     * resolves to null. There is no code path from this column to a URL.
+     *
+     * PRD § Schema listed this as `media_path`; it is amended there to match
+     * rather than left describing a column that does not exist.
+     *
+     * ## `media_kind` is denormalised on purpose, and the CHECK is the point
+     *
+     * The manifest already knows whether an asset is a still or a clip — that is
+     * a property of the file. The column repeats it so that the vocabulary is
+     * constrained in the database rather than only in TypeScript, and so a query
+     * can tell them apart without loading the manifest. `resolveFormMedia`
+     * refuses a row whose kind disagrees with its asset, which is the only state
+     * the duplication can produce.
+     *
+     * `text` + CHECK and not a `pgEnum`, built from `MEDIA_KINDS` — the argument
+     * is `section`'s above and `workouts.type`'s before it, and so is the
+     * `sql.raw`: a tagged template would bind these as parameters and emit
+     * `in ($1, $2)`, which is a syntax error in a file nothing runs until
+     * somebody deploys it.
+     *
+     * ## `media_alt` is content, not a label
+     *
+     * § Accessibility, to FUEL-50's standard: it describes the MOVEMENT, because
+     * the media is what this sheet is for and "video of a squat" leaves a screen
+     * reader user with nothing. It is per exercise rather than per asset for the
+     * same reason — one clip could serve two exercises that cue differently.
+     * A row with a key and no alt renders nothing at all.
+     *
+     * ## `media_credit` overrides an attribution it never has to supply
+     *
+     * CC BY requires attribution, and `creditFor` derives the line from the
+     * manifest's author and licence, so the app is compliant with this column
+     * null. It exists for the asset whose licence demands an exact wording the
+     * derived line would get wrong — which is a property of that licence, not of
+     * this app, and so is not something code should try to infer.
+     */
+    mediaKey: text("media_key"),
+    mediaKind: text("media_kind"),
+    mediaAlt: text("media_alt"),
+    mediaCredit: text("media_credit"),
   },
   (t) => [
     foreignKey({
@@ -800,6 +854,35 @@ export const workoutExercises = pgTable(
           and ("target_reps_low" is null
                or ("target_reps_low" between 1 and 999
                    and "target_reps_high" between "target_reps_low" and 999))`,
+    ),
+
+    // The media vocabulary — § P10, FUEL-94. Built from the one array, and
+    // `sql.raw` for the reason the section CHECK above spells out in full.
+    check(
+      "workout_exercises_media_kind",
+      sql.raw(`"media_kind" in (${MEDIA_KINDS.map((kind) => `'${kind}'`).join(", ")})`),
+    ),
+
+    // The four media columns move together, because a half-populated row is
+    // precisely the one that draws a broken box on a screen being operated
+    // one-handed. `resolveFormMedia` refuses these rows too — it has to, since
+    // it also runs against rows this constraint has not seen — but a guarantee
+    // the database makes is one no future writer can forget to make.
+    //
+    // A key implies a kind and a description; a description or a credit without
+    // a key is an orphan, naming media the row does not point at. The `trim`
+    // is not decoration: § Accessibility's requirement is a description of the
+    // movement, and a space satisfies `is not null` while describing nothing.
+    //
+    // Scoped strictly to columns that did not exist until this migration, so
+    // every row already stored satisfies it by holding nulls.
+    check(
+      "workout_exercises_media_complete",
+      sql`("media_key" is null) = ("media_kind" is null)
+          and ("media_key" is null) = ("media_alt" is null)
+          and ("media_credit" is null or "media_key" is not null)
+          and ("media_key" is null
+               or (trim("media_key") <> '' and trim("media_alt") <> ''))`,
     ),
   ],
 );
