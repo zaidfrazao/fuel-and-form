@@ -81,6 +81,10 @@ const EXERCISES = new Map<string, WorkoutExercise[]>(
       targetSets: exercise.targetSets ?? null,
       targetRepsLow: exercise.targetRepsLow ?? null,
       targetRepsHigh: exercise.targetRepsHigh ?? null,
+      mediaKey: exercise.mediaKey ?? null,
+      mediaKind: exercise.mediaKind ?? null,
+      mediaAlt: exercise.mediaAlt ?? null,
+      mediaCredit: exercise.mediaCredit ?? null,
     })),
   ]),
 );

@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   type ReactNode,
@@ -36,6 +37,7 @@ import { addDays, type CalendarDate } from "@/lib/date";
 import type { WorkoutLogStatus } from "@/lib/db/schema";
 import { type EnergyRange, sessionEnergy } from "@/lib/energy";
 import { figure } from "@/lib/format";
+import type { ResolvedFormMedia } from "@/lib/form-media";
 import {
   PAGE_ASIDE_COLUMN,
   PAGE_ASIDE_GRID,
@@ -54,6 +56,26 @@ import {
   targetLabel,
 } from "@/lib/exercise-set";
 import { dayLabel } from "@/lib/now-display";
+
+/**
+ * The form sheet, kept out of this screen's first payload — § P10, FUEL-94.
+ *
+ * The ticket's criterion is that media is "never loaded on `/`", and this is
+ * how it is met rather than asserted. `/` renders `exercise-list.tsx` and never
+ * imports this module at all, so the requirement is already true there; what
+ * `dynamic` adds is that `/training` does not pay for the sheet either until
+ * somebody presses "Show form". The chunk holds the sheet, its Radix dialog and
+ * the `<img>`/`<video>` decision — none of which is on the path to the screen's
+ * 1.5s interactive target.
+ *
+ * `ssr: false` because there is nothing to render server-side: the sheet is
+ * closed until a click, and prerendering a closed dialog is work for markup
+ * nobody sees. `tests/unit/bundle-boundaries.test.ts` holds the `/` half.
+ */
+const FormMediaSheet = dynamic(
+  () => import("@/components/form-media-sheet").then((m) => m.FormMediaSheet),
+  { ssr: false },
+);
 import { sectionLabel, WORKING_SECTION, working } from "@/lib/section";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { MAX_NOTE_LENGTH } from "@/lib/session-entry";
@@ -186,7 +208,23 @@ export type TrainingItem = {
  * The target rather than the prescription, which stays exactly what it was —
  * rendered verbatim, never parsed. See schema.ts on why these are columns.
  */
-export type TrainingExercise = ListedExercise & SetTarget;
+export type TrainingExercise = ListedExercise &
+  SetTarget & {
+    /**
+     * Form reference media, already resolved — § P10, FUEL-94.
+     *
+     * A `ResolvedFormMedia` or `null`, never a stored string: `page.tsx` runs
+     * `resolveFormMedia` at the boundary, so an unrecognised `media_key` has
+     * become `null` before this type exists. That is what lets the session state
+     * decide whether to draw the affordance by testing for null, with no notion
+     * of a path and nothing to validate.
+     *
+     * `null` for most exercises, and the plan list never reads it: the affordance
+     * is the session state's alone (FUEL-90's ruling), because FUEL-92's group
+     * headings spent the plan list's row budget.
+     */
+    media: ResolvedFormMedia | null;
+  };
 
 /** One set, narrowed to what the sub-list draws. */
 export type LoggedSetView = LoggedSet & { exerciseId: string };
@@ -1037,6 +1075,25 @@ export function Training({
   const current = session ? currentExercise(workingExercises, sets) : -1;
   const currentEx = workingExercises[current];
 
+  /*
+   * Which exercise the form sheet is open FOR — § P10, FUEL-94.
+   *
+   * An id rather than a boolean, and that is the whole of the reset logic.
+   * `currentEx` is derived from the sets, so ticking the last set of an exercise
+   * moves the subject on the same frame. A boolean would survive that move and
+   * leave the sheet open over the NEXT exercise, showing one movement under
+   * another one's name — and it would happen at exactly the moment the reader
+   * is looking away from the phone, which is what the whole state is for.
+   *
+   * Comparing against the current id closes it by construction instead. No
+   * effect, nothing to keep in sync, and the impossible state is unrepresentable
+   * rather than merely unreached.
+   */
+  const [formFor, setFormFor] = useState<string | null>(null);
+  const formOpen = formFor !== null && formFor === currentEx?.id;
+  const setFormOpen = (open: boolean) =>
+    setFormFor(open && currentEx ? currentEx.id : null);
+
   const draft = (exerciseId: string, setIndex: number, value: string) =>
     setDrafts((previous) => new Map(previous).set(`${exerciseId}#${setIndex}`, value));
 
@@ -1198,7 +1255,57 @@ export function Training({
               <SlashMeta>
                 {`${currentEx.prescription} · Exercise ${current + 1} of ${workingExercises.length}`}
               </SlashMeta>
+              {/*
+               * "Show form" — § P10, FUEL-94, and the mock draws it exactly
+               * here: directly under the prescription, `align-self: flex-start`,
+               * as a Text button.
+               *
+               * A Text button because it is tertiary to the set you are in the
+               * middle of — the same weight `rest-timer.tsx` gives "Stop" in the
+               * bar below, which is this state's other non-action control.
+               *
+               * WITH THE SUBJECT, not on each row of the plan list. FUEL-90's
+               * ruling: § Progressive Disclosure's ban on accordions means the
+               * reveal may not be a row that expands in place, and FUEL-92's
+               * group headings already took the plan list from 281px to 597px,
+               * so it has no room for a per-row affordance and does not get one.
+               *
+               * Rendered only when there is media. An exercise without it draws
+               * nothing — not a disabled button, which would promise a reference
+               * that does not exist, and § Desktop refuses a state that
+               * "would promise an action that does not exist" for the same
+               * reason. The gap closes because the button is simply absent from
+               * the flex column rather than being hidden inside it.
+               */}
+              {currentEx.media ? (
+                <Button
+                  variant="link"
+                  size="xs"
+                  className="self-start px-0"
+                  onClick={() => setFormOpen(true)}
+                >
+                  Show form
+                </Button>
+              ) : null}
             </div>
+
+            {/*
+             * Mounted only once opened, and unmounted on close.
+             *
+             * Not merely a saving: `dynamic` fetches the chunk when this element
+             * first renders, so gating it on `formOpen` is what makes the import
+             * lazy in fact rather than in principle. The media element goes with
+             * it, which is the other half of "never loaded on `/`" — a `<video
+             * preload="none">` that is never mounted cannot be fetched at all.
+             */}
+            {currentEx.media && formOpen ? (
+              <FormMediaSheet
+                open={formOpen}
+                onOpenChange={setFormOpen}
+                exerciseName={currentEx.name}
+                media={currentEx.media}
+              />
+            ) : null}
 
             <section className="flex flex-col gap-[14px]">
               <Eyebrow>Sets</Eyebrow>

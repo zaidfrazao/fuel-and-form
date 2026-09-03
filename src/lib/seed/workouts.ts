@@ -202,6 +202,10 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetRepsHigh: 15,
         notes:
           "On toes if you can. If you can't get 8 clean, put your hands on a couch or step — not on your knees; elevated hands keeps the full-body line.",
+        mediaKey: "push-up",
+        mediaKind: "image",
+        mediaAlt:
+          "The bottom of a push-up: the body held in one straight line from heel to head, hands under the shoulders, elbows bent and tucked back along the ribs rather than flared out sideways, chest lowered to just above the floor.",
       },
       {
         name: "Reverse lunges",
@@ -220,6 +224,10 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetRepsHigh: 20,
         notes:
           "On your back, heels close to your bum, drive the hips up, squeeze at the top for 1 sec.",
+        mediaKey: "glute-bridge",
+        mediaKind: "image",
+        mediaAlt:
+          "The top of a glute bridge: lying face up with the arms flat at the sides, heels drawn in close to the bum, and the hips pushed up until the knees, hips and shoulders form one straight line.",
       },
       {
         name: "Plank",
@@ -275,6 +283,10 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetRepsLow: 8,
         targetRepsHigh: 12,
         notes: "As the glute bridge, one foot off the floor. Keep the hips level.",
+        mediaKey: "glute-bridge",
+        mediaKind: "image",
+        mediaAlt:
+          "The top of a two-footed glute bridge, which this version holds with one foot lifted clear: shoulders and the working heel on the floor, hips driven up until knee, hip and shoulder line up, and the pelvis kept level rather than dropping on the free side.",
       },
       {
         name: "Mountain climbers",
@@ -293,6 +305,10 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetRepsHigh: null,
         notes:
           "Face down, lift chest and thighs off the floor. The only real posterior-chain and back work available without a pull-up bar — don't skip it.",
+        mediaKey: "superman",
+        mediaKind: "image",
+        mediaAlt:
+          "The lift of a superman hold: face down with the arms stretched out ahead and the legs straight behind, both raised clear of the floor so that only the hips and stomach stay in contact with it.",
       },
     ]),
   },
@@ -363,6 +379,10 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetRepsLow: null,
         targetRepsHigh: null,
         notes: null,
+        mediaKey: "side-plank",
+        mediaKind: "image",
+        mediaAlt:
+          "A side plank: propped on one forearm with the body turned onto its side, feet stacked one on the other, and the hips lifted so that head, hips and heels make one straight line.",
       },
     ]),
   },

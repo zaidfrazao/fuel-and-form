@@ -6,6 +6,7 @@ import { Training, type TrainingItem } from "@/components/training";
 import { getSession } from "@/lib/auth/session";
 import { type CalendarDate, parseCalendarDate } from "@/lib/date";
 import { loadTraining } from "@/lib/db/queries/training";
+import { resolveFormMedia } from "@/lib/form-media";
 import type { TrainingSession } from "@/lib/resolve-training";
 import type { ExerciseSet, WorkoutLog } from "@/lib/db/schema";
 
@@ -124,6 +125,20 @@ function narrow(
       targetSets: exercise.targetSets,
       targetRepsLow: exercise.targetRepsLow,
       targetRepsHigh: exercise.targetRepsHigh,
+      /*
+       * Form media, resolved HERE and never on the client — § P10, FUEL-94.
+       *
+       * This is the boundary the whole feature is built around. `media_key` is
+       * a stored string; what crosses to the browser is either a manifest entry
+       * or `null`. A component therefore cannot render an unvalidated path
+       * because it is never given one, which is a stronger guarantee than a
+       * check applied at the point of use — the check is at the point of
+       * CROSSING, and there is one of those.
+       *
+       * `null` is the ordinary case and is not an error: most exercises have no
+       * media, and the session state draws no affordance for them.
+       */
+      media: resolveFormMedia(exercise),
     })),
     entry: log
       ? { status: log.status, note: log.note, durationMin: log.durationMin }
