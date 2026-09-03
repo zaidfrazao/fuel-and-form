@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   creditFor,
   FORM_MEDIA,
+  type FormMediaAsset,
   type FormMediaColumns,
   LICENCES,
   MEDIA_KINDS,
@@ -23,8 +24,10 @@ describe("resolveFormMedia", () => {
     const resolved = resolveFormMedia(row());
 
     expect(resolved).not.toBeNull();
-    expect(resolved?.path).toBe(FORM_MEDIA["side-plank"].path);
+    expect(resolved?.frames).toEqual(FORM_MEDIA["side-plank"].frames);
     expect(resolved?.kind).toBe("image");
+    // Two of them — a movement, not a still. See FUEL-107.
+    expect(resolved?.frames.length).toBeGreaterThanOrEqual(2);
   });
 
   /*
@@ -105,17 +108,43 @@ describe("resolveFormMedia", () => {
 });
 
 describe("creditFor", () => {
-  it("derives an attribution where the licence requires one", () => {
-    const asset = FORM_MEDIA["side-plank"];
+  /*
+   * A synthetic asset, not a shipped one. Every asset FUEL-107 ships is
+   * `unlicense-declared`, which requires no attribution — so testing the
+   * attribution path against the manifest would assert nothing today and would
+   * start asserting something different the moment a CC BY asset was added.
+   */
+  const attributed = {
+    kind: "image",
+    frames: [{ path: "/form/x-1.jpg", width: 1, height: 1, label: "Start" }],
+    author: "A Photographer",
+    licence: "cc-by-sa-3.0",
+    source: "https://example.org/x",
+    retrieved: "2026-09-03",
+  } as const satisfies FormMediaAsset;
 
-    expect(LICENCES[asset.licence].requiresAttribution).toBe(true);
-    expect(creditFor(asset, null)).toBe("Everkinetic · CC BY-SA 3.0");
+  it("derives an attribution where the licence requires one", () => {
+    expect(LICENCES[attributed.licence].requiresAttribution).toBe(true);
+    expect(creditFor(attributed, null)).toBe("A Photographer · CC BY-SA 3.0");
   });
 
   it("prefers an explicit credit over the derived one", () => {
-    expect(creditFor(FORM_MEDIA["side-plank"], "Someone else")).toBe("Someone else");
+    expect(creditFor(attributed, "Someone else")).toBe("Someone else");
     // Whitespace is not an override; it falls back rather than rendering blank.
-    expect(creditFor(FORM_MEDIA["side-plank"], "   ")).toBe("Everkinetic · CC BY-SA 3.0");
+    expect(creditFor(attributed, "   ")).toBe("A Photographer · CC BY-SA 3.0");
+  });
+
+  /*
+   * The shipped case, and the one that matters for what renders: an upstream
+   * declaration asks for no attribution, so the sheet shows no credit line
+   * rather than inventing one. Naming a creator we cannot identify would be
+   * worse than naming none — see `unlicense-declared` in form-media.ts.
+   */
+  it("renders no credit for an asset whose licence requires none", () => {
+    for (const [key, asset] of Object.entries(FORM_MEDIA)) {
+      if (LICENCES[asset.licence].requiresAttribution) continue;
+      expect(creditFor(asset, null), `${key}`).toBeNull();
+    }
   });
 });
 
@@ -135,14 +164,33 @@ describe("the manifest", () => {
     }
   });
 
-  it("points every asset at a bundled path and a known kind", () => {
+  it("points every frame at a bundled path and a known kind", () => {
     for (const [key, asset] of Object.entries(FORM_MEDIA)) {
-      // Relative into the bundle. Not a URL, not protocol-relative, no traversal
-      // — the properties the renderer relies on rather than re-checks.
-      expect(asset.path, `${key} path`).toMatch(/^\/form\/[a-z0-9-]+\.(svg|png|webp|avif|mp4)$/);
       expect(MEDIA_KINDS, `${key} kind`).toContain(asset.kind);
-      expect(asset.width, `${key} width`).toBeGreaterThan(0);
-      expect(asset.height, `${key} height`).toBeGreaterThan(0);
+
+      for (const [i, frame] of asset.frames.entries()) {
+        // Relative into the bundle. Not a URL, not protocol-relative, no
+        // traversal — the properties the renderer relies on rather than
+        // re-checks.
+        expect(frame.path, `${key} frame ${i} path`).toMatch(
+          /^\/form\/[a-z0-9-]+\.(jpg|svg|png|webp|avif|mp4)$/,
+        );
+        expect(frame.width, `${key} frame ${i} width`).toBeGreaterThan(0);
+        expect(frame.height, `${key} frame ${i} height`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  /*
+   * Provenance honesty, asserted. FUEL-107 ships on an upstream declaration the
+   * project does not fully believe; the mitigation is that every such asset says
+   * so. An entry that claimed a real author under this licence key would be the
+   * one that quietly makes the risk invisible again.
+   */
+  it("names no author for an asset whose provenance ends at a declaration", () => {
+    for (const [key, asset] of Object.entries(FORM_MEDIA)) {
+      if (asset.licence !== "unlicense-declared") continue;
+      expect(asset.author, `${key}`).toBe("Not documented upstream");
     }
   });
 });

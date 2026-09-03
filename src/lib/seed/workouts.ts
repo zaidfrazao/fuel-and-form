@@ -193,6 +193,10 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetRepsHigh: 20,
         notes:
           "Feet shoulder-width, sit back like you're reaching for a chair, chest up. Thighs to at least parallel.",
+        mediaKey: "squat",
+        mediaKind: "image",
+        mediaAlt:
+          "Two frames of a bodyweight squat: standing with the feet about shoulder-width apart, then the bottom position with the hips sat back and down, the thighs at least parallel to the floor, the chest up and the heels still flat.",
       },
       {
         name: "Push-ups",
@@ -205,7 +209,7 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         mediaKey: "push-up",
         mediaKind: "image",
         mediaAlt:
-          "The bottom of a push-up: the body held in one straight line from heel to head, hands under the shoulders, elbows bent and tucked back along the ribs rather than flared out sideways, chest lowered to just above the floor.",
+          "Two frames of a push-up: the top, with the arms straight and the body in one line from heel to head, then the bottom, with the elbows bent and tucked back along the ribs rather than flared out sideways and the chest just above the floor.",
       },
       {
         name: "Reverse lunges",
@@ -215,6 +219,10 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetRepsHigh: 12,
         notes:
           "Step back, drop the back knee toward the floor, push through the front heel to stand.",
+        mediaKey: "reverse-lunge",
+        mediaKind: "image",
+        mediaAlt:
+          "Two frames of a lunge: standing tall, then the bottom position with one leg stepped back, the back knee lowered toward the floor, the front shin close to vertical and the torso upright. Photographed as a crossover step back; step straight back instead and the position is the same.",
       },
       {
         name: "Glute bridges",
@@ -227,7 +235,7 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         mediaKey: "glute-bridge",
         mediaKind: "image",
         mediaAlt:
-          "The top of a glute bridge: lying face up with the arms flat at the sides, heels drawn in close to the bum, and the hips pushed up until the knees, hips and shoulders form one straight line.",
+          "Two frames of a glute bridge: lying face up with the arms flat at the sides and the heels drawn in close to the bum, then the top, with the hips pushed up until the knees, hips and shoulders form one straight line.",
       },
       {
         name: "Plank",
@@ -237,6 +245,10 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetRepsHigh: null,
         notes:
           "Straight line from heel to head. Squeeze the glutes — that's what stops the hips sagging.",
+        mediaKey: "plank",
+        mediaKind: "image",
+        mediaAlt:
+          "Two frames of a front plank: setting up on the forearms with the elbows under the shoulders, then the hold, with the body in one straight line from heels to head and the hips neither sagging toward the floor nor piked up.",
       },
     ]),
   },
@@ -257,15 +269,34 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetRepsHigh: 20,
         notes:
           "Sit into a squat, then pulse up and down in the bottom third of the range. Burns fast.",
+        mediaKey: "squat",
+        mediaKind: "image",
+        mediaAlt:
+          "The same squat as the full movement, shown standing and at the bottom. A pulse stays down near the bottom frame and moves through only the last few inches rather than standing all the way up between reps.",
       },
       {
-        name: "Pike push-ups",
-        prescription: "3 x 6–12",
+        /*
+         * Was "Pike push-ups" until FUEL-107.
+         *
+         * Swapped for a movement the form library actually photographs: no pike
+         * push-up exists in it, `Hanging Pike` is a hanging leg raise and
+         * `Handstand Push-Ups` is a far harder wall movement, so the pike would
+         * have been the one working row on this circuit with no reference. It
+         * holds the same slot — the vertical press and triceps work standing in
+         * for overhead pressing — and needs only a chair, which the push-up note
+         * two rows up already assumes you have.
+         */
+        name: "Bench dips",
+        prescription: "3 x 8–15",
         targetSets: 3,
-        targetRepsLow: 6,
-        targetRepsHigh: 12,
+        targetRepsLow: 8,
+        targetRepsHigh: 15,
         notes:
-          "Hands and feet on the floor, hips high in an upside-down V, lower the crown of your head toward the floor. This is the shoulder work standing in for overhead pressing.",
+          "Hands on the edge of a chair or step behind you, legs out in front, lower until the elbows are at about 90 degrees. Keep your back close to the chair — drifting forward turns it into a shoulder stretch.",
+        mediaKey: "bench-dip",
+        mediaKind: "image",
+        mediaAlt:
+          "Two frames of a bench dip: arms straight with the hands on the edge of a chair behind you and the legs out in front, then the bottom, with the elbows bent to about 90 degrees and pointing straight back while the back stays close to the chair.",
       },
       {
         name: "Split squats",
@@ -275,6 +306,10 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetRepsHigh: 12,
         notes:
           "Like a lunge, but the back foot stays planted for the whole set. Harder than reverse lunges — expect fewer reps.",
+        mediaKey: "split-squat",
+        mediaKind: "image",
+        mediaAlt:
+          "Two frames of a split squat: standing in a long stride with one foot forward and one back, then the bottom, with the back knee lowered toward the floor and the weight kept over the front heel. The feet stay where they are between reps.",
       },
       {
         name: "Single-leg glute bridge",
@@ -283,10 +318,10 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetRepsLow: 8,
         targetRepsHigh: 12,
         notes: "As the glute bridge, one foot off the floor. Keep the hips level.",
-        mediaKey: "glute-bridge",
+        mediaKey: "single-leg-glute-bridge",
         mediaKind: "image",
         mediaAlt:
-          "The top of a two-footed glute bridge, which this version holds with one foot lifted clear: shoulders and the working heel on the floor, hips driven up until knee, hip and shoulder line up, and the pelvis kept level rather than dropping on the free side.",
+          "Two frames of a single-leg glute bridge: lying face up with one heel drawn in and the other leg lifted clear of the floor, then the top, with the hips driven up until knee, hip and shoulder line up and the pelvis kept level rather than dropping on the free side.",
       },
       {
         name: "Mountain climbers",
@@ -296,6 +331,10 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetRepsHigh: 40,
         notes:
           "Plank position, drive the knees to the chest alternately. Keep the hips low — don't let them bounce up.",
+        mediaKey: "mountain-climber",
+        mediaKind: "image",
+        mediaAlt:
+          "Two frames of mountain climbers: the top of a push-up position with the arms straight and the body in one line, then one knee driven forward toward the chest while the hips stay low and the shoulders stay over the hands.",
       },
       {
         name: "Superman hold",
@@ -308,7 +347,7 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         mediaKey: "superman",
         mediaKind: "image",
         mediaAlt:
-          "The lift of a superman hold: face down with the arms stretched out ahead and the legs straight behind, both raised clear of the floor so that only the hips and stomach stay in contact with it.",
+          "Two frames of a superman: lying face down with the arms stretched out ahead and the legs straight behind, then the lift, with the chest and thighs raised clear of the floor so only the hips and stomach stay in contact with it.",
       },
     ]),
   },
@@ -362,6 +401,10 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetRepsLow: null,
         targetRepsHigh: null,
         notes: "Core finisher, straight after the intervals.",
+        mediaKey: "plank",
+        mediaKind: "image",
+        mediaAlt:
+          "Two frames of a front plank: setting up on the forearms with the elbows under the shoulders, then the hold, with the body in one straight line from heels to head and the hips neither sagging toward the floor nor piked up.",
       },
       {
         name: "Dead bug",
@@ -371,6 +414,10 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetRepsHigh: 10,
         notes:
           "On your back, opposite arm and leg extend slowly. The lower back stays pressed to the floor throughout.",
+        mediaKey: "dead-bug",
+        mediaKind: "image",
+        mediaAlt:
+          "Two frames of a dead bug: lying face up with the arms reaching at the ceiling and the knees stacked over the hips, then one arm and the opposite leg extended away slowly while the lower back stays pressed to the floor.",
       },
       {
         name: "Side plank",
@@ -382,7 +429,7 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         mediaKey: "side-plank",
         mediaKind: "image",
         mediaAlt:
-          "A side plank: propped on one forearm with the body turned onto its side, feet stacked one on the other, and the hips lifted so that head, hips and heels make one straight line.",
+          "Two frames of a side plank: setting up on one forearm with the body turned onto its side and the feet stacked, then the hold, with the hips lifted so that head, hips and heels make one straight line.",
       },
     ]),
   },

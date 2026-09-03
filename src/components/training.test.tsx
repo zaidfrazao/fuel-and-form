@@ -1705,12 +1705,21 @@ describe("the rest timer", () => {
 describe("form reference media", () => {
   const MEDIA = {
     key: "side-plank",
-    path: "/form/side-plank.svg",
     kind: "image" as const,
-    width: 1200,
-    height: 554,
+    frames: [
+      { path: "/form/side-plank-1.jpg", width: 850, height: 567, label: "Set-up" },
+      {
+        path: "/form/side-plank-2.jpg",
+        width: 850,
+        height: 567,
+        label: "Holding the side plank",
+      },
+    ],
     alt: "A side plank: propped on one forearm, feet stacked, hips lifted.",
-    credit: "Everkinetic · CC BY-SA 3.0",
+    // A credit is carried here even though every SHIPPED asset waives it, so the
+    // attribution path stays covered — see form-media.test.ts on why the
+    // manifest is the wrong place to assert it from.
+    credit: "A Photographer · CC BY-SA 3.0",
     licence: {
       name: "CC BY-SA 3.0",
       url: "https://creativecommons.org/licenses/by-sa/3.0/",
@@ -1769,19 +1778,35 @@ describe("form reference media", () => {
     // The sheet is lazy, so it arrives on a later frame than the click.
     const sheet = await screen.findByRole("dialog");
 
-    const image = within(sheet).getByRole("img", { name: MEDIA.alt });
-    expect(image.getAttribute("src")).toBe(MEDIA.path);
-    expect(image.getAttribute("loading")).toBe("lazy");
-    // Reserved before it loads, or the sheet reflows when it arrives.
-    expect(image.getAttribute("width")).toBe(String(MEDIA.width));
-    expect(image.getAttribute("height")).toBe(String(MEDIA.height));
+    /*
+     * BOTH frames, in order — FUEL-107. A movement needs a start and a working
+     * position, and asserting only that "an image rendered" would pass against
+     * the single still this ticket exists to replace.
+     */
+    const images = within(sheet).getAllByRole("img");
+    expect(images).toHaveLength(MEDIA.frames.length);
+
+    for (const [i, frame] of MEDIA.frames.entries()) {
+      const image = images[i]!;
+      expect(image.getAttribute("src")).toBe(frame.path);
+      expect(image.getAttribute("alt")).toBe(frame.label);
+      expect(image.getAttribute("loading")).toBe("lazy");
+      // Reserved before it loads, or the sheet reflows as each one arrives.
+      expect(image.getAttribute("width")).toBe(String(frame.width));
+      expect(image.getAttribute("height")).toBe(String(frame.height));
+    }
+
+    // Each frame says which moment it is, under the photograph.
+    for (const frame of MEDIA.frames) {
+      expect(within(sheet).getByText(`/ ${frame.label}`)).toBeTruthy();
+    }
 
     // The description is CONTENT, not only an alt — § Accessibility's "a mark
     // on a screen is not the data", which media is the strongest case of.
     expect(within(sheet).getByText(MEDIA.alt)).toBeTruthy();
 
     // Attribution is the licence's condition, so it renders with its link.
-    expect(within(sheet).getByText(/Everkinetic · CC BY-SA 3\.0/)).toBeTruthy();
+    expect(within(sheet).getByText(/A Photographer · CC BY-SA 3\.0/)).toBeTruthy();
     expect(within(sheet).getByRole("link", { name: "Licence" }).getAttribute("href")).toBe(
       MEDIA.licence.url,
     );
@@ -1811,7 +1836,18 @@ describe("form reference media", () => {
               index === 0
                 ? {
                     ...exercise,
-                    media: { ...MEDIA, kind: "video" as const, path: "/form/side-plank.mp4" },
+                    media: {
+                      ...MEDIA,
+                      kind: "video" as const,
+                      frames: [
+                        {
+                          path: "/form/side-plank.mp4",
+                          width: 850,
+                          height: 567,
+                          label: "The movement",
+                        },
+                      ],
+                    },
                   }
                 : exercise,
             ),
