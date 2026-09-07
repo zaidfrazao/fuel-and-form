@@ -144,19 +144,33 @@ function exercise(
   };
 }
 
-/** Two working rows and a cool-down, so `section` has something to say. */
+/**
+ * Two working rows and a cool-down, so `section` has something to say.
+ *
+ * ## The ids run BACKWARDS against `sort_order`, deliberately
+ *
+ * `setRows` orders by the exercise's place in the session and tie-breaks on
+ * `exerciseId`. With ascending ids the two agree, so every ordering assertion
+ * below passes with the `sort_order` term deleted — the tie-break silently
+ * produces the same answer and the test pins nothing.
+ *
+ * That is not hypothetical: this block had ascending ids until a mutation run
+ * removed the `sort_order` term and the suite stayed green. It is the same trap
+ * `export.test.ts`'s `inOrder` helper is built around, and it takes the same
+ * answer — the row that must come FIRST carries the LATER id.
+ */
 const SQUAT = exercise({
-  id: "ffffffff-0000-4000-8000-000000000001",
+  id: "ffffffff-0000-4000-8000-000000000003",
   name: "Goblet squat",
   sortOrder: 0,
 });
 const ROW = exercise({
-  id: "ffffffff-0000-4000-8000-000000000002",
+  id: "ffffffff-0000-4000-8000-000000000001",
   name: "Dumbbell row",
   sortOrder: 1,
 });
 const STRETCH = exercise({
-  id: "ffffffff-0000-4000-8000-000000000003",
+  id: "ffffffff-0000-4000-8000-000000000002",
   name: "Hip opener",
   sortOrder: 2,
   section: "cooldown",
