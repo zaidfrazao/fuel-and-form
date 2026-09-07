@@ -65,6 +65,10 @@ const PAYLOAD: WeekExportPayload = {
     weightLogs: [],
     meals: [],
     workouts: [],
+    exercises: [],
+    sets: [],
+    weighIns: [],
+    startWeightKg: 80,
   },
 };
 

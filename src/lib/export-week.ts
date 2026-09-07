@@ -1,7 +1,16 @@
 import { csvTable } from "./csv";
 import { addDays, type CalendarDate } from "./date";
-import { FILENAME_STEM } from "./export";
-import type { Meal, MealLog, WeightLog, Workout, WorkoutLog } from "./db/schema";
+import type {
+  ExerciseSet,
+  Meal,
+  MealLog,
+  WeightLog,
+  Workout,
+  WorkoutExercise,
+  WorkoutLog,
+} from "./db/schema";
+import { type EnergyRange, nearestWeight, sessionEnergy } from "./energy";
+import { BURN_SEMANTICS, FILENAME_STEM } from "./export";
 import { compareDay, stood } from "./plan-vs-actual";
 import type { ResolvedDay, ResolvedMeal } from "./resolve-plan";
 import type { TrainingDay } from "./resolve-training";
@@ -33,20 +42,28 @@ import type { TrainingDay } from "./resolve-training";
  * Nothing here is the backup. Any row this summarises away is still in the JSON
  * export, whole.
  *
- * ## One file, three sections
+ * ## One file, four sections
  *
  * P6 asks for "one section or file each for weight, training, and meals" and
  * this takes the first option: one attachment on a check-in message, one tap on
- * a phone. The file is therefore ragged — three tables with three different
- * column counts, separated by blank lines — which every spreadsheet import
- * understands and no CSV reader minds, since a reader is told the shape by the
- * header row it is pointed at.
+ * a phone. The file is therefore ragged — tables with different column counts,
+ * separated by blank lines — which every spreadsheet import understands and no
+ * CSV reader minds, since a reader is told the shape by the header row it is
+ * pointed at.
  *
- * A four-line preamble comes first. `week` and `dates` name the seven days;
+ * FUEL-97 made it four rather than three. Sets are their own section and not a
+ * widening of training, because a training row is one per session and a set row
+ * is many per session: they cannot share a header, and packing `12,10,8` into a
+ * cell produces a column a spreadsheet cannot pivot, sum or chart — which is the
+ * one thing the assistant opens this file to do.
+ *
+ * A five-line preamble comes first. `week` and `dates` name the seven days;
  * `timezone` is there because a bare column of dates is not readable without it
  * — "2026-08-17" is a day only in some zone, and the JSON export makes the same
  * claim by putting the timezone on `account` rather than leaving it inside
- * `profile`.
+ * `profile`. `est_burn_is` is there because the two modelled columns are the
+ * only numbers in the file that nobody measured, and a spreadsheet is precisely
+ * where a caveat that lives in a README stops travelling with the data.
  *
  * ## The three meal columns
  *
@@ -108,6 +125,22 @@ const WEEK_LENGTH = 7;
 
 const WEIGHT_HEADER = ["date", "weight_kg", "note"] as const;
 
+/**
+ * Section 2's columns.
+ *
+ * The two `est_` columns sit between the measured `duration_min` and the free
+ * text, which is where they belong on both counts: a reader scanning left to
+ * right meets the session's facts, then its model, then its prose, and `note`
+ * stays last because a free-text column in the middle of a table is the one
+ * that breaks a hand-edited paste.
+ *
+ * The prefix is the whole labelling scheme and it is worth stating once: the
+ * only bare `kcal` column in this file is the meals section's, which is a
+ * `meals` row's own stored figure. Anything modelled carries `est_`. A reader
+ * who learns that one rule can tell measured from modelled without a legend,
+ * and `est_burn_is` in the preamble says it in the file for the reader who does
+ * not.
+ */
 const TRAINING_HEADER = [
   "date",
   "session",
@@ -115,7 +148,40 @@ const TRAINING_HEADER = [
   "scheduled",
   "status",
   "duration_min",
+  "est_burn_kcal_low",
+  "est_burn_kcal_high",
   "note",
+] as const;
+
+/**
+ * Section 3's columns — § P10's per-set record, FUEL-97.
+ *
+ * Long form: one row per set, never `12,10,8` packed into a cell. The ticket is
+ * explicit about why and it is the reason this is a section rather than columns
+ * on the training row — a training row is one per session and a set row is many
+ * per session, so they cannot share a header, and a comma-packed cell is one a
+ * spreadsheet cannot pivot, sum, or chart.
+ *
+ * `session` and not `workout`, matching `TRAINING_HEADER` above. The two
+ * sections are meant to be joined on `(date, session)`, which is the whole
+ * reason the sets are long form; naming one column two things across one file
+ * would break the join for the sake of a synonym.
+ *
+ * `section` is carried even though every row it can produce today reads `work`
+ * — set entry is scoped to the working section by `section.ts`'s `working`. It
+ * is not decoration. The vocabulary is open by design, an exercise moved to
+ * `cooldown` keeps the sets already logged against it, and the column is what
+ * lets the assistant sum working volume without first having to know that the
+ * app would never have offered set entry anywhere else.
+ */
+const SETS_HEADER = [
+  "date",
+  "session",
+  "exercise",
+  "section",
+  "set_index",
+  "reps",
+  "load_kg",
 ] as const;
 
 const MEALS_HEADER = [
@@ -157,10 +223,44 @@ export type WeekExportInput = {
   trainingDays: readonly TrainingDay[];
   mealLogs: readonly MealLog[];
   workoutLogs: readonly WorkoutLog[];
+  /** The week's weigh-ins — section 1, and ONLY section 1. See `weighIns`. */
   weightLogs: readonly WeightLog[];
   /** The library, for naming what a log points at. */
   meals: readonly Meal[];
   workouts: readonly Workout[];
+  /**
+   * Every session's exercise rows — § P10, FUEL-97.
+   *
+   * The whole library rather than the week's, because a session resolves to a
+   * workout and a workout owns its rows regardless of which weeks it appears
+   * in. Two readers want them: the sets section names the exercise a set was
+   * performed on, and the estimate needs the SECTIONS to apportion a logged
+   * duration between working and support time.
+   */
+  exercises: readonly WorkoutExercise[];
+  /** The week's sets, addressed by `workout_log_id` — § P10, FUEL-91. */
+  sets: readonly ExerciseSet[];
+  /**
+   * The weigh-ins a session may be costed at, which is NOT `weightLogs`.
+   *
+   * Two fields for what looks like one table, and the duplication is the point.
+   * `weightLogs` is the week's rows and it is what section 1 prints: widening it
+   * would put a reading from outside the week into a file whose name is that
+   * week. This is the candidate set `nearestWeight` scans, and the nearest
+   * weigh-in to a Monday session is quite often the previous Thursday's.
+   *
+   * `queries/week-export.ts` builds it as the week's rows plus the last weigh-in
+   * strictly before Monday plus the first strictly after Sunday — strict
+   * because Monday and Sunday are in the week's own rows already. That set
+   * provably contains the nearest reading for every date in the week; the proof
+   * is in that module. Structurally typed rather than
+   * taking `energy.ts`'s `WeighIn`, so this module names only the three things
+   * `energy.convention.test.ts` allows it to.
+   */
+  weighIns: readonly { date: CalendarDate; weightKg: number }[];
+  /** `profiles.start_weight_kg` — `nearestWeight`'s fallback, for an account
+   * that has never stepped on the scale. */
+  startWeightKg: number;
 };
 
 /**
@@ -179,20 +279,34 @@ function cell(value: number | null | undefined): string {
   return typeof value === "number" ? String(value) : "";
 }
 
+/**
+ * Groups rows under a key, preserving the order they arrived in.
+ *
+ * The arrays it returns are its own, so a caller may sort one in place without
+ * touching the `WeekExportInput` it came from — the property `buildWeekCsv`
+ * relies on and the suite asserts.
+ */
+function groupBy<T>(
+  rows: readonly T[],
+  key: (row: T) => string,
+): Map<string, T[]> {
+  const index = new Map<string, T[]>();
+
+  for (const row of rows) {
+    const existing = index.get(key(row));
+
+    if (existing) existing.push(row);
+    else index.set(key(row), [row]);
+  }
+
+  return index;
+}
+
 /** Indexes rows by their date. Every log table in this file is read that way. */
 function byDate<T extends { date: CalendarDate }>(
   rows: readonly T[],
 ): Map<CalendarDate, T[]> {
-  const index = new Map<CalendarDate, T[]>();
-
-  for (const row of rows) {
-    const existing = index.get(row.date);
-
-    if (existing) existing.push(row);
-    else index.set(row.date, [row]);
-  }
-
-  return index;
+  return groupBy(rows, (row) => row.date);
 }
 
 /** Indexes anything the file has to name by its id. */
@@ -201,7 +315,9 @@ function byId<T extends { id: string }>(rows: readonly T[]): Map<string, T> {
 }
 
 /** A date's meals from a resolved week, indexed by slot. */
-function slotsOf(days: readonly ResolvedDay[]): Map<CalendarDate, ResolvedMeal[]> {
+function slotsOf(
+  days: readonly ResolvedDay[],
+): Map<CalendarDate, ResolvedMeal[]> {
   return new Map(days.map((day) => [day.date, day.meals]));
 }
 
@@ -214,7 +330,9 @@ function slotsOf(days: readonly ResolvedDay[]): Map<CalendarDate, ResolvedMeal[]
  * name and contents disagree, and the name is what the assistant files it by.
  */
 function weekDates(monday: CalendarDate): CalendarDate[] {
-  return Array.from({ length: WEEK_LENGTH }, (_, offset) => addDays(monday, offset));
+  return Array.from({ length: WEEK_LENGTH }, (_, offset) =>
+    addDays(monday, offset),
+  );
 }
 
 /** Section 1: what the scale said. At most one row a day — a unique index. */
@@ -234,20 +352,50 @@ function weightRows(
 }
 
 /**
- * Section 2: what the week trained, and what it recorded.
+ * One session in the week, as both training sections report it.
  *
- * The daily walk is a row like any other. It is a `workouts` row whose `type`
- * is `WALK_TYPE`, `trainingDay` resolves it alongside the sessions, and the
+ * Resolved once and shared, rather than each section working out for itself
+ * which sessions the week held and what to call them. That is not tidiness: the
+ * sets section is meant to be JOINED to the training section on
+ * `(date, session)`, so a session that appeared under one name in one and
+ * another name in the other — or in a different order — would break the one
+ * thing long-form rows are for. One list, one order, one name.
+ *
+ * The daily walk is a session like any other. It is a `workouts` row whose
+ * `type` is `WALK_TYPE`, `trainingDay` resolves it alongside the rest, and the
  * `type` column carries the distinction — so nothing here needs to know the
  * walk exists, which is what `resolve-training.ts` asks of its callers.
  */
-function trainingRows(
+type WeekSession = {
+  date: CalendarDate;
+  /** The `session` column in both sections, and the key they join on. */
+  name: string;
+  type: string;
+  /** Whether the week's template asked for this — the `scheduled` column. */
+  scheduled: boolean;
+  workoutId: string;
+  /** `workout_logs`, when the session was recorded at all. */
+  log: WorkoutLog | undefined;
+};
+
+/**
+ * The week's sessions, in report order: the template's for the days it covers,
+ * then anything logged that the template did not ask for.
+ *
+ * A session may be logged on a date the template no longer covers, and those
+ * rows are kept and marked rather than dropped — see the module comment. They
+ * are the one group with no natural key, since nothing ordered them, so they
+ * sort by name and tie-break on the workout id.
+ */
+function weekSessions(
   dates: readonly CalendarDate[],
   trainingDays: readonly TrainingDay[],
   logs: readonly WorkoutLog[],
   workouts: readonly Workout[],
-): string[][] {
-  const scheduled = new Map(trainingDays.map((day) => [day.date, day.sessions]));
+): WeekSession[] {
+  const scheduled = new Map(
+    trainingDays.map((day) => [day.date, day.sessions]),
+  );
   const logsByDate = byDate(logs);
   const library = byId(workouts);
 
@@ -256,46 +404,174 @@ function trainingRows(
     const dayLogs = logsByDate.get(date) ?? [];
     const planned = new Set(sessions.map((session) => session.workout.id));
 
-    const rows = sessions.map((session) => {
-      const log = dayLogs.find((row) => row.workoutId === session.workout.id);
+    const asked: WeekSession[] = sessions.map((session) => ({
+      date,
+      name: session.workout.name,
+      type: session.workout.type,
+      scheduled: true,
+      workoutId: session.workout.id,
+      log: dayLogs.find((row) => row.workoutId === session.workout.id),
+    }));
 
-      return [
-        date,
-        session.workout.name,
-        session.workout.type,
-        "yes",
-        log?.status ?? "",
-        cell(log?.durationMin),
-        log?.note ?? "",
-      ];
-    });
-
-    const unplanned = dayLogs
+    const unplanned: WeekSession[] = dayLogs
       .filter((log) => !planned.has(log.workoutId))
       .map((log) => {
-        const workout = library.get(log.workoutId);
-
         // Resolved once here rather than in the comparator and again in the
         // row. A log naming a workout the library no longer holds — which a
         // composite foreign key makes unreachable, so this is defensive — must
         // sort under the same name it prints under, and this is the only place
         // that decides what that name is.
-        return { log, name: workout?.name ?? "", type: workout?.type ?? "" };
+        const workout = library.get(log.workoutId);
+
+        return {
+          date,
+          name: workout?.name ?? "",
+          type: workout?.type ?? "",
+          scheduled: false,
+          workoutId: log.workoutId,
+          log,
+        };
       })
       .sort(
-        (a, b) => compare(a.name, b.name) || compare(a.log.workoutId, b.log.workoutId),
-      )
-      .map(({ log, name, type }) => [
-        date,
-        name,
-        type,
-        "no",
-        log.status,
-        cell(log.durationMin),
-        log.note ?? "",
-      ]);
+        (a, b) => compare(a.name, b.name) || compare(a.workoutId, b.workoutId),
+      );
 
-    return [...rows, ...unplanned];
+    return [...asked, ...unplanned];
+  });
+}
+
+/**
+ * What a session is estimated to have cost — § P10's figure, FUEL-95/97.
+ *
+ * A resolver rather than a column computed inline, because the inputs are three
+ * indexes and a fallback and threading those through a row builder would put
+ * the model in the middle of the printer.
+ *
+ * ## The same answer `/training` gives, which is the whole requirement
+ *
+ * `sessionEnergy` is the one implementation and this repeats none of its
+ * reasoning — the property `plan-vs-actual.ts` already buys the meals half of
+ * both artefacts. The part that would drift silently if it were skipped is
+ * `nearestWeight`: a session is costed at the weigh-in nearest ITS OWN date,
+ * not the week's last one, so `weighIns` deliberately reaches outside the seven
+ * days this file covers. See that field on `WeekExportInput`.
+ *
+ * ## An unrecorded session has no estimate, and neither do several recorded ones
+ *
+ * No log means nothing happened, so there is nothing to model. Beyond that,
+ * `lib/energy.ts` returns `null` for a workout type with no MET band, for a
+ * session carrying neither a duration nor a set, and for a range too wide to
+ * mean anything — all three print as two blank cells, which is what this file
+ * already means by a blank number.
+ *
+ * `status` is not consulted. A session marked `skipped` that still carries a
+ * logged duration is contradictory data; the screen prices it anyway, and a
+ * file that quietly disagreed with a figure somebody watched appear is the
+ * harder of the two to explain.
+ */
+function burnResolver(
+  input: WeekExportInput,
+  setsByLog: Map<string, ExerciseSet[]>,
+): (session: WeekSession) => EnergyRange | null {
+  const exercisesByWorkout = groupBy(input.exercises, (row) => row.workoutId);
+
+  return (session) =>
+    session.log
+      ? sessionEnergy({
+          type: session.type,
+          exercises: exercisesByWorkout.get(session.workoutId) ?? [],
+          sets: setsByLog.get(session.log.id) ?? [],
+          durationMin: session.log.durationMin,
+          weightKg: nearestWeight(
+            input.weighIns,
+            session.date,
+            input.startWeightKg,
+          ),
+        })
+      : null;
+}
+
+/** Section 2: what the week trained, and what it recorded. */
+function trainingRows(
+  sessions: readonly WeekSession[],
+  burn: (session: WeekSession) => EnergyRange | null,
+): string[][] {
+  return sessions.map((session) => {
+    const range = burn(session);
+
+    return [
+      session.date,
+      session.name,
+      session.type,
+      session.scheduled ? "yes" : "no",
+      session.log?.status ?? "",
+      cell(session.log?.durationMin),
+      cell(range?.lowKcal),
+      cell(range?.highKcal),
+      session.log?.note ?? "",
+    ];
+  });
+}
+
+/**
+ * Section 3: every set performed in the week, one row each — § P10, FUEL-97.
+ *
+ * Driven from `weekSessions` rather than from the sets table, so a set row
+ * carries the same `date` and `session` the training row above it does and the
+ * two sections join. A session with no log contributes nothing, because sets are
+ * addressed by `workout_log_id` and there is no log to address.
+ *
+ * ## The order is the order they were performed in
+ *
+ * The session's own exercise order — `sort_order`, which is what that column is
+ * for — and then `set_index` within an exercise, which is the ordinal the screen
+ * prints. Never a row id, and never the order the query returned, which is the
+ * determinism promise the rest of this file makes.
+ *
+ * A set naming an exercise the library does not hold sorts LAST and prints with
+ * blank name and section rather than being dropped. The composite foreign key
+ * makes it unreachable, so this is defensive in the same way the unplanned-log
+ * branch above is — and dropping a row would delete recorded history from the
+ * report, which `lib/export.ts` argues against at length. `exerciseId` breaks
+ * the tie so two such rows cannot swap places between two exports of one week.
+ */
+function setRows(
+  sessions: readonly WeekSession[],
+  input: WeekExportInput,
+  setsByLog: Map<string, ExerciseSet[]>,
+): string[][] {
+  const exercises = byId(input.exercises);
+
+  // Unknown exercises sort behind every real `sort_order`. `MAX_SAFE_INTEGER`
+  // rather than `Infinity` because the subtraction below would be NaN for two
+  // of them, and a NaN comparator silently leaves an array in input order.
+  const rank = (set: ExerciseSet) =>
+    exercises.get(set.exerciseId)?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+
+  return sessions.flatMap((session) => {
+    if (!session.log) return [];
+
+    // Sorted in place: `groupBy` built this array, so it is not the caller's.
+    const sets = (setsByLog.get(session.log.id) ?? []).sort(
+      (a, b) =>
+        rank(a) - rank(b) ||
+        compare(a.exerciseId, b.exerciseId) ||
+        a.setIndex - b.setIndex,
+    );
+
+    return sets.map((set) => {
+      const exercise = exercises.get(set.exerciseId);
+
+      return [
+        session.date,
+        session.name,
+        exercise?.name ?? "",
+        exercise?.section ?? "",
+        cell(set.setIndex),
+        cell(set.reps),
+        cell(set.loadKg),
+      ];
+    });
   });
 }
 
@@ -359,11 +635,25 @@ function mealRows(
  */
 export function buildWeekCsv(input: WeekExportInput): string {
   const dates = weekDates(input.monday);
+  const sessions = weekSessions(
+    dates,
+    input.trainingDays,
+    input.workoutLogs,
+    input.workouts,
+  );
+
+  // Built once and shared by the two readers of it — the estimate and the sets
+  // section — so the week's fastest-growing table is walked once.
+  const setsByLog = groupBy(input.sets, (row) => row.workoutLogId);
 
   return csvTable([
     ["week", input.monday],
     ["dates", input.monday, addDays(input.monday, WEEK_LENGTH - 1)],
     ["timezone", input.timezone],
+    // What the two `est_` columns are, said IN the file. `plannedIs` in the
+    // JSON export is the same move for the same reason, and the string is
+    // imported from there rather than respelled here.
+    ["est_burn_is", BURN_SEMANTICS],
     ["exported_at", input.exportedAt.toISOString()],
 
     [],
@@ -374,7 +664,15 @@ export function buildWeekCsv(input: WeekExportInput): string {
     [],
     ["training"],
     [...TRAINING_HEADER],
-    ...trainingRows(dates, input.trainingDays, input.workoutLogs, input.workouts),
+    ...trainingRows(sessions, burnResolver(input, setsByLog)),
+
+    // Directly after training, because it is that section read at a finer
+    // grain: a reader who has just met a session meets its sets next, and the
+    // join between the two is one screen apart rather than a file apart.
+    [],
+    ["sets"],
+    [...SETS_HEADER],
+    ...setRows(sessions, input, setsByLog),
 
     [],
     ["meals"],

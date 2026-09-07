@@ -21,7 +21,7 @@ import { scope } from "../scope";
  * "The export runs against the logged-in account only — demo sessions export
  * demo data" is not a feature of this file so much as the absence of a way to
  * write it otherwise: `scope(userId, getDb())` prepends `user_id = $1` to all
- * twelve statements, and `scope.select` refuses a caller-supplied `user_id`
+ * thirteen statements, and `scope.select` refuses a caller-supplied `user_id`
  * that would let one be widened. Testing Strategy § 1.4 case 3 is the test that
  * a demo session's export holds demo rows and zero owner rows, and it passes
  * because there is no unscoped statement here to get wrong.
@@ -32,25 +32,25 @@ import { scope } from "../scope";
  * `schema.test.ts` names it as the sole exemption, so a table that ever forgets
  * `user_id` fails that suite rather than quietly arriving here unscoped.
  *
- * ## Two waves, not twelve round trips
+ * ## Two waves, not fourteen round trips
  *
  * The profile decides whether there is anything to export at all, and it
  * carries the timezone the filename's date comes from — so it and the `users`
- * row go first, together. The remaining ten tables depend on nothing but the
+ * row go first, together. The remaining twelve tables depend on nothing but the
  * `user_id` already in hand, so they run through `Promise.all`: on Neon's HTTP
- * driver each statement is its own request, and ten of them in sequence is the
- * difference between a fast tap and a slow one.
+ * driver each statement is its own request, and twelve of them in sequence is
+ * the difference between a fast tap and a slow one.
  *
  * ## The snapshot is not transactional, knowingly
  *
  * Neon's HTTP driver has no interactive transaction, so these statements are
- * twelve independent reads. A write landing between two of them could produce a
- * file where a `meal_log` names a meal the earlier query did not return. The
- * window is milliseconds, the export is a deliberate tap by the only person who
- * can also be writing, and the consequence is a backup one row out of date —
- * so this is recorded rather than engineered around. `db.batch()` over
- * neon-http is the fix if it ever matters, and it would need `scope()` to grow
- * a batching API first.
+ * fourteen independent reads. A write landing between two of them could
+ * produce a file where a `meal_log` names a meal the earlier query did not
+ * return. The window is milliseconds, the export is a deliberate tap by the
+ * only person who can also be writing, and the consequence is a backup one row
+ * out of date — so this is recorded rather than engineered around.
+ * `db.batch()` over neon-http is the fix if it ever matters, and it would need
+ * `scope()` to grow a batching API first.
  */
 
 /** What the route needs: who, what, and the date that names the file. */

@@ -196,7 +196,7 @@ Doubles as the backup mechanism against the "don't lose my history" requirement.
 
 **Acceptance Criteria:**
 - [ ] Export all data as a single JSON file with a stable, documented schema
-- [ ] Export a selected week as CSV — one section or file each for weight, training, and meals
+- [ ] Export a selected week as CSV — one section or file each for weight, training, and meals; § P10 adds a fourth for sets, because a training row is one per session and a set row is many and they cannot share a header
 - [ ] Meal export distinguishes planned, actual, and swapped-with for every slot
 - [ ] Filenames are dated (e.g. `fuel-form-2026-08-10.json`)
 - [ ] Export downloads directly on both mobile and desktop browsers

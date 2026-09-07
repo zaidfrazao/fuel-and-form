@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, gte, lte } from "drizzle-orm";
+import { and, asc, desc, gt, gte, inArray, lt, lte } from "drizzle-orm";
 
 import { addDays, type CalendarDate, startOfWeek, todayIn } from "@/lib/date";
 import type { WeekExportInput } from "@/lib/export-week";
@@ -10,6 +10,7 @@ import type { TrainingPlan } from "@/lib/rotation";
 import { getDb } from "../index";
 import * as schema from "../schema";
 import { scope } from "../scope";
+import { byWorkout } from "./today";
 
 /**
  * One week of everything — FUEL-38's read, P6's check-in half.
@@ -28,8 +29,8 @@ import { scope } from "../scope";
  * ## Every read is scoped, and that is an acceptance criterion
  *
  * P6: "the export runs against the logged-in account only — demo sessions
- * export demo data". `scope(userId, getDb())` prepends `user_id = $1` to all
- * seven statements, and `scope.select` refuses a caller-supplied `user_id` that
+ * export demo data". `scope(userId, getDb())` prepends `user_id = $1` to every
+ * statement here, and `scope.select` refuses a caller-supplied `user_id` that
  * would widen one. There is no unscoped statement here to get wrong, which is a
  * stronger guarantee than a rule that has to be remembered; the claim itself is
  * asserted against a real database in `tests/integration/`.
@@ -42,12 +43,13 @@ import { scope } from "../scope";
  * `todayIn` AFTER the profile lands. `startOfWeek` then snaps the anchor to its
  * Monday, so a Wednesday and the Monday before it name the same seven days.
  *
- * ## Two waves, and four narrowed tables
+ * ## The waves, and the narrowed tables
  *
- * The profile decides the week, so it goes first and alone; the other seven
- * statements depend on nothing but the `user_id` already in hand and run
- * through `Promise.all`. On Neon's HTTP driver every statement is its own
- * request, so the shape of this function is most of its latency.
+ * The profile decides the week, so it goes first and alone; the middle wave
+ * depends on nothing but the `user_id` already in hand and runs through
+ * `Promise.all`; `exercise_sets` needs the log ids and so comes last. On Neon's
+ * HTTP driver every statement is its own request, so the shape of this function
+ * is most of its latency — three round trips rather than thirteen.
  *
  * The four dated tables are narrowed to Monday..Sunday with a BETWEEN, for
  * `week.ts`'s reason: the dates are contiguous by construction and
@@ -57,11 +59,49 @@ import { scope } from "../scope";
  * resolution decides which of their rows a date wants and deciding that in SQL
  * would move resolution into the query.
  *
- * `workout_exercises` is NOT fetched. `trainingDay` takes an exercise map and
- * is given an empty one: the CSV names sessions, not the movements inside them,
- * and its own comment says a missing entry resolves to an empty list rather
- * than a throw. A statement whose result no column reads is latency spent on
- * nothing.
+ * `workout_exercises` IS fetched, and was not until FUEL-97. The sentence that
+ * stood here said the CSV "names sessions, not the movements inside them" — true
+ * until § P10 gave it a sets section, which names the exercise a set was
+ * performed on, and an estimate, which apportions a logged duration by the
+ * SECTIONS a session's rows fall into. Two columns now read the result, so the
+ * statement has stopped being latency spent on nothing. `trainingDay` gets the
+ * real map for the same reason `byWorkout` exists.
+ *
+ * ## Three waves, because `exercise_sets` is addressed by a log id
+ *
+ * That table has no `date`. Its rows hang off `workout_log_id`, so the ids
+ * cannot be known until `workout_logs` has landed and the read cannot join the
+ * wave above it — one more round trip, which on Neon's HTTP driver is the unit
+ * that costs. Narrowing it to the week's logs is what makes it worth having: the
+ * alternative is every set the account has ever recorded, on the table that
+ * grows fastest, to print at most a week of them.
+ *
+ * A week with no logs skips the statement entirely rather than sending
+ * `in ()`, which is not a narrower query but an invalid one.
+ *
+ * ## The weigh-ins are read twice, on purpose
+ *
+ * `weightLogs` is Monday..Sunday and is what the file's weight SECTION prints.
+ * `weighIns` is a different question — which reading a session should be costed
+ * at — and its answer routinely lies outside the week: the weigh-in nearest a
+ * Monday session is often the previous Thursday's. So the week's rows are joined
+ * by the last weigh-in STRICTLY BEFORE Monday and the first strictly after
+ * Sunday. Strict on both sides because Monday and Sunday are themselves in
+ * `weightLogs` already — `lte` here would re-fetch a row the week range covers,
+ * which is harmless but says something untrue about where the boundary is, and
+ * the predicates are the thing a later reader will trust.
+ *
+ * That set is provably every candidate `nearestWeight` could pick for any date
+ * in the week. For a date d in the week, a weigh-in before Monday is at best
+ * the LAST one before Monday (anything earlier is strictly further from d), and
+ * symmetrically after Sunday — so nothing omitted can be nearer, or even tied:
+ * `weight_logs` is unique per date, so the omitted rows are strictly further,
+ * which is what leaves `nearestWeight`'s earlier-reading tie-break undisturbed.
+ *
+ * The two are kept as separate fields so that widening one cannot put a
+ * foreign date into a file named after a week. `/training` resolves the same
+ * pair for its single date, which is what makes the CSV's figure and the
+ * screen's figure the same number.
  *
  * ## The snapshot is not transactional, knowingly
  *
@@ -79,9 +119,6 @@ export type WeekExportPayload = {
   /** Everything `buildWeekCsv` takes, ready to hand over. */
   input: WeekExportInput;
 };
-
-/** No exercises are read, so every session resolves with an empty list. */
-const NO_EXERCISES = new Map<string, never[]>();
 
 /**
  * One week, for one user.
@@ -119,9 +156,12 @@ export async function loadWeekExport(
     overrides,
     mealLogs,
     workouts,
+    workoutExercises,
     trainingTemplate,
     workoutLogs,
     weightLogs,
+    weighInBefore,
+    weighInAfter,
   ] = await Promise.all([
     s.select(schema.meals),
     s.select(schema.planTemplateEntries),
@@ -137,16 +177,52 @@ export async function loadWeekExport(
       and(gte(schema.mealLogs.date, monday), lte(schema.mealLogs.date, sunday)),
     ),
     s.select(schema.workouts),
+    s.select(schema.workoutExercises),
     s.select(schema.trainingTemplateEntries),
     s.select(
       schema.workoutLogs,
-      and(gte(schema.workoutLogs.date, monday), lte(schema.workoutLogs.date, sunday)),
+      and(
+        gte(schema.workoutLogs.date, monday),
+        lte(schema.workoutLogs.date, sunday),
+      ),
     ),
     s.select(
       schema.weightLogs,
-      and(gte(schema.weightLogs.date, monday), lte(schema.weightLogs.date, sunday)),
+      and(
+        gte(schema.weightLogs.date, monday),
+        lte(schema.weightLogs.date, sunday),
+      ),
     ),
+
+    // The two readings outside the week that a session inside it may be costed
+    // at — see "The weigh-ins are read twice". `selectOne` with an `orderBy`,
+    // which is `loadTraining`'s shape for the same question asked of one date:
+    // the nearest weigh-in in either direction is one of exactly these two, so
+    // together with the week's own rows this is every candidate.
+    s.selectOne(schema.weightLogs, lt(schema.weightLogs.date, monday), {
+      orderBy: desc(schema.weightLogs.date),
+    }),
+    s.selectOne(schema.weightLogs, gt(schema.weightLogs.date, sunday), {
+      orderBy: asc(schema.weightLogs.date),
+    }),
   ]);
+
+  /*
+   * Wave three. See "Three waves" above for why it cannot join the one before.
+   *
+   * The guard is not defensive tidiness: `inArray` with an empty list emits
+   * `in ()`, which Postgres rejects outright — a week nobody trained would 500
+   * on a file that should have been an empty section. `scope.insert` has the
+   * same edge and `scope`'s own comment names it.
+   */
+  const logIds = workoutLogs.map((log) => log.id);
+  const sets =
+    logIds.length === 0
+      ? []
+      : await s.select(
+          schema.exerciseSets,
+          inArray(schema.exerciseSets.workoutLogId, logIds),
+        );
 
   const plan: Plan = {
     programStartDate: profile.programStartDate,
@@ -163,6 +239,11 @@ export async function loadWeekExport(
 
   const days = resolveWeek(plan, monday);
 
+  // Indexed once, not once per day. `trainingDay` takes the map rather than
+  // building it, so calling `byWorkout` inside the `map` below would rebuild
+  // the whole index seven times for seven lookups.
+  const exercisesByWorkout = byWorkout(workoutExercises);
+
   return {
     monday,
     input: {
@@ -173,13 +254,25 @@ export async function loadWeekExport(
       // Keyed off the resolved days rather than recomputing the seven dates, so
       // the "planned" column and the week it belongs to are the same dates in
       // the same order by construction — `loadWeek` pairs them the same way.
-      templateDays: days.map(({ date }) => ({ date, meals: templateDay(plan, date) })),
-      trainingDays: days.map(({ date }) => trainingDay(training, NO_EXERCISES, date)),
+      templateDays: days.map(({ date }) => ({
+        date,
+        meals: templateDay(plan, date),
+      })),
+      trainingDays: days.map(({ date }) =>
+        trainingDay(training, exercisesByWorkout, date),
+      ),
       mealLogs,
       workoutLogs,
       weightLogs,
       meals,
       workouts,
+      exercises: workoutExercises,
+      sets,
+      // The week's readings plus the two just outside it. Order is irrelevant —
+      // `nearestWeight` scans every candidate rather than assuming a sequence —
+      // and a `null` boundary is simply a week with nothing before or after it.
+      weighIns: [weightLogs, weighInBefore ?? [], weighInAfter ?? []].flat(),
+      startWeightKg: profile.startWeightKg,
     },
   };
 }

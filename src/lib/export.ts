@@ -16,6 +16,7 @@ import type {
   WorkoutLog,
   WeightLog,
 } from "./db/schema";
+import { type EnergyRange, nearestWeight, sessionEnergy } from "./energy";
 import { compareDay } from "./plan-vs-actual";
 import { type Plan, resolveDay, templateDay } from "./resolve-plan";
 
@@ -122,6 +123,32 @@ import { type Plan, resolveDay, templateDay } from "./resolve-plan";
  * artefact. Never beside the tables. That is the line this concedes once and
  * does not concede again.
  *
+ * ## The second interpretation, taken on those terms — FUEL-97
+ *
+ * `derived.sessionEnergy` is the estimate P10 gives a logged session, and it
+ * arrived under the rule above rather than beside it: behind `derived`, with
+ * `derived.burnIs` naming what it is the way `plannedIs` already does.
+ *
+ * It qualifies on the same two counts `planVsActual` does. It is recomputable
+ * from rows in this very document — `workout_logs`, `exercise_sets`,
+ * `workout_exercises`, `weight_logs` and `profiles.start_weight_kg`, all of
+ * them here — so nothing is lost by a restorer that skips the whole key. And it
+ * is emphatically not a fact: it is a MET band multiplied by a bodyweight, so
+ * putting it among the tables would file a model as history.
+ *
+ * There is one thing it does that `planVsActual` does not, and it is the reason
+ * the estimate is in the export at all rather than only on the screen. § P6's
+ * reader never opens the app. A figure that exists only in `/training` is a
+ * figure the person the export was built for will never see.
+ *
+ * The constraint travels with it, and travels STRUCTURALLY: PRD § P10 forbids
+ * the estimate being combined with `target_kcal` or any macro total, "the
+ * export included". Here that is kept by there being no total in this file to
+ * combine it with — every macro in the document is a `meals` row's own column,
+ * and this key holds a low and a high that are summed into nothing.
+ * `energy.convention.test.ts` and `export-energy.test.ts` are where that is
+ * enforced rather than promised.
+ *
  * ## Which dates the section covers
  *
  * Those carrying a `meal_log` or a `day_plan_override`, and no others. "Logged
@@ -141,6 +168,16 @@ export const SCHEMA_VERSION = 1;
 
 /** The value of `derived.plannedIs`. See `PlannedSemantics`. */
 const PLANNED_SEMANTICS = "template-as-of-export";
+
+/**
+ * The value of `derived.burnIs` — and of the weekly CSV's `est_burn_is`.
+ *
+ * Exported for `FILENAME_STEM`'s reason, one paragraph of which is the whole
+ * argument: a literal spelled in two files is two files that can drift, each
+ * with its own passing test pinning its own spelling. The two artefacts say the
+ * same sentence about the same figure because they say it from here.
+ */
+export const BURN_SEMANTICS = "estimated-not-measured";
 
 /** The filename stem. `fuel-form-2026-08-10.json`, per P6's own example. */
 export const FILENAME_STEM = "fuel-form";
@@ -229,6 +266,39 @@ export type PlanVsActualRow = {
 };
 
 /**
+ * What `sessionEnergy`'s figures are — § P10, FUEL-97.
+ *
+ * A literal in the file, for `PlannedSemantics`' reason: the caveat is not a
+ * footnote, it is the field's MEANING. Every other number in this document is
+ * something a person entered or a scale reported. These two are modelled — a
+ * MET band against a bodyweight against a duration — and a reader who put them
+ * in a column beside `kcal` would be subtracting a measurement from a guess.
+ *
+ * PRD § P10 states the constraint the app keeps around it: the estimate is
+ * never subtracted from, added to, or combined with `target_kcal` or any macro
+ * total, the export included. This string is how the file says so to a reader
+ * who has only the file.
+ */
+export type BurnSemantics = "estimated-not-measured";
+
+/**
+ * One logged session's modelled cost.
+ *
+ * `EnergyRange` rather than two loose numbers, so the low and the high are the
+ * shape `lib/energy.ts` produced and cannot be recombined here into a single
+ * figure on the way out. A range that collapses to a number is the caveat being
+ * thrown away, and this file would be the last place anyone looked for it.
+ *
+ * Addressed the way `workout_logs` is — a date and a workout — because that
+ * table is unique on exactly that pair, so a row here names one log without
+ * repeating its id and without inventing a second way to point at it.
+ */
+export type SessionEnergyRow = {
+  date: CalendarDate;
+  workoutId: string;
+} & EnergyRange;
+
+/**
  * Everything in the file that is a reading rather than a row.
  *
  * One container, and the reason it exists rather than the section sitting at
@@ -246,7 +316,11 @@ export type PlanVsActualRow = {
 export type ExportDerived = {
   /** What `plannedMealId` means. See `PlannedSemantics`. */
   plannedIs: PlannedSemantics;
+  /** What `sessionEnergy`'s figures mean. See `BurnSemantics`. */
+  burnIs: BurnSemantics;
   planVsActual: PlanVsActualRow[];
+  /** One modelled cost per logged session that yields one. See below. */
+  sessionEnergy: SessionEnergyRow[];
 };
 
 export type ExportDocument = {
@@ -265,9 +339,15 @@ export type ExportDocument = {
   workouts: Exported<Workout>[];
   workoutExercises: Exported<WorkoutExercise>[];
   trainingTemplateEntries: Exported<TrainingTemplateEntry>[];
-  workoutLogs: (Omit<WorkoutLog, "userId" | "loggedAt"> & { loggedAt: Instant })[];
-  exerciseSets: (Omit<ExerciseSet, "userId" | "createdAt"> & { createdAt: Instant })[];
-  weightLogs: (Omit<WeightLog, "userId" | "createdAt"> & { createdAt: Instant })[];
+  workoutLogs: (Omit<WorkoutLog, "userId" | "loggedAt"> & {
+    loggedAt: Instant;
+  })[];
+  exerciseSets: (Omit<ExerciseSet, "userId" | "createdAt"> & {
+    createdAt: Instant;
+  })[];
+  weightLogs: (Omit<WeightLog, "userId" | "createdAt"> & {
+    createdAt: Instant;
+  })[];
   shoppingChecks: (Omit<ShoppingCheck, "userId" | "checkedAt"> & {
     checkedAt: Instant;
   })[];
@@ -424,6 +504,109 @@ function planVsActual(tables: ExportTables): PlanVsActualRow[] {
 }
 
 /**
+ * Groups rows under a key, preserving the order they arrived in.
+ *
+ * Two callers below want the same thing off two different columns, and the
+ * alternative — a `filter` inside the loop over logs — is the quadratic version
+ * of it. `exercise_sets` is the fastest-growing table the account has, and this
+ * file reads ALL of it.
+ */
+function groupBy<T>(
+  rows: readonly T[],
+  key: (row: T) => string,
+): Map<string, T[]> {
+  const index = new Map<string, T[]>();
+
+  for (const row of rows) {
+    const existing = index.get(key(row));
+
+    if (existing) existing.push(row);
+    else index.set(key(row), [row]);
+  }
+
+  return index;
+}
+
+/**
+ * What each logged session cost — § P10's estimate, FUEL-97.
+ *
+ * See the module comment for why this is in `derived` rather than beside the
+ * tables, and `energy.convention.test.ts` for what had to be decided out loud
+ * before this module could import `lib/energy.ts` at all.
+ *
+ * ## The same answer the screen gives, or it is worse than nothing
+ *
+ * `/training` prices a session from the same four inputs and this repeats none
+ * of the reasoning: `sessionEnergy` is the one implementation, so the file and
+ * the screen cannot come to disagree — the property `plan-vs-actual.ts` already
+ * buys the meals half of both artefacts.
+ *
+ * `nearestWeight` is the part that would silently drift if it were skipped. A
+ * session is costed at the weigh-in nearest ITS OWN date, not the latest one,
+ * which is what stops a March session re-pricing itself every time somebody
+ * steps on the scale. This file holds the whole weigh-in history, so it hands
+ * over all of it; the function scans every candidate rather than assuming a
+ * pair, and says so.
+ *
+ * ## Which sessions get a row
+ *
+ * Logged ones that yield an estimate, and no others. Absence is how this file
+ * already says "nothing to report", and there are three ways to arrive at it:
+ * a workout whose `type` has no MET band, a session with neither a duration nor
+ * a set to model one from, and a range too wide to mean anything —
+ * `lib/energy.ts` makes all three the same `null` and argues each.
+ *
+ * `status` is deliberately NOT consulted, which is the one judgement call here.
+ * A session marked `skipped` that nonetheless carries a logged duration is
+ * contradictory data, and the screen prices it anyway; a file that quietly
+ * disagreed with the figure somebody watched appear would be the harder of the
+ * two to explain. One rule, one answer, in both places.
+ */
+function sessionEnergies(tables: ExportTables): SessionEnergyRow[] {
+  const exercisesByWorkout = groupBy(
+    tables.workoutExercises,
+    (row) => row.workoutId,
+  );
+  const setsByLog = groupBy(tables.exerciseSets, (row) => row.workoutLogId);
+  const library = new Map(
+    tables.workouts.map((workout) => [workout.id, workout]),
+  );
+
+  return ordered(
+    tables.workoutLogs.flatMap((log) => {
+      const workout = library.get(log.workoutId);
+
+      // A log naming a workout the library does not hold. Unreachable through
+      // the composite foreign key — and `queries/export.ts` selects the whole
+      // table — so this is `planVsActual`'s `carried` filter by another name:
+      // the LOG is still in the document above, whole. Only the reading of it
+      // is dropped, and only for the row that could not be read.
+      if (!workout) return [];
+
+      const range = sessionEnergy({
+        type: workout.type,
+        exercises: exercisesByWorkout.get(log.workoutId) ?? [],
+        sets: setsByLog.get(log.id) ?? [],
+        durationMin: log.durationMin,
+        weightKg: nearestWeight(
+          tables.weightLogs,
+          log.date,
+          tables.profile.startWeightKg,
+        ),
+      });
+
+      if (!range) return [];
+
+      return [{ date: log.date, workoutId: log.workoutId, ...range }];
+    }),
+    // `workout_logs` is unique on (user, date, workout), so this chain is total
+    // without reaching for an id — the one section in the file that needs no
+    // tie-break, because its address genuinely identifies it.
+    (a, b) => text(a.date, b.date) || text(a.workoutId, b.workoutId),
+  );
+}
+
+/**
  * The account as one document — every user-owned row, ordered and stripped.
  *
  * `exportedAt` is a parameter rather than a `new Date()` here, the contract
@@ -460,7 +643,9 @@ export function buildExport({
     mealIngredients: ordered(
       tables.mealIngredients.map(withoutUser),
       (a, b) =>
-        text(a.mealId, b.mealId) || num(a.sortOrder, b.sortOrder) || text(a.id, b.id),
+        text(a.mealId, b.mealId) ||
+        num(a.sortOrder, b.sortOrder) ||
+        text(a.id, b.id),
     ),
     planTemplateEntries: ordered(
       tables.planTemplateEntries.map(withoutUser),
@@ -477,14 +662,16 @@ export function buildExport({
         ...withoutUser(row),
         createdAt: row.createdAt.toISOString(),
       })),
-      (a, b) => text(a.date, b.date) || text(a.slot, b.slot) || text(a.id, b.id),
+      (a, b) =>
+        text(a.date, b.date) || text(a.slot, b.slot) || text(a.id, b.id),
     ),
     mealLogs: ordered(
       tables.mealLogs.map((row) => ({
         ...withoutUser(row),
         loggedAt: row.loggedAt.toISOString(),
       })),
-      (a, b) => text(a.date, b.date) || text(a.slot, b.slot) || text(a.id, b.id),
+      (a, b) =>
+        text(a.date, b.date) || text(a.slot, b.slot) || text(a.id, b.id),
     ),
 
     workouts: ordered(
@@ -501,7 +688,9 @@ export function buildExport({
     trainingTemplateEntries: ordered(
       tables.trainingTemplateEntries.map(withoutUser),
       (a, b) =>
-        num(a.dayOfWeek, b.dayOfWeek) || num(a.sortOrder, b.sortOrder) || text(a.id, b.id),
+        num(a.dayOfWeek, b.dayOfWeek) ||
+        num(a.sortOrder, b.sortOrder) ||
+        text(a.id, b.id),
     ),
     workoutLogs: ordered(
       tables.workoutLogs.map((row) => ({
@@ -553,7 +742,9 @@ export function buildExport({
         checkedAt: row.checkedAt.toISOString(),
       })),
       (a, b) =>
-        text(a.weekStart, b.weekStart) || text(a.itemKey, b.itemKey) || text(a.id, b.id),
+        text(a.weekStart, b.weekStart) ||
+        text(a.itemKey, b.itemKey) ||
+        text(a.id, b.id),
     ),
 
     // Last in the object and therefore last in the file, for the reason
@@ -561,7 +752,9 @@ export function buildExport({
     // Every row comes before every reading of one.
     derived: {
       plannedIs: PLANNED_SEMANTICS,
+      burnIs: BURN_SEMANTICS,
       planVsActual: planVsActual(tables),
+      sessionEnergy: sessionEnergies(tables),
     },
   };
 }
