@@ -228,7 +228,7 @@ export async function provisionDemoUser(ipHash: string, now: Date): Promise<Prov
     // statement is even built. That throw would roll back the transaction and
     // turn "Try the demo" into an error for EVERY visitor, not a degraded one.
     //
-    // None of the four can be empty for the shipped seed library, and
+    // None of these can be empty for the shipped seed library, and
     // history.test.ts holds that line across all seven weekdays. But the
     // generator can return an empty batch — two of its own tests make it do so,
     // with a one-recipe slot and with a program only days old — so the property
@@ -238,9 +238,62 @@ export async function provisionDemoUser(ipHash: string, now: Date): Promise<Prov
       [schema.weightLogs, history.weightLogs],
       [schema.dayPlanOverrides, history.dayPlanOverrides],
       [schema.mealLogs, history.mealLogs],
-      [schema.workoutLogs, history.workoutLogs],
     ] as const) {
       if (rows.length > 0) await owned.insert(table, rows);
+    }
+
+    // The workout logs are inserted on their own, and not because they are
+    // special: FUEL-96's sets hang off them by `workout_log_id`, and that id is
+    // generated here. So this is the one batch above whose RETURNING rows are
+    // read rather than discarded.
+    const logRows =
+      history.workoutLogs.length > 0
+        ? await owned.insert(schema.workoutLogs, history.workoutLogs)
+        : [];
+
+    // FUEL-96. Sets are the one part of the history whose rows name TWO
+    // generated ids — the log above and the exercise from `loadSeedLibraries` —
+    // so the generator emits them keyed by `(date, workoutId)` and they are
+    // resolved here.
+    //
+    // Keyed rather than zipped positionally. `load.ts` zips its RETURNING rows
+    // against the seed arrays and has to verify the ordering name by name to do
+    // it safely; this needs no such check, because `workout_logs` is UNIQUE on
+    // `(user_id, date, workout_id)`. That constraint is what makes the pair a
+    // key at all, and it is enforced by the insert on the line above — two logs
+    // that collided here would have failed there first.
+    //
+    // Guarded on non-empty like every batch around it, for the reason the loop
+    // gives: `scope.insert` builds a statement Postgres has no form of, and the
+    // throw would roll back the transaction and turn "Try the demo" into an
+    // error for every visitor.
+    //
+    // NOT empty merely because a program is young — a program shorter than
+    // `SET_HISTORY_WEEKS` is entirely INSIDE the horizon, so it gets sets from
+    // its first day. It is empty when the program has not started, and it would
+    // be empty for a library whose working rows all declined a rep range.
+    if (history.exerciseSets.length > 0) {
+      const logIds = new Map(logRows.map((log) => [`${log.date}|${log.workoutId}`, log.id]));
+
+      await owned.insert(
+        schema.exerciseSets,
+        history.exerciseSets.map(({ date, workoutId, ...set }) => {
+          const workoutLogId = logIds.get(`${date}|${workoutId}`);
+
+          // Unreachable: the generator emits a set only for a session it has
+          // just logged. A throw rather than a filter, because the alternative
+          // is silently dropping a visitor's history and never knowing — and a
+          // `!` here would insert a null into a NOT NULL column instead.
+          if (!workoutLogId) {
+            throw new Error(
+              `Seeding exercise_sets: no workout log for ${workoutId} on ${date}. ` +
+                `The generator produced a set for a session it did not log.`,
+            );
+          }
+
+          return { ...set, workoutLogId };
+        }),
+      );
     }
 
     return user.id;

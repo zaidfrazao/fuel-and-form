@@ -7,6 +7,7 @@ import { provisionDemoUser } from "@/lib/db/queries/demo";
 import * as schema from "@/lib/db/schema";
 import { scope } from "@/lib/db/scope";
 import { DEMO_LIMITS, hashClientIp } from "@/lib/demo";
+import { WORKING_SECTION } from "@/lib/section";
 
 import { testDatabaseUrl } from "./env";
 import { seedFixture, type Fixture } from "./fixtures";
@@ -85,7 +86,13 @@ vi.mock("@/lib/seed/history", async (importOriginal) => {
     ...actual,
     demoHistory: (input: Parameters<typeof actual.demoHistory>[0]) =>
       generating.empty
-        ? { weightLogs: [], dayPlanOverrides: [], mealLogs: [], workoutLogs: [] }
+        ? {
+            weightLogs: [],
+            dayPlanOverrides: [],
+            mealLogs: [],
+            workoutLogs: [],
+            exerciseSets: [],
+          }
         : actual.demoHistory(input),
   };
 });
@@ -314,6 +321,16 @@ describe.skipIf(!configured)("provisioning a demo account", () => {
 
         expect(rows.every((row) => row.date < today)).toBe(true);
       }
+
+      // `exercise_sets` carries no date of its own — it is dated through the log
+      // it hangs off, which is the whole reason FUEL-96 resolves it by
+      // `(date, workout_id)`. So the same claim is asked of the join.
+      const sets = await owned.select(schema.exerciseSets);
+      const logDates = new Map(
+        (await owned.select(schema.workoutLogs)).map((log) => [log.id, log.date]),
+      );
+
+      expect(sets.every((set) => logDates.get(set.workoutLogId)! < today)).toBe(true);
     });
 
     it("keeps every logged row pointing at this account's own library", async () => {
@@ -334,6 +351,50 @@ describe.skipIf(!configured)("provisioning a demo account", () => {
 
       for (const log of await owned.select(schema.workoutLogs)) {
         expect(workoutIds.has(log.workoutId)).toBe(true);
+      }
+    });
+
+    it("logs sets against the sessions that were actually performed", async () => {
+      // FUEL-96, and the half no unit test can reach. `history.ts` emits a set
+      // keyed by `(date, workoutId)` and `provisionDemoUser` resolves that to a
+      // `workout_log_id` through a map. Whether the map resolved to the RIGHT
+      // log is a claim about rows in Postgres, so it is asked of Postgres: the
+      // set's log must be the one whose date and workout the generator named.
+      //
+      // A map that resolved every set to the same log would still satisfy the
+      // foreign key, still insert, and still render a training screen — with
+      // one session carrying four weeks of somebody's sets.
+      const userId = await provisioned();
+      const owned = scope(userId, getDb());
+
+      const sets = await owned.select(schema.exerciseSets);
+      const logs = await owned.select(schema.workoutLogs);
+      const exercises = await owned.select(schema.workoutExercises);
+
+      // Non-empty, or every loop below passes vacuously — the failure mode this
+      // whole ticket exists to remove.
+      expect(sets.length).toBeGreaterThan(0);
+
+      const logsById = new Map(logs.map((log) => [log.id, log]));
+      const exercisesById = new Map(exercises.map((row) => [row.id, row]));
+
+      for (const set of sets) {
+        const log = logsById.get(set.workoutLogId);
+        const exercise = exercisesById.get(set.exerciseId);
+
+        expect(log).toBeDefined();
+        expect(exercise).toBeDefined();
+
+        // The set's exercise belongs to the session its log names. This is the
+        // assertion that a mis-resolved map fails: nothing in the schema ties
+        // `exercise_id` to the log's `workout_id`, because a set references the
+        // exercise and the log independently.
+        expect(exercise!.workoutId).toBe(log!.workoutId);
+
+        // A skipped session has no sets, and a working row is the only kind
+        // that gets them.
+        expect(log!.status).not.toBe("skipped");
+        expect(exercise!.section).toBe(WORKING_SECTION);
       }
     });
 

@@ -60,6 +60,16 @@ export type LoadedSeed = {
     workouts: schema.Workout[];
     planTemplate: schema.PlanTemplateEntry[];
     trainingTemplate: schema.TrainingTemplateEntry[];
+
+    /**
+     * The exercise rows, for a caller that has to log against one — FUEL-96.
+     *
+     * Every other array here is returned because the demo's history resolves
+     * THROUGH it. This one is returned because history hangs OFF it: a set row
+     * names `(exercise_id, user_id)` under a composite key, so the id has to
+     * come out of this transaction or the insert is refused.
+     */
+    workoutExercises: schema.WorkoutExercise[];
   }>;
   /**
    * Rows written, per table, for a caller that wants to report what it did.
@@ -185,7 +195,13 @@ export async function loadSeedLibraries(s: Scope): Promise<LoadedSeed> {
     })),
   );
 
-  if (exercises.length > 0) await s.insert(schema.workoutExercises, exercises);
+  // Kept rather than discarded, unlike the ingredients above. FUEL-96's set
+  // history has to name an `exercise_id`, and these are the only rows that
+  // carry one — the seed file's entries have a `key` and the database's have a
+  // uuid, and nothing else bridges the two. `meal_ingredients` has no such
+  // consumer, so its insert result is still dropped.
+  const exerciseRows =
+    exercises.length > 0 ? await s.insert(schema.workoutExercises, exercises) : [];
 
   /* ---- The weekly template -------------------------------------------- */
 
@@ -219,12 +235,13 @@ export async function loadSeedLibraries(s: Scope): Promise<LoadedSeed> {
       workouts: workoutRows,
       planTemplate: planTemplateRows,
       trainingTemplate: trainingTemplateRows,
+      workoutExercises: exerciseRows,
     },
     counts: {
       meals: mealRows.length,
       meal_ingredients: ingredients.length,
       workouts: workoutRows.length,
-      workout_exercises: exercises.length,
+      workout_exercises: exerciseRows.length,
       plan_template_entries: seedPlanTemplate.length,
       training_template_entries: seedTrainingTemplate.length,
     },
