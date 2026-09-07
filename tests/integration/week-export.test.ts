@@ -185,7 +185,11 @@ describe.skipIf(!configured)("the weekly export, scoped", () => {
     expect(section(csv, "meals")).toEqual([
       "2026-03-09,breakfast,Bob's porridge,,,,420,24,12,55,",
     ]);
-    expect(section(csv, "training")).toEqual(["2026-03-09,Bob's circuit,circuit,yes,,,"]);
+    // Scheduled, unlogged: a blank status, a blank duration and — since
+    // nothing happened — two blank `est_burn` cells.
+    expect(section(csv, "training")).toEqual([
+      "2026-03-09,Bob's circuit,circuit,yes,,,,,",
+    ]);
   });
 
   it("chooses the current week in the user's own zone", async () => {
