@@ -343,9 +343,27 @@ function csvNumbers(text: string): Set<number> {
   return found;
 }
 
-/** Every number anywhere in the JSON, however deeply nested. */
+/**
+ * Every number anywhere in the JSON, however deeply nested — INCLUDING one
+ * spelled as a string.
+ *
+ * The string case is not hypothetical tidiness, and it is the asymmetry an
+ * external review pointed at: the CSV scanner above reads numbers out of text
+ * because every CSV cell IS text, so a netted figure there is caught whatever
+ * it is. This one started by trusting `typeof value === "number"`, which means
+ * `"netKcal": "1490"` — a perfectly ordinary thing to write when somebody wants
+ * to label or format a figure — would have walked straight through the guard
+ * that exists to catch exactly that field.
+ *
+ * A guard whose two halves disagree about what counts as a number is a guard
+ * with a documented way round it. Numeric strings count.
+ */
+const NUMERIC = /^-?\d+(\.\d+)?$/;
+
 function jsonNumbers(value: unknown, found = new Set<number>()): Set<number> {
   if (typeof value === "number") found.add(value);
+  else if (typeof value === "string" && NUMERIC.test(value))
+    found.add(Number(value));
   else if (Array.isArray(value))
     for (const item of value) jsonNumbers(item, found);
   else if (value && typeof value === "object") {
@@ -536,6 +554,18 @@ describe("the check itself", () => {
         }),
       ].filter((value) => NETTED.has(value)),
     ).toEqual([profile.targetKcal + BURN.highKcal]);
+
+    // The same figure spelled as a STRING, which is the way round the JSON
+    // scanner used to have. See `jsonNumbers`.
+    expect(
+      [
+        ...jsonNumbers({
+          derived: {
+            net: [{ kcal: String(profile.targetKcal - BURN.highKcal) }],
+          },
+        }),
+      ].filter((value) => NETTED.has(value)),
+    ).toEqual([profile.targetKcal - BURN.highKcal]);
   });
 
   test("the range this file asserts is the one the app computes", () => {

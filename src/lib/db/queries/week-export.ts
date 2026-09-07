@@ -85,9 +85,20 @@ import { byWorkout } from "./today";
  * `weighIns` is a different question — which reading a session should be costed
  * at — and its answer routinely lies outside the week: the weigh-in nearest a
  * Monday session is often the previous Thursday's. So the week's rows are joined
- * by the last weigh-in on or before Monday and the first after Sunday, which is
- * provably every candidate `nearestWeight` could pick for any date in the week,
- * and the two are kept as separate fields so that widening one cannot put a
+ * by the last weigh-in STRICTLY BEFORE Monday and the first strictly after
+ * Sunday. Strict on both sides because Monday and Sunday are themselves in
+ * `weightLogs` already — `lte` here would re-fetch a row the week range covers,
+ * which is harmless but says something untrue about where the boundary is, and
+ * the predicates are the thing a later reader will trust.
+ *
+ * That set is provably every candidate `nearestWeight` could pick for any date
+ * in the week. For a date d in the week, a weigh-in before Monday is at best
+ * the LAST one before Monday (anything earlier is strictly further from d), and
+ * symmetrically after Sunday — so nothing omitted can be nearer, or even tied:
+ * `weight_logs` is unique per date, so the omitted rows are strictly further,
+ * which is what leaves `nearestWeight`'s earlier-reading tie-break undisturbed.
+ *
+ * The two are kept as separate fields so that widening one cannot put a
  * foreign date into a file named after a week. `/training` resolves the same
  * pair for its single date, which is what makes the CSV's figure and the
  * screen's figure the same number.
@@ -228,6 +239,11 @@ export async function loadWeekExport(
 
   const days = resolveWeek(plan, monday);
 
+  // Indexed once, not once per day. `trainingDay` takes the map rather than
+  // building it, so calling `byWorkout` inside the `map` below would rebuild
+  // the whole index seven times for seven lookups.
+  const exercisesByWorkout = byWorkout(workoutExercises);
+
   return {
     monday,
     input: {
@@ -243,7 +259,7 @@ export async function loadWeekExport(
         meals: templateDay(plan, date),
       })),
       trainingDays: days.map(({ date }) =>
-        trainingDay(training, byWorkout(workoutExercises), date),
+        trainingDay(training, exercisesByWorkout, date),
       ),
       mealLogs,
       workoutLogs,

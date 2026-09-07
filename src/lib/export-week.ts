@@ -249,9 +249,11 @@ export type WeekExportInput = {
    * week. This is the candidate set `nearestWeight` scans, and the nearest
    * weigh-in to a Monday session is quite often the previous Thursday's.
    *
-   * `queries/week-export.ts` builds it as the week's rows plus the last on or
-   * before Monday plus the first after Sunday, which provably contains the
-   * nearest reading for every date in the week. Structurally typed rather than
+   * `queries/week-export.ts` builds it as the week's rows plus the last weigh-in
+   * strictly before Monday plus the first strictly after Sunday — strict
+   * because Monday and Sunday are in the week's own rows already. That set
+   * provably contains the nearest reading for every date in the week; the proof
+   * is in that module. Structurally typed rather than
    * taking `energy.ts`'s `WeighIn`, so this module names only the three things
    * `energy.convention.test.ts` allows it to.
    */
