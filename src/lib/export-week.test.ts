@@ -1073,6 +1073,53 @@ describe("the sets section", () => {
     );
   });
 
+  test("breaks a tie between two exercises sharing a place in the session", () => {
+    /*
+     * `sort_order` defaults to 0 and nothing makes it unique, so two rows can
+     * genuinely share a place. Without the `exerciseId` tie-break their sets
+     * would come out in whatever order the query returned them — which is the
+     * one thing this file promises never to depend on, since two exports of an
+     * unchanged week have to be byte-identical to be diffable.
+     *
+     * Fed in reverse, so the assertion fails if nothing decides.
+     */
+    const ALPHA = exercise({
+      id: "ffffffff-0000-4000-8000-00000000000a",
+      name: "Alpha press",
+      sortOrder: 0,
+    });
+    const BETA = exercise({
+      id: "ffffffff-0000-4000-8000-00000000000b",
+      name: "Beta curl",
+      sortOrder: 0,
+    });
+
+    expect(
+      setsOf({
+        exercises: [BETA, ALPHA],
+        sets: [
+          set({
+            id: "2",
+            workoutLogId: CIRCUIT_LOG_ID,
+            exerciseId: BETA.id,
+            setIndex: 1,
+            reps: 9,
+          }),
+          set({
+            id: "1",
+            workoutLogId: CIRCUIT_LOG_ID,
+            exerciseId: ALPHA.id,
+            setIndex: 1,
+            reps: 12,
+          }),
+        ],
+      }),
+    ).toEqual([
+      "2026-08-17,Full body circuit,Alpha press,work,1,12,",
+      "2026-08-17,Full body circuit,Beta curl,work,1,9,",
+    ]);
+  });
+
   test("keeps a set whose exercise the library no longer holds, sorted last", () => {
     // Unreachable through the composite foreign key, so this is defensive in
     // the way the unnamed-session row above is: dropping it would delete
