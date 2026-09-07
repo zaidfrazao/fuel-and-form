@@ -170,3 +170,199 @@ describe("a workout with no exercises at all", () => {
     expect(screen.queryByRole("list")).toBeNull();
   });
 });
+
+/**
+ * The form affordance, and the screen that may not have it — § P10, FUEL-108.
+ *
+ * Every case here is a property of ABSENCE, which is this file's recurring
+ * reason for existing. The affordance is opt-in because FUEL-94's criterion is
+ * that media is "never loaded on `/`", and the way that criterion fails is
+ * silently: a row that gained a button on the wrong screen looks like a row.
+ * jsdom applies no stylesheet and the visual suite photographs a seeded
+ * session, so neither would report it.
+ */
+describe("the form affordance", () => {
+  const AVAILABLE = new Set(["w1"]);
+
+  test("without the prop there is no control at all, which is what `/` renders", () => {
+    // The regression guard for FUEL-94's criterion, asserted on the component
+    // rather than on `/` — `right-now.test.tsx` has the same assertion against
+    // the real screen, and this one is what fails first if the prop stops being
+    // the thing that decides.
+    render(<ExerciseList exercises={SESSION} />);
+
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+  });
+
+  test("only an exercise that HAS a reference becomes one", () => {
+    // Not a disabled control on the others: FUEL-107 left Skipping intervals
+    // without a reference deliberately, and a control that promises one that
+    // does not exist is the state `training.tsx` refuses at the other end too.
+    render(
+      <ExerciseList exercises={SESSION} form={{ available: AVAILABLE, onShow: () => {} }} />,
+    );
+
+    const buttons = screen.getAllByRole("button");
+
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]!.textContent).toContain("Show form for");
+    expect(buttons[0]!.textContent).toContain("Squats");
+  });
+
+  test("says what it does WITHOUT silencing what the row says", () => {
+    /*
+     * The regression this replaced an `aria-label` to avoid.
+     *
+     * A label on a control that wraps a whole row replaces its contents as the
+     * accessible name, so "Show form for Squats" would have been the entirety
+     * of what a screen reader got — and the note and the prescription, which
+     * are announced on this row today, would have gone silent. The name is
+     * built from the contents instead, with the purpose prefixed.
+     */
+    render(
+      <ExerciseList
+        exercises={[exercise({ id: "w1", notes: "Sit back like you're reaching for a chair." })]}
+        form={{ available: new Set(["w1"]), onShow: () => {} }}
+      />,
+    );
+
+    // `getByRole`'s `name` IS the computed accessible name, so each of these
+    // is an assertion about what a screen reader is handed — not about markup.
+    expect(screen.getByRole("button", { name: /^Show form for/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Squats/ })).toBeTruthy();
+    // The two that an `aria-label` would have silenced.
+    expect(screen.getByRole("button", { name: /reaching for a chair/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /3 x 12/ })).toBeTruthy();
+  });
+
+  test("hands back the id that was pressed", () => {
+    // The whole contract with the caller. An affordance that reported the wrong
+    // row would open a movement under another one's name, which is the failure
+    // FUEL-94's id-rather-than-boolean state exists to make unrepresentable.
+    const shown: string[] = [];
+
+    render(
+      <ExerciseList
+        exercises={SESSION}
+        form={{ available: new Set(["w2"]), onShow: (id) => shown.push(id) }}
+      />,
+    );
+
+    screen.getByRole("button", { name: /Push-ups/ }).click();
+
+    expect(shown).toEqual(["w2"]);
+  });
+
+  test("works in the grouped shape as well as the flat one", () => {
+    // Two shapes render rows and both thread the prop. A warm-up or cool-down
+    // movement has a reference like any other — the plan list draws those rows
+    // and the session state does not step through them, which is precisely why
+    // this list is where they become reachable.
+    render(
+      <ExerciseList
+        exercises={SESSION}
+        form={{ available: new Set(["u1", "c1"]), onShow: () => {} }}
+      />,
+    );
+
+    expect(
+      screen.getAllByRole("button").map((button) => button.textContent),
+    ).toEqual([
+      "Show form for 01Joint prep~2 min",
+      "Show form for 01Lower-body stretches30 sec each",
+    ]);
+  });
+
+  test("keeps the row a row: one list item, still carrying its own content", () => {
+    // § Lists' window is a height, and the whole argument for this shape is that
+    // it adds none. A control drawn as a second row — or a row that gained a
+    // sibling — would be the per-row affordance FUEL-90 refused, arrived at by
+    // accident.
+    render(
+      <ExerciseList
+        exercises={[exercise({ id: "w1" })]}
+        form={{ available: AVAILABLE, onShow: () => {} }}
+      />,
+    );
+
+    const rows = screen.getAllByRole("listitem");
+
+    expect(rows).toHaveLength(1);
+    expect(within(rows[0]!).getByText("Squats")).toBeTruthy();
+    expect(within(rows[0]!).getByText("3 x 12")).toBeTruthy();
+  });
+});
+
+/**
+ * The mark costs no layout, asserted as structure — § P10, FUEL-108.
+ *
+ * This is the one property the ticket's whole argument rests on, and it is the
+ * one that broke: the first build marked the row with a trailing chevron, which
+ * is a flex child, which took 16px from a name column holding all of the row's
+ * slack. At 375 the seed's Plank row re-wrapped its note and grew 101px → 118,
+ * and the screen grew with it. jsdom applies no stylesheet, so no test here
+ * could have measured that — but it can hold the shape that caused it.
+ *
+ * So the guard is structural rather than dimensional: becoming a control adds
+ * no ELEMENT to the row. A mark that occupies a box is how the height comes
+ * back, whatever box it is.
+ */
+describe("the affordance adds no box", () => {
+  const only = (form?: {
+    available: ReadonlySet<string>;
+    onShow: (id: string) => void;
+  }) => {
+    const { unmount } = render(
+      <ExerciseList
+        exercises={[exercise({ id: "w1", notes: "Squeeze at the top." })]}
+        progress={new Map([["w1", "2 of 3 sets"]])}
+        form={form}
+      />,
+    );
+    const row = screen.getByRole("listitem");
+
+    /*
+     * `sr-only` is the declared exception and has to be excluded by NAME.
+     *
+     * It shrinks its box to a clipped pixel rather than removing it, so it
+     * occupies no layout — which is the property this block is really about.
+     * jsdom applies no stylesheet, so the class is the only handle on that
+     * here; the alternative, asserting on computed geometry, measures nothing
+     * in this environment.
+     */
+    const laidOut = [...row.querySelectorAll("*")].filter(
+      (node) => !node.classList.contains("sr-only"),
+    );
+    const shape = {
+      tags: laidOut.map((node) => node.tagName).join(","),
+      // What is actually drawn: the sr-only prefix is not.
+      text: laidOut
+        .filter((node) => node.children.length === 0)
+        .map((node) => node.textContent)
+        .join("|"),
+    };
+
+    unmount();
+    return shape;
+  };
+
+  test("a control row holds the same elements as an inert one, plus the button", () => {
+    const inert = only();
+    const control = only({ available: new Set(["w1"]), onShow: () => {} });
+
+    // One added element that occupies space, and it is the wrapper itself — no
+    // glyph, no spacer, no second span holding a mark.
+    expect(control.tags).toBe(`BUTTON,${inert.tags}`);
+  });
+
+  test("and it draws identically, because the mark is not a character", () => {
+    // The chevron that broke this was a rendered glyph, so it also appeared in
+    // the row's drawn text. An underline is a decoration on text that was
+    // already there: nothing to lay out. The `sr-only` prefix is excluded
+    // above for the same reason — it is announced, not drawn.
+    const inert = only();
+    const control = only({ available: new Set(["w1"]), onShow: () => {} });
+
+    expect(control.text).toBe(inert.text);
+  });
+});
