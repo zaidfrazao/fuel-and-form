@@ -263,7 +263,36 @@ function Rows({
               {String(index + 1).padStart(2, "0")}
             </span>
             <span className="flex min-w-[9rem] flex-1 flex-col gap-[3px]">
-              <span className="text-body text-text-primary">{exercise.name}</span>
+              {/*
+               * The resting mark, and it costs no space — § P10, FUEL-108.
+               *
+               * It has to REST: a hover ground says nothing to a thumb, and
+               * this screen's posture is a phone. It also has to cost nothing,
+               * because the argument for putting the affordance on the row at
+               * all is that the row is already there — an affordance that grows
+               * the list is the one FUEL-90 refused.
+               *
+               * A trailing chevron was drawn first and MEASURED, which is the
+               * only reason this is an underline. The name column is `flex-1`
+               * and holds all of the row's slack, so a 4px glyph and its 12px
+               * gap come out of the text: at 375 the seed's Plank row went from
+               * 189px of name column to 172px, its note re-wrapped, and the row
+               * grew 101px → 118. One row, seventeen pixels, invisible in
+               * jsdom and unarguable in a screenshot — see § Lists.
+               *
+               * The underline is the app's own link treatment, at the same
+               * decoration and offset `week-nav.tsx` and the form sheet use. It
+               * adds no box, so no column narrows and no note re-wraps, and it
+               * is not colour alone.
+               */}
+              <span
+                className={cn(
+                  "text-body text-text-primary",
+                  showForm && "underline decoration-text-tertiary underline-offset-4",
+                )}
+              >
+                {exercise.name}
+              </span>
               {/* Truthy, not `!== null`. `notes` is a nullable text column with
                   no length constraint, so an empty string is storable — and it
                   would render as a bare "/ " with nothing after it, which reads
@@ -337,23 +366,6 @@ function Rows({
               )}
             >
               {content}
-              {/*
-               * The resting mark, and it has to rest: a hover ground says
-               * nothing to a thumb, and this screen's posture is a phone. It is
-               * `week-nav.tsx`'s typographic chevron rather than a new mark or
-               * an SVG — § Materials' library is closed and this borrows from
-               * it rather than adding to it — and `text-tertiary`, so § The
-               * Four Rules' one umber element per screen is untouched.
-               *
-               * `aria-hidden` for that component's stated reason: the direction
-               * repeats what the label already carries.
-               */}
-              <span
-                aria-hidden
-                className={cn("shrink-0 text-slash text-text-tertiary", lift)}
-              >
-                ›
-              </span>
             </button>
           </li>
         );

@@ -227,8 +227,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--pg-accent); out
    from the prev/next chevrons rather than added to the mark library, and
    text-3 so the accent budget is untouched. Rows without one are inert rows,
    not disabled controls. */
-.row-chev { font-size: 15px; color: var(--text-3); flex: none; margin-left: -4px; }
-.row.is-hover .row-chev { color: var(--text); }
+.row-title.opens { text-decoration: underline; text-decoration-color: var(--text-3); text-underline-offset: 4px; }
 
 .status { font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
   color: var(--text-3); white-space: nowrap; }
@@ -1205,7 +1204,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                 <div style="display:flex;flex-direction:column;gap:10px;">
                   <span class="grp">Warm-up</span>
                   <div class="list">
-                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">01</span><div class="row-main"><span class="row-title">Hip openers</span></div><span class="row-trail">60s</span><span class="row-chev" aria-hidden="true">&rsaquo;</span></div>
+                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">01</span><div class="row-main"><span class="row-title opens">Hip openers</span></div><span class="row-trail">60s</span></div>
                     <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">02</span><div class="row-main"><span class="row-title">Band pull-aparts</span></div><span class="row-trail">2 × 15</span></div>
                   </div>
                 </div>
@@ -1213,19 +1212,19 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                 <div style="display:flex;flex-direction:column;gap:10px;">
                   <span class="grp">Work</span>
                   <div class="list">
-                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">01</span><div class="row-main"><span class="row-title">Press-ups</span></div><span class="row-trail">3 × 12</span><span class="row-chev" aria-hidden="true">&rsaquo;</span></div>
-                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">02</span><div class="row-main"><span class="row-title">Reverse lunges</span></div><span class="row-trail">3 × 10 ea</span><span class="row-chev" aria-hidden="true">&rsaquo;</span></div>
+                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">01</span><div class="row-main"><span class="row-title opens">Press-ups</span></div><span class="row-trail">3 × 12</span></div>
+                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">02</span><div class="row-main"><span class="row-title opens">Reverse lunges</span></div><span class="row-trail">3 × 10 ea</span></div>
                     <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">03</span><div class="row-main"><span class="row-title">Inverted rows</span></div><span class="row-trail">3 × 8</span></div>
-                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">04</span><div class="row-main"><span class="row-title">Glute bridge</span></div><span class="row-trail">3 × 15</span><span class="row-chev" aria-hidden="true">&rsaquo;</span></div>
-                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">05</span><div class="row-main"><span class="row-title">Plank</span></div><span class="row-trail">3 × 45s</span><span class="row-chev" aria-hidden="true">&rsaquo;</span></div>
+                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">04</span><div class="row-main"><span class="row-title opens">Glute bridge</span></div><span class="row-trail">3 × 15</span></div>
+                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">05</span><div class="row-main"><span class="row-title opens">Plank</span></div><span class="row-trail">3 × 45s</span></div>
                   </div>
                 </div>
 
                 <div style="display:flex;flex-direction:column;gap:10px;">
                   <span class="grp">Cool-down</span>
                   <div class="list">
-                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">01</span><div class="row-main"><span class="row-title">Couch stretch</span></div><span class="row-trail">45s ea</span><span class="row-chev" aria-hidden="true">&rsaquo;</span></div>
-                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">02</span><div class="row-main"><span class="row-title">Thoracic opener</span></div><span class="row-trail">60s</span><span class="row-chev" aria-hidden="true">&rsaquo;</span></div>
+                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">01</span><div class="row-main"><span class="row-title opens">Couch stretch</span></div><span class="row-trail">45s ea</span></div>
+                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">02</span><div class="row-main"><span class="row-title opens">Thoracic opener</span></div><span class="row-trail">60s</span></div>
                   </div>
                 </div>
               </div>
@@ -1269,7 +1268,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
           <h3>Training — the plan state</h3>
           <p>Numbered exercise rows, and six weeks of adherence as dots. Skipped is an outline, never red — the pattern is visible and deliberately ungraded. This is the screen you read <b>before and after</b>; the one you operate <i>during</i> is drawn next (&sect; Desktop, FUEL-90), and the primary here becomes <b>Start session</b> the day that state is built.</p>
           <p><b>Grouped since FUEL-90</b>, and the cost is the point rather than a side effect. Warm-up, work and cool-down are the group heading &sect; Lists now names — the Slash register, uppercase and tracked, which <code>shopping-list-view.tsx</code> has drawn since it shipped, so this is its second case and not a second device. Grouping the five rows drawn here took the exercise block from <b>281px to 597px</b> and this frame from <b>973px to 1290px</b>: nine rows and three headings, each heading 20px and its gap 10. Against a window that ends where the sticky bar begins, that is a list which has stopped being the thing on the screen — which is the argument for the frame below, not an objection to it. The tagline read <code>P3 · /</code> until FUEL-90 and was a copy-paste from the frame above it; the route is <code>/training</code> and always was.</p>
-          <p><b>The rows are the form affordance since FUEL-108</b>, and the chevron is what says so. FUEL-90 gave &ldquo;Show form&rdquo; to the session state alone on two grounds: the accordion ban, which <b>stands</b> and is why the row <i>opens the sheet</i> rather than expanding, and the height budget, which is <b>spent</b> &mdash; that objection is to a control drawn beside a row, and this one <b>is</b> the row. Nothing is added and nothing is taller. The mark rests because a hover ground says nothing to a thumb; it is the prev/next chevron borrowed rather than a ninth mark, and <code>text-3</code> rather than accent. <b>Row 03 has none deliberately</b> &mdash; a reference exists for thirteen of fourteen exercises, and a row without one stays an inert row rather than becoming a disabled control. <code>/</code> draws no chevron on the same list: &sect; Materials admits imagery inside a sheet, and media is never loaded there.</p>
+          <p><b>The rows are the form affordance since FUEL-108</b>, and the <b>underline on the title</b> is what says so. FUEL-90 gave &ldquo;Show form&rdquo; to the session state alone on two grounds: the accordion ban, which <b>stands</b> and is why the row <i>opens the sheet</i> rather than expanding, and the height budget, which is <b>spent</b> &mdash; that objection is to a control drawn beside a row, and this one <b>is</b> the row. <b>The mark was drawn as a trailing chevron first, and measured, and it cost 17px.</b> A dense row&rsquo;s name column is <code>flex-1</code> and holds all the slack, so a glyph and its gap come out of the text: Plank&rsquo;s note re-wrapped and that row grew 101px to 118. The underline is the link treatment this file already draws, at the same decoration and offset; it occupies no box, so nothing narrows and nothing re-wraps. <b>Row 03 is unmarked deliberately</b> &mdash; a reference exists for thirteen of fourteen exercises, and a row without one stays an inert row rather than becoming a disabled control. <code>/</code> marks no row on the same list: &sect; Materials admits imagery inside a sheet, and media is never loaded there.</p>
         </div>
       </div>
 
@@ -1926,7 +1925,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                 <div style="display:flex;flex-direction:column;gap:10px;">
                   <span class="grp">Warm-up</span>
                   <div class="list">
-                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">01</span><div class="row-main"><span class="row-title">Hip openers</span></div><span class="row-trail">60s</span><span class="row-chev" aria-hidden="true">&rsaquo;</span></div>
+                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">01</span><div class="row-main"><span class="row-title opens">Hip openers</span></div><span class="row-trail">60s</span></div>
                     <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">02</span><div class="row-main"><span class="row-title">Band pull-aparts</span></div><span class="row-trail">2 × 15</span></div>
                   </div>
                 </div>
@@ -1934,19 +1933,19 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                 <div style="display:flex;flex-direction:column;gap:10px;">
                   <span class="grp">Work</span>
                   <div class="list">
-                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">01</span><div class="row-main"><span class="row-title">Press-ups</span></div><span class="row-trail">3 × 12</span><span class="row-chev" aria-hidden="true">&rsaquo;</span></div>
-                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">02</span><div class="row-main"><span class="row-title">Reverse lunges</span></div><span class="row-trail">3 × 10 ea</span><span class="row-chev" aria-hidden="true">&rsaquo;</span></div>
+                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">01</span><div class="row-main"><span class="row-title opens">Press-ups</span></div><span class="row-trail">3 × 12</span></div>
+                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">02</span><div class="row-main"><span class="row-title opens">Reverse lunges</span></div><span class="row-trail">3 × 10 ea</span></div>
                     <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">03</span><div class="row-main"><span class="row-title">Inverted rows</span></div><span class="row-trail">3 × 8</span></div>
-                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">04</span><div class="row-main"><span class="row-title">Glute bridge</span></div><span class="row-trail">3 × 15</span><span class="row-chev" aria-hidden="true">&rsaquo;</span></div>
-                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">05</span><div class="row-main"><span class="row-title">Plank</span></div><span class="row-trail">3 × 45s</span><span class="row-chev" aria-hidden="true">&rsaquo;</span></div>
+                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">04</span><div class="row-main"><span class="row-title opens">Glute bridge</span></div><span class="row-trail">3 × 15</span></div>
+                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">05</span><div class="row-main"><span class="row-title opens">Plank</span></div><span class="row-trail">3 × 45s</span></div>
                   </div>
                 </div>
 
                 <div style="display:flex;flex-direction:column;gap:10px;">
                   <span class="grp">Cool-down</span>
                   <div class="list">
-                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">01</span><div class="row-main"><span class="row-title">Couch stretch</span></div><span class="row-trail">45s ea</span><span class="row-chev" aria-hidden="true">&rsaquo;</span></div>
-                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">02</span><div class="row-main"><span class="row-title">Thoracic opener</span></div><span class="row-trail">60s</span><span class="row-chev" aria-hidden="true">&rsaquo;</span></div>
+                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">01</span><div class="row-main"><span class="row-title opens">Couch stretch</span></div><span class="row-trail">45s ea</span></div>
+                    <div class="row" style="min-height:46px;padding:11px 0;"><span class="num-ix">02</span><div class="row-main"><span class="row-title opens">Thoracic opener</span></div><span class="row-trail">60s</span></div>
                   </div>
                 </div>
               </div>
@@ -1995,7 +1994,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
           <span class="tagline">P3 · /training · dark</span>
           <h3>Training — the plan state</h3>
           <p><b>Grouped since FUEL-90</b>, which is the one thing that changed here: warm-up, work and cool-down are the group heading &sect; Lists now names, drawn once so that four P10 tickets do not each invent one. The three headings cost real height, and that cost is the argument for the state drawn below rather than an objection to it. Redrawn before that (FUEL-85), and <b>changed least of the three</b> &mdash; this screen&rsquo;s columns were already full, which is why it read better than <code>/</code> before any of this. It takes the header rule and the content-width controls, and keeps everything else. The measure keeps the session and the exercise list; the aside keeps the adherence grid and the recent sessions. An earlier draft moved adherence into the header on the grounds that it was below the fold; that was the phone&rsquo;s fold, and at desktop the aside starts at the top of the content. <b>A redesign that churns a working screen to look busy is the same mistake in the other direction.</b> The rail is drawn active on Training here, which is the first time this file has drawn that destination at all.</p>
-          <p><b>The rows are the form affordance since FUEL-108</b>, and the chevron is what says so. FUEL-90 gave &ldquo;Show form&rdquo; to the session state alone on two grounds: the accordion ban, which <b>stands</b> and is why the row <i>opens the sheet</i> rather than expanding, and the height budget, which is <b>spent</b> &mdash; that objection is to a control drawn beside a row, and this one <b>is</b> the row. Nothing is added and nothing is taller. The mark rests because a hover ground says nothing to a thumb; it is the prev/next chevron borrowed rather than a ninth mark, and <code>text-3</code> rather than accent. <b>Row 03 has none deliberately</b> &mdash; a reference exists for thirteen of fourteen exercises, and a row without one stays an inert row rather than becoming a disabled control. <code>/</code> draws no chevron on the same list: &sect; Materials admits imagery inside a sheet, and media is never loaded there.</p>
+          <p><b>The rows are the form affordance since FUEL-108</b>, and the <b>underline on the title</b> is what says so. FUEL-90 gave &ldquo;Show form&rdquo; to the session state alone on two grounds: the accordion ban, which <b>stands</b> and is why the row <i>opens the sheet</i> rather than expanding, and the height budget, which is <b>spent</b> &mdash; that objection is to a control drawn beside a row, and this one <b>is</b> the row. <b>The mark was drawn as a trailing chevron first, and measured, and it cost 17px.</b> A dense row&rsquo;s name column is <code>flex-1</code> and holds all the slack, so a glyph and its gap come out of the text: Plank&rsquo;s note re-wrapped and that row grew 101px to 118. The underline is the link treatment this file already draws, at the same decoration and offset; it occupies no box, so nothing narrows and nothing re-wraps. <b>Row 03 is unmarked deliberately</b> &mdash; a reference exists for thirteen of fourteen exercises, and a row without one stays an inert row rather than becoming a disabled control. <code>/</code> marks no row on the same list: &sect; Materials admits imagery inside a sheet, and media is never loaded there.</p>
         </div>
       </div>
 

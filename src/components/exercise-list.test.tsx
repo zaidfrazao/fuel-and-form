@@ -281,3 +281,57 @@ describe("the form affordance", () => {
     expect(within(rows[0]!).getByText("3 x 12")).toBeTruthy();
   });
 });
+
+/**
+ * The mark costs no layout, asserted as structure — § P10, FUEL-108.
+ *
+ * This is the one property the ticket's whole argument rests on, and it is the
+ * one that broke: the first build marked the row with a trailing chevron, which
+ * is a flex child, which took 16px from a name column holding all of the row's
+ * slack. At 375 the seed's Plank row re-wrapped its note and grew 101px → 118,
+ * and the screen grew with it. jsdom applies no stylesheet, so no test here
+ * could have measured that — but it can hold the shape that caused it.
+ *
+ * So the guard is structural rather than dimensional: becoming a control adds
+ * no ELEMENT to the row. A mark that occupies a box is how the height comes
+ * back, whatever box it is.
+ */
+describe("the affordance adds no box", () => {
+  const only = (form?: {
+    available: ReadonlySet<string>;
+    onShow: (id: string) => void;
+  }) => {
+    const { unmount } = render(
+      <ExerciseList
+        exercises={[exercise({ id: "w1", notes: "Squeeze at the top." })]}
+        progress={new Map([["w1", "2 of 3 sets"]])}
+        form={form}
+      />,
+    );
+    const row = screen.getByRole("listitem");
+    const shape = {
+      // Every element in the row, by tag, in order.
+      tags: [...row.querySelectorAll("*")].map((node) => node.tagName).join(","),
+      text: row.textContent,
+    };
+
+    unmount();
+    return shape;
+  };
+
+  test("a control row holds the same elements as an inert one, plus the button", () => {
+    const inert = only();
+    const control = only({ available: new Set(["w1"]), onShow: () => {} });
+
+    // One added element and it is the wrapper itself — no glyph, no spacer, no
+    // second span holding a mark.
+    expect(control.tags).toBe(`BUTTON,${inert.tags}`);
+  });
+
+  test("and it reads identically, because the mark is not a character", () => {
+    // The chevron that broke this was a rendered glyph, so it also appeared in
+    // the row's text. An underline is a decoration on text that was already
+    // there: nothing to announce, nothing to lay out.
+    expect(only({ available: new Set(["w1"]), onShow: () => {} }).text).toBe(only().text);
+  });
+});
