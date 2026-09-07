@@ -626,16 +626,21 @@ restores a uuid pointing at nothing.
   "mealLogs":                [ { "id", "date", "slot", "mealId", "status", "note", "loggedAt" } ],
 
   "workouts":                [ { "id", "name", "type", "description", "rotationGroup", "rotationIndex" } ],
-  "workoutExercises":        [ { "id", "workoutId", "name", "prescription", "sortOrder", "notes" } ],
+  "workoutExercises":        [ { "id", "workoutId", "name", "prescription", "sortOrder", "notes",
+                                 "section", "targetSets", "targetRepsLow", "targetRepsHigh",
+                                 "mediaKey", "mediaKind", "mediaAlt", "mediaCredit" } ],
   "trainingTemplateEntries": [ { "id", "dayOfWeek", "workoutId", "rotationGroup", "sortOrder" } ],
   "workoutLogs":             [ { "id", "date", "workoutId", "status", "note", "durationMin", "loggedAt" } ],
+  "exerciseSets":            [ { "id", "workoutLogId", "exerciseId", "setIndex", "reps", "loadKg", "createdAt" } ],
 
   "weightLogs":              [ { "id", "date", "weightKg", "note", "createdAt" } ],
 
   "shoppingChecks":          [ { "id", "weekStart", "itemKey", "checkedAt" } ],
 
   "derived": { "plannedIs": "template-as-of-export",
-               "planVsActual": [ { "date", "slot", "plannedMealId", "swappedWithMealId", "actualMealId", "status", "note" } ] }
+               "burnIs":    "estimated-not-measured",
+               "planVsActual":  [ { "date", "slot", "plannedMealId", "swappedWithMealId", "actualMealId", "status", "note" } ],
+               "sessionEnergy": [ { "date", "workoutId", "lowKcal", "highKcal" } ] }
 }
 ```
 
@@ -652,8 +657,8 @@ write down rather than one they can skip.
 
 #### `derived`, the one key that is not rows
 
-Every other key is rows. This one is a reading of them: for each slot, what the
-**template** planned, what a **swap** put there, and what was **logged**.
+Every other key is rows. This one holds two readings of them: `planVsActual`,
+which is per slot, and `sessionEnergy`, which is per logged session.
 
 It is nested and written **last** so it cannot be mistaken for restorable state.
 **A restore should skip `derived` entirely** — that is a rule you can follow
@@ -695,6 +700,32 @@ a reader who keeps the string can tell two exports of the same date apart
 instead of assuming the earlier one was wrong. The rows above are facts; this is
 a present-tense reading of them. The same caveat applies to the CSV's `planned`
 column, which has nowhere to say so.
+
+#### `derived.sessionEnergy` — what a session is estimated to have cost
+
+```jsonc
+{ "date": "2026-08-17", "workoutId": "…circuit", "lowKcal": 190, "highKcal": 310 }
+```
+
+A **range**, in kcal, per logged session — modelled from the workout type's MET
+band, the session's sections, its logged duration and the bodyweight nearest
+that date. `derived.burnIs` is `"estimated-not-measured"`, and it is in the file
+for `plannedIs`' reason: every other number in the document is something a
+person entered or a scale reported, and this one is not.
+
+**It is never netted against intake.** PRD § P10: the estimate is not
+subtracted from, added to, or combined with `target_kcal` or any macro total,
+the export included. A spreadsheet is exactly where two adjacent columns get
+subtracted, so the figure keeps its range, sits under `derived`, and is summed
+into nothing. `src/lib/export-energy.test.ts` checks that against the produced
+files rather than against this paragraph.
+
+A session gets no row when it cannot be priced: a workout type with no MET band,
+a session with neither a logged duration nor a set, or a range too wide to mean
+anything. Absence is this file's way of saying nothing to report — the
+`workoutLogs` row is still there, whole. Sessions logged before per-set tracking
+existed price normally, since a measured duration is what the estimate is built
+from.
 
 #### What is not in it, and why
 
@@ -750,14 +781,19 @@ downloads of one week overwrite rather than accumulate.
 
 #### The shape
 
-A four-line preamble, then three sections separated by blank lines. The file is
-deliberately ragged — three tables, three different column counts, which P6
-allows as "one section or file each" and every spreadsheet imports.
+A five-line preamble, then four sections separated by blank lines. The file is
+deliberately ragged — four tables, four different column counts, which P6 allows
+as "one section or file each" and every spreadsheet imports.
+
+Sets are their own section rather than columns on the training row: a training
+row is one per session and a set row is many per session, so they cannot share a
+header, and `12,10,8` packed into one cell is a column nobody can pivot.
 
 ```csv
 week,2026-08-17
 dates,2026-08-17,2026-08-23
 timezone,Europe/London
+est_burn_is,estimated-not-measured
 exported_at,2026-08-21T09:30:00.000Z
 
 weight
@@ -766,9 +802,15 @@ date,weight_kg,note
 2026-08-19,80.1,"lighter, after a long walk"
 
 training
-date,session,type,scheduled,status,duration_min,note
-2026-08-17,Push A,strength,yes,done,52,
-2026-08-17,Daily walk,walk,yes,,,
+date,session,type,scheduled,status,duration_min,est_burn_kcal_low,est_burn_kcal_high,note
+2026-08-17,Full body circuit,circuit,yes,done,34,190,310,
+2026-08-17,Daily walk,walk,yes,,,,,
+
+sets
+date,session,exercise,section,set_index,reps,load_kg
+2026-08-17,Full body circuit,Goblet squat,work,1,12,
+2026-08-17,Full body circuit,Goblet squat,work,2,10,
+2026-08-17,Full body circuit,Dumbbell row,work,1,10,22.5
 
 meals
 date,slot,planned,swapped_with,actual,status,kcal,protein_g,fat_g,carb_g,note
@@ -799,6 +841,29 @@ that would disagree on exactly the swapped days.
 otherwise the meal that stood. So a summed column is intake *as recorded*, and
 a row with a blank `status` is intake that was planned and never confirmed —
 **filter on `status = eaten`** to separate them.
+
+**`session`** is the same column in the training and sets sections, and the
+sets section is long form precisely so the two can be joined on `(date,
+session)` and pivoted. It is called `session` in both rather than `workout` in
+one of them for that reason.
+
+**`section`** on a set row says which part of the session the exercise belongs
+to — `work`, `warmup`, `cooldown` — so warm-up movement is separable from
+working volume rather than inflating it. Today the app only offers set entry on
+working rows, so in practice every set row reads `work`; the column is what lets
+you rely on that instead of assuming it.
+
+**`est_burn_kcal_low` and `est_burn_kcal_high`** are the modelled cost of the
+session, and the `est_` prefix is the whole labelling rule: the only bare `kcal`
+column in this file is the meals section's, which is a stored figure. Anything
+carrying `est_` was computed from a MET band, a bodyweight and a duration.
+
+**Do not subtract one from the other.** PRD § P10: the estimate is never
+combined with `target_kcal` or any macro total. The two live in different
+sections with different headers for exactly that reason, and `est_burn_is` in
+the preamble says so inside the file. Both cells are blank when the session
+cannot be priced — an unlogged session, a workout type with no band, or a
+session with no logged duration to apportion.
 
 **`scheduled`** in the training section is `yes` or `no`. A session can be
 logged on a date the template no longer covers, because the template is edited

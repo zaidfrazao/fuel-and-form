@@ -116,7 +116,7 @@ describe("the table", () => {
   });
 
   test("writes an empty row as a blank line", () => {
-    // How the weekly export separates its three sections.
+    // How the weekly export separates its four sections.
     expect(csvTable([["a"], [], ["b"]])).toBe("a\r\n\r\nb\r\n");
   });
 

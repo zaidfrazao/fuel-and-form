@@ -42,20 +42,28 @@ import type { TrainingDay } from "./resolve-training";
  * Nothing here is the backup. Any row this summarises away is still in the JSON
  * export, whole.
  *
- * ## One file, three sections
+ * ## One file, four sections
  *
  * P6 asks for "one section or file each for weight, training, and meals" and
  * this takes the first option: one attachment on a check-in message, one tap on
- * a phone. The file is therefore ragged — three tables with three different
- * column counts, separated by blank lines — which every spreadsheet import
- * understands and no CSV reader minds, since a reader is told the shape by the
- * header row it is pointed at.
+ * a phone. The file is therefore ragged — tables with different column counts,
+ * separated by blank lines — which every spreadsheet import understands and no
+ * CSV reader minds, since a reader is told the shape by the header row it is
+ * pointed at.
  *
- * A four-line preamble comes first. `week` and `dates` name the seven days;
+ * FUEL-97 made it four rather than three. Sets are their own section and not a
+ * widening of training, because a training row is one per session and a set row
+ * is many per session: they cannot share a header, and packing `12,10,8` into a
+ * cell produces a column a spreadsheet cannot pivot, sum or chart — which is the
+ * one thing the assistant opens this file to do.
+ *
+ * A five-line preamble comes first. `week` and `dates` name the seven days;
  * `timezone` is there because a bare column of dates is not readable without it
  * — "2026-08-17" is a day only in some zone, and the JSON export makes the same
  * claim by putting the timezone on `account` rather than leaving it inside
- * `profile`.
+ * `profile`. `est_burn_is` is there because the two modelled columns are the
+ * only numbers in the file that nobody measured, and a spreadsheet is precisely
+ * where a caveat that lives in a README stops travelling with the data.
  *
  * ## The three meal columns
  *

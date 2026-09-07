@@ -1304,6 +1304,31 @@ describe("`derived.sessionEnergy`", () => {
     ]);
   });
 
+  test("skips a log naming a workout the library does not hold", () => {
+    /*
+     * Unreachable through the composite foreign key, and `queries/export.ts`
+     * selects the whole `workouts` table — so this is `planVsActual`'s
+     * `carried` filter by another name. The reading is dropped because it
+     * cannot be computed; the LOG stays in the document, whole, so a reader
+     * sees the dangling reference rather than being told nothing happened.
+     */
+    const document = build({
+      ...TABLES,
+      workoutLogs: [
+        workoutLog(WORKOUT_LOG_ID, "2026-08-10"),
+        {
+          ...workoutLog("cccccccc-0000-4000-8000-00000000000e", "2026-08-11"),
+          workoutId: "bbbbbbbb-0000-4000-8000-00000000000f",
+        },
+      ],
+    });
+
+    expect(document.derived.sessionEnergy).toEqual([
+      { date: "2026-08-10", workoutId: WORKOUT_ID, lowKcal: 220, highKcal: 360 },
+    ]);
+    expect(document.workoutLogs).toHaveLength(2);
+  });
+
   test("is empty for an account that has logged nothing", () => {
     expect(build(EMPTY).derived.sessionEnergy).toEqual([]);
   });

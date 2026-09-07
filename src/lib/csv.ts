@@ -91,10 +91,10 @@ function field(value: string): string {
  * backwards when a section happens to have no rows.
  *
  * A row may be empty. `[]` writes a blank line, which is how `export-week.ts`
- * separates its three sections: the file is deliberately ragged — three tables
- * with three different column counts, which PRD § P6 asks for as "one section
- * or file each" — and a blank line is the separator every spreadsheet's import
- * already understands.
+ * separates its sections: the file is deliberately ragged — four tables with
+ * four different column counts, which PRD § P6 asks for as "one section or file
+ * each" — and a blank line is the separator every spreadsheet's import already
+ * understands.
  */
 export function csvTable(rows: readonly (readonly string[])[]): string {
   return rows.map((row) => row.map(field).join(",") + ROW_END).join("");
