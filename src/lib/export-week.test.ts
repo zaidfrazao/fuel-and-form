@@ -1,7 +1,19 @@
 import { describe, expect, test } from "vitest";
 
-import type { Meal, MealLog, WeightLog, Workout, WorkoutLog } from "./db/schema";
-import { buildWeekCsv, type WeekExportInput, weekExportFilename } from "./export-week";
+import type {
+  ExerciseSet,
+  Meal,
+  MealLog,
+  WeightLog,
+  Workout,
+  WorkoutExercise,
+  WorkoutLog,
+} from "./db/schema";
+import {
+  buildWeekCsv,
+  type WeekExportInput,
+  weekExportFilename,
+} from "./export-week";
 import type { ResolvedDay, ResolvedMeal } from "./resolve-plan";
 import type { TrainingSession } from "./resolve-training";
 
@@ -90,8 +102,87 @@ const WALK: Workout = {
   type: "walk",
 };
 
+/**
+ * The one workout type in these fixtures that can be COSTED — FUEL-95/97.
+ *
+ * `MET_BANDS` holds bands for `circuit` and `intervals` and for nothing else,
+ * so `PUSH` and `WALK` above produce two blank `est_burn` cells however they
+ * are logged. That is not an oversight in the fixtures, it is what makes them
+ * useful: most of the file below asserts whole documents, and a session that
+ * silently acquired an estimate would change every one of them.
+ *
+ * The estimate also needs a LOGGED duration. A session with sets and no
+ * duration models its minutes from reps, and that band compounds to 3.2× wide,
+ * which `MAX_WIDTH_RATIO` refuses — so "sets alone" is a real and deliberate
+ * no-estimate case, argued in `energy.ts` rather than here.
+ */
+const CIRCUIT: Workout = {
+  ...PUSH,
+  id: "bbbbbbbb-0000-4000-8000-000000000003",
+  name: "Full body circuit",
+  type: "circuit",
+};
+
+function exercise(
+  over: Partial<WorkoutExercise> & Pick<WorkoutExercise, "id" | "name">,
+): WorkoutExercise {
+  return {
+    userId: USER_ID,
+    workoutId: CIRCUIT.id,
+    prescription: "3 x 12",
+    sortOrder: 0,
+    notes: null,
+    section: "work",
+    targetSets: null,
+    targetRepsLow: null,
+    targetRepsHigh: null,
+    mediaKey: null,
+    mediaKind: null,
+    mediaAlt: null,
+    mediaCredit: null,
+    ...over,
+  };
+}
+
+/** Two working rows and a cool-down, so `section` has something to say. */
+const SQUAT = exercise({
+  id: "ffffffff-0000-4000-8000-000000000001",
+  name: "Goblet squat",
+  sortOrder: 0,
+});
+const ROW = exercise({
+  id: "ffffffff-0000-4000-8000-000000000002",
+  name: "Dumbbell row",
+  sortOrder: 1,
+});
+const STRETCH = exercise({
+  id: "ffffffff-0000-4000-8000-000000000003",
+  name: "Hip opener",
+  sortOrder: 2,
+  section: "cooldown",
+});
+
+function set(
+  over: Partial<ExerciseSet> &
+    Pick<
+      ExerciseSet,
+      "id" | "workoutLogId" | "exerciseId" | "setIndex" | "reps"
+    >,
+): ExerciseSet {
+  return {
+    userId: USER_ID,
+    loadKg: null,
+    createdAt: new Date("2026-08-17T18:05:00.000Z"),
+    ...over,
+  };
+}
+
 /** A planned slot, as `resolveSlot` answers it. */
-function planned(slot: ResolvedMeal["slot"], meal: Meal, source: ResolvedMeal["source"] = "template"): ResolvedMeal {
+function planned(
+  slot: ResolvedMeal["slot"],
+  meal: Meal,
+  source: ResolvedMeal["source"] = "template",
+): ResolvedMeal {
   return { slot, meal, source, entryId: `entry-${slot}-${source}` };
 }
 
@@ -111,7 +202,9 @@ function session(workout: Workout): TrainingSession {
   };
 }
 
-function mealLog(over: Partial<MealLog> & Pick<MealLog, "date" | "slot" | "mealId">): MealLog {
+function mealLog(
+  over: Partial<MealLog> & Pick<MealLog, "date" | "slot" | "mealId">,
+): MealLog {
   return {
     id: "cccccccc-0000-4000-8000-000000000001",
     userId: USER_ID,
@@ -136,7 +229,9 @@ function workoutLog(
   };
 }
 
-function weightLog(over: Partial<WeightLog> & Pick<WeightLog, "date" | "weightKg">): WeightLog {
+function weightLog(
+  over: Partial<WeightLog> & Pick<WeightLog, "date" | "weightKg">,
+): WeightLog {
   return {
     id: "eeeeeeee-0000-4000-8000-000000000001",
     userId: USER_ID,
@@ -148,7 +243,15 @@ function weightLog(over: Partial<WeightLog> & Pick<WeightLog, "date" | "weightKg
 
 /** An empty week, which every case below fills in only what it is about. */
 function input(over: Partial<WeekExportInput> = {}): WeekExportInput {
-  const dates = ["2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21", "2026-08-22", SUNDAY];
+  const dates = [
+    "2026-08-17",
+    "2026-08-18",
+    "2026-08-19",
+    "2026-08-20",
+    "2026-08-21",
+    "2026-08-22",
+    SUNDAY,
+  ];
 
   return {
     monday: MONDAY,
@@ -161,7 +264,16 @@ function input(over: Partial<WeekExportInput> = {}): WeekExportInput {
     workoutLogs: [],
     weightLogs: [],
     meals: [OATS, CHICKEN, BEEF],
-    workouts: [PUSH, WALK],
+    workouts: [PUSH, WALK, CIRCUIT],
+    exercises: [],
+    sets: [],
+    // Empty by default, so `nearestWeight` falls back to `startWeightKg` and a
+    // case that is not about the scale does not have to say anything about it.
+    weighIns: [],
+    // The persona's start weight, which `check-no-metrics.sh` allows as a
+    // PROFILE field. The weigh-in case below uses one of that script's
+    // separate fixture values — the two lists mean different things.
+    startWeightKg: 84.2,
     ...over,
   };
 }
@@ -180,26 +292,57 @@ function section(csv: string, name: string): string[] {
 }
 
 describe("the whole document", () => {
-  test("is a preamble and three sections, in order", () => {
+  test("is a preamble and four sections, in order", () => {
     const csv = buildWeekCsv(
       input({
         days: [
-          day(MONDAY, [planned("breakfast", OATS), planned("lunch", BEEF, "override")]),
-          ...["2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21", "2026-08-22", SUNDAY].map((date) => day(date)),
+          day(MONDAY, [
+            planned("breakfast", OATS),
+            planned("lunch", BEEF, "override"),
+          ]),
+          ...[
+            "2026-08-18",
+            "2026-08-19",
+            "2026-08-20",
+            "2026-08-21",
+            "2026-08-22",
+            SUNDAY,
+          ].map((date) => day(date)),
         ],
         templateDays: [
           day(MONDAY, [planned("breakfast", OATS), planned("lunch", CHICKEN)]),
-          ...["2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21", "2026-08-22", SUNDAY].map((date) => day(date)),
+          ...[
+            "2026-08-18",
+            "2026-08-19",
+            "2026-08-20",
+            "2026-08-21",
+            "2026-08-22",
+            SUNDAY,
+          ].map((date) => day(date)),
         ],
         trainingDays: [
           { date: MONDAY, sessions: [session(PUSH), session(WALK)] },
-          ...["2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21", "2026-08-22", SUNDAY].map((date) => ({ date, sessions: [] })),
+          ...[
+            "2026-08-18",
+            "2026-08-19",
+            "2026-08-20",
+            "2026-08-21",
+            "2026-08-22",
+            SUNDAY,
+          ].map((date) => ({ date, sessions: [] })),
         ],
         mealLogs: [
           mealLog({ date: MONDAY, slot: "breakfast", mealId: OATS.id }),
-          mealLog({ id: "cccccccc-0000-4000-8000-000000000002", date: MONDAY, slot: "lunch", mealId: BEEF.id }),
+          mealLog({
+            id: "cccccccc-0000-4000-8000-000000000002",
+            date: MONDAY,
+            slot: "lunch",
+            mealId: BEEF.id,
+          }),
         ],
-        workoutLogs: [workoutLog({ date: MONDAY, workoutId: PUSH.id, durationMin: 52 })],
+        workoutLogs: [
+          workoutLog({ date: MONDAY, workoutId: PUSH.id, durationMin: 52 }),
+        ],
         weightLogs: [
           weightLog({ date: MONDAY, weightKg: 80.4 }),
           weightLog({
@@ -219,6 +362,9 @@ describe("the whole document", () => {
         "week,2026-08-17",
         "dates,2026-08-17,2026-08-23",
         "timezone,Europe/London",
+        // What the two `est_burn` columns are, said in the file rather than
+        // only in the README — `plannedIs` in the JSON export is the same move.
+        "est_burn_is,estimated-not-measured",
         "exported_at,2026-08-21T09:30:00.000Z",
         "",
         "weight",
@@ -228,11 +374,18 @@ describe("the whole document", () => {
         '2026-08-19,80.1,"lighter, after a long walk"',
         "",
         "training",
-        "date,session,type,scheduled,status,duration_min,note",
-        "2026-08-17,Push A,strength,yes,done,52,",
+        "date,session,type,scheduled,status,duration_min,est_burn_kcal_low,est_burn_kcal_high,note",
+        // Blank burn on both rows: neither `strength` nor `walk` has a MET
+        // band, so neither can be costed however it is logged. See `CIRCUIT`.
+        "2026-08-17,Push A,strength,yes,done,52,,,",
         // Scheduled and never logged: the row is still here, with a blank
         // status. Absent would say the walk was not on the plan.
-        "2026-08-17,Daily walk,walk,yes,,,",
+        "2026-08-17,Daily walk,walk,yes,,,,,",
+        "",
+        // The sets section, between training and meals — it is the training
+        // section at a finer grain, and the two join on (date, session).
+        "sets",
+        "date,session,exercise,section,set_index,reps,load_kg",
         "",
         "meals",
         "date,slot,planned,swapped_with,actual,status,kcal,protein_g,fat_g,carb_g,note",
@@ -254,13 +407,17 @@ describe("the whole document", () => {
       "week,2026-08-17",
       "dates,2026-08-17,2026-08-23",
       "timezone,Europe/London",
+      "est_burn_is,estimated-not-measured",
       "exported_at,2026-08-21T09:30:00.000Z",
       "",
       "weight",
       "date,weight_kg,note",
       "",
       "training",
-      "date,session,type,scheduled,status,duration_min,note",
+      "date,session,type,scheduled,status,duration_min,est_burn_kcal_low,est_burn_kcal_high,note",
+      "",
+      "sets",
+      "date,session,exercise,section,set_index,reps,load_kg",
       "",
       "meals",
       "date,slot,planned,swapped_with,actual,status,kcal,protein_g,fat_g,carb_g,note",
@@ -275,7 +432,9 @@ describe("planned, swapped_with and actual", () => {
       input({
         days: [day(MONDAY, [planned("breakfast", OATS)]), ...[]],
         templateDays: [day(MONDAY, [planned("breakfast", OATS)])],
-        mealLogs: [mealLog({ date: MONDAY, slot: "breakfast", mealId: OATS.id })],
+        mealLogs: [
+          mealLog({ date: MONDAY, slot: "breakfast", mealId: OATS.id }),
+        ],
       }),
     );
 
@@ -308,7 +467,12 @@ describe("planned, swapped_with and actual", () => {
         days: [day(MONDAY, [planned("breakfast", OATS)])],
         templateDays: [day(MONDAY, [planned("breakfast", OATS)])],
         mealLogs: [
-          mealLog({ date: MONDAY, slot: "breakfast", mealId: OATS.id, status: "skipped" }),
+          mealLog({
+            date: MONDAY,
+            slot: "breakfast",
+            mealId: OATS.id,
+            status: "skipped",
+          }),
         ],
       }),
     );
@@ -326,7 +490,9 @@ describe("planned, swapped_with and actual", () => {
       input({
         days: [day(MONDAY, [planned("lunch", BEEF, "override")])],
         templateDays: [day(MONDAY, [planned("lunch", CHICKEN)])],
-        mealLogs: [mealLog({ date: MONDAY, slot: "lunch", mealId: CHICKEN.id })],
+        mealLogs: [
+          mealLog({ date: MONDAY, slot: "lunch", mealId: CHICKEN.id }),
+        ],
       }),
     );
 
@@ -408,8 +574,18 @@ describe("a slot logged more than once", () => {
       buildWeekCsv(
         input({
           mealLogs: [
-            mealLog({ date: MONDAY, slot: "breakfast", mealId: OATS.id, ...first }),
-            mealLog({ date: MONDAY, slot: "breakfast", mealId: CHICKEN.id, ...second }),
+            mealLog({
+              date: MONDAY,
+              slot: "breakfast",
+              mealId: OATS.id,
+              ...first,
+            }),
+            mealLog({
+              date: MONDAY,
+              slot: "breakfast",
+              mealId: CHICKEN.id,
+              ...second,
+            }),
           ],
         }),
       ),
@@ -486,8 +662,8 @@ describe("the training section", () => {
     );
 
     expect(section(csv, "training")).toEqual([
-      "2026-08-17,Daily walk,walk,yes,done,30,",
-      "2026-08-17,Push A,strength,no,partial,,squeezed it in",
+      "2026-08-17,Daily walk,walk,yes,done,30,,,",
+      "2026-08-17,Push A,strength,no,partial,,,,squeezed it in",
     ]);
   });
 
@@ -502,7 +678,7 @@ describe("the training section", () => {
       }),
     );
 
-    expect(section(csv, "training")).toEqual(["2026-08-17,,,no,done,,"]);
+    expect(section(csv, "training")).toEqual(["2026-08-17,,,no,done,,,,"]);
   });
 
   test("orders unscheduled sessions by name", () => {
@@ -546,8 +722,8 @@ describe("the training section", () => {
     );
 
     expect(section(csv, "training")).toEqual([
-      "2026-08-17,,,no,done,,",
-      "2026-08-17,Push A,strength,no,done,,",
+      "2026-08-17,,,no,done,,,,",
+      "2026-08-17,Push A,strength,no,done,,,,",
     ]);
   });
 
@@ -555,7 +731,10 @@ describe("the training section", () => {
     // Two workouts may honestly share a name — `lib/export.ts` makes the same
     // point about meals. Without the second comparator the order would be
     // whatever Postgres returned, and the file would stop being reproducible.
-    const twin: Workout = { ...PUSH, id: "bbbbbbbb-0000-4000-8000-00000000000a" };
+    const twin: Workout = {
+      ...PUSH,
+      id: "bbbbbbbb-0000-4000-8000-00000000000a",
+    };
 
     const csv = buildWeekCsv(
       input({
@@ -575,8 +754,8 @@ describe("the training section", () => {
     // Ordered by id in byte order, where a digit sorts before a letter — so
     // `...0001` comes first and the 40-minute row leads.
     expect(section(csv, "training")).toEqual([
-      "2026-08-17,Push A,strength,no,done,40,",
-      "2026-08-17,Push A,strength,no,done,55,",
+      "2026-08-17,Push A,strength,no,done,40,,,",
+      "2026-08-17,Push A,strength,no,done,55,,,",
     ]);
   });
 
@@ -587,7 +766,9 @@ describe("the training section", () => {
     // that is configured.
     const csv = buildWeekCsv(
       input({
-        trainingDays: [{ date: MONDAY, sessions: [session(PUSH), session(WALK)] }],
+        trainingDays: [
+          { date: MONDAY, sessions: [session(PUSH), session(WALK)] },
+        ],
       }),
     );
 
@@ -606,8 +787,16 @@ describe("the week it names", () => {
       input({
         weightLogs: [
           weightLog({ date: "2026-08-16", weightKg: 80.8 }),
-          weightLog({ id: "eeeeeeee-0000-4000-8000-00000000000b", date: SUNDAY, weightKg: 79.3 }),
-          weightLog({ id: "eeeeeeee-0000-4000-8000-00000000000c", date: "2026-08-24", weightKg: 77.4 }),
+          weightLog({
+            id: "eeeeeeee-0000-4000-8000-00000000000b",
+            date: SUNDAY,
+            weightKg: 79.3,
+          }),
+          weightLog({
+            id: "eeeeeeee-0000-4000-8000-00000000000c",
+            date: "2026-08-24",
+            weightKg: 77.4,
+          }),
         ],
       }),
     );
@@ -652,7 +841,11 @@ describe("the document is reproducible", () => {
     // caller's rows are read here and never reordered in place.
     const rows = [
       weightLog({ date: SUNDAY, weightKg: 79.3 }),
-      weightLog({ id: "eeeeeeee-0000-4000-8000-00000000000b", date: MONDAY, weightKg: 80.4 }),
+      weightLog({
+        id: "eeeeeeee-0000-4000-8000-00000000000b",
+        date: MONDAY,
+        weightKg: 80.4,
+      }),
     ];
     const before = [...rows];
 
@@ -673,5 +866,445 @@ describe("the filename", () => {
 
   test("shares the stem the JSON export uses", () => {
     expect(weekExportFilename(MONDAY).startsWith("fuel-form-")).toBe(true);
+  });
+});
+
+describe("the sets section", () => {
+  /*
+   * § P10's per-set record in the file the assistant opens — FUEL-97.
+   *
+   * The criterion is "one row per set", and the reason it is worth a section of
+   * its own rather than a column is that a training row is one per session
+   * while a set row is many. So the assertions here are about ROWS: how many,
+   * in what order, and joined to which session.
+   *
+   * Every burn figure below is written out rather than recomputed from
+   * `lib/energy.ts`. That module is not imported here — `energy.convention.
+   * test.ts` names the three files allowed to and this is not one — and the
+   * ban is doing something useful: a test that recomputed the estimate with the
+   * same function that produced it would pass on every possible change to it.
+   */
+
+  /** A logged circuit session on the Monday, which is what has sets to show. */
+  const CIRCUIT_LOG_ID = "dddddddd-0000-4000-8000-000000000009";
+
+  function trained(over: Partial<WeekExportInput> = {}): WeekExportInput {
+    return input({
+      trainingDays: [
+        { date: MONDAY, sessions: [session(CIRCUIT)] },
+        ...[
+          "2026-08-18",
+          "2026-08-19",
+          "2026-08-20",
+          "2026-08-21",
+          "2026-08-22",
+          SUNDAY,
+        ].map((date) => ({ date, sessions: [] })),
+      ],
+      workoutLogs: [
+        workoutLog({
+          id: CIRCUIT_LOG_ID,
+          date: MONDAY,
+          workoutId: CIRCUIT.id,
+          durationMin: 30,
+        }),
+      ],
+      exercises: [SQUAT, ROW, STRETCH],
+      ...over,
+    });
+  }
+
+  const setsOf = (over: Partial<WeekExportInput> = {}) =>
+    section(buildWeekCsv(trained(over)), "sets");
+
+  test("writes one row per set, never a packed cell", () => {
+    const rows = setsOf({
+      sets: [
+        set({
+          id: "1",
+          workoutLogId: CIRCUIT_LOG_ID,
+          exerciseId: SQUAT.id,
+          setIndex: 1,
+          reps: 12,
+        }),
+        set({
+          id: "2",
+          workoutLogId: CIRCUIT_LOG_ID,
+          exerciseId: SQUAT.id,
+          setIndex: 2,
+          reps: 10,
+        }),
+        set({
+          id: "3",
+          workoutLogId: CIRCUIT_LOG_ID,
+          exerciseId: SQUAT.id,
+          setIndex: 3,
+          reps: 8,
+        }),
+      ],
+    });
+
+    // Three rows, not one cell reading "12,10,8" — which is the whole point of
+    // the section, since a packed cell cannot be pivoted or summed.
+    expect(rows).toEqual([
+      "2026-08-17,Full body circuit,Goblet squat,work,1,12,",
+      "2026-08-17,Full body circuit,Goblet squat,work,2,10,",
+      "2026-08-17,Full body circuit,Goblet squat,work,3,8,",
+    ]);
+  });
+
+  test("orders by the exercise's place in the session, then by set index", () => {
+    // Deliberately shuffled on the way in. `sort_order` is 0 for the squat and
+    // 1 for the row, so the squat's sets all come first however they arrive.
+    const rows = setsOf({
+      sets: [
+        set({
+          id: "4",
+          workoutLogId: CIRCUIT_LOG_ID,
+          exerciseId: ROW.id,
+          setIndex: 2,
+          reps: 9,
+        }),
+        set({
+          id: "1",
+          workoutLogId: CIRCUIT_LOG_ID,
+          exerciseId: SQUAT.id,
+          setIndex: 2,
+          reps: 10,
+        }),
+        set({
+          id: "3",
+          workoutLogId: CIRCUIT_LOG_ID,
+          exerciseId: ROW.id,
+          setIndex: 1,
+          reps: 10,
+        }),
+        set({
+          id: "2",
+          workoutLogId: CIRCUIT_LOG_ID,
+          exerciseId: SQUAT.id,
+          setIndex: 1,
+          reps: 12,
+        }),
+      ],
+    });
+
+    expect(rows).toEqual([
+      "2026-08-17,Full body circuit,Goblet squat,work,1,12,",
+      "2026-08-17,Full body circuit,Goblet squat,work,2,10,",
+      "2026-08-17,Full body circuit,Dumbbell row,work,1,10,",
+      "2026-08-17,Full body circuit,Dumbbell row,work,2,9,",
+    ]);
+  });
+
+  test("carries the load when one was recorded", () => {
+    expect(
+      setsOf({
+        sets: [
+          set({
+            id: "1",
+            workoutLogId: CIRCUIT_LOG_ID,
+            exerciseId: ROW.id,
+            setIndex: 1,
+            reps: 10,
+            loadKg: 22.5,
+          }),
+        ],
+      }),
+    ).toEqual(["2026-08-17,Full body circuit,Dumbbell row,work,1,10,22.5"]);
+  });
+
+  test("names the section a set was performed in", () => {
+    /*
+     * The criterion: "section is present, so warm-up work is separable from
+     * working volume".
+     *
+     * `STRETCH` is a cool-down row, and set entry is scoped to the working
+     * section, so this is a state the SCREEN cannot produce — an exercise moved
+     * to the cool-down after its sets were logged can. The column is what stops
+     * those reps being summed into the week's working volume, and it is the
+     * only thing that could.
+     */
+    expect(
+      setsOf({
+        sets: [
+          set({
+            id: "1",
+            workoutLogId: CIRCUIT_LOG_ID,
+            exerciseId: SQUAT.id,
+            setIndex: 1,
+            reps: 12,
+          }),
+          set({
+            id: "2",
+            workoutLogId: CIRCUIT_LOG_ID,
+            exerciseId: STRETCH.id,
+            setIndex: 1,
+            reps: 5,
+          }),
+        ],
+      }),
+    ).toEqual([
+      "2026-08-17,Full body circuit,Goblet squat,work,1,12,",
+      "2026-08-17,Full body circuit,Hip opener,cooldown,1,5,",
+    ]);
+  });
+
+  test("writes the header and no rows for a week that logged no sets", () => {
+    // The acceptance criterion in one line: same shape, no rows. A missing
+    // section reads as a broken export to the person opening the file.
+    expect(setsOf()).toEqual([]);
+    expect(lines(buildWeekCsv(trained()))).toContain(
+      "date,session,exercise,section,set_index,reps,load_kg",
+    );
+  });
+
+  test("keeps a set whose exercise the library no longer holds, sorted last", () => {
+    // Unreachable through the composite foreign key, so this is defensive in
+    // the way the unnamed-session row above is: dropping it would delete
+    // recorded history from the report, and a blank name says what is known.
+    expect(
+      setsOf({
+        sets: [
+          set({
+            id: "2",
+            workoutLogId: CIRCUIT_LOG_ID,
+            exerciseId: "gone",
+            setIndex: 1,
+            reps: 6,
+          }),
+          set({
+            id: "1",
+            workoutLogId: CIRCUIT_LOG_ID,
+            exerciseId: ROW.id,
+            setIndex: 1,
+            reps: 10,
+          }),
+        ],
+      }),
+    ).toEqual([
+      "2026-08-17,Full body circuit,Dumbbell row,work,1,10,",
+      "2026-08-17,Full body circuit,,,1,6,",
+    ]);
+  });
+
+  test("reports the sets of a session the week did not schedule", () => {
+    // The training section keeps an unscheduled logged session and marks it
+    // `scheduled=no`; its sets have to follow it, or the two sections disagree
+    // about what happened on a day.
+    const csv = buildWeekCsv(
+      input({
+        workoutLogs: [
+          workoutLog({
+            id: CIRCUIT_LOG_ID,
+            date: MONDAY,
+            workoutId: CIRCUIT.id,
+            durationMin: 30,
+          }),
+        ],
+        exercises: [SQUAT, ROW, STRETCH],
+        sets: [
+          set({
+            id: "1",
+            workoutLogId: CIRCUIT_LOG_ID,
+            exerciseId: SQUAT.id,
+            setIndex: 1,
+            reps: 12,
+          }),
+        ],
+      }),
+    );
+
+    expect(section(csv, "training")).toEqual([
+      "2026-08-17,Full body circuit,circuit,no,done,30,170,280,",
+    ]);
+    expect(section(csv, "sets")).toEqual([
+      "2026-08-17,Full body circuit,Goblet squat,work,1,12,",
+    ]);
+  });
+});
+
+describe("the burn estimate", () => {
+  /*
+   * § P10's figure, carried into the check-in — FUEL-95's number, FUEL-97's
+   * column. What it may never do is `export-energy.test.ts`'s subject; this
+   * block is about it being present, correct, and marked.
+   */
+
+  const LOG_ID = "dddddddd-0000-4000-8000-000000000009";
+
+  function costed(over: Partial<WeekExportInput> = {}): string[] {
+    return section(
+      buildWeekCsv(
+        input({
+          trainingDays: [
+            { date: MONDAY, sessions: [session(CIRCUIT)] },
+            ...[
+              "2026-08-18",
+              "2026-08-19",
+              "2026-08-20",
+              "2026-08-21",
+              "2026-08-22",
+              SUNDAY,
+            ].map((date) => ({ date, sessions: [] })),
+          ],
+          workoutLogs: [
+            workoutLog({
+              id: LOG_ID,
+              date: MONDAY,
+              workoutId: CIRCUIT.id,
+              durationMin: 30,
+            }),
+          ],
+          exercises: [SQUAT, ROW, STRETCH],
+          ...over,
+        }),
+      ),
+      "training",
+    );
+  }
+
+  test("prints the range as two columns, low then high", () => {
+    /*
+     * 30 minutes over three rows, two of them working: 20 working minutes at
+     * the circuit band (5.0-8.0) and 10 support minutes at 2.0-3.0, against
+     * the 84.2kg fallback. 176.8 to 280.0 kcal raw, rounded outward to the 10 — which is the
+     * figure `/training` shows for the same session, and the reason this file
+     * carries it at all: § P6's reader never opens the app.
+     */
+    expect(costed()).toEqual([
+      "2026-08-17,Full body circuit,circuit,yes,done,30,170,280,",
+    ]);
+  });
+
+  test("costs a session at the weigh-in nearest it, from outside the week", () => {
+    /*
+     * The one thing here that would be silently wrong if the query fetched only
+     * the week's weigh-ins. This reading is three days BEFORE the Monday, so a
+     * seven-day window would miss it and fall back to `start_weight_kg` — the
+     * file would still open, still sum, and quietly disagree with the screen.
+     *
+     * 88.2kg rather than the 84.2 fallback moves the range to 180-300, so it fails if
+     * the fallback is taken.
+     */
+    expect(
+      costed({ weighIns: [{ date: "2026-08-14", weightKg: 88.2 }] }),
+    ).toEqual(["2026-08-17,Full body circuit,circuit,yes,done,30,180,300,"]);
+  });
+
+  test("costs a session logged before per-set tracking existed", () => {
+    /*
+     * The acceptance criterion the ticket flags as the one a fixture will not
+     * produce by accident: a session recorded before FUEL-91, so a duration and
+     * a status and NO sets at all. It is not an error and not a blank — the
+     * duration is what the estimate is built from, and it is measured.
+     */
+    const csv = buildWeekCsv(
+      input({
+        trainingDays: [
+          { date: MONDAY, sessions: [session(CIRCUIT)] },
+          ...[
+            "2026-08-18",
+            "2026-08-19",
+            "2026-08-20",
+            "2026-08-21",
+            "2026-08-22",
+            SUNDAY,
+          ].map((date) => ({ date, sessions: [] })),
+        ],
+        workoutLogs: [
+          workoutLog({
+            id: LOG_ID,
+            date: MONDAY,
+            workoutId: CIRCUIT.id,
+            durationMin: 30,
+          }),
+        ],
+        exercises: [SQUAT, ROW, STRETCH],
+        sets: [],
+      }),
+    );
+
+    expect(section(csv, "training")).toEqual([
+      "2026-08-17,Full body circuit,circuit,yes,done,30,170,280,",
+    ]);
+    expect(section(csv, "sets")).toEqual([]);
+  });
+
+  test("leaves both columns blank when the method cannot answer", () => {
+    /*
+     * Three ways to get here and all three print the same two blanks, which is
+     * what this file already means by a number it does not have.
+     *
+     * The middle one is the interesting one: sets WITHOUT a logged duration
+     * model their minutes from reps, and that band compounds to 3.2x wide,
+     * which `MAX_WIDTH_RATIO` refuses. A range that wide is not a figure.
+     */
+    // A type with no MET band.
+    expect(
+      section(
+        buildWeekCsv(
+          input({
+            trainingDays: [
+              { date: MONDAY, sessions: [session(PUSH)] },
+              ...[
+                "2026-08-18",
+                "2026-08-19",
+                "2026-08-20",
+                "2026-08-21",
+                "2026-08-22",
+                SUNDAY,
+              ].map((date) => ({ date, sessions: [] })),
+            ],
+            workoutLogs: [
+              workoutLog({ date: MONDAY, workoutId: PUSH.id, durationMin: 30 }),
+            ],
+          }),
+        ),
+        "training",
+      ),
+    ).toEqual(["2026-08-17,Push A,strength,yes,done,30,,,"]);
+
+    // Sets, but no measured duration to apportion.
+    expect(
+      costed({
+        workoutLogs: [
+          workoutLog({
+            id: LOG_ID,
+            date: MONDAY,
+            workoutId: CIRCUIT.id,
+            durationMin: null,
+          }),
+        ],
+        sets: [
+          set({
+            id: "1",
+            workoutLogId: LOG_ID,
+            exerciseId: SQUAT.id,
+            setIndex: 1,
+            reps: 12,
+          }),
+          set({
+            id: "2",
+            workoutLogId: LOG_ID,
+            exerciseId: SQUAT.id,
+            setIndex: 2,
+            reps: 12,
+          }),
+          set({
+            id: "3",
+            workoutLogId: LOG_ID,
+            exerciseId: SQUAT.id,
+            setIndex: 3,
+            reps: 12,
+          }),
+        ],
+      }),
+    ).toEqual(["2026-08-17,Full body circuit,circuit,yes,done,,,,"]);
+
+    // Scheduled and never logged: nothing happened, so nothing is costed.
+    expect(costed({ workoutLogs: [] })).toEqual([
+      "2026-08-17,Full body circuit,circuit,yes,,,,,",
+    ]);
   });
 });

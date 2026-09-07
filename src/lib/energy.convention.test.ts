@@ -26,6 +26,20 @@ import { describe, expect, test } from "vitest";
  * the netting cannot happen without: a module that never sees an `EnergyRange`
  * cannot combine one with anything.
  *
+ * ## Where that stopped being enough — FUEL-97
+ *
+ * The paragraph above was written before the export ticket and it predicted the
+ * edit correctly. What it did not settle is what to do when a module has a
+ * LEGITIMATE reason to see the figure, which is the position both export
+ * builders are in now: the file the assistant opens is supposed to carry the
+ * estimate, and § P6 is why the estimate is in the app at all.
+ *
+ * So this file is no longer one rule. It is a ban over most of the app, a
+ * narrower ban over the two modules that had to be let through, and — in
+ * `export-energy.test.ts` — an assertion about the artefacts themselves, which
+ * is the only place the actual criterion can be checked rather than approximated.
+ * The `FORBIDDEN` block below carries the full argument for the move.
+ *
  * ## Both directions
  *
  * Downward: no module that does intake arithmetic may import `energy.ts`.
@@ -90,16 +104,47 @@ const namesEnergy = (specifier: string) =>
  *
  * `macros.ts` is the fixed-point summation itself; `day-summary.ts`,
  * `week-totals.ts` and `plan-vs-actual.ts` are the three readers that put a
- * total against `target_kcal`; the two export modules and `csv.ts` are the file
- * the check-in is built from, which PRD § P10 names by name.
+ * total against `target_kcal`; `csv.ts` and the two query modules are the rest
+ * of the path the check-in is built along, which PRD § P10 names by name.
+ *
+ * ## The two modules that left this list — FUEL-97, and what replaced them
+ *
+ * `lib/export.ts` and `lib/export-week.ts` were here until the export ticket,
+ * which the block above predicted would be "exactly the edit" this file exists
+ * to make somebody think about. They moved to `ALLOWED` rather than being
+ * routed around, because the alternative is worse in a specific way: the
+ * estimate can reach the file through a parameter without either builder ever
+ * importing this module, and a guard that a two-line indirection satisfies is a
+ * guard that reports CLEAN while the criterion is broken.
+ *
+ * What moving them costs is real and is stated rather than waved at: those two
+ * modules are precisely the ones that hold a burn range and a macro total in
+ * the same scope, so they are the modules the criterion is actually about, and
+ * they no longer have a module-level guarantee. Three things stand in its place
+ * and none of them is this scan:
+ *
+ *   - the ban still holds for the nine other entries below, including
+ *     `csv.ts` and BOTH query modules — deriving the estimate inside the pure
+ *     builders rather than in the query layer is what kept the move to two
+ *     entries instead of four;
+ *   - `EXPORT_MAY_NAME` below narrows what those two are allowed to touch, so
+ *     the allowance cannot quietly grow into "the export does its own energy
+ *     arithmetic";
+ *   - `export-energy.test.ts` asserts the criterion against the ARTEFACTS —
+ *     that no arithmetic combination of an intake figure and a burn figure
+ *     appears as a cell in the CSV or as a number anywhere in the JSON.
+ *
+ * That last one is the actual replacement, and it is honestly weaker in one
+ * direction and stronger in another. An import ban is universal over the
+ * source; a value test proves only what its fixture produces. But it asserts
+ * the thing § P10 actually asks for — never combined — where the ban could only
+ * assert a proxy for it. Neither alone is the guarantee. The package is.
  */
 const FORBIDDEN = [
   "lib/macros.ts",
   "lib/day-summary.ts",
   "lib/week-totals.ts",
   "lib/plan-vs-actual.ts",
-  "lib/export.ts",
-  "lib/export-week.ts",
   "lib/csv.ts",
   "lib/db/queries/export.ts",
   "lib/db/queries/week-export.ts",
@@ -110,12 +155,39 @@ const FORBIDDEN = [
 /**
  * Every file allowed to import the estimate, and why each one is.
  *
- * Three, and the shape of the list is the argument: the query that resolves the
- * bodyweight, the screen that draws the figure, and the tests that constrain it.
- * Nothing that adds up food is on it, and nothing can be added to it without
- * saying so here.
+ * The shape of the list is the argument: the query that resolves the bodyweight,
+ * the screen that draws the figure, the two files the estimate is FOR, and the
+ * tests that constrain them. Nothing that adds up food is on it, and nothing can
+ * be added to it without saying so here.
+ *
+ * The two export entries are the ones to read sceptically, and `EXPORT_MAY_NAME`
+ * below is the second half of each of their justifications.
  */
 const ALLOWED = new Map([
+  [
+    "lib/export.ts",
+    "PRD § P6 — the backup. It derives `derived.sessionEnergy` from rows it " +
+      "already holds, which is why no query module needed this import: the " +
+      "estimate is computed where `planVsActual` is, from `workout_logs`, " +
+      "`exercise_sets`, `workout_exercises` and the weigh-ins. The figure lands " +
+      "nested under `derived` beside `burnIs`, never beside a table and never " +
+      "inside one — the line that file conceded once and does not concede again.",
+  ],
+  [
+    "lib/export-week.ts",
+    "PRD § P6 — the check-in the nutrition assistant opens. This is the module " +
+      "the criterion is genuinely about, because it renders the meals section's " +
+      "measured `kcal` and the training section's modelled burn into one file. " +
+      "The burn is two columns of its own, prefixed `est_`, in a different " +
+      "section from any macro, and it enters no sum. `export-energy.test.ts` " +
+      "checks that against the rendered text rather than against this sentence.",
+  ],
+  [
+    "lib/export-energy.test.ts",
+    "The value-level guard that replaced the module-level one for the two " +
+      "modules above. It has to name the estimate in order to compute the " +
+      "combinations it then proves are absent from both artefacts.",
+  ],
   [
     "lib/db/queries/training.ts",
     "Resolves the bodyweight for the viewed date through `nearestWeight`. It " +
@@ -129,11 +201,35 @@ const ALLOWED = new Map([
       "Disclosure's one question per screen, and here the question is how the " +
       "session went.",
   ],
-  [
-    "lib/energy.test.ts",
-    "The module's own tests.",
-  ],
+  ["lib/energy.test.ts", "The module's own tests."],
 ]);
+
+/**
+ * What the two export builders may touch, now that they may touch anything.
+ *
+ * The narrower half of their justification above. Both need the same three
+ * names and no others: `sessionEnergy` to ask the question, `nearestWeight` to
+ * price a past session at the bodyweight it actually happened at, and
+ * `EnergyRange` to type the answer. Everything else this module exports is a
+ * COEFFICIENT — `MET_BANDS`, `SUPPORT_BAND`, `SECONDS_PER_REP`, `REST_SECONDS`,
+ * `MAX_WIDTH_RATIO`, `KCAL_STEP` — and a file that names one of those is a file
+ * doing energy arithmetic of its own rather than reporting the answer.
+ *
+ * That distinction is the whole reason this list exists rather than the
+ * allowlist entry alone. "The export may see the estimate" and "the export may
+ * compute an estimate" are different permissions, and the second one is where a
+ * figure starts being adjusted before it is printed — rounded to the same step
+ * as a macro total, widened, or scaled against something. This is the line
+ * between them, and it is a `toEqual` rather than prose.
+ *
+ * `EnergyInput` is deliberately absent: both builders construct that object
+ * structurally, and a module that has to NAME the input type is usually one
+ * building the call somewhere other than at the point it reports the answer.
+ */
+const EXPORT_MAY_NAME = ["EnergyRange", "nearestWeight", "sessionEnergy"];
+
+/** The two modules `EXPORT_MAY_NAME` constrains. */
+const EXPORT_BUILDERS = ["lib/export.ts", "lib/export-week.ts"];
 
 function* walk(directory: string): Generator<string> {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -195,9 +291,9 @@ const reexports = (code: string) =>
  * written. See the identifier test below for what this is for.
  */
 const EXPORTED = [
-  ...(readFileSync(join(SRC, "lib/energy.ts"), "utf8").matchAll(
+  ...readFileSync(join(SRC, "lib/energy.ts"), "utf8").matchAll(
     /export\s+(?:const|function|type)\s+([A-Za-z_][A-Za-z0-9_]*)/g,
-  )),
+  ),
 ].map((match) => match[1]!);
 
 describe("the estimate is never netted against intake", () => {
@@ -219,7 +315,9 @@ describe("the estimate is never netted against intake", () => {
   });
 
   test("only the modules on the allowlist import it at all", () => {
-    const importers = SOURCES.filter(({ code }) => imports(code)).map(({ rel }) => rel);
+    const importers = SOURCES.filter(({ code }) => imports(code)).map(
+      ({ rel }) => rel,
+    );
 
     expect(importers.sort()).toEqual([...ALLOWED.keys()].sort());
   });
@@ -238,7 +336,9 @@ describe("the estimate is never netted against intake", () => {
      * is what makes it worth a rule: tidying a query module by widening what it
      * exposes is an ordinary thing to do.
      */
-    const launderers = SOURCES.filter(({ code }) => reexports(code)).map(({ rel }) => rel);
+    const launderers = SOURCES.filter(({ code }) => reexports(code)).map(
+      ({ rel }) => rel,
+    );
 
     expect(launderers).toEqual([]);
   });
@@ -268,15 +368,47 @@ describe("the estimate is never netted against intake", () => {
     expect(offenders).toEqual([]);
   });
 
+  test("the export builders name the answer and never the coefficients", () => {
+    /*
+     * The narrowed ban, and the one that has to hold now that the broad one
+     * does not. See `EXPORT_MAY_NAME`.
+     *
+     * Asserted per module rather than over the pair, so a failure names the file
+     * — and derived from `EXPORTED`, so a coefficient added to `energy.ts`
+     * tomorrow is forbidden here today without anybody editing this test.
+     */
+    const named = EXPORT_BUILDERS.map((rel) => {
+      const source = SOURCES.find((file) => file.rel === rel);
+
+      // A missing module would otherwise pass this test by naming nothing,
+      // which is the way an allowlist entry rots into a guard over nothing.
+      expect(
+        source,
+        `${rel} is on the allowlist but does not exist`,
+      ).toBeDefined();
+
+      return [
+        rel,
+        EXPORTED.filter((name) =>
+          new RegExp(`\\b${name}\\b`).test(source?.identifiers ?? ""),
+        ).sort(),
+      ];
+    });
+
+    expect(named).toEqual(
+      EXPORT_BUILDERS.map((rel) => [rel, [...EXPORT_MAY_NAME].sort()]),
+    );
+  });
+
   test("the estimate does not reach for a target from its own side", () => {
     const energy = SOURCES.find(({ rel }) => rel === "lib/energy.ts");
 
     // Two imports, both pure, and neither of them touches a macro. Asserted as
     // the whole list rather than as an absence, so a third import is a decision
     // somebody has to make here rather than one that lands unnoticed.
-    const specifiers = [...(energy?.code.matchAll(/from\s+"([^"]+)"/g) ?? [])].map(
-      (match) => match[1],
-    );
+    const specifiers = [
+      ...(energy?.code.matchAll(/from\s+"([^"]+)"/g) ?? []),
+    ].map((match) => match[1]);
 
     expect(specifiers.sort()).toEqual(["./date", "./section"]);
   });
