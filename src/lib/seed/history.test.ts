@@ -6,11 +6,18 @@ import type {
   PlanTemplateEntry,
   TrainingTemplateEntry,
   Workout,
+  WorkoutExercise,
 } from "@/lib/db/schema";
 import { resolveTraining } from "@/lib/rotation";
+import { WORKING_SECTION, working } from "@/lib/section";
 import { PACE_TOLERANCE_KG, TRAILING_DAYS, weightStats } from "@/lib/weight-stats";
 
-import { demoHistory, type DemoHistoryInput, MEAL_LOG_WEEKS } from "./history";
+import {
+  demoHistory,
+  type DemoHistoryInput,
+  MEAL_LOG_WEEKS,
+  SET_HISTORY_WEEKS,
+} from "./history";
 import { seedMeals } from "./meals";
 import { DEMO_TIMEZONE, demoProfile } from "./persona";
 import { seedPlanTemplate, seedTrainingTemplate } from "./plan";
@@ -102,7 +109,29 @@ function seededLibrary() {
     }),
   );
 
-  return { meals, workouts, planTemplate, trainingTemplate };
+  // Flattened exactly as `loadSeedLibraries` writes them: `sort_order` is the
+  // position within the workout, not across all of them, and it is defaulted at
+  // load time rather than stated in the seed file.
+  const workoutExercises: WorkoutExercise[] = seedWorkouts.flatMap((workout, workoutIndex) =>
+    workout.exercises.map((exercise, sortOrder) => ({
+      ...exercise,
+      id: `exercise-${workoutIndex}-${sortOrder}`,
+      userId: "demo",
+      workoutId: `workout-${workoutIndex}`,
+      sortOrder,
+      section: exercise.section ?? WORKING_SECTION,
+      notes: exercise.notes ?? null,
+      targetSets: exercise.targetSets ?? null,
+      targetRepsLow: exercise.targetRepsLow ?? null,
+      targetRepsHigh: exercise.targetRepsHigh ?? null,
+      mediaKey: exercise.mediaKey ?? null,
+      mediaKind: exercise.mediaKind ?? null,
+      mediaAlt: exercise.mediaAlt ?? null,
+      mediaCredit: exercise.mediaCredit ?? null,
+    })),
+  );
+
+  return { meals, workouts, planTemplate, trainingTemplate, workoutExercises };
 }
 
 const LIBRARY = seededLibrary();
@@ -219,17 +248,26 @@ describe("the window it covers", () => {
       dayPlanOverrides: [],
       mealLogs: [],
       workoutLogs: [],
+      exerciseSets: [],
     });
   });
 });
 
-/** Every date this history writes, across all four tables. */
+/**
+ * Every date this history writes, across all five tables.
+ *
+ * `exerciseSets` carries a date because that is half of the key its log is
+ * resolved by (FUEL-96), which means the bounds properties below cover sets
+ * without a line of their own — including "stops before today", the one that
+ * keeps the demo's landing screen something a visitor can still act on.
+ */
 function everyDatedRow(history: ReturnType<typeof demoHistory>): CalendarDate[] {
   return [
     ...history.weightLogs.map((row) => row.date),
     ...history.workoutLogs.map((row) => row.date),
     ...history.mealLogs.map((row) => row.date),
     ...history.dayPlanOverrides.map((row) => row.date),
+    ...history.exerciseSets.map((row) => row.date),
   ];
 }
 
@@ -744,5 +782,227 @@ describe("a profile with times missing", () => {
     for (const log of history.workoutLogs) {
       expect(Number.isNaN(log.loggedAt!.getTime())).toBe(false);
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The set history                                                             */
+/* -------------------------------------------------------------------------- */
+
+/** The exercise a set names, from the fixture library. */
+function exerciseFor(input: DemoHistoryInput, exerciseId: string): WorkoutExercise {
+  const exercise = input.workoutExercises.find((row) => row.id === exerciseId);
+
+  if (!exercise) throw new Error(`No such exercise: ${exerciseId}`);
+
+  return exercise;
+}
+
+describe("set history", () => {
+  it.each(eachWeekday)("logs sets against the demo's own sessions, %s", (date) => {
+    const input = provisionedOn(date);
+    const { exerciseSets } = demoHistory(input);
+
+    // The whole point of the ticket: a demo whose training screen is blank on
+    // every past date is a portfolio piece whose headline feature renders as
+    // empty rows.
+    expect(exerciseSets.length).toBeGreaterThan(0);
+  });
+
+  it.each(eachWeekday)("keeps every set inside the schema's bounds, %s", (date) => {
+    const { exerciseSets } = demoHistory(provisionedOn(date));
+
+    for (const set of exerciseSets) {
+      // `exercise_sets_set_index_range` and `exercise_sets_reps_range`. A
+      // generator that produced a row outside these would fail at the driver,
+      // during provisioning, for every visitor — and nothing else here runs
+      // against a real constraint.
+      expect(set.setIndex).toBeGreaterThanOrEqual(1);
+      expect(set.setIndex).toBeLessThanOrEqual(20);
+      expect(set.reps).toBeGreaterThanOrEqual(1);
+      expect(set.reps).toBeLessThanOrEqual(999);
+    }
+  });
+
+  it.each(eachWeekday)("names a session it actually logged, %s", (date) => {
+    const input = provisionedOn(date);
+    const history = demoHistory(input);
+
+    // The property `provisionDemoUser` resolves sets by, asserted where it is
+    // cheap: a `(date, workoutId)` that is not among the logs is a set the
+    // provisioner would throw on, in a transaction a visitor is waiting on.
+    const logs = new Set(history.workoutLogs.map((log) => `${log.date}|${log.workoutId}`));
+
+    for (const set of history.exerciseSets) {
+      expect(logs.has(`${set.date}|${set.workoutId}`)).toBe(true);
+    }
+  });
+
+  it.each(eachWeekday)("never logs a set against a skipped session, %s", (date) => {
+    const input = provisionedOn(date);
+    const history = demoHistory(input);
+
+    const skipped = new Set(
+      history.workoutLogs
+        .filter((log) => log.status === "skipped")
+        .map((log) => `${log.date}|${log.workoutId}`),
+    );
+
+    for (const set of history.exerciseSets) {
+      expect(skipped.has(`${set.date}|${set.workoutId}`)).toBe(false);
+    }
+  });
+
+  it.each(eachWeekday)("logs sets only against working rows, %s", (date) => {
+    const input = provisionedOn(date);
+    const { exerciseSets } = demoHistory(input);
+
+    for (const set of exerciseSets) {
+      // `section.ts`: a warm-up "does not get rep entry". A set against one is
+      // data the screen cannot produce, and it would be priced at the working
+      // MET by `energy.ts` on top of that.
+      expect(exerciseFor(input, set.exerciseId).section).toBe(WORKING_SECTION);
+    }
+  });
+
+  it.each(eachWeekday)("never invents a rep count for a timed hold, %s", (date) => {
+    const input = provisionedOn(date);
+    const { exerciseSets } = demoHistory(input);
+
+    for (const set of exerciseSets) {
+      const exercise = exerciseFor(input, set.exerciseId);
+
+      // The planks, the side plank and the superman hold carry a set count and
+      // no rep range, because seconds are not reps. `reps` is NOT NULL, so the
+      // only honest row for one is no row — and the skipping session, which has
+      // no target_sets at all, declines for the reason workouts.ts gives.
+      expect(exercise.targetSets).not.toBeNull();
+      expect(exercise.targetRepsLow).not.toBeNull();
+      expect(exercise.targetRepsHigh).not.toBeNull();
+    }
+  });
+
+  it.each(eachWeekday)("performs the prescription, and never under it, %s", (date) => {
+    const input = provisionedOn(date);
+    const { exerciseSets } = demoHistory(input);
+
+    for (const set of exerciseSets) {
+      const exercise = exerciseFor(input, set.exerciseId);
+
+      expect(set.reps).toBeGreaterThanOrEqual(exercise.targetRepsLow!);
+      expect(set.reps).toBeLessThanOrEqual(exercise.targetRepsHigh!);
+      expect(set.setIndex).toBeLessThanOrEqual(exercise.targetSets!);
+    }
+  });
+
+  it.each(eachWeekday)("gives an exercise consecutive sets from one, %s", (date) => {
+    const input = provisionedOn(date);
+    const { exerciseSets } = demoHistory(input);
+
+    // A gap would be invisible in the data and visible on the screen, which
+    // prints the index as the set's ordinal — "Set 1, Set 3".
+    const byExercise = new Map<string, number[]>();
+
+    for (const set of exerciseSets) {
+      const key = `${set.date}|${set.exerciseId}`;
+
+      byExercise.set(key, [...(byExercise.get(key) ?? []), set.setIndex]);
+    }
+
+    for (const indexes of byExercise.values()) {
+      expect([...indexes].sort((a, b) => a - b)).toEqual(
+        indexes.map((_, position) => position + 1),
+      );
+    }
+  });
+
+  it.each(eachWeekday)("stops at the set-history horizon, %s", (date) => {
+    const input = provisionedOn(date);
+    const { exerciseSets } = demoHistory(input);
+
+    const earliest = exerciseSets.map((set) => set.date).sort()[0]!;
+
+    // The documented boundary, asserted so that raising SET_HISTORY_WEEKS is a
+    // deliberate act with a measured cost rather than a number someone nudged.
+    expect(daysBetween(earliest, input.today)).toBeLessThanOrEqual(SET_HISTORY_WEEKS * 7);
+  });
+
+  it.each(eachWeekday)("does the whole session when it was completed, %s", (date) => {
+    const input = provisionedOn(date);
+    const history = demoHistory(input);
+
+    const done = history.workoutLogs.filter(
+      (log) => log.status === "done" && history.exerciseSets.some((set) => set.date === log.date),
+    );
+
+    for (const log of done) {
+      const sets = history.exerciseSets.filter(
+        (set) => set.date === log.date && set.workoutId === log.workoutId,
+      );
+
+      if (sets.length === 0) continue;
+
+      // Every working row that CAN carry sets carries its full target. A 'done'
+      // session that stopped two exercises in is not a done session.
+      const eligible = working(
+        input.workoutExercises.filter((row) => row.workoutId === log.workoutId),
+      ).filter((row) => row.targetSets !== null && row.targetRepsLow !== null);
+
+      expect(new Set(sets.map((set) => set.exerciseId)).size).toBe(eligible.length);
+
+      for (const exercise of eligible) {
+        expect(sets.filter((set) => set.exerciseId === exercise.id)).toHaveLength(
+          exercise.targetSets!,
+        );
+      }
+    }
+  });
+
+  it("gives the same history to two demos provisioned on the same day", () => {
+    // Determinism, which the module note explains at length: a Tuesday nine
+    // weeks ago is skipped in every demo ever provisioned or in none of them.
+    const first = demoHistory(provisionedOn("2026-08-25"));
+    const second = demoHistory(provisionedOn("2026-08-25"));
+
+    expect(first.exerciseSets).toEqual(second.exerciseSets);
+  });
+
+  it("logs from day one of a program younger than the horizon", () => {
+    const input = provisionedOn("2026-08-25");
+
+    // A program shorter than SET_HISTORY_WEEKS is entirely INSIDE the horizon,
+    // so the window clamps to the program rather than excluding it — the same
+    // behaviour MEAL_LOG_WEEKS has, and the reason the guard below is not the
+    // way this batch comes back empty.
+    const history = demoHistory({
+      ...input,
+      today: addDays(input.profile.programStartDate, 1),
+    });
+
+    expect(history.exerciseSets.length).toBeGreaterThan(0);
+
+    for (const set of history.exerciseSets) {
+      expect(set.date).toBe(input.profile.programStartDate);
+    }
+  });
+
+  it("returns no sets when nothing in the library carries a rep range", () => {
+    const input = provisionedOn("2026-08-25");
+
+    // The empty batch `provisionDemoUser` guards against, reached the way it
+    // actually can be: a library of holds and intervals. The guard is what
+    // stops "Try the demo" being an error for every visitor rather than a
+    // degraded one — `scope.insert` has no statement for inserting no rows.
+    const history = demoHistory({
+      ...input,
+      workoutExercises: input.workoutExercises.map((exercise) => ({
+        ...exercise,
+        targetRepsLow: null,
+        targetRepsHigh: null,
+      })),
+    });
+
+    expect(history.exerciseSets).toEqual([]);
+    expect(history.workoutLogs.length).toBeGreaterThan(0);
   });
 });

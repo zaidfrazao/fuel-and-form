@@ -9,6 +9,7 @@ import {
 import type {
   dayPlanOverrides,
   DayPlanOverride,
+  exerciseSets,
   Meal,
   mealLogs,
   MealSlot,
@@ -17,11 +18,13 @@ import type {
   TrainingTemplateEntry,
   weightLogs,
   Workout,
+  WorkoutExercise,
   workoutLogs,
 } from "@/lib/db/schema";
 import type { ScopedInsert } from "@/lib/db/scope";
 import { type Plan, resolveDay, templateSlot } from "@/lib/resolve-plan";
 import { resolveTraining, type TrainingPlan } from "@/lib/rotation";
+import { working } from "@/lib/section";
 
 /**
  * Sam Rivera's twelve weeks of history — FUEL-41, PRD § P7.
@@ -116,6 +119,37 @@ export type DemoHistoryInput = {
   workouts: Workout[];
   planTemplate: PlanTemplateEntry[];
   trainingTemplate: TrainingTemplateEntry[];
+
+  /**
+   * Every session's rows, for the sets to hang off — FUEL-96.
+   *
+   * The rows and not the seed entries, for the reason the note above gives: a
+   * set names an `exercise_id` under a composite key, so only an id that came
+   * out of the same transaction can be written.
+   */
+  workoutExercises: WorkoutExercise[];
+};
+
+/**
+ * A set, less the one id this module cannot know — FUEL-96.
+ *
+ * `workout_log_id` is generated when the log inserts, which happens after this
+ * module has run, so a set names its session the way a PERSON would: the date
+ * it happened and the workout it was. `workout_logs` is unique on
+ * `(user_id, date, workout_id)`, so that pair identifies exactly one log —
+ * which is what lets the caller resolve it with a map instead of relying on two
+ * arrays staying in the same order.
+ *
+ * The alternative was a positional index into `workoutLogs`, and it is worse in
+ * the way that matters: a filter or a sort applied to either array would
+ * silently re-point every set at a different session, and nothing would fail.
+ * A key that misses its map throws.
+ */
+export type DemoExerciseSet = Omit<ScopedInsert<typeof exerciseSets>, "workoutLogId"> & {
+  /** The session's date — half of the log's natural key. */
+  date: CalendarDate;
+  /** The session's workout — the other half. */
+  workoutId: string;
 };
 
 /** The rows to write, per table. Insert order is the caller's problem. */
@@ -124,6 +158,8 @@ export type DemoHistory = {
   dayPlanOverrides: ScopedInsert<typeof dayPlanOverrides>[];
   mealLogs: ScopedInsert<typeof mealLogs>[];
   workoutLogs: ScopedInsert<typeof workoutLogs>[];
+  /** Keyed to their log by `(date, workoutId)` — see `DemoExerciseSet`. */
+  exerciseSets: DemoExerciseSet[];
 };
 
 /* -------------------------------------------------------------------------- */
@@ -168,6 +204,8 @@ const SALT = {
   workoutNote: 37,
   mealStatus: 53,
   swapPick: 71,
+  setReps: 89,
+  partialReach: 103,
 } as const;
 
 /* -------------------------------------------------------------------------- */
@@ -447,6 +485,107 @@ const SESSION_FALLBACK_TIME = "07:00";
  */
 const SESSIONS_PER_DAY = 4;
 
+/* -------------------------------------------------------------------------- */
+/* Sets                                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How much of the history carries per-set reps — the trailing four weeks.
+ *
+ * The dial FUEL-96 asks for, and shorter than the weigh-in and training
+ * history for a reason about where sets are actually SEEN. The weight series
+ * feeds a chart and the workout logs feed the adherence dot grid, and both read
+ * the whole program at once, so every one of their rows appears on a screen a
+ * visitor lands on. A set appears on one screen only — `/training`, for one
+ * specific past date — and it is reached by stepping back a day at a time.
+ *
+ * ## Why it is four and not two, which is a measurement rather than a taste
+ *
+ * Set history was measured on the test branch at both, nine runs each, median
+ * at the `provisionDemoUser` boundary:
+ *
+ *   | Sets      | Rows written | Median provisioning |
+ *   |-----------|--------------|---------------------|
+ *   | none      |          557 |             1216 ms |
+ *   | 2 weeks   |          644 |             1354 ms |
+ *   | 4 weeks   |          704 |             1366 ms |
+ *
+ * Nearly the whole +138 ms is the extra ROUND TRIP, not the rows: doubling the
+ * sets from 87 to 147 costs 12 ms. The obvious guess — that this dial is priced
+ * per row, the way `MEAL_LOG_WEEKS` largely is — is wrong, and picking two on
+ * that guess would have bought a shorter history for nothing.
+ *
+ * So it is set to match `MEAL_LOG_WEEKS`, which is worth more than the twelve
+ * milliseconds: the four weeks that carry meal logs are then the same four that
+ * carry sets, and "the recent weeks" is one horizon a reader has to hold rather
+ * than two that differ for no reason they can see.
+ *
+ * It does NOT follow that twelve weeks is free — the marginal rate is small but
+ * not zero, and the whole program would be roughly a thousand rows and about a
+ * further 70 ms. The stop is the meal-log horizon, deliberately.
+ */
+export const SET_HISTORY_WEEKS = 4;
+
+/**
+ * The strides that keep one session's set rolls apart from another's.
+ *
+ * The same device as `SLOTS_PER_DAY` and `SESSIONS_PER_DAY`, one level deeper:
+ * a set is identified by its day, its exercise within the session, and its
+ * index within the exercise, so the salt argument has to carry all three. Both
+ * are comfortably above what the seed schedules — 20 is the schema's own
+ * `set_index` ceiling — so adding an exercise to a circuit does not silently
+ * start reusing another session's rolls.
+ */
+const SETS_PER_EXERCISE = 20;
+const EXERCISES_PER_SESSION = 32;
+
+/**
+ * How long one set takes, for the purpose of stamping `created_at`.
+ *
+ * Sets are stamped marching through the session rather than all at its start,
+ * for the reason `loggedAt` gives about the whole history: rows that all carry
+ * the instant the demo was provisioned are the tell that gives it away. Nothing
+ * renders this column today; the export will.
+ */
+const SET_MINUTES = 3;
+
+/**
+ * How far into the session a PARTIAL one got — between a third and two thirds.
+ *
+ * A partial session is one somebody cut short, and the honest shape of that is
+ * the first few exercises done properly and the rest not done at all — which is
+ * what `WORKOUT_NOTES` already says out loud with "Cut it short, ran out of
+ * morning". The alternative reading, every exercise carrying one fewer set,
+ * describes a different event: someone who finished the session and dropped a
+ * set throughout. Both happen; only one leaves the screen showing what a
+ * cut-short session looks like, which is the state worth having in a demo.
+ *
+ * It is also the only thing that puts a working exercise with NO sets under a
+ * session that has some — a real state the app can reach and one nothing else
+ * in this generator would produce.
+ */
+const PARTIAL_REACH = { from: 1 / 3, spread: 1 / 3 } as const;
+
+/**
+ * The reps performed in one set, tapering across an exercise.
+ *
+ * Drawn from the prescription's own range, with the top of the range coming
+ * down as the sets go on. A flat draw over [12, 20] gives 20, 13, 18 — three
+ * independent numbers, which is what it is, and which reads as noise rather
+ * than as a person. Tapering the CEILING rather than forcing each set below the
+ * last keeps it from being a staircase, so a set can still match the one before
+ * it, but the third set is never the strongest.
+ *
+ * The floor is always the prescription's own low bound: this is a program whose
+ * ranges are the whole instruction, and a demo that shows sets under the
+ * prescribed minimum shows somebody failing it.
+ */
+function repsFor(low: number, high: number, setIndex: number, targetSets: number, n: number): number {
+  const ceiling = high - Math.floor(((high - low) * setIndex) / targetSets);
+
+  return low + Math.floor(variation(n, SALT.setReps) * (ceiling - low + 1));
+}
+
 /**
  * A plausible instant for a row that was written on `date` at `wallMinutes`.
  *
@@ -496,6 +635,7 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
     dayPlanOverrides: [],
     mealLogs: [],
     workoutLogs: [],
+    exerciseSets: [],
   };
 
   // Nothing has happened yet. Reachable only from a `today` on or before the
@@ -511,6 +651,18 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
     template: trainingTemplate,
     workouts,
   };
+
+  // Grouped once rather than filtered per day: the training loop runs for every
+  // date in the program, and a filter inside it would walk all 27 exercise rows
+  // roughly two hundred times to find the five it wants.
+  const exercisesByWorkout = new Map<string, WorkoutExercise[]>();
+
+  for (const exercise of input.workoutExercises) {
+    const rows = exercisesByWorkout.get(exercise.workoutId);
+
+    if (rows) rows.push(exercise);
+    else exercisesByWorkout.set(exercise.workoutId, [exercise]);
+  }
 
   /* ---- Swaps, first, so the meal logs can resolve through them --------- */
 
@@ -589,6 +741,7 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
   /* ---- Day by day ------------------------------------------------------- */
 
   const mealLogsFrom = daysBetween(programStart, addDays(today, -MEAL_LOG_WEEKS * 7));
+  const setsFrom = daysBetween(programStart, addDays(today, -SET_HISTORY_WEEKS * 7));
 
   let runningWeightKg = profile.startWeightKg;
 
@@ -659,6 +812,75 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
         // swap's `pick` above is the one that can genuinely come back empty.
         note: noteRoll < NOTE_RATE ? pick(WORKOUT_NOTES, noteRoll / NOTE_RATE)! : null,
         loggedAt: loggedAt(date, wallMinutes),
+      });
+
+      /* ---- The sets, for the recent weeks only — FUEL-96 -------------- */
+
+      // A skipped session has no sets for the same reason it has no duration:
+      // writing them would put work nobody did into the history, and into the
+      // modelled half of `energy.ts` on top of it.
+      if (dayIndex < setsFrom || status === "skipped") return;
+
+      // `working` and not every row: `section.ts` says a warm-up "does not get
+      // rep entry", so sets against one would be data the screen cannot produce
+      // and the estimate would price mobility work at the working MET.
+      const rows = working(exercisesByWorkout.get(workout.id) ?? []);
+
+      // How far into the session they got. `done` reached the end of it; a
+      // partial one stopped somewhere in the middle — see `PARTIAL_REACH`.
+      const reach =
+        status === "done"
+          ? rows.length
+          : Math.max(
+              1,
+              Math.round(
+                rows.length *
+                  (PARTIAL_REACH.from +
+                    variation(day, SALT.partialReach) * PARTIAL_REACH.spread),
+              ),
+            );
+
+      // Counts sets across the whole session rather than per exercise, so the
+      // stamps march through it in the order they were performed.
+      let setNumber = 0;
+
+      rows.slice(0, reach).forEach((exercise, exerciseIndex) => {
+        const { targetSets, targetRepsLow: low, targetRepsHigh: high } = exercise;
+
+        // Two shapes of prescription decline sets here, and both are real rows
+        // in the shipped library rather than defensive branches:
+        //
+        //   - No `target_sets` at all is the skipping session, whose "8–12
+        //     rounds" workouts.ts refuses to transcribe because "an interval
+        //     session logged as eight sets of eight reps would be a record of
+        //     something nobody did". The same argument forbids GENERATING one.
+        //   - A set count with no rep range is a timed HOLD — the planks, the
+        //     side plank, the superman. `reps` is NOT NULL, so a row here means
+        //     inventing a rep count for something measured in seconds.
+        //
+        // Both leave a working exercise with no sets under a session that has
+        // some, which is a state the app reaches on the owner's account too.
+        if (targetSets === null || low === null || high === null) return;
+
+        for (let setIndex = 0; setIndex < targetSets; setIndex += 1) {
+          const n = (day * EXERCISES_PER_SESSION + exerciseIndex) * SETS_PER_EXERCISE + setIndex;
+
+          history.exerciseSets.push({
+            date,
+            workoutId: workout.id,
+            exerciseId: exercise.id,
+            // 1-based, which is both the schema's check and the ordinal the
+            // screen prints.
+            setIndex: setIndex + 1,
+            reps: repsFor(low, high, setIndex, targetSets, n),
+            // From the window the session opens in — the log above is stamped
+            // an hour later, at the end — so the sets fall inside the session
+            // rather than after it.
+            createdAt: loggedAt(date, wallMinutes - 60 + setNumber * SET_MINUTES),
+          });
+
+          setNumber += 1;
+        }
       });
     });
 
