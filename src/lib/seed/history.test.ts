@@ -958,6 +958,32 @@ describe("set history", () => {
     }
   });
 
+  it.each(eachWeekday)("stamps every set with a real instant, %s", (date) => {
+    const input = provisionedOn(date);
+    const { exerciseSets } = demoHistory(input);
+
+    // The same claim the workout logs make one describe up. `createdAt` is
+    // built by string arithmetic on the session's window, so an hour that ran
+    // past midnight would produce `T24:03:00Z` and an Invalid Date — which
+    // inserts as null-ish rather than failing, and reaches the export.
+    for (const set of exerciseSets) {
+      expect(Number.isNaN(set.createdAt!.getTime())).toBe(false);
+      expect(set.createdAt!.toISOString().slice(0, 10)).toBe(set.date);
+    }
+  });
+
+  it.each(eachWeekday)("never logs two sessions of one workout on a date, %s", (date) => {
+    const { workoutLogs } = demoHistory(provisionedOn(date));
+
+    // The property the whole `(date, workoutId)` correlation rests on, and the
+    // one `workout_logs`' unique index would reject at insert time. Asserted
+    // here so a template change that scheduled a workout twice in a day fails
+    // in a unit test rather than as a failed provision for every visitor.
+    const keys = workoutLogs.map((log) => `${log.date}|${log.workoutId}`);
+
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
   it("gives the same history to two demos provisioned on the same day", () => {
     // Determinism, which the module note explains at length: a Tuesday nine
     // weeks ago is skipped in every demo ever provisioned or in none of them.

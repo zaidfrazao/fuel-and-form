@@ -266,8 +266,12 @@ export async function provisionDemoUser(ipHash: string, now: Date): Promise<Prov
     // Guarded on non-empty like every batch around it, for the reason the loop
     // gives: `scope.insert` builds a statement Postgres has no form of, and the
     // throw would roll back the transaction and turn "Try the demo" into an
-    // error for every visitor. It is empty on a demo provisioned in its first
-    // fortnight, and on any date whose sessions were all skipped.
+    // error for every visitor.
+    //
+    // NOT empty merely because a program is young — a program shorter than
+    // `SET_HISTORY_WEEKS` is entirely INSIDE the horizon, so it gets sets from
+    // its first day. It is empty when the program has not started, and it would
+    // be empty for a library whose working rows all declined a rep range.
     if (history.exerciseSets.length > 0) {
       const logIds = new Map(logRows.map((log) => [`${log.date}|${log.workoutId}`, log.id]));
 

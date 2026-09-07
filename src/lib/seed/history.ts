@@ -599,10 +599,19 @@ function repsFor(low: number, high: number, setIndex: number, targetSets: number
  * the tell that would give the whole history away.
  */
 function loggedAt(date: CalendarDate, wallMinutes: number): Date {
-  const hours = String(Math.floor(wallMinutes / 60)).padStart(2, "0");
-  const minutes = String(wallMinutes % 60).padStart(2, "0");
-
-  return new Date(`${date}T${hours}:${minutes}:00Z`);
+  // Arithmetic from midnight rather than string formatting, which is what makes
+  // this TOTAL. Formatting the hours and minutes by hand is only correct for
+  // `wallMinutes` inside a single day: 1470 formats as "T24:30:00Z" and a
+  // negative value as "T-1:30:00Z", and both are Invalid Date — which inserts
+  // without complaint and reaches the export as a null instant.
+  //
+  // Every caller was in range while each passed a fixed time or a fixed offset
+  // from one. FUEL-96 is the first to pass a value it computes per row
+  // (`wallMinutes - 60 + setNumber * SET_MINUTES`), so it is the change that
+  // makes the edge reachable at all, and it closes it rather than staying just
+  // inside it. Identical instants for every in-range value, so nothing that
+  // exists today moves.
+  return new Date(Date.parse(`${date}T00:00:00Z`) + wallMinutes * 60_000);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -662,6 +671,17 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
 
     if (rows) rows.push(exercise);
     else exercisesByWorkout.set(exercise.workoutId, [exercise]);
+  }
+
+  // Sorted explicitly, because a PARTIAL session takes a prefix of this list and
+  // "the first few exercises" has to mean the first few IN THE SESSION'S OWN
+  // ORDER. Unsorted it would mean "the first few as the insert happened to
+  // return them" — true today, since `loadSeedLibraries` builds its VALUES in
+  // `sortOrder` order and Postgres returns them that way, but that is the very
+  // assumption `load.ts` verifies name by name rather than trusts. Getting it
+  // wrong marks the wrong exercises as done and nothing fails.
+  for (const rows of exercisesByWorkout.values()) {
+    rows.sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
   /* ---- Swaps, first, so the meal logs can resolve through them --------- */
