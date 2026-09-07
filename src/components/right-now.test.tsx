@@ -559,6 +559,27 @@ describe("the active session", () => {
     expect(screen.getByText("30s on / 30s off")).toBeDefined();
   });
 
+  test("offers no form affordance on any row — § P10, FUEL-94's criterion", () => {
+    /*
+     * "Media is never loaded on `/`", asserted against the screen rather than
+     * against the component that could break it.
+     *
+     * FUEL-108 made an exercise row the control that opens a form reference,
+     * and made it OPT-IN for exactly this reason: `ExerciseList` is shared, and
+     * the way this criterion fails is silently. A row that gained a button here
+     * would still look like a row — jsdom applies no stylesheet, and the `/`
+     * baselines photograph a seeded day where nothing about the geometry
+     * changes. Nothing else in either suite would report it.
+     *
+     * Scoped to the list, because the screen around it has real buttons.
+     */
+    renderNow(active(2));
+
+    const list = screen.getAllByRole("listitem").find((item) => item.closest("ol"))!;
+
+    expect(within(list.closest("ol")!).queryAllByRole("button")).toHaveLength(0);
+  });
+
   test("renders no slash mark for an empty note", () => {
     // `notes` is nullable text with no length constraint, so "" is storable.
     // A bare "/ " reads as a note that failed to load.

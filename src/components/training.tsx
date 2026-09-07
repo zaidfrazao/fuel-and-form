@@ -1318,11 +1318,20 @@ export function Training({
                * middle of — the same weight `rest-timer.tsx` gives "Stop" in the
                * bar below, which is this state's other non-action control.
                *
-               * WITH THE SUBJECT, not on each row of the plan list. FUEL-90's
-               * ruling: § Progressive Disclosure's ban on accordions means the
-               * reveal may not be a row that expands in place, and FUEL-92's
-               * group headings already took the plan list from 281px to 597px,
-               * so it has no room for a per-row affordance and does not get one.
+               * WITH THE SUBJECT, which is this state's answer and no longer
+               * the only one. FUEL-90 put it here rather than on each row of
+               * the plan list, on two grounds: § Progressive Disclosure's ban
+               * on accordions means the reveal may not be a row that expands in
+               * place, and FUEL-92's group headings had already taken that list
+               * from 281px to 597px, so it had "no room for a per-row
+               * affordance".
+               *
+               * FUEL-108 spent the second and kept the first. The plan row
+               * opens this same sheet — it does not expand, so the ban is what
+               * chose the shape rather than something worked around — and it
+               * adds no height because the row IS the control. This button
+               * stays exactly where the mock draws it; the plan state gained a
+               * door, it did not take this one.
                *
                * Rendered only when there is media. An exercise without it draws
                * nothing — not a disabled button, which would promise a reference
