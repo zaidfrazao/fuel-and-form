@@ -14,8 +14,14 @@ import { truncateAll } from "./tables";
  * "Demo session exports → export contains demo data only." `export.test.ts`
  * makes the case for the JSON file; this is the same criterion on the other
  * file P6 hands out, and it needs its own test because it is a different set of
- * statements: seven reads in `queries/week-export.ts`, four of them narrowed to
- * a date range, none of them shared with the JSON export's eleven.
+ * statements: thirteen reads in `queries/week-export.ts`, four of them narrowed
+ * to a date range and one to a set of log ids, none of them shared with the
+ * JSON export's fourteen.
+ *
+ * FUEL-97 widened that surface rather than merely adding a column.
+ * `workout_exercises` and `exercise_sets` are read here for the first time, and
+ * the sets section prints an exercise NAME — so the sweep below has to reach it
+ * or the criterion holds over a smaller file than the one that leaves.
  *
  * ## Why the assertion is stronger here than for the JSON
  *
@@ -82,7 +88,7 @@ describe.skipIf(!configured)("the weekly export, scoped", () => {
     return end === -1 ? rest : rest.slice(0, end);
   }
 
-  it("gives a demo session its own week, in all three sections", async () => {
+  it("gives a demo session its own week, in all four sections", async () => {
     // The positive half, and what stops the isolation assertions below from
     // passing against a file that had quietly stopped working.
     const { csv } = await csvFor(fixture.bob.userId);
@@ -92,6 +98,14 @@ describe.skipIf(!configured)("the weekly export, scoped", () => {
     // The weigh-in, by its date: the fixture gives each user a date of their
     // own, so a leaked row is visible as a day this user never recorded.
     expect(csv).toContain(`\r\n${fixture.bob.weighInDate},`);
+
+    // The sets section — FUEL-97, and the half that would otherwise pass by
+    // being empty. The fixture's exercise is called "Press-ups" for every user,
+    // so the distinguishing column is `reps`: it is the user's name length, so
+    // a leaked row carries a count that could not be this user's.
+    expect(section(csv, "sets")).toEqual([
+      `${fixture.bob.weighInDate},Bob's circuit,Press-ups,work,1,3,`,
+    ]);
   });
 
   it("gives a demo session none of the owner's rows", async () => {
@@ -104,6 +118,15 @@ describe.skipIf(!configured)("the weekly export, scoped", () => {
     expect(csv).not.toContain(fixture.alice.userId);
     expect(csv).not.toContain(fixture.alice.mealId);
     expect(csv).not.toContain(fixture.alice.workoutId);
+    expect(csv).not.toContain(fixture.alice.exerciseId);
+
+    // Her set, which carries no id in this file at all — it is five reps
+    // against a "Press-ups" row that is spelled the same for everyone, so the
+    // only way to say "not hers" is that the section holds ONE row and it is
+    // Bob's. Both users' sets fall in this week, so the date range is not what
+    // makes this pass.
+    expect(section(csv, "sets")).toHaveLength(1);
+    expect(section(csv, "sets")[0]).toContain(",1,3,");
 
     // Alice's weigh-in is asserted as a ROW rather than as a string, because
     // her fixture date is this week's Monday — it is in the preamble of every
