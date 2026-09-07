@@ -170,3 +170,114 @@ describe("a workout with no exercises at all", () => {
     expect(screen.queryByRole("list")).toBeNull();
   });
 });
+
+/**
+ * The form affordance, and the screen that may not have it — § P10, FUEL-108.
+ *
+ * Every case here is a property of ABSENCE, which is this file's recurring
+ * reason for existing. The affordance is opt-in because FUEL-94's criterion is
+ * that media is "never loaded on `/`", and the way that criterion fails is
+ * silently: a row that gained a button on the wrong screen looks like a row.
+ * jsdom applies no stylesheet and the visual suite photographs a seeded
+ * session, so neither would report it.
+ */
+describe("the form affordance", () => {
+  const AVAILABLE = new Set(["w1"]);
+
+  test("without the prop there is no control at all, which is what `/` renders", () => {
+    // The regression guard for FUEL-94's criterion, asserted on the component
+    // rather than on `/` — `right-now.test.tsx` has the same assertion against
+    // the real screen, and this one is what fails first if the prop stops being
+    // the thing that decides.
+    render(<ExerciseList exercises={SESSION} />);
+
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+  });
+
+  test("only an exercise that HAS a reference becomes one", () => {
+    // Not a disabled control on the others: FUEL-107 left Skipping intervals
+    // without a reference deliberately, and a control that promises one that
+    // does not exist is the state `training.tsx` refuses at the other end too.
+    render(
+      <ExerciseList exercises={SESSION} form={{ available: AVAILABLE, onShow: () => {} }} />,
+    );
+
+    const buttons = screen.getAllByRole("button");
+
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]!.getAttribute("aria-label")).toBe("Show form for Squats");
+  });
+
+  test("names the control for its exercise, not for the affordance", () => {
+    // Without the label the computed name is the whole row — ordinal, name,
+    // note, progress and prescription — read out per control on a list of up to
+    // eight. The label is the fix and the fix is what is asserted.
+    render(
+      <ExerciseList
+        exercises={SESSION}
+        form={{
+          available: new Set(["w1", "w2"]),
+          onShow: () => {},
+        }}
+      />,
+    );
+
+    expect(
+      screen.getAllByRole("button").map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["Show form for Squats", "Show form for Push-ups"]);
+  });
+
+  test("hands back the id that was pressed", () => {
+    // The whole contract with the caller. An affordance that reported the wrong
+    // row would open a movement under another one's name, which is the failure
+    // FUEL-94's id-rather-than-boolean state exists to make unrepresentable.
+    const shown: string[] = [];
+
+    render(
+      <ExerciseList
+        exercises={SESSION}
+        form={{ available: new Set(["w2"]), onShow: (id) => shown.push(id) }}
+      />,
+    );
+
+    screen.getByRole("button", { name: "Show form for Push-ups" }).click();
+
+    expect(shown).toEqual(["w2"]);
+  });
+
+  test("works in the grouped shape as well as the flat one", () => {
+    // Two shapes render rows and both thread the prop. A warm-up or cool-down
+    // movement has a reference like any other — the plan list draws those rows
+    // and the session state does not step through them, which is precisely why
+    // this list is where they become reachable.
+    render(
+      <ExerciseList
+        exercises={SESSION}
+        form={{ available: new Set(["u1", "c1"]), onShow: () => {} }}
+      />,
+    );
+
+    expect(
+      screen.getAllByRole("button").map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["Show form for Joint prep", "Show form for Lower-body stretches"]);
+  });
+
+  test("keeps the row a row: one list item, still carrying its own content", () => {
+    // § Lists' window is a height, and the whole argument for this shape is that
+    // it adds none. A control drawn as a second row — or a row that gained a
+    // sibling — would be the per-row affordance FUEL-90 refused, arrived at by
+    // accident.
+    render(
+      <ExerciseList
+        exercises={[exercise({ id: "w1" })]}
+        form={{ available: AVAILABLE, onShow: () => {} }}
+      />,
+    );
+
+    const rows = screen.getAllByRole("listitem");
+
+    expect(rows).toHaveLength(1);
+    expect(within(rows[0]!).getByText("Squats")).toBeTruthy();
+    expect(within(rows[0]!).getByText("3 x 12")).toBeTruthy();
+  });
+});

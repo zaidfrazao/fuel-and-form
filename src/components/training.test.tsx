@@ -1763,12 +1763,84 @@ describe("form reference media", () => {
     expect(screen.queryByRole("button", { name: "Show form" })).toBeNull();
   });
 
-  test("is the session state's alone — the plan list offers it on no row", () => {
-    // FUEL-90: the plan list has no room for a per-row affordance and does not
-    // get one. Asserted before the session is entered, which is the plan state.
-    render(view({ sessions: withMedia() }));
+  /**
+   * The plan state's own door — § P10, FUEL-108.
+   *
+   * This block replaces a test that asserted the opposite ("the plan list offers
+   * it on no row"), and the way that test would have SURVIVED this change is
+   * worth recording: it queried the exact name "Show form", and the plan rows
+   * are named "Show form for Press-ups", so it went on passing while the thing
+   * it claimed stopped being true. A test that passes for a reason unrelated to
+   * its subject is worse than an absent one, and the fix is to assert against
+   * the row rather than against a string that used to be unique.
+   */
+  describe("from the plan state", () => {
+    test("a row with a reference is the control that opens it", async () => {
+      // FUEL-90 put the affordance with the subject, and the reader who is
+      // PLANNING never reaches a subject: the session state is today-only and
+      // shows one exercise at a time. Before this, checking a movement before
+      // starting was three gates away from the state you were in.
+      const user = userEvent.setup();
 
-    expect(screen.queryByRole("button", { name: "Show form" })).toBeNull();
+      render(view({ sessions: withMedia() }));
+
+      await user.click(
+        await screen.findByRole("button", { name: "Show form for Press-ups" }),
+      );
+
+      expect(await screen.findByRole("dialog")).toBeTruthy();
+      expect(screen.getByText("Form · Press-ups")).toBeTruthy();
+    });
+
+    test("a row with no reference offers nothing", async () => {
+      // The other two exercises in the fixture carry `media: null`. Absent, not
+      // disabled — the same refusal the session state's button makes.
+      render(view({ sessions: withMedia() }));
+
+      expect(await screen.findByRole("button", { name: "Show form for Press-ups" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Show form for Reverse lunges" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Show form for Plank" })).toBeNull();
+    });
+
+    test("opens the exercise that was pressed, not the one the session is on", async () => {
+      // The failure this shape has to rule out. `currentEx` is derived whether
+      // or not a session has been entered, so a sheet that read from it rather
+      // than from the pressed row would show the first exercise under the
+      // second's name — silently, and only for rows other than the first.
+      const user = userEvent.setup();
+
+      render(
+        view({
+          sessions: [
+            {
+              ...CIRCUIT,
+              exercises: CIRCUIT.exercises.map((exercise, index) =>
+                index === 1 ? { ...exercise, media: MEDIA } : exercise,
+              ),
+            },
+            WALK,
+          ],
+        }),
+      );
+
+      await user.click(
+        await screen.findByRole("button", { name: "Show form for Reverse lunges" }),
+      );
+
+      expect(await screen.findByText("Form · Reverse lunges")).toBeTruthy();
+    });
+
+    test("is offered on a past date, where a session cannot be started", async () => {
+      // `canEnter` gates STARTING a session — a claim about what can be
+      // performed now. How a movement is done is not a claim about today, so
+      // the reference is not gated with it.
+      render(view({ sessions: withMedia(), date: "2026-08-31", today: "2026-09-07" }));
+
+      expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
+      expect(
+        await screen.findByRole("button", { name: "Show form for Press-ups" }),
+      ).toBeTruthy();
+    });
   });
 
   test("reveals the media, its description and its attribution", async () => {

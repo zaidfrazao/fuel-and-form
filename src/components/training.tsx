@@ -1090,9 +1090,63 @@ export function Training({
    * rather than merely unreached.
    */
   const [formFor, setFormFor] = useState<string | null>(null);
-  const formOpen = formFor !== null && formFor === currentEx?.id;
-  const setFormOpen = (open: boolean) =>
-    setFormFor(open && currentEx ? currentEx.id : null);
+
+  /**
+   * The exercise the sheet is open for, resolved against the state on screen —
+   * § P10, FUEL-108.
+   *
+   * Two states offer the reference now and they answer this differently, which
+   * is why the resolution lives here rather than at either call site.
+   *
+   * IN SESSION the answer is pinned to the subject, which is FUEL-94's rule
+   * above and is unchanged: the sheet is open only while `formFor` still names
+   * the exercise being worked, so ticking the last set closes it by
+   * construction rather than leaving it open over the next movement.
+   *
+   * IN THE PLAN STATE there is no subject and no set to tick, so the answer is
+   * any row of the session — including the warm-up and cool-down, which the
+   * plan list draws and the session state does not step through. The hazard the
+   * pinning exists to prevent cannot arise here, and applying it anyway would
+   * mean a list where only one row in eight could be opened.
+   *
+   * `undefined` rather than `null` because it is the result of a lookup, and
+   * because it reads as "no exercise" beside `media`'s own `null`, which means
+   * something else entirely — an exercise that HAS no reference.
+   */
+  const formExercise = ((): TrainingExercise | undefined => {
+    if (formFor === null) return undefined;
+    if (inSession) return currentEx?.id === formFor ? currentEx : undefined;
+    return session?.exercises.find((exercise) => exercise.id === formFor);
+  })();
+
+  /**
+   * Which rows of the plan list may be opened, by id.
+   *
+   * Derived rather than fetched: `page.tsx` resolves `media` for every exercise
+   * in the session and not only for the one being worked, so this is a set
+   * built from data the screen already holds. Nothing new crosses the wire.
+   *
+   * An exercise with no reference is absent from this set and its row draws
+   * nothing — the same refusal the session state's button makes, for the same
+   * reason: a control that promises a reference that does not exist is worse
+   * than no control.
+   *
+   * ## Plain derivations, and not `useMemo`
+   *
+   * True of `formExercise` above as well. This project compiles with the React
+   * Compiler, which memoizes these itself and REFUSES TO OPTIMISE A COMPONENT
+   * whose hand-written memoization it cannot preserve — `session` is a prop it
+   * cannot prove is never mutated, so `[session]` is a dependency it will not
+   * accept. A `useMemo` here therefore costs this whole component its
+   * optimization in order to save one pass over at most eight rows, and the
+   * lint rule that says so (`react-hooks/preserve-manual-memoization`) is an
+   * error rather than a warning for exactly that reason.
+   */
+  const formAvailable = new Set(
+    (session?.exercises ?? [])
+      .filter((exercise) => exercise.media !== null)
+      .map((exercise) => exercise.id),
+  );
 
   const draft = (exerciseId: string, setIndex: number, value: string) =>
     setDrafts((previous) => new Map(previous).set(`${exerciseId}#${setIndex}`, value));
@@ -1282,30 +1336,12 @@ export function Training({
                   variant="link"
                   size="xs"
                   className="self-start px-0"
-                  onClick={() => setFormOpen(true)}
+                  onClick={() => setFormFor(currentEx.id)}
                 >
                   Show form
                 </Button>
               ) : null}
             </div>
-
-            {/*
-             * Mounted only once opened, and unmounted on close.
-             *
-             * Not merely a saving: `dynamic` fetches the chunk when this element
-             * first renders, so gating it on `formOpen` is what makes the import
-             * lazy in fact rather than in principle. The media element goes with
-             * it, which is the other half of "never loaded on `/`" — a `<video
-             * preload="none">` that is never mounted cannot be fetched at all.
-             */}
-            {currentEx.media && formOpen ? (
-              <FormMediaSheet
-                open={formOpen}
-                onOpenChange={setFormOpen}
-                exerciseName={currentEx.name}
-                media={currentEx.media}
-              />
-            ) : null}
 
             <section className="flex flex-col gap-[14px]">
               <Eyebrow>Sets</Eyebrow>
@@ -1352,7 +1388,29 @@ export function Training({
             {/* § Desktop gives the plan state set progress "on the exercise's
                 own row, no rows added" — which is what keeps the list's window
                 spendable, and what § P3's criterion is re-aimed against. */}
-            <ExerciseList exercises={session.exercises} progress={progress} />
+            {/*
+             * The rows are the form affordance — § P10, FUEL-108.
+             *
+             * FUEL-90 put "Show form" with the subject rather than on each row
+             * of this list, and the reader who is PLANNING never reaches a
+             * subject: the session state is today-only and shows one exercise
+             * at a time, so a reference was three gates away from the state you
+             * are in when you want to check a movement before starting.
+             *
+             * The row opens the same sheet rather than expanding, so
+             * § Progressive Disclosure's accordion ban is untouched — it is
+             * what rules out the alternative. And the row IS the control, so
+             * § Lists' window is untouched too: no row added, none made taller.
+             *
+             * Offered on every date, not only today. `canEnter` gates STARTING
+             * a session, which is a claim about what can be performed now; how
+             * a movement is done is not a claim about today at all.
+             */}
+            <ExerciseList
+              exercises={session.exercises}
+              progress={progress}
+              form={{ available: formAvailable, onShow: setFormFor }}
+            />
           </section>
         )}
 
@@ -1431,6 +1489,36 @@ export function Training({
         )}
           </>
         )}
+
+        {/*
+         * Mounted only once opened, and unmounted on close.
+         *
+         * Not merely a saving: `dynamic` fetches the chunk when this element
+         * first renders, so gating it on an open sheet is what makes the import
+         * lazy in fact rather than in principle. The media element goes with
+         * it, which is the other half of "never loaded on `/`" — a `<video
+         * preload="none">` that is never mounted cannot be fetched at all.
+         *
+         * ONE MOUNT FOR BOTH STATES — § P10, FUEL-108. It sits outside the
+         * ternary above because the plan state opens the same sheet on the same
+         * state, and two mounts would be two chunks' worth of gating to keep
+         * in agreement for one panel that can only ever be open once.
+         *
+         * `formExercise.media` is checked rather than asserted: `formFor` is
+         * only ever set from a control that exists because media does, so a
+         * null here is unreachable — and rendering nothing is the right answer
+         * to an unreachable state that a future caller could still reach.
+         */}
+        {formExercise?.media ? (
+          <FormMediaSheet
+            open
+            onOpenChange={(open) => {
+              if (!open) setFormFor(null);
+            }}
+            exerciseName={formExercise.name}
+            media={formExercise.media}
+          />
+        ) : null}
 
         </div>
 
