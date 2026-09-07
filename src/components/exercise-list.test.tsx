@@ -205,26 +205,34 @@ describe("the form affordance", () => {
     const buttons = screen.getAllByRole("button");
 
     expect(buttons).toHaveLength(1);
-    expect(buttons[0]!.getAttribute("aria-label")).toBe("Show form for Squats");
+    expect(buttons[0]!.textContent).toContain("Show form for");
+    expect(buttons[0]!.textContent).toContain("Squats");
   });
 
-  test("names the control for its exercise, not for the affordance", () => {
-    // Without the label the computed name is the whole row — ordinal, name,
-    // note, progress and prescription — read out per control on a list of up to
-    // eight. The label is the fix and the fix is what is asserted.
+  test("says what it does WITHOUT silencing what the row says", () => {
+    /*
+     * The regression this replaced an `aria-label` to avoid.
+     *
+     * A label on a control that wraps a whole row replaces its contents as the
+     * accessible name, so "Show form for Squats" would have been the entirety
+     * of what a screen reader got — and the note and the prescription, which
+     * are announced on this row today, would have gone silent. The name is
+     * built from the contents instead, with the purpose prefixed.
+     */
     render(
       <ExerciseList
-        exercises={SESSION}
-        form={{
-          available: new Set(["w1", "w2"]),
-          onShow: () => {},
-        }}
+        exercises={[exercise({ id: "w1", notes: "Sit back like you're reaching for a chair." })]}
+        form={{ available: new Set(["w1"]), onShow: () => {} }}
       />,
     );
 
-    expect(
-      screen.getAllByRole("button").map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["Show form for Squats", "Show form for Push-ups"]);
+    // `getByRole`'s `name` IS the computed accessible name, so each of these
+    // is an assertion about what a screen reader is handed — not about markup.
+    expect(screen.getByRole("button", { name: /^Show form for/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Squats/ })).toBeTruthy();
+    // The two that an `aria-label` would have silenced.
+    expect(screen.getByRole("button", { name: /reaching for a chair/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /3 x 12/ })).toBeTruthy();
   });
 
   test("hands back the id that was pressed", () => {
@@ -240,7 +248,7 @@ describe("the form affordance", () => {
       />,
     );
 
-    screen.getByRole("button", { name: "Show form for Push-ups" }).click();
+    screen.getByRole("button", { name: /Push-ups/ }).click();
 
     expect(shown).toEqual(["w2"]);
   });
@@ -258,8 +266,11 @@ describe("the form affordance", () => {
     );
 
     expect(
-      screen.getAllByRole("button").map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["Show form for Joint prep", "Show form for Lower-body stretches"]);
+      screen.getAllByRole("button").map((button) => button.textContent),
+    ).toEqual([
+      "Show form for 01Joint prep~2 min",
+      "Show form for 01Lower-body stretches30 sec each",
+    ]);
   });
 
   test("keeps the row a row: one list item, still carrying its own content", () => {
@@ -309,10 +320,26 @@ describe("the affordance adds no box", () => {
       />,
     );
     const row = screen.getByRole("listitem");
+
+    /*
+     * `sr-only` is the declared exception and has to be excluded by NAME.
+     *
+     * It shrinks its box to a clipped pixel rather than removing it, so it
+     * occupies no layout — which is the property this block is really about.
+     * jsdom applies no stylesheet, so the class is the only handle on that
+     * here; the alternative, asserting on computed geometry, measures nothing
+     * in this environment.
+     */
+    const laidOut = [...row.querySelectorAll("*")].filter(
+      (node) => !node.classList.contains("sr-only"),
+    );
     const shape = {
-      // Every element in the row, by tag, in order.
-      tags: [...row.querySelectorAll("*")].map((node) => node.tagName).join(","),
-      text: row.textContent,
+      tags: laidOut.map((node) => node.tagName).join(","),
+      // What is actually drawn: the sr-only prefix is not.
+      text: laidOut
+        .filter((node) => node.children.length === 0)
+        .map((node) => node.textContent)
+        .join("|"),
     };
 
     unmount();
@@ -323,15 +350,19 @@ describe("the affordance adds no box", () => {
     const inert = only();
     const control = only({ available: new Set(["w1"]), onShow: () => {} });
 
-    // One added element and it is the wrapper itself — no glyph, no spacer, no
-    // second span holding a mark.
+    // One added element that occupies space, and it is the wrapper itself — no
+    // glyph, no spacer, no second span holding a mark.
     expect(control.tags).toBe(`BUTTON,${inert.tags}`);
   });
 
-  test("and it reads identically, because the mark is not a character", () => {
+  test("and it draws identically, because the mark is not a character", () => {
     // The chevron that broke this was a rendered glyph, so it also appeared in
-    // the row's text. An underline is a decoration on text that was already
-    // there: nothing to announce, nothing to lay out.
-    expect(only({ available: new Set(["w1"]), onShow: () => {} }).text).toBe(only().text);
+    // the row's drawn text. An underline is a decoration on text that was
+    // already there: nothing to lay out. The `sr-only` prefix is excluded
+    // above for the same reason — it is announced, not drawn.
+    const inert = only();
+    const control = only({ available: new Set(["w1"]), onShow: () => {} });
+
+    expect(control.text).toBe(inert.text);
   });
 });

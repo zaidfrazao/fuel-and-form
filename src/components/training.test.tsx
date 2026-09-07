@@ -1785,7 +1785,7 @@ describe("form reference media", () => {
       render(view({ sessions: withMedia() }));
 
       await user.click(
-        await screen.findByRole("button", { name: "Show form for Press-ups" }),
+        await screen.findByRole("button", { name: /Show form for.*Press-ups/ }),
       );
 
       expect(await screen.findByRole("dialog")).toBeTruthy();
@@ -1797,9 +1797,9 @@ describe("form reference media", () => {
       // disabled — the same refusal the session state's button makes.
       render(view({ sessions: withMedia() }));
 
-      expect(await screen.findByRole("button", { name: "Show form for Press-ups" })).toBeTruthy();
-      expect(screen.queryByRole("button", { name: "Show form for Reverse lunges" })).toBeNull();
-      expect(screen.queryByRole("button", { name: "Show form for Plank" })).toBeNull();
+      expect(await screen.findByRole("button", { name: /Show form for.*Press-ups/ })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /Show form for.*Reverse lunges/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Show form for.*Plank/ })).toBeNull();
     });
 
     test("opens the exercise that was pressed, not the one the session is on", async () => {
@@ -1824,10 +1824,46 @@ describe("form reference media", () => {
       );
 
       await user.click(
-        await screen.findByRole("button", { name: "Show form for Reverse lunges" }),
+        await screen.findByRole("button", { name: /Show form for.*Reverse lunges/ }),
       );
 
       expect(await screen.findByText("Form · Reverse lunges")).toBeTruthy();
+    });
+
+    test("a request made in one state does not answer in the other", async () => {
+      /*
+       * The resurrection bug, and the reason `FormRequest` carries `from`.
+       *
+       * Storing an id alone was FUEL-94's design and it was right while ONE
+       * state could open the sheet: advancing past an exercise stopped the id
+       * matching `currentEx`, the sheet unmounted, and nothing had to be kept
+       * in sync. With two states the same close stopped clearing anything —
+       * the id survived, and the plan state's lookup would find it and reopen
+       * a sheet the reader had already watched close.
+       *
+       * Driven through the storage subscription rather than by clicking,
+       * because that is a real path (`subscribeToStorage` exists so a session
+       * entered or left in another tab is not a stale composition here) and
+       * because the sheet is `aria-modal`, so the controls that would leave the
+       * session are not reachable by a role query while it is open.
+       */
+      const user = userEvent.setup();
+      resumed();
+
+      render(view({ sessions: withMedia() }));
+
+      await user.click(await screen.findByRole("button", { name: "Show form" }));
+      expect(await screen.findByRole("dialog")).toBeTruthy();
+
+      // Another tab leaves the session. `inSession` flips underneath the sheet.
+      window.localStorage.removeItem(`fuel:training-session:${TODAY}`);
+      window.dispatchEvent(new StorageEvent("storage"));
+
+      // The session's request is retired with the session. Before `from`, the
+      // plan state's lookup found the same exercise and this stayed open.
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).toBeNull();
+      });
     });
 
     test("is offered on a past date, where a session cannot be started", async () => {
@@ -1838,7 +1874,7 @@ describe("form reference media", () => {
 
       expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
       expect(
-        await screen.findByRole("button", { name: "Show form for Press-ups" }),
+        await screen.findByRole("button", { name: /Show form for.*Press-ups/ }),
       ).toBeTruthy();
     });
   });

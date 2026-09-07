@@ -349,14 +349,6 @@ function Rows({
             <button
               type="button"
               onClick={showForm}
-              /*
-               * Named for the exercise, because the computed name would
-               * otherwise be the whole row — ordinal, name, note, progress and
-               * prescription — read out as a paragraph, once per control, on a
-               * list of up to eight. `recent-sessions.tsx` composes its rows'
-               * names deliberately for the same reason.
-               */
-              aria-label={`Show form for ${exercise.name}`}
               className={cn(
                 ROW_LAYOUT,
                 "group w-full text-left",
@@ -365,6 +357,30 @@ function Rows({
                 FOCUS_RING,
               )}
             >
+              {/*
+               * The purpose, prefixed — and NOT `aria-label` on the button.
+               *
+               * `aria-label` was the first attempt and it is the well-known
+               * trap for a control that wraps a whole row: the name it supplies
+               * REPLACES the element's contents, so "Show form for Reverse
+               * lunges" is all a screen reader gets and the note and the
+               * prescription — which are the row's actual information, and are
+               * announced today — stop being read at all. A concise name is not
+               * worth silencing the content it names.
+               *
+               * So the name comes from the contents, as it does for every other
+               * button, and this says what pressing it does: "Show form for, 01
+               * Reverse lunges, / Step back…, 3 x 8–12 each leg". Longer than a
+               * label, and it is the whole row rather than a summary of it.
+               *
+               * `sr-only` because the row already SHOWS what this says — it is
+               * the affordance the underline draws, spelled out for a reader
+               * who cannot see an underline. It shrinks its box to a clipped
+               * pixel rather than removing it, which is why it announces at all
+               * and why it costs no layout — `day-ruler.tsx` and `dot-grid.tsx`
+               * lean on the same property.
+               */}
+              <span className="sr-only">{"Show form for "}</span>
               {content}
             </button>
           </li>

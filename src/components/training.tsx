@@ -687,6 +687,28 @@ type Attempt =
   | { kind: "log-set"; exerciseId: string; setIndex: number; reps: number }
   | { kind: "remove-set"; exerciseId: string; setIndex: number };
 
+/**
+ * A request to see a form reference, and the state that made it — FUEL-108.
+ *
+ * An id ALONE was the bug, and it is worth stating as a bug rather than as a
+ * refinement. FUEL-94 stored an id so that advancing past an exercise would
+ * close the sheet by construction, with no effect to keep in sync. That works
+ * while one state can open it. With two, closing "by construction" stops
+ * clearing anything: the sheet unmounts because the id no longer matches
+ * `currentEx`, the id stays set, and leaving the session then hands that same
+ * id to the plan state's lookup — which finds it, and reopens a sheet the
+ * reader had already watched close.
+ *
+ * Nothing the reader does clears it either, because the close they DID ask for
+ * goes through `onOpenChange` and nulls it; this is the close nobody asked for.
+ *
+ * So the request carries where it came from, and each state answers only its
+ * own. A retired session request is inert in the plan state and a plan request
+ * is inert in the session, which keeps the original property — no effect,
+ * nothing to synchronise — rather than trading it for one.
+ */
+type FormRequest = { id: string; from: "plan" | "session" };
+
 /** The two that move a row of the sub-list rather than the session's record. */
 type SetAttempt = Extract<Attempt, { kind: "log-set" | "remove-set" }>;
 
@@ -1089,7 +1111,7 @@ export function Training({
    * effect, nothing to keep in sync, and the impossible state is unrepresentable
    * rather than merely unreached.
    */
-  const [formFor, setFormFor] = useState<string | null>(null);
+  const [formFor, setFormFor] = useState<FormRequest | null>(null);
 
   /**
    * The exercise the sheet is open for, resolved against the state on screen —
@@ -1115,8 +1137,31 @@ export function Training({
    */
   const formExercise = ((): TrainingExercise | undefined => {
     if (formFor === null) return undefined;
-    if (inSession) return currentEx?.id === formFor ? currentEx : undefined;
-    return session?.exercises.find((exercise) => exercise.id === formFor);
+
+    /*
+     * A request answers only in the state that made it, and that is the whole
+     * of the staleness fix — see `FormRequest`.
+     *
+     * The session's request is pinned to the subject, which is FUEL-94's rule
+     * unchanged: the sheet is open only while the request still names the
+     * exercise being worked, so advancing past it closes the sheet by
+     * construction. It is now ALSO conditional on still being in the session,
+     * so a request the advance retired cannot answer anywhere else.
+     */
+    if (formFor.from === "session") {
+      return inSession && currentEx?.id === formFor.id ? currentEx : undefined;
+    }
+
+    /*
+     * The plan's request reaches any row of the session — the warm-up and
+     * cool-down included, which the plan list draws and the session state does
+     * not step through. There is no subject here to pin to and no set to tick,
+     * so the hazard the pinning exists to prevent cannot arise; entering the
+     * session retires the request instead.
+     */
+    return inSession
+      ? undefined
+      : session?.exercises.find((exercise) => exercise.id === formFor.id);
   })();
 
   /**
@@ -1345,7 +1390,7 @@ export function Training({
                   variant="link"
                   size="xs"
                   className="self-start px-0"
-                  onClick={() => setFormFor(currentEx.id)}
+                  onClick={() => setFormFor({ id: currentEx.id, from: "session" })}
                 >
                   Show form
                 </Button>
@@ -1418,7 +1463,10 @@ export function Training({
             <ExerciseList
               exercises={session.exercises}
               progress={progress}
-              form={{ available: formAvailable, onShow: setFormFor }}
+              form={{
+                available: formAvailable,
+                onShow: (id) => setFormFor({ id, from: "plan" }),
+              }}
             />
           </section>
         )}
