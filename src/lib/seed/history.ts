@@ -1056,6 +1056,7 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
           workoutId: workout.id,
           points: route.points,
           pointCount: route.pointCount,
+          simplifiedToleranceM: route.toleranceM,
         });
       }
 

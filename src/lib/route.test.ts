@@ -250,7 +250,7 @@ describe("simplifyToCap", () => {
   it("reduces a straight run to its two ends", () => {
     // The whole argument for shape-preserving simplification: a walk down a
     // long straight road needs two points to draw, however long it took.
-    expect(simplifyToCap([straightLine(200)])).toEqual([
+    expect(simplifyToCap([straightLine(200)]).track).toEqual([
       [expect.objectContaining({ t: 0 }), expect.objectContaining({ t: 199 })],
     ]);
   });
@@ -264,7 +264,7 @@ describe("simplifyToCap", () => {
       at(195, index * 5, 40 + index),
     );
 
-    const [simplified = []] = simplifyToCap([[...east, ...north]]);
+    const [simplified = []] = simplifyToCap([[...east, ...north]]).track;
 
     expect(simplified).toHaveLength(3);
     expect(simplified.at(1)).toEqual(at(195, 0, 39));
@@ -277,7 +277,7 @@ describe("simplifyToCap", () => {
       at(index * 3, (index % 7) * 40, index),
     );
 
-    expect(countPoints(simplifyToCap([noisy]))).toBeLessThanOrEqual(MAX_ROUTE_POINTS);
+    expect(countPoints(simplifyToCap([noisy]).track)).toBeLessThanOrEqual(MAX_ROUTE_POINTS);
   });
 
   it("drops the shortest segments when there are too many to thin", () => {
@@ -292,7 +292,9 @@ describe("simplifyToCap", () => {
 
     const kept = simplifyToCap([long, stub, alsoLong, alsoStub], 4);
 
-    expect(kept).toEqual([long, alsoLong]);
+    expect(kept.track).toEqual([long, alsoLong]);
+    // Dropping segments is a reduction, so it reports a tolerance.
+    expect(kept.toleranceM).not.toBeNull();
   });
 
   it("simplifies a loop that ends where it started", () => {
@@ -308,7 +310,7 @@ describe("simplifyToCap", () => {
       at(0, 0, 240),
     ];
 
-    const [simplified = []] = simplifyToCap([loop]);
+    const [simplified = []] = simplifyToCap([loop]).track;
 
     expect(simplified).toEqual(loop);
     for (const point of simplified) {
@@ -317,12 +319,18 @@ describe("simplifyToCap", () => {
   });
 
   it("leaves an empty segment alone", () => {
-    expect(simplifyToCap([[]])).toEqual([[]]);
+    expect(simplifyToCap([[]]).track).toEqual([[]]);
   });
 
-  it("leaves a two-point segment alone", () => {
+  it("leaves a two-point segment alone, and reports no tolerance", () => {
+    // Nothing was dropped, so there is no reduction to describe. A figure
+    // here would claim one that did not happen — which is the exact
+    // confusion the column exists to prevent.
     const pair: TrackPoint[] = [at(0, 0, 0), at(400, 0, 90)];
-    expect(simplifyToCap([pair])).toEqual([pair]);
+    const kept = simplifyToCap([pair]);
+
+    expect(kept.track).toEqual([pair]);
+    expect(kept.toleranceM).toBeNull();
   });
 });
 
@@ -361,6 +369,21 @@ describe("storableRoute", () => {
     const stored = storableRoute(walk);
 
     expect(stored.pointCount).toBe(countPoints(stored.points));
+  });
+
+  it("reports the tolerance it thinned the trace at", () => {
+    // Provenance, and the only record of how lossy the stored shape is.
+    // Without it a walk down a straight road and a walk whose shape was
+    // thinned away by an escalating cap draw the same picture.
+    const stored = storableRoute(walk);
+
+    expect(stored.toleranceM).toBeGreaterThan(0);
+  });
+
+  it("reports no tolerance when nothing was dropped", () => {
+    const pair: Track = [[at(0, 0, 0), at(900, 0, 600)]];
+
+    expect(storableRoute(pair, { trimMetres: 0 }).toleranceM).toBeNull();
   });
 
   it("stores nothing past the fifth decimal place", () => {

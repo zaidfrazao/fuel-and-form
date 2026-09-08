@@ -166,6 +166,22 @@ export type StorableRoute = {
   pointCount: number;
   /** The FULL walk's distance, untrimmed — `workout_logs.distance_m`. */
   distanceM: number;
+  /**
+   * The tolerance the track was thinned at, or null if nothing was dropped —
+   * `walk_routes.simplified_tolerance_m`.
+   *
+   * Provenance rather than data, and the only record of how lossy the stored
+   * shape is. Without it a straight two-point line and a walk whose shape was
+   * thinned away by an escalating cap are the same picture.
+   */
+  toleranceM: number | null;
+};
+
+/** A thinned track, and the tolerance it took to fit. */
+export type Simplified = {
+  track: Track;
+  /** Null when nothing was dropped — every point survived as recorded. */
+  toleranceM: number | null;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -519,7 +535,10 @@ export function countPoints(track: Track): number {
  * segment of a few metres is a receiver settling rather than a stretch of
  * walking, and it is the least shape lost per point recovered.
  */
-export function simplifyToCap(track: Track, cap: number = MAX_ROUTE_POINTS): Track {
+export function simplifyToCap(
+  track: Track,
+  cap: number = MAX_ROUTE_POINTS,
+): Simplified {
   let epsilon = SIMPLIFY_EPSILON_M;
   let simplified = track.map((segment) => simplifySegment(segment, epsilon));
 
@@ -531,7 +550,12 @@ export function simplifyToCap(track: Track, cap: number = MAX_ROUTE_POINTS): Tra
     simplified = track.map((segment) => simplifySegment(segment, epsilon));
   }
 
-  if (countPoints(simplified) <= cap) return simplified;
+  // Null when the track came through untouched — a two-point segment, or a
+  // walk already coarser than the tolerance. Recording a figure there would
+  // claim a reduction that did not happen.
+  const toleranceM = countPoints(simplified) === countPoints(track) ? null : epsilon;
+
+  if (countPoints(simplified) <= cap) return { track: simplified, toleranceM };
 
   const longestFirst = simplified
     .map((segment, index) => ({ segment, index }))
@@ -549,7 +573,10 @@ export function simplifyToCap(track: Track, cap: number = MAX_ROUTE_POINTS): Tra
   // back is still in the order it was walked. A trace is drawn segment by
   // segment and the order does not change the picture, but it does change what
   // `points[0]` means, and FUEL-102's map hand-off reads the start of the walk.
-  return simplified.filter((_segment, index) => keptIndices.has(index));
+  return {
+    track: simplified.filter((_segment, index) => keptIndices.has(index)),
+    toleranceM: epsilon,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -607,7 +634,12 @@ export function storableRoute(
 
   const trimmed = trimEnds(track, trimMetres);
   const simplified = simplifyToCap(trimmed, cap);
-  const points = reduceTrackPrecision(simplified);
+  const points = reduceTrackPrecision(simplified.track);
 
-  return { points, pointCount: countPoints(points), distanceM };
+  return {
+    points,
+    pointCount: countPoints(points),
+    distanceM,
+    toleranceM: simplified.toleranceM,
+  };
 }
