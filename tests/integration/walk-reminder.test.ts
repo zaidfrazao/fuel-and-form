@@ -47,13 +47,15 @@ const at = (time: string) => new Date(`${MONDAY}T${time}:00.000Z`);
  * and what the query relies on: there is nothing for the walk to alternate with,
  * so no rotation has to be resolved to know a date holds one.
  */
-async function seedWalk(userId: string, days: number[]): Promise<string> {
+async function seedWalk(
+  userId: string,
+  days: number[],
+  name = "Morning Walk",
+  sortOrder = 1,
+): Promise<string> {
   const owned = scope(userId, getDb());
 
-  const [walk] = await owned.insert(schema.workouts, {
-    name: "Daily walk",
-    type: "walk",
-  });
+  const [walk] = await owned.insert(schema.workouts, { name, type: "walk" });
 
   if (!walk) throw new Error("Fixture insert of the walk returned no row.");
 
@@ -61,11 +63,22 @@ async function seedWalk(userId: string, days: number[]): Promise<string> {
     await owned.insert(schema.trainingTemplateEntries, {
       dayOfWeek,
       workoutId: walk.id,
-      sortOrder: 1,
+      sortOrder,
     });
   }
 
   return walk.id;
+}
+
+/** Both of the day's walks, as the seed schedules them — FUEL-98. */
+async function seedBothWalks(
+  userId: string,
+  days: number[],
+): Promise<{ morning: string; afternoon: string }> {
+  return {
+    morning: await seedWalk(userId, days, "Morning Walk", 1),
+    afternoon: await seedWalk(userId, days, "Afternoon Walk", 2),
+  };
 }
 
 describe.skipIf(!configured)("the walk reminder, scoped", () => {
@@ -85,7 +98,7 @@ describe.skipIf(!configured)("the walk reminder, scoped", () => {
 
       const reminder = await loadWalkReminder(fixture.alice.userId, at("19:00"));
 
-      expect(reminder).toEqual({ at: "19:00" });
+      expect(reminder).toEqual({ at: "19:00", outstanding: ["Morning Walk"] });
     });
 
     it("shows nothing all evening when the reminder is switched off", async () => {
@@ -108,6 +121,7 @@ describe.skipIf(!configured)("the walk reminder, scoped", () => {
       expect(await loadWalkReminder(fixture.alice.userId, at("21:29"))).toBeUndefined();
       expect(await loadWalkReminder(fixture.alice.userId, at("21:30"))).toEqual({
         at: "21:30",
+        outstanding: ["Morning Walk"],
       });
     });
 
@@ -213,6 +227,58 @@ describe.skipIf(!configured)("the walk reminder, scoped", () => {
       });
 
       expect(await loadWalkReminder(fixture.alice.userId, at("20:00"))).toBeUndefined();
+    });
+
+    it("goes on showing while the OTHER walk is unlogged — FUEL-98", async () => {
+      /*
+       * The defect, repeating a layer up. `isWalkUnlogged` asked whether ANY of
+       * the day's walks had a row and answered "nothing outstanding" if one
+       * did — indistinguishable from correct while there was one walk. With
+       * two, a morning walk logged at 10:30 bought silence for the evening
+       * about an afternoon walk nobody took, and the banner P9 exists for would
+       * never have appeared on the day it was most needed.
+       */
+      const { morning } = await seedBothWalks(fixture.bob.userId, [1]);
+
+      await scope(fixture.bob.userId, getDb()).insert(schema.workoutLogs, {
+        date: MONDAY,
+        workoutId: morning,
+        status: "done",
+      });
+
+      const reminder = await loadWalkReminder(fixture.bob.userId, at("20:00"));
+
+      expect(reminder).toBeDefined();
+      // And it names what is actually outstanding, rather than speaking about
+      // "the walk" over a record that holds one.
+      expect(reminder?.outstanding).toEqual(["Afternoon Walk"]);
+    });
+
+    it("stops only when EVERY walk is logged", async () => {
+      const { morning, afternoon } = await seedBothWalks(fixture.bob.userId, [1]);
+      const owned = scope(fixture.bob.userId, getDb());
+
+      for (const workoutId of [morning, afternoon]) {
+        await owned.insert(schema.workoutLogs, {
+          date: MONDAY,
+          workoutId,
+          status: "done",
+        });
+      }
+
+      expect(await loadWalkReminder(fixture.bob.userId, at("20:00"))).toBeUndefined();
+    });
+
+    it("lists both walks in template order while both are outstanding", async () => {
+      // The order the sentence reads in. It comes from `sort_order` and is
+      // sorted explicitly, because a list Postgres happened to return one way
+      // this evening and the other way tomorrow would be a banner that
+      // reworded itself for no reason a reader could see.
+      await seedBothWalks(fixture.bob.userId, [1]);
+
+      expect(
+        (await loadWalkReminder(fixture.bob.userId, at("20:00")))?.outstanding,
+      ).toEqual(["Morning Walk", "Afternoon Walk"]);
     });
 
     it("comes back if the log is taken away again", async () => {
