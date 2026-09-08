@@ -348,9 +348,23 @@ const CASES: Record<
   },
   complete: {
     label: "Day complete",
-    note: "The finished page: actual against target, the day's log, and crop marks at the four corners. No ruler, no tab bar, no score.",
+    note: "The finished page: actual against target, the day's log, and crop marks at the four corners. No ruler, no tab bar, no score — and nothing offered, the walks being among the logs above.",
     view: { ...base(21 * 60 + 30), state: "day-complete" },
     entries: LOGGED,
+    /*
+     * Both walks logged, matching the two lines `LOGGED` carries for them.
+     *
+     * Without this the specimen drew the summary saying DONE against each walk
+     * and an Anytime row offering to log it underneath — a state the app cannot
+     * reach, since the row is rendered from the absence of exactly the log the
+     * line above it reports. It was wrong with one walk too and simply harder to
+     * see; FUEL-98 drew it twice. The outstanding cases are `complete-walk` and
+     * `complete-one-walk`, which carry summaries that agree with their rows.
+     */
+    walks: new Map([
+      ["e6", { durationMin: 20 }],
+      ["e7", { durationMin: 15 }],
+    ]),
   },
   "complete-empty": {
     label: "Day complete · nothing logged",
