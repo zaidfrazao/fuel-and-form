@@ -74,6 +74,7 @@ export default defineConfig({
         "src/lib/repeat.ts",
         "src/lib/rest-timer.ts",
         "src/lib/resolve-plan.ts",
+        "src/lib/route.ts",
         "src/lib/resolve-now.ts",
         "src/lib/resolve-training.ts",
         "src/lib/rotation.ts",
@@ -257,6 +258,21 @@ export default defineConfig({
         // never reads workout_logs. An unmeasured branch here is precisely where
         // a shortcut that consults history would sit unnoticed.
         "src/lib/rotation.ts": FULLY_COVERED,
+        // FUEL-100, and the strongest case in this list for a gate rather than
+        // for tests alone: it is the only module here whose failure cannot be
+        // corrected afterwards. Every other unmeasured branch in this file
+        // shows somebody a wrong number, and the fix is a commit. An
+        // unmeasured branch HERE is a coordinate stored at the precision the
+        // receiver reported, and truncating it on read afterwards does not
+        // un-store it — PRD § Risks' leak row is about what the database and
+        // the repository hold, not about what the screen draws.
+        //
+        // Every rule in it also fails by storing something rather than by
+        // throwing: a trim that silently consumed nothing, a cap that never
+        // engaged, a `reducePrecision` that rounded to six places. None of the
+        // three looks wrong in a diff, none breaks a screen, and the walk
+        // renders correctly in every case.
+        "src/lib/route.ts": FULLY_COVERED,
         // FUEL-21, and the same reasoning as cursor.ts: every branch in it is
         // reachable by anyone who can POST to the settings action, and the one
         // that matters is the one that must REFUSE. `slot_times` is free-shaped

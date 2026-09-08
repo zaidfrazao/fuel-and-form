@@ -630,7 +630,8 @@ restores a uuid pointing at nothing.
                                  "section", "targetSets", "targetRepsLow", "targetRepsHigh",
                                  "mediaKey", "mediaKind", "mediaAlt", "mediaCredit" } ],
   "trainingTemplateEntries": [ { "id", "dayOfWeek", "workoutId", "rotationGroup", "sortOrder" } ],
-  "workoutLogs":             [ { "id", "date", "workoutId", "status", "note", "durationMin", "loggedAt" } ],
+  "workoutLogs":             [ { "id", "date", "workoutId", "status", "note", "durationMin",
+                                 "distanceM", "loggedAt" } ],
   "exerciseSets":            [ { "id", "workoutLogId", "exerciseId", "setIndex", "reps", "loadKg", "createdAt" } ],
 
   "weightLogs":              [ { "id", "date", "weightKg", "note", "createdAt" } ],
@@ -736,6 +737,15 @@ person's data into somebody else's id.
 
 **The `users` row.** Its columns belong to the session layer — `expires_at` is
 the demo reaper's — so four chosen fields cross as `account` instead.
+
+**`walk_routes` — the recorded shape of a walk.** The one omission here that is
+a real loss rather than a redundancy, and it is PRD § P11's ruling rather than
+this file's: *"routes absent from the export by default, because the export is a
+file that gets emailed"*. A trace of a twice-daily walk starts and ends at a
+front door, repeats, and is timestamped, so ten of them are a home address in a
+document whose whole purpose is to be copied around. A lost trace is a missing
+picture of one walk; a leaked one is where somebody lives. The walk's
+`distanceM` and `durationMin` are exported in full — how far, without where.
 
 **Ids are kept.** `/weight` strips ids from the payload it sends the browser and
 argues why; that argument is about a screen's payload. This is a backup, and

@@ -207,6 +207,7 @@ const workoutLog = (id: string, date: string): WorkoutLog => ({
   status: "done",
   note: null,
   durationMin: 32,
+  distanceM: null,
   loggedAt: new Date("2026-08-10T06:35:00.000Z"),
 });
 
@@ -572,8 +573,34 @@ describe("drift", () => {
    *
    * So the file is smaller by three opaque strings and loses nothing anyone
    * could want back.
+   *
+   * `walk_routes` is the third, and it is the only one excluded for what the
+   * file would DO rather than for what it would fail to be worth. PRD § P11
+   * rules it directly: *"routes absent from the export by default, because the
+   * export is a file that gets emailed"*.
+   *
+   * This one is a real loss and is accepted with its eyes open. A route IS
+   * history by every test the other two exclusions fail — something happened,
+   * it is recorded here, and nothing else in the app remembers it — so P6's
+   * "don't lose my history" genuinely is weakened by leaving it out. What
+   * overrides that is the asymmetry in the consequences. The export is
+   * downloaded to a laptop, mailed to oneself and pasted into a support
+   * thread; a trace of a twice-daily walk starts and ends at a front door,
+   * repeats, and is timestamped, so ten of them are a home address in a
+   * document whose whole purpose is to be copied around. A lost trace is a
+   * missing picture of one walk. A leaked one is where somebody lives.
+   *
+   * `workout_logs.distance_m` is NOT excluded and is not affected by any of
+   * this — the walk's distance, duration and steps all reach both formats and
+   * both scopes (FUEL-104). It is the geometry that stays behind, and a
+   * distance says how far without saying where.
+   *
+   * If a route is ever exported it is on an explicit opt-in with the
+   * consequence stated in the interface, and never in the weekly check-in
+   * scope. That is FUEL-104's to build if it is built at all; until then this
+   * entry is the decision, recorded where it is enforced.
    */
-  const EXCLUDED = new Set(["users", "push_subscriptions"]);
+  const EXCLUDED = new Set(["users", "push_subscriptions", "walk_routes"]);
 
   /**
    * Where a table's key is not just its name in camel case.

@@ -145,6 +145,7 @@ const walkLog = (fields: Partial<WorkoutLog> = {}): WorkoutLog => ({
   status: "done",
   note: null,
   durationMin: null,
+  distanceM: null,
   loggedAt: new Date("2026-03-09T19:30:00Z"),
   ...fields,
 });

@@ -56,7 +56,10 @@ describe("schema", () => {
     // FUEL-47: `push_subscriptions` holds the address P9's notification is sent
     // to, which has to outlive the request that created it. Fifteen since
     // FUEL-91: `exercise_sets` is § P10's per-set record, and the one table
-    // here the PRD's listing named before this file had it.
+    // here the PRD's listing named before this file had it. Sixteen since
+    // FUEL-100: `walk_routes` is § P11's recorded trace, and the PRD's § Data
+    // Model deliberately did not name it in advance — the cap, the precision
+    // and the trim were left to the ticket that could measure them.
     expect(tables.map(([name]) => name).sort()).toEqual([
       "day_plan_overrides",
       "exercise_sets",
@@ -69,6 +72,7 @@ describe("schema", () => {
       "shopping_checks",
       "training_template_entries",
       "users",
+      "walk_routes",
       "weight_logs",
       "workout_exercises",
       "workout_logs",

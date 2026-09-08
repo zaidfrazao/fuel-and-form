@@ -23,6 +23,12 @@ import {
 // strings, which is the direction the dependency has to run: `section.ts` is
 // pure and type-only, so a client component importing it pulls no pg-core.
 import { MEDIA_KINDS } from "../form-media";
+// The cap and the shape of a stored trace, from the module that enforces them
+// on write — FUEL-100. A type-only import for `Track` keeps `route.ts` out of
+// anything this file drags in, and `MAX_ROUTE_POINTS` is imported rather than
+// re-spelled so the CHECK below and the simplifier cannot disagree about what
+// the cap is.
+import { MAX_ROUTE_POINTS, type Track } from "../route";
 import { SECTIONS, WORKING_SECTION } from "../section";
 
 /**
@@ -964,6 +970,45 @@ export const workoutLogs = pgTable(
     status: workoutLogStatus().notNull(),
     note: text(),
     durationMin: integer("duration_min"),
+
+    /**
+     * How far a recorded walk went, in whole metres — § P11, FUEL-100.
+     *
+     * ## Here rather than beside the points, and why that is not a shortcut
+     *
+     * This is read on every list and every summary — the walk's own row, the
+     * export, FUEL-103's step estimate and FUEL-104's energy range all want
+     * it — and the trace is read only when somebody opens one walk's sheet. A
+     * summary column in `walk_routes` would put a join in front of every one
+     * of those readers to fetch a single integer, and the `jsonb` it sits
+     * beside is the one column in this schema that must never be dragged into
+     * a list query. Separating them by TABLE is what makes that structural:
+     * `walk_routes` is not named by any list query, so the point array cannot
+     * be selected by one.
+     *
+     * ## Nullable, and null means "not recorded" rather than zero
+     *
+     * Null for every session, for every walk logged with one tap, and for
+     * every walk logged before P11 existed. § P11 requires that such a walk
+     * "renders and exports cleanly, its fields absent rather than zeroed",
+     * and zero is a measurement — it would read as a walk where somebody
+     * stood still. There is no default for the same reason.
+     *
+     * ## The full walk, not the drawn one
+     *
+     * `storableRoute` measures this BEFORE trimming the ends off the trace,
+     * so it is longer than the polyline `walk_routes` holds. `route.ts` argues
+     * that at length; the short version is that the trim is a privacy control
+     * over stored geometry and this is a measured quantity about somebody's
+     * day, and shortening it would corrupt every figure derived from it to
+     * protect a coordinate that is already gone.
+     *
+     * Metres rather than kilometres, and an integer: a walk is measured by a
+     * consumer GPS, so a centimetre column would be three digits of noise, and
+     * the screens divide to render "3.2 km" anyway.
+     */
+    distanceM: integer("distance_m"),
+
     loggedAt: instant("logged_at").notNull().defaultNow(),
   },
   (t) => [
@@ -981,8 +1026,27 @@ export const workoutLogs = pgTable(
     uniqueIndex("workout_logs_user_date_workout_key").on(t.userId, t.date, t.workoutId),
 
     // What `exercise_sets` hangs off — FUEL-91, and the same trivially
-    // satisfied addition `workout_exercises` takes above.
+    // satisfied addition `workout_exercises` takes above. `walk_routes` hangs
+    // off it too since FUEL-100, which is why this needed no change there.
     unique("workout_logs_id_user_id_key").on(t.id, t.userId),
+
+    /*
+     * The bound on a recorded distance — `session-entry.ts`'s argument for
+     * `MAX_DURATION_MIN`, applied to the other half of the same row.
+     *
+     * Both ends matter and neither is a judgement about walking. A negative
+     * distance is not a walk, and zero is the absence of one rather than a
+     * measurement of one — a walk with no usable fixes writes null, which is
+     * what "absent rather than zeroed" means one column up. The ceiling is a
+     * hundred kilometres: far above § P3's twice-daily walk and far below the
+     * point where a figure stops meaning anything. Without it a forged request
+     * stores 1e9 and the export presents it as fact, exactly as an unchecked
+     * rep count would.
+     */
+    check(
+      "workout_logs_distance_range",
+      sql`"distance_m" is null or "distance_m" between 1 and 100000`,
+    ),
   ],
 );
 
@@ -1112,6 +1176,180 @@ export const exerciseSets = pgTable(
     check("exercise_sets_set_index_range", sql`"set_index" between 1 and 20`),
     check("exercise_sets_reps_range", sql`"reps" between 1 and 999`),
     check("exercise_sets_load_positive", sql`"load_kg" is null or "load_kg" > 0`),
+  ],
+);
+
+/**
+ * The drawn shape of one recorded walk — § P11's route storage, FUEL-100.
+ *
+ * ## The most sensitive table in this schema, and the only one with a rule
+ * ## about the repository attached to it
+ *
+ * Weight and macros are private. A GPS trace of a twice-daily walk is a
+ * different category: it starts and ends at the owner's front door, it
+ * repeats, and it is timestamped, so ten of them identify a home address to
+ * anyone who reads them. PRD § Risks' leak row is EXTENDED for this table
+ * rather than inherited, and the rules it states are requirements rather than
+ * this table's own judgement — never seeded, never in a fixture, never
+ * committed; precision truncated on the way in; the metrics scan taught to see
+ * a coordinate; the demo persona's route invented. `src/lib/route.ts` performs
+ * the first two and `scripts/check-no-metrics.sh` enforces the third over
+ * every file in the repository, including this one.
+ *
+ * ## Why the points are a table of their own rather than a column
+ *
+ * `workout_logs.distance_m` is read by every list, every summary and both
+ * export formats. This is read when one walk's sheet is opened, and never
+ * otherwise. Holding them apart is what keeps a `jsonb` blob of five hundred
+ * coordinates out of the query that draws the day — and it does it
+ * structurally, because no list query names this table, rather than by
+ * everyone remembering to write a column list.
+ *
+ * ## One row per walk log, keyed the way everything owned here is keyed
+ *
+ * `(workout_log_id, user_id)` composite, as `exercise_sets` is. A plain
+ * `workout_log_id` would say the log exists and not that it is YOURS, and
+ * `ownedReference`'s header sets out at length why that is a cross-tenant read
+ * and an enumeration oracle rather than a style preference. It matters more
+ * here than anywhere else in the schema: the row on the other end of a leaked
+ * reference is a home address.
+ *
+ * `on delete no action`, as with every other history table. A log is history
+ * and history is what the export exists to preserve. The demo reaper's
+ * `delete from users` still cascades cleanly through this row's own `user_id`,
+ * which is why `no action` rather than `restrict` — `ownedReference` gives the
+ * end-of-statement timing argument in full.
+ *
+ * A route is NOT in the weekly export and is not in the full one either. PRD
+ * § P11: the export is a file that gets emailed. `export.test.ts` names this
+ * table in its exclusion list with that reason beside it, so the omission is
+ * asserted rather than forgotten.
+ */
+export const walkRoutes = pgTable(
+  "walk_routes",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+
+    // Plain, not `ownerId()` — `exercise_sets`' call, for its reason: the
+    // composite key below pins this column to the log's own owner, so the two
+    // cannot disagree, and the delete cascade arrives through that key rather
+    // than through a second reference to `users`.
+    userId: uuid("user_id").notNull(),
+    workoutLogId: uuid("workout_log_id").notNull(),
+
+    /**
+     * The trace: one array per continuous stretch of recording.
+     *
+     * ## Five decimal places, truncated on write
+     *
+     * About a metre, which is more than enough to draw a line and is the
+     * resolution at which a trace stops being able to say which side of a road
+     * somebody was on. Seven decimals — what a phone's receiver reports — is
+     * centimetres, which no consumer GPS measures and which is therefore not
+     * accuracy but a claim about a doorway. `reducePrecision` in
+     * `src/lib/route.ts` performs it and argues why it rounds rather than
+     * truncating toward zero.
+     *
+     * The first and last 150 metres of every walk are trimmed off before the
+     * trace is stored, on write and irreversibly, so this does not begin or
+     * end at the front door. `TRIM_METRES` carries the honest note that goes
+     * with that: it protects against the repository far more than against the
+     * database.
+     *
+     * ## Nested, so that a gap costs nothing
+     *
+     * Brand Guide § The Route Trace draws each segment as its own polyline and
+     * nothing across the join, and `distanceMetres` sums only WITHIN segments.
+     * A recording interrupted for six minutes therefore contributes no
+     * straight-line distance across the hole by construction rather than by a
+     * condition somebody has to remember — which is how a 3km walk becomes 5km.
+     *
+     * Each point's `t` is seconds from the walk's first fix, not an instant.
+     * The row already knows its date through the log; five hundred wall-clock
+     * timestamps would be that clock written out five hundred times, and a
+     * coordinate paired with an absolute instant is a stronger re-identifying
+     * claim than either half for a field the drawing never reads.
+     *
+     * `jsonb` rather than PostGIS geometry or a child row per point. Nothing
+     * queries INTO this — there is no "walks near here", and § Non-Goals rules
+     * out the features that would want one — so an extension and a spatial
+     * index would be machinery in front of a column that is read whole, by
+     * primary key, and handed to an SVG.
+     */
+    points: jsonb().$type<Track>().notNull(),
+
+    /**
+     * How many points survived, across every segment.
+     *
+     * Stored rather than derived because the reason it is bounded is worth
+     * being able to see without parsing the blob it describes — and because
+     * `jsonb_array_length` cannot count a nested array in one call. Capped at
+     * `MAX_ROUTE_POINTS`; the CHECK below is the database's own copy of that
+     * bound and `simplifyToCap` is what keeps a row under it.
+     */
+    pointCount: integer("point_count").notNull(),
+
+    /**
+     * How far the trace was simplified, in metres of Ramer–Douglas–Peucker
+     * tolerance, or null where nothing had to be dropped.
+     *
+     * Provenance rather than data. A trace is a lossy rendering of what the
+     * receiver reported and this is the only record of HOW lossy — without it
+     * a straight two-point line is indistinguishable from a walk down a
+     * straight road and a walk whose shape was thinned away by a cap that
+     * engaged. FUEL-102 draws the same picture either way; a reader asking why
+     * a route looks angular cannot tell them apart at all.
+     */
+    simplifiedToleranceM: integer("simplified_tolerance_m"),
+
+    createdAt: instant("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      name: "walk_routes_log_fk",
+      columns: [t.workoutLogId, t.userId],
+      foreignColumns: [workoutLogs.id, workoutLogs.userId],
+    }).onDelete("no action"),
+
+    /**
+     * One trace per walk, and the arbiter a re-save collides on.
+     *
+     * A walk recorded, then recorded again after an interrupted session was
+     * resumed (FUEL-101), is one walk with a better trace — not two. With two
+     * rows there would be no rule for which of them the sheet, the distance
+     * and the export should each believe, and each would have to remember the
+     * same tie-break separately: the argument `workout_logs` and
+     * `exercise_sets` both make, unchanged.
+     *
+     * `user_id` leads because it is in the WHERE clause of every statement and
+     * because `scope.upsert` prepends it to the conflict target itself.
+     */
+    uniqueIndex("walk_routes_user_log_key").on(t.userId, t.workoutLogId),
+
+    /*
+     * The cap, in the database as well as in `route.ts`.
+     *
+     * Both layers, on `session-entry.ts`'s reasoning: the module is what gives
+     * the write path a bound it can enforce while it still holds the geometry,
+     * and the constraint is what holds when a future caller forgets to call
+     * it. This one is worth having twice more than most — the failure it
+     * refuses is not a wrong number on a screen but an unbounded blob of
+     * coordinates accepted from anyone who can POST to the app, and a row that
+     * gets past it cannot be un-stored.
+     *
+     * Zero points is refused. A trace of no positions did not draw anything,
+     * and the honest way to say a walk has no route is the absence of a row —
+     * which is what a walk too short to trim produces, and what a walk logged
+     * with one tap has always produced.
+     */
+    check(
+      "walk_routes_point_count_range",
+      sql.raw(`"point_count" between 1 and ${MAX_ROUTE_POINTS}`),
+    ),
+    check(
+      "walk_routes_tolerance_positive",
+      sql`"simplified_tolerance_m" is null or "simplified_tolerance_m" > 0`,
+    ),
   ],
 );
 

@@ -215,6 +215,7 @@ const WORKOUT_LOG: WorkoutLog = {
   status: "done",
   note: null,
   durationMin: DURATION_MIN,
+  distanceM: null,
   loggedAt: new Date("2026-08-17T18:00:00.000Z"),
 };
 
