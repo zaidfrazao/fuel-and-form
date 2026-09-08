@@ -59,8 +59,16 @@ WHERE
 -- who took the walk off Sunday has said something this migration must not
 -- overrule. `sort_order` 2 puts it after the session (0) and the morning
 -- walk (1), which is where it happens.
+--
+-- DISTINCT as well as the NOT EXISTS, and the two guard different things.
+-- NOT EXISTS looks at rows that were already there; it is evaluated against
+-- the snapshot the statement started with, so it cannot see the rows this
+-- statement is itself about to insert. Nothing forbids two template rows on
+-- one weekday naming the morning walk — the table has no unique constraint
+-- on (user_id, day_of_week, workout_id) — and without DISTINCT each of them
+-- would produce an afternoon entry of its own.
 INSERT INTO "training_template_entries" ("user_id", "day_of_week", "workout_id", "rotation_group", "sort_order")
-SELECT
+SELECT DISTINCT
   e."user_id",
   e."day_of_week",
   pm."afternoon_id",

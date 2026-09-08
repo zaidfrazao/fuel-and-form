@@ -207,6 +207,41 @@ describe.skipIf(!configured)("the two-walk data migration", () => {
     expect(entries.filter((entry) => entry.workoutId !== null)).toHaveLength(14);
   });
 
+  it("adds one afternoon entry per day, not one per morning row", async () => {
+    // Two template rows on a weekday naming the same morning walk is a shape
+    // nothing forbids, and the `NOT EXISTS` guard cannot see it: it is
+    // evaluated against the snapshot the statement started with, so both source
+    // rows pass it and both would insert. `SELECT DISTINCT` is what stops that.
+    const { userId } = fixture.alice;
+    const owned = scope(userId, getDb());
+
+    const [walk] = await owned.insert(schema.workouts, {
+      name: "Daily Walk",
+      type: "walk",
+    });
+
+    for (const sortOrder of [1, 3]) {
+      await owned.insert(schema.trainingTemplateEntries, {
+        dayOfWeek: 1,
+        workoutId: walk!.id,
+        sortOrder,
+      });
+    }
+
+    await runMigration();
+
+    const afternoon = (await walksOf(userId)).find(
+      (row) => row.name === "Afternoon Walk",
+    );
+
+    const entries = await owned.select(
+      schema.trainingTemplateEntries,
+      eq(schema.trainingTemplateEntries.workoutId, afternoon!.id),
+    );
+
+    expect(entries).toHaveLength(1);
+  });
+
   it("leaves a database that already has two walks alone", async () => {
     // An account seeded after this change. The guard is a count of the user's
     // own walks, so the migration cannot rename a walk somebody has already
