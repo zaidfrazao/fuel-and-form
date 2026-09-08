@@ -344,6 +344,11 @@ describe.skipIf(!configured)("the walk reminder, scoped", () => {
       expect(await loadWalkReminder(fixture.alice.userId, at("17:30"))).toBeUndefined();
       expect(await loadWalkReminder(fixture.bob.userId, at("17:30"))).toEqual({
         at: "17:00",
+        // Bob's OWN walk, named. The sentence reads a `workouts` row, so this
+        // is also the assertion that the name comes through a scope — a banner
+        // that named the owner's walk to a demo visitor would be a disclosure
+        // the time alone could not make.
+        outstanding: ["Morning Walk"],
       });
     });
   });

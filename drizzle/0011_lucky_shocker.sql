@@ -13,6 +13,11 @@
 -- morning walk simply has a history that starts before the afternoon walk
 -- existed. Deleting and re-creating would take the history with it.
 --
+-- The descriptions are ONE string literal each, with the line breaks as
+-- \n escapes. Postgres' adjacent-literal concatenation does not apply to
+-- E-strings the way it does to plain ones, and the failure is a syntax
+-- error at migrate time rather than anything a reader would spot.
+--
 -- Idempotent, and guarded on a user having EXACTLY ONE walk. A database
 -- seeded after this change already has two and is left untouched; a
 -- re-run is a no-op. `src/lib/seed/workouts.ts` is authoritative for the
@@ -23,14 +28,7 @@
 UPDATE "workouts" AS w
 SET
   "name" = 'Morning Walk',
-  "description" =
-    E'Separate from the training sessions, and every day including weekends.\n'
-    E'\n'
-    E'20 min, mid-morning — the walk Snack 1 is anchored to. Brisk enough that you\n'
-    E'could talk but wouldn''t want to sing.\n'
-    E'\n'
-    E'This and the afternoon one together are the single biggest lever available\n'
-    E'against a desk job, and they cost nothing in hunger or recovery.'
+  "description" = E'Separate from the training sessions, and every day including weekends.\n\n20 min, mid-morning — the walk Snack 1 is anchored to. Brisk enough that you\ncould talk but wouldn''t want to sing.\n\nThis and the afternoon one together are the single biggest lever available\nagainst a desk job, and they cost nothing in hunger or recovery.'
 WHERE
   w."type" = 'walk'
   AND (SELECT count(*) FROM "workouts" o WHERE o."user_id" = w."user_id" AND o."type" = 'walk') = 1;
@@ -42,10 +40,7 @@ SELECT
   w."user_id",
   'Afternoon Walk',
   'walk',
-  E'Separate from the training sessions, and every day including weekends.\n'
-  E'\n'
-  E'20 min, late afternoon — the walk Snack 2 is anchored to. Do the lot in one\n'
-  E'go if the morning got away from you; 30–45 min across the day is the target.',
+  E'Separate from the training sessions, and every day including weekends.\n\n20 min, late afternoon — the walk Snack 2 is anchored to. Do the lot in one\ngo if the morning got away from you; 30–45 min across the day is the target.',
   NULL,
   NULL
 FROM "workouts" w
