@@ -29,6 +29,16 @@
 # figure to it, not even in a comment, not even to explain a false positive.
 # During development this check fired on its own source for exactly that reason.
 #
+# The same rule covers COMMIT MESSAGES, which is less obvious and was learnt the
+# hard way in FUEL-100: check 2 reads `git log -p`, and a patch includes the
+# message that carries it. A commit explaining a new pattern by spelling out the
+# values it catches puts those values in the history permanently — worse than a
+# file, because editing a file does not remove it from the commits behind it.
+# Describe the example, or write it at a precision the patterns do not match.
+# That commit was reworded before its branch was pushed. Had a pull request been
+# opened first, `refs/pull/N/head` would have kept it beyond the reach of any
+# force-push — which is exactly the state check 3 exists to track.
+#
 #
 # NO DIRECTORY IS EXEMPT
 #
