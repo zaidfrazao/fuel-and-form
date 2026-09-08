@@ -24,8 +24,8 @@ import { BODYWEIGHT_CIRCUIT, type SeedKey, type SeedPlanEntry, type SeedTraining
  *   is Chicken & Rice", and P2's worked example — "ran out of chicken → Tuesday
  *   becomes Chilli" — says the same thing from the other side.
  * - **Training** is pinned. workouts.ts:71 heads the circuits "Mon / Wed / Fri",
- *   :162 heads the skipping session "Tue / Thu", and :221 the walk "every day,
- *   including weekends".
+ *   :162 heads the skipping session "Tue / Thu", and its last section heads the
+ *   walks "every day, including weekends — and TWICE" (FUEL-98).
  * - **The other four dinners are a reconstruction.** See the block on
  *   `WEEKDAY_DINNER` below for what corroborates it and how to correct it.
  *
@@ -154,7 +154,13 @@ const CIRCUIT_DAYS = [1, 3, 5] as const satisfies readonly DayOfWeek[];
 /** Tue / Thu — workouts.ts:162. */
 const CARDIO_DAYS = [2, 4] as const satisfies readonly DayOfWeek[];
 
-/** Every day, weekends included — workouts.ts:221. */
+/**
+ * Every day, weekends included — workouts.ts' last section.
+ *
+ * Mapped TWICE below, once per walk. Named by section rather than by line, which
+ * the two citations above are not: FUEL-98 moved this one, and a line number in
+ * a comment is a fact nothing checks.
+ */
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6] as const satisfies readonly DayOfWeek[];
 
 /**
@@ -166,8 +172,20 @@ const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6] as const satisfies readonly DayOfWeek[];
  * session does not shift what comes next. Naming a workout here instead would
  * pin Monday to Circuit A forever — the silent failure rotation.ts warns about.
  *
- * The walk sorts after the session on days that have one: it is the day's second
- * activity, not its headline, and P3 renders them in this order.
+ * The walks sort after the session on days that have one: they are the day's
+ * second and third activities, not its headline, and P3 renders them in this
+ * order.
+ *
+ * BOTH walks are on every day — FUEL-98, PRD § P1's "twice daily in practice".
+ * Two entries naming two different workouts, and that is the whole fix: one
+ * entry logged twice was one `workout_logs` row overwritten, because the table
+ * is unique on `(user_id, date, workout_id)`. Two workouts are two ids, and the
+ * index has always allowed that. `seed/workouts.ts` carries the argument.
+ *
+ * The morning walk keeps sort order 1 rather than the pair being renumbered:
+ * every existing template row is at 0 or 1, and a row's position in the day is
+ * what `resolveTraining` orders by. The afternoon walk takes 2, which is where
+ * it happens.
  */
 export const seedTrainingTemplate: readonly SeedTrainingEntry[] = [
   ...CIRCUIT_DAYS.map((dayOfWeek) => ({
@@ -182,7 +200,12 @@ export const seedTrainingTemplate: readonly SeedTrainingEntry[] = [
   })),
   ...ALL_DAYS.map((dayOfWeek) => ({
     dayOfWeek,
-    workoutKey: "daily-walk",
+    workoutKey: "morning-walk",
     sortOrder: 1,
+  })),
+  ...ALL_DAYS.map((dayOfWeek) => ({
+    dayOfWeek,
+    workoutKey: "afternoon-walk",
+    sortOrder: 2,
   })),
 ];

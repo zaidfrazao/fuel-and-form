@@ -364,7 +364,11 @@ const ADHERENCE = {
 
 /** How long a session runs, by type: the shortest it gets, and the spread. */
 const DURATION_MIN = {
-  walk: { from: 30, spread: 16 },
+  // Per WALK, and there are two of them — FUEL-98. PRD § Persona has "a 30–45
+  // minute walk every day", which is now the day's total rather than one
+  // outing's, so halving this is what keeps the demo's history describing the
+  // persona it was built from instead of doubling their walking overnight.
+  walk: { from: 15, spread: 11 },
   circuit: { from: 26, spread: 12 },
   intervals: { from: 20, spread: 10 },
   other: { from: 25, spread: 15 },
@@ -469,8 +473,23 @@ const SWAP_FALLBACK_TIME = "18:00";
 /* Instants                                                                   */
 /* -------------------------------------------------------------------------- */
 
-/** When the walk gets logged, since `workoutTimes.walk` is null by design. */
-const WALK_LOGGED_HOUR = 18;
+/**
+ * When each of the day's walks gets logged, since `workoutTimes.walk` is null by
+ * design — one hour per walk, in template order.
+ *
+ * Two walks now (FUEL-98), and they must not share an instant: the export sorts
+ * a date's sessions and `recent-sessions` reads them back, so two rows stamped
+ * 18:00 would be two records of a day that has no order in it. The hours are
+ * PRD § P1's own anchors — Snack 1 at 10:30 is "the mid-morning walk" and Snack
+ * 2 at 16:00 is "the afternoon walk" — so the demo's history says the same thing
+ * about the routine that the routine table does.
+ *
+ * A day with more walks than this has entries falls back to the last hour, which
+ * is a stamp rather than a lie: nothing in the schema forbids a third walk, and
+ * a seed that threw on one would be a seed that could not load a template the
+ * app is happy to render.
+ */
+const WALK_LOGGED_HOURS = [10, 16] as const;
 
 /** Used only for a workout type the profile has no window for. */
 const SESSION_FALLBACK_TIME = "07:00";
@@ -785,6 +804,12 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
     // rolls off the same salt would tie them together — every skipped circuit
     // would come with a skipped walk, which is the opposite of how a bad
     // morning actually goes.
+    // Which walk of the day this is, so the two get different hours below. The
+    // resolver returns the day in template order, so counting as we go IS the
+    // template's order — the same thing `sortOrder` configures and nothing here
+    // has to re-derive.
+    let walksSoFar = 0;
+
     resolveTraining(training, date).forEach(({ workout }, position) => {
       const day = dayIndex * SESSIONS_PER_DAY + position;
 
@@ -800,11 +825,11 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
       const noteRoll = variation(day, SALT.workoutNote);
 
       // The walk has no window on purpose — `workoutTimes.walk` is null, which
-      // persona.ts explains — so it is stamped with an evening hour instead of
+      // persona.ts explains — so it is stamped with its own hour instead of
       // taking a default that would put it on the morning's start time.
       const wallMinutes =
         workout.type === "walk"
-          ? WALK_LOGGED_HOUR * 60
+          ? (WALK_LOGGED_HOURS[walksSoFar++] ?? WALK_LOGGED_HOURS.at(-1)!) * 60
           : parseTimeOfDay(
               // Optional twice over, and both reachable: the column carries a
               // `{}` default so the whole object is absent from an insert that

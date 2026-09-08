@@ -15,14 +15,21 @@ import { REMINDER_LINK, reminderStatement } from "@/lib/walk-reminder";
  * the same placement `demo-banner.tsx` argues for, and it sits directly beneath
  * that banner when a demo session has both.
  *
+ * Since FUEL-98 there are two walks, and the sentence names whichever of them
+ * are outstanding rather than speaking about "the walk" in general: with the
+ * morning one logged and the afternoon one not, a generic sentence contradicts
+ * the record it is reporting on. The query supplies the names; see
+ * `reminderStatement`.
+ *
  * ## Why there is no dismiss button
  *
  * Because the criterion is "dismisses on log", and that is a different thing
- * from dismissible. The banner reports one fact — today's walk has no row — and
- * the way to make it go is to log the walk, which is one tap on `/` or
- * `/training`. `logWalk` already calls `refresh()`, which re-renders this
- * layout, so the banner is gone on the render that follows the tap with nothing
- * here having to know that happened.
+ * from dismissible. The banner reports one fact — one of today's walks has no
+ * row — and the way to make it go is to log the walks, which is one tap each on
+ * `/` or `/training`. `logWalk` already calls `refresh()`, which re-renders this
+ * layout, so the sentence loses a walk on the render that follows each tap, and
+ * the banner is gone after the last one, with nothing here having to know that
+ * happened.
  *
  * A dismiss control would have to answer a question P9 does not ask: dismissed
  * until when? For the evening leaves the walk unlogged with the app silent about
@@ -91,7 +98,7 @@ export async function WalkReminder() {
            * screen it is most often seen above.
            */}
           <p className="text-slash text-text-secondary">
-            {reminderStatement(reminder.at)}{" "}
+            {reminderStatement(reminder.outstanding, reminder.at)}{" "}
             {/*
              * To `/`, always, and not to `/training`.
              *

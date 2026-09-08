@@ -104,12 +104,13 @@ const EMPTY_EXERCISES = new Map<string, readonly WorkoutExercise[]>();
 /**
  * One day: what the template put there, and what was recorded against it.
  *
- * The status is decided by the day's SESSION, not by its walk. A weekday holds
- * both — `lib/seed/plan.ts` gives the walk `sortOrder: 1` on days that have a
- * session, "the day's second activity, not its headline" — and a grid that let
- * the walk speak for the day would show a completed dot for a session that was
- * never done. A day with no session is where the walk answers, which is what
- * makes a weekend a small dot rather than an empty one.
+ * The status is decided by the day's SESSION, not by its walks. A weekday holds
+ * all three — `lib/seed/plan.ts` gives the walks `sortOrder` 1 and 2 on days
+ * that have a session, "the day's second and third activities, not its
+ * headline" — and a grid that let a walk speak for the day would show a
+ * completed dot for a session that was never done. A day with no session is
+ * where the walks answer, which is what makes a weekend a small dot rather than
+ * an empty one.
  *
  * `label` names the workout for the adjacent data table, which Brand Guide §
  * Accessibility requires and which is where "Circuit B" is allowed to appear —
@@ -142,10 +143,23 @@ function dayFor(
     };
   }
 
-  const walk = sessions.find((item) => item.kind === "walk");
+  /*
+   * Every walk, named — FUEL-98.
+   *
+   * The DOT stays one per day and its status stays the session's: two walks are
+   * not two days, and a weekend is one square whatever happened in it. What
+   * changes is the label, which Brand Guide § Accessibility puts in the data
+   * table beside the graphic and which is the only place a day's content is
+   * stated in words. A `find` here named the morning walk and silently dropped
+   * the afternoon one, so the table said a weekend held one activity when the
+   * template held two — the grid agreeing with a plan nobody is following.
+   */
+  const walks = sessions.filter((item) => item.kind === "walk");
 
-  return walk
-    ? { date, label: walk.workout.name, status: "walk" }
+  return walks.length > 0
+    ? // Joined rather than listed, because `label` is one cell. Order is the
+      // template's, which `trainingDay` preserves.
+      { date, label: walks.map((walk) => walk.workout.name).join(" · "), status: "walk" }
     : // Nothing planned: a date before `program_start_date`, or one the
       // template does not cover. Not an error and not a gap — the grid draws
       // it as the faintest dot it has, which is what "nothing here" looks like.

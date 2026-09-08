@@ -4,16 +4,23 @@ import type { NowItem } from "./resolve-now";
 import { WALK_TYPE } from "./resolve-training";
 
 /**
- * The daily walk, as the layers that are not the walk's own have to see it —
- * FUEL-29, PRD § P3.
+ * The daily walks, as the layers that are not a walk's own have to see them —
+ * FUEL-29, FUEL-98, PRD § P3.
  *
- * The walk is the one item on the plan that is neither on the timeline nor a
+ * A walk is the one item on the plan that is neither on the timeline nor a
  * session: it has no window, so `resolve-now.ts` puts it in `anytime` on every
  * day of the week; it has no exercises, no note and no three-way status, so
  * `session-entry.ts`'s vocabulary is wider than it needs. What it does have is a
  * `workout_logs` row like any other, and that row has to be told apart from the
  * session's by three separate callers who would otherwise each write their own
  * `type === "walk"` test.
+ *
+ * There are TWO of them since FUEL-98 — a morning walk and an afternoon one,
+ * two `workouts` rows and two template entries, which is what makes them two
+ * `workout_logs` rows under a unique index that has always been keyed by
+ * workout. Everything below was already written in the plural against the day
+ * that changed; this is that day, and the shapes are load-bearing now rather
+ * than defensive.
  *
  * This file is that test, written once, plus the two things that follow from it.
  *
@@ -64,11 +71,12 @@ export function isWalk<T extends NowItem>(
 /**
  * The `workouts.id` of every walk on the day, from the day's own resolution.
  *
- * A set rather than a single id because nothing in the schema forbids two walk
- * entries on one weekday — `training_template_entries` has no unique constraint
- * on `(user_id, day_of_week)` and could not have one, since the walk already
- * shares every day with a session. The seed schedules one; a caller that assumed
- * so would be a caller that silently left the second walk's row in the stack.
+ * A set rather than a single id because the seed schedules TWO walks on every
+ * weekday (FUEL-98), and nothing in the schema forbids more —
+ * `training_template_entries` has no unique constraint on
+ * `(user_id, day_of_week)` and could not have one, since a walk already shares
+ * every day with a session. A caller that assumed one would be a caller that
+ * silently left the afternoon walk's row in the stack.
  *
  * Taken from the RESOLVED items rather than from the workout library, so a walk
  * that is no longer on today's plan is not in the set — and its log row is
@@ -121,11 +129,11 @@ export type WalkEntryView = { durationMin: number | null };
  * What is recorded against each of the day's walks, keyed by TEMPLATE ENTRY id.
  *
  * A map rather than a single answer, for the reason `walkWorkoutIds` is a set:
- * nothing forbids two walk entries on one weekday, and a function that returned
- * "the walk's duration" would hand the same figure to both rows — the second
- * showing the first's minutes, with no way for a reader to tell. The seed
- * schedules one; the shape that only works for one is the one that fails
- * silently if that changes.
+ * the seed schedules two walk entries on every weekday, and a function that
+ * returned "the walk's duration" would hand the same figure to both rows — the
+ * second showing the first's minutes, with no way for a reader to tell. That
+ * was written when the seed scheduled one, as the shape that would fail
+ * silently if that changed; FUEL-98 is the change, and it did not.
  *
  * Keyed by the entry rather than the workout because the entry is what a row
  * holds and what a write names — `resolve-training.ts` gives the reason: a
@@ -162,17 +170,22 @@ export function walkEntries(
 /**
  * The durations the row offers, in minutes.
  *
- * PRD § Persona has the walk at "30–45 minutes every day including weekends",
- * and 60 is there for the day that ran long. Presets rather than the numeric
- * field `/training` gives a session, because the criterion attached to this
- * feature is ONE TAP: a keyboard between the tap and the row would be a second
- * question asked of someone who has just come in from a walk, and § Progressive
- * Disclosure's answer to "one question per screen" is not to ask the optional
- * one at all until the first is answered.
+ * PRD § Persona has "a 30–45 minute walk every day including weekends", and
+ * since FUEL-98 that is the DAY's figure across two walks rather than one
+ * outing's: 15 and 20 are what each of them ordinarily is, and 30 is there for
+ * the walk that took the whole day's allowance because the other one did not
+ * happen. Offering 45 and 60 against a twenty-minute walk would be offering
+ * mostly-wrong answers to the one question this control asks.
+ *
+ * Presets rather than the numeric field `/training` gives a session, because the
+ * criterion attached to this feature is ONE TAP: a keyboard between the tap and
+ * the row would be a second question asked of someone who has just come in from
+ * a walk, and § Progressive Disclosure's answer to "one question per screen" is
+ * not to ask the optional one at all until the first is answered.
  *
  * The bound they have to stay inside is `MAX_DURATION_MIN`, which
  * `session-entry.ts`'s `parseDuration` enforces on the way in regardless of what
  * is listed here — the presets are what the screen offers, not what the action
  * trusts.
  */
-export const WALK_PRESETS: readonly number[] = [30, 45, 60];
+export const WALK_PRESETS: readonly number[] = [15, 20, 30];

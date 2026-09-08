@@ -64,9 +64,62 @@ export const DEFAULT_WALK_REMINDER_AT: TimeOfDay = "19:00";
  */
 export const REMINDER_LINK = "Log the walk.";
 
-/** `Walk not logged. Reminder set for 19:00.` — the AC's sentence, given a time. */
-export function reminderStatement(at: TimeOfDay): string {
-  return `Walk not logged. Reminder set for ${at}.`;
+/**
+ * The names of the walks with no row against them, in the day's own order.
+ *
+ * A list rather than a count, because the sentence NAMES them — see below.
+ */
+export type OutstandingWalks = readonly string[];
+
+/**
+ * "Morning Walk and Afternoon Walk" — the subject of the sentence.
+ *
+ * Written out rather than reached for through `Intl.ListFormat`, which would
+ * make the copy depend on the runtime's locale and ICU build: `dot-grid.tsx`
+ * refuses the same API for the same reason, and this string is asserted word for
+ * word by a test that must mean the same thing on every machine it runs on.
+ *
+ * The Oxford comma is deliberate at three and above. There are two walks today
+ * and a third is a template edit away, so the branch exists; it is one clause
+ * and it is the one that stops "A, B and C" from being written as "A and B and
+ * C" the first time someone adds one.
+ */
+function nameList(names: OutstandingWalks): string {
+  if (names.length <= 2) return names.join(" and ");
+
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+
+/**
+ * `Morning Walk not logged. Reminder set for 19:00.` — the AC's sentence, given
+ * the walks that are outstanding and a time.
+ *
+ * ## Why the walks are named, and the sentence is no longer a constant
+ *
+ * It was "Walk not logged." while there was one walk. There are two since
+ * FUEL-98, and with the morning one done and the afternoon one not, that
+ * sentence is simply FALSE — the app reporting nothing logged about a day with
+ * a log in it. § Tone of Voice asks for factual before it asks for anything
+ * else, so the sentence says which.
+ *
+ * The alternative was to keep it generic and let it be true "about the day".
+ * That reads as an accusation the record contradicts, and it is exactly the
+ * thing the walk reminder must not become: a banner someone learns to ignore
+ * because it is sometimes wrong.
+ *
+ * Singular and plural are one shape rather than two strings — the subject is a
+ * list, the predicate never changes. "Morning Walk and Afternoon Walk not
+ * logged" is a compound subject taking a plural verb that is not written down,
+ * so nothing has to agree with anything.
+ *
+ * An EMPTY list is not a state this is called in: the caller establishes that
+ * something is outstanding before there is a banner at all. It renders as
+ * "not logged" with no subject, which is ungrammatical rather than misleading —
+ * a caller that reached it has a bug, and a sentence that quietly read well
+ * would be a bug nobody saw.
+ */
+export function reminderStatement(names: OutstandingWalks, at: TimeOfDay): string {
+  return `${nameList(names)} not logged. Reminder set for ${at}.`;
 }
 
 /**
