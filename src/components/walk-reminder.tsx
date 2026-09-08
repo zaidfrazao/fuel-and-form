@@ -15,11 +15,12 @@ import { reminderLink, reminderStatement } from "@/lib/walk-reminder";
  * the same placement `demo-banner.tsx` argues for, and it sits directly beneath
  * that banner when a demo session has both.
  *
- * Since FUEL-98 there are two walks, and the sentence names whichever of them
- * are outstanding rather than speaking about "the walk" in general: with the
- * morning one logged and the afternoon one not, a generic sentence contradicts
- * the record it is reporting on. The query supplies the names; see
- * `reminderStatement`.
+ * Since FUEL-98 there are two walks, and the sentence agrees with the day it is
+ * about: plural while more than one is outstanding, and naming the walk when
+ * exactly one is — because with the morning one logged and the afternoon one
+ * not, a sentence saying nothing is logged contradicts the record it is
+ * reporting on. The query supplies the list; `reminderStatement` argues the
+ * shape, and the link takes its number from the same place.
  *
  * ## Why there is no dismiss button
  *
