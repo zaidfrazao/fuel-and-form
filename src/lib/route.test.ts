@@ -347,11 +347,20 @@ describe("storableRoute", () => {
     const stored = storableRoute(walk);
 
     expect(stored.distanceM).toBe(590);
-    expect(distanceMetres(stored.points)).toBeLessThan(stored.distanceM);
+    expect(distanceMetres(stored.points)).toBeLessThan(stored.distanceM ?? 0);
   });
 
   it("rounds the distance to the metre", () => {
     expect(Number.isInteger(storableRoute(walk).distanceM)).toBe(true);
+  });
+
+  it("reports no distance rather than zero for a recording that measured none", () => {
+    // A single usable fix, or two a handspan apart. Zero is a measurement —
+    // it reads as a walk where somebody stood still — and the column's CHECK
+    // refuses it outright, so passing it through would turn a degenerate
+    // recording into a failed insert instead of a walk with fewer figures.
+    expect(storableRoute([[at(0, 0, 0)]]).distanceM).toBeNull();
+    expect(storableRoute([[at(0, 0, 0), at(0.2, 0, 5)]]).distanceM).toBeNull();
   });
 
   it("stores no points at all for a walk that is all doorstep", () => {
@@ -418,6 +427,6 @@ describe("storableRoute", () => {
 
     expect(stored.pointCount).toBeLessThanOrEqual(4);
     // Nothing trimmed, so the trace runs the whole length of the walk.
-    expect(distanceMetres(stored.points)).toBeCloseTo(stored.distanceM, 0);
+    expect(distanceMetres(stored.points)).toBeCloseTo(stored.distanceM ?? 0, 0);
   });
 });

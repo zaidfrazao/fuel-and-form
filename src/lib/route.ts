@@ -164,8 +164,20 @@ export type StorableRoute = {
   points: Track;
   /** How many points survived, across every segment — `walk_routes.point_count`. */
   pointCount: number;
-  /** The FULL walk's distance, untrimmed — `workout_logs.distance_m`. */
-  distanceM: number;
+  /**
+   * The FULL walk's distance in whole metres, untrimmed —
+   * `workout_logs.distance_m`. Null when there is none to report.
+   *
+   * Null rather than zero, and the column's CHECK is why it has to be: a
+   * recording that produced one usable fix, or two a handspan apart, measures
+   * no distance at all. Zero is a measurement — it reads as a walk where
+   * somebody stood still — and `workout_logs_distance_range` refuses it
+   * outright, so a caller passing the zero through would turn a degenerate
+   * recording into a failed insert rather than into a walk with fewer figures.
+   * § P11's "absent rather than zeroed", decided here so that every caller
+   * inherits it instead of each remembering.
+   */
+  distanceM: number | null;
   /**
    * The tolerance the track was thinned at, or null if nothing was dropped —
    * `walk_routes.simplified_tolerance_m`.
@@ -630,7 +642,10 @@ export function storableRoute(
   const cap = options.cap ?? MAX_ROUTE_POINTS;
   const trimMetres = options.trimMetres ?? TRIM_METRES;
 
-  const distanceM = Math.round(distanceMetres(track));
+  // Rounded to the metre first, so a track measuring half a metre is the
+  // "no distance" case rather than a stored 1 — see `distanceM` on the type.
+  const metres = Math.round(distanceMetres(track));
+  const distanceM = metres > 0 ? metres : null;
 
   const trimmed = trimEnds(track, trimMetres);
   const simplified = simplifyToCap(trimmed, cap);

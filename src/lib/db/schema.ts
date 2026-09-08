@@ -1611,6 +1611,9 @@ export type NewWorkoutLog = typeof workoutLogs.$inferInsert;
 export type ExerciseSet = typeof exerciseSets.$inferSelect;
 export type NewExerciseSet = typeof exerciseSets.$inferInsert;
 
+export type WalkRoute = typeof walkRoutes.$inferSelect;
+export type NewWalkRoute = typeof walkRoutes.$inferInsert;
+
 export type WeightLog = typeof weightLogs.$inferSelect;
 export type NewWeightLog = typeof weightLogs.$inferInsert;
 
