@@ -857,6 +857,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
         <span class="item-head">04 — Graphics</span>
         <h4>Two devices, two time-scales</h4>
         <p>The <strong>day ruler</strong> for intraday, the <strong>dot grid</strong> for weeks. Split this way they never appear as alternatives to each other on the same screen.</p>
+        <p>The split is by <b>time-scale</b>, and that is the whole of the rule (FUEL-99). It bans two answers to one question on one canvas &mdash; which is what refused a row of set marks on <span class="mono">/training</span>. A graphic that is <i>not</i> a time-scale device is outside this rule rather than exempted from it: the weight chart, and the route trace drawn beside these two below, which lives in a sheet and never on a canvas. <b>Two devices is still the count.</b></p>
       </div>
     </div>
   </section>
@@ -865,8 +866,8 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
   <section class="section">
     <div class="section-head">
       <div class="sec-no"><b>02</b><i></i></div>
-      <h2>The two signature graphics</h2>
-      <p>Both are abstractions of data the app already has — neither is decoration, and neither needs colour to work.</p>
+      <h2>The two signature graphics, and the one drawn beside them</h2>
+      <p>Both are abstractions of data the app already has — neither is decoration, and neither needs colour to work. The third specimen is <b>not a third device</b>: the route trace is a data graphic, ruled in § Data Display and drawn here because a graphic this file draws is one whoever builds it can transcribe rather than invent.</p>
     </div>
 
     <div class="grid2">
@@ -919,6 +920,66 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
         </div>
         <p>Six weeks of training adherence, one row per week. Filled is done, ring is skipped, small dots are walk-only weekends. Today is the single umber dot. The PRD wants adherence visible without a score — this shows the pattern and refuses to grade it.</p>
       </div>
+
+      <!-- Not a third signature graphic. § Data Display rules it (FUEL-99):
+           a data display like the chart, living in a sheet opened from a
+           logged walk's own figures, so it never shares a canvas with the
+           ruler or the grid and § The Four Rules #4 needs no exception.
+           Drawn here rather than described because this file's caption on
+           /weight says a graphic drawn in it is an obligation on whoever
+           builds the screen — which is the intent, for FUEL-102. The stroke
+           carries vector-effect="non-scaling-stroke" and the marks sit in an
+           unscaled overlay at percentage positions: that IS the technique
+           § Data Display prescribes, not an artefact of drawing it small. -->
+      <div class="item" style="grid-column: 1 / -1;">
+        <span class="item-head">Route trace · one walk — a data graphic, not a third device</span>
+        <div class="plate">
+          <div class="ui" data-mode="light">
+            <div style="display:flex;gap:26px;flex-wrap:wrap;">
+
+              <div style="flex:1 1 260px;min-width:0;">
+                <div style="position:relative;">
+                  <svg viewBox="0 0 120 80" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:auto;" role="img" aria-label="Morning Walk, 3.2 km in 34 minutes, a loop, recorded in one segment">
+                    <polyline points="24,64 20,52 22,40 30,31 42,25 56,22 70,21 84,24 94,31 98,42 95,53 87,61 75,66 62,68 48,69 38,69 31,68 28,66"
+                              fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></polyline>
+                  </svg>
+                  <span style="position:absolute;left:20%;top:80%;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border:1.5px solid var(--text-3);border-radius:50%;"></span>
+                  <span style="position:absolute;left:23.3%;top:82.5%;width:4px;height:4px;margin:-2px 0 0 -2px;background:var(--ink);border-radius:50%;"></span>
+                </div>
+                <div style="margin-top:10px;display:flex;flex-direction:column;gap:2px;">
+                  <span class="u-val">3.2 km</span>
+                  <span class="u-slash">34 min · ~4,300 steps · a loop</span>
+                </div>
+              </div>
+
+              <div style="flex:1 1 260px;min-width:0;">
+                <div style="position:relative;">
+                  <svg viewBox="0 0 120 80" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:auto;" role="img" aria-label="Afternoon Walk, 5.8 km in 61 minutes, point to point, recorded in two segments with 6 minutes not recorded">
+                    <polyline points="16,66 26,60 36,58 46,52 54,50 62,46"
+                              fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></polyline>
+                    <polyline points="78,38 86,30 92,27 100,24 104,18"
+                              fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></polyline>
+                  </svg>
+                  <span style="position:absolute;left:13.3%;top:82.5%;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border:1.5px solid var(--text-3);border-radius:50%;"></span>
+                  <span style="position:absolute;left:86.7%;top:22.5%;width:4px;height:4px;margin:-2px 0 0 -2px;background:var(--ink);border-radius:50%;"></span>
+                </div>
+                <div style="margin-top:10px;display:flex;flex-direction:column;gap:2px;">
+                  <span class="u-val">5.8 km</span>
+                  <span class="u-slash">61 min · ~7,700 steps · 2 segments · 6 min not recorded</span>
+                </div>
+              </div>
+
+            </div>
+            <div class="legend" style="margin-top:16px;">
+              <i><span style="width:9px;height:9px;border:1.5px solid var(--text-3);border-radius:50%;"></span>Start</i>
+              <i><span style="width:4px;height:4px;background:var(--ink);border-radius:50%;"></span>End</i>
+              <i><span style="width:11px;height:2px;background:var(--ink);border-radius:1px;"></span>2px ink, at every width</i>
+            </div>
+          </div>
+        </div>
+        <p><b>The same box, two walks, each fitted to it on its own</b> — so the trace shows <b>shape, not size</b>, and the two drawings are not comparable to each other. The distance says the size, in four characters, which is what a figure is for. A fixed 3:2 in the sheet's column: not square, because an out-and-back is a long thin thing and a square spends a third of the sheet on the empty half of it. The route scales <b>isotropically</b> and is never stretched to fill, because a stretched route is a different shape and shape is all this carries.</p>
+        <p><b>No plate, no gridline, no axis, no scale bar, no north arrow, and no colour.</b> The chart's plot area earns its fill because a trend has to be read <i>against</i> something; a route carries its own extent — the shape <i>is</i> the datum. Start and end differ by form rather than ink, a ring against a disc, so it survives greyscale. <b>Umber appears only while a recording is running</b>, on the current position, which is the one thing the accent means. A finished walk has no <i>now</i> in it. <b>A gap draws nothing</b> — the second specimen is two segments, and the words carry the six minutes, because a dashed connector would draw a path nobody walked.</p>
+      </div>
     </div>
 
     <p class="note">
@@ -926,6 +987,14 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
       ruler is one day at hour precision, the grid is six weeks at day precision. The ruler lives on
       <span class="mono">/</span>; the grid lives on Training and Weight. No screen shows both, so neither
       has to compete to be the memorable thing.
+    </p>
+    <p class="note">
+      <strong>And why the third one does not collide either.</strong> The route trace answers <i>where did I
+      go</i>, which is not a time-scale question, so there is nothing here for it to be an alternative to.
+      It is also never on a canvas: it opens in a <b>sheet</b>, from a logged walk's own figures on
+      <span class="mono">/</span> and on Training — the row opens it rather than growing one — so the ruler
+      and the grid keep their screens unchanged and nothing is displaced. § Data Display carries the ruling
+      and what was decided against; PRD § P11 carries why there is no basemap under it.
     </p>
   </section>
 
@@ -2874,7 +2943,8 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
     <div class="grid2">
       <div class="item"><span class="item-head">Contrast</span><p>≥4.5:1 body, ≥3:1 for large text and every control, tick, dot and hairline that carries meaning.</p></div>
       <div class="item"><span class="item-head">Never colour alone</span><p>The ruler encodes status as fill, hatch and hairline; the dot grid as solid, ring and size. Both survive greyscale — and both already are greyscale.</p></div>
-      <div class="item"><span class="item-head">Signature graphics</span><p>The ruler and the grid each carry an accessible summary plus a data table. A mark on a screen is not the data.</p></div>
+      <div class="item"><span class="item-head">Graphics</span><p>The ruler and the grid each carry an accessible summary plus a data table &mdash; and so do the chart and the route trace, because the obligation attaches to what a graphic <i>is</i>. A mark on a screen is not the data.</p></div>
+      <div class="item"><span class="item-head">The table is the data a reader wants</span><p>Not the data the graphic holds. The route trace's table is the walk's figures &mdash; distance, duration, pace, the step estimate and its source &mdash; and never its coordinates: nobody can read a list of latitudes, and it would write a home address into the accessibility tree.</p></div>
       <div class="item"><span class="item-head">Micro labels</span><p>10.5px is small. It is permitted only for labels whose value sits adjacent at 22px or more, never for standalone information, and it scales with Dynamic Type.</p></div>
       <div class="item"><span class="item-head">Focus</span><p>2px umber ring, 2px offset, on every interactive element in both modes. Never removed.</p></div>
       <div class="item"><span class="item-head">Touch</span><p>44×44px minimum. Icon-only tabs carry an <span class="mono">aria-label</span>; the active tab shows its label as text.</p></div>
