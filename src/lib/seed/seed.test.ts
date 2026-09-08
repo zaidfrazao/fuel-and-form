@@ -106,12 +106,13 @@ describe("A/B alternation", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("workout library", () => {
-  it("holds both circuits, the interval session and the walk", () => {
+  it("holds both circuits, the interval session and both walks", () => {
     expect(seedWorkouts.map((w) => w.key)).toEqual([
       "bodyweight-circuit-a",
       "bodyweight-circuit-b",
       "skipping-intervals-core",
-      "daily-walk",
+      "morning-walk",
+      "afternoon-walk",
     ]);
   });
 
@@ -233,13 +234,24 @@ describe("workout library", () => {
     }
   });
 
-  it("models the walk as a session with no exercise list", () => {
+  it("models both walks as sessions with no exercise list", () => {
     // AC4's structural claim, in its workout form: a parent row is valid with no
-    // children. The walk is the case that proves it — one activity, logged with
-    // a single tap, with nothing to step through.
-    const walk = seedWorkouts.find((w) => w.key === "daily-walk");
+    // children. The walks are the case that proves it — one activity each,
+    // logged with a single tap, with nothing to step through.
+    for (const key of ["morning-walk", "afternoon-walk"]) {
+      expect(seedWorkouts.find((w) => w.key === key)?.exercises, key).toEqual([]);
+    }
+  });
 
-    expect(walk?.exercises).toEqual([]);
+  it("gives the two walks the same type and different identities", () => {
+    // FUEL-98. Both are `walk`, so `WALK_TYPE`, `isWalk` and
+    // `EDITABLE_WORKOUT_TYPES` go on answering about both without learning a
+    // second vocabulary — and they are two rows, which is what lets one date
+    // hold two `workout_logs` under the unique index keyed by workout.
+    const walks = seedWorkouts.filter((w) => w.type === "walk");
+
+    expect(walks).toHaveLength(2);
+    expect(new Set(walks.map((w) => w.name)).size).toBe(2);
   });
 });
 

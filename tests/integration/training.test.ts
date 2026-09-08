@@ -139,12 +139,12 @@ describe.skipIf(!configured)("resolving a training day, scoped", () => {
     return workout!.id;
   }
 
-  /** The daily walk, on all seven days, sorting after whatever else the day has. */
+  /** The morning walk, on all seven days, sorting after whatever else the day has. */
   async function addDailyWalk(userId: string): Promise<void> {
     const owned = scope(userId, getDb());
 
     const [walk] = await owned.insert(schema.workouts, {
-      name: "Daily Walk",
+      name: "Morning Walk",
       type: "walk",
     });
 
@@ -222,7 +222,7 @@ describe.skipIf(!configured)("resolving a training day, scoped", () => {
     // as anything else, `groupWorkouts` would have matched it into the circuit
     // and put a walk on the Monday too.
     expect(saturday.map((session) => [session.workout.name, session.kind])).toEqual([
-      ["Daily Walk", "walk"],
+      ["Morning Walk", "walk"],
     ]);
     expect(saturday[0]?.exercises).toEqual([]);
     expect(saturday[0]?.source).toBe("fixed");
@@ -383,7 +383,7 @@ describe.skipIf(!configured)("recording a session, scoped", () => {
     const { userId } = fixture.alice;
     const s = scope(userId, getDb());
 
-    const [walk] = await s.insert(schema.workouts, { name: "Daily Walk", type: "walk" });
+    const [walk] = await s.insert(schema.workouts, { name: "Morning Walk", type: "walk" });
 
     await recordSession(userId, {
       date: ALICE_LOGGED,
@@ -395,6 +395,125 @@ describe.skipIf(!configured)("recording a session, scoped", () => {
 
     // The index constrains (date, workout), not the date. A day holds both.
     expect(await logsOf(userId)).toHaveLength(2);
+  });
+
+  /*
+   * FUEL-98's regression, and the assertion whose absence let the defect exist.
+   *
+   * It has to be here rather than in jsdom, and that is the whole reason the
+   * bug survived: a unique index does nothing in a unit test. The seed put two
+   * walk ENTRIES on a weekday naming ONE workout, so the two taps a person
+   * makes on one day were two writes to `(user_id, date, workout_id)` — and
+   * `recordSession` upserts against that index, so the afternoon walk did not
+   * collide loudly. It replaced the morning one, took its duration with it, and
+   * told nobody. Adherence, the export and the reminder then all agreed on a
+   * number that was half the truth.
+   *
+   * Two workouts is the fix, and these are the two things a test can see: two
+   * rows survive one date, and writing the second leaves the first alone.
+   */
+  it("stores BOTH of a day's walks, because they are two workouts", async () => {
+    const { userId } = fixture.alice;
+    const s = scope(userId, getDb());
+
+    const [morning] = await s.insert(schema.workouts, {
+      name: "Morning Walk",
+      type: "walk",
+    });
+    const [afternoon] = await s.insert(schema.workouts, {
+      name: "Afternoon Walk",
+      type: "walk",
+    });
+
+    for (const [walk, durationMin] of [
+      [morning!, 20],
+      [afternoon!, 15],
+    ] as const) {
+      await recordSession(userId, {
+        date: ALICE_LOGGED,
+        workoutId: walk.id,
+        status: "done",
+        note: null,
+        durationMin,
+      });
+    }
+
+    const walkLogs = (await logsOf(userId)).filter(
+      (log) => log.workoutId === morning!.id || log.workoutId === afternoon!.id,
+    );
+
+    // Two rows. One would be the defect, and it is the count that says so —
+    // the write itself never failed.
+    expect(walkLogs).toHaveLength(2);
+  });
+
+  it("does not let the afternoon walk overwrite the morning one", async () => {
+    // The sharper half. A count could be satisfied by two rows whose durations
+    // had been shuffled; this pins each walk's own minutes to its own row,
+    // which is the value the defect silently replaced.
+    const { userId } = fixture.alice;
+    const s = scope(userId, getDb());
+
+    const [morning] = await s.insert(schema.workouts, {
+      name: "Morning Walk",
+      type: "walk",
+    });
+
+    await recordSession(userId, {
+      date: ALICE_LOGGED,
+      workoutId: morning!.id,
+      status: "done",
+      note: null,
+      durationMin: 20,
+    });
+
+    const [afternoon] = await s.insert(schema.workouts, {
+      name: "Afternoon Walk",
+      type: "walk",
+    });
+
+    await recordSession(userId, {
+      date: ALICE_LOGGED,
+      workoutId: afternoon!.id,
+      status: "done",
+      note: null,
+      durationMin: 15,
+    });
+
+    const byWorkout = new Map(
+      (await logsOf(userId)).map((log) => [log.workoutId, log.durationMin]),
+    );
+
+    expect(byWorkout.get(morning!.id)).toBe(20);
+    expect(byWorkout.get(afternoon!.id)).toBe(15);
+  });
+
+  it("still corrects a walk in place, which is what the upsert is for", async () => {
+    // The other side of the same index, and the thing a widened key would have
+    // put at risk: a duration changed from 20 to 15 is one row, not two. That
+    // is what makes the row's presets toggleable at all.
+    const { userId } = fixture.alice;
+    const s = scope(userId, getDb());
+
+    const [walk] = await s.insert(schema.workouts, {
+      name: "Morning Walk",
+      type: "walk",
+    });
+
+    for (const durationMin of [20, 15]) {
+      await recordSession(userId, {
+        date: ALICE_LOGGED,
+        workoutId: walk!.id,
+        status: "done",
+        note: null,
+        durationMin,
+      });
+    }
+
+    const walkLogs = (await logsOf(userId)).filter((log) => log.workoutId === walk!.id);
+
+    expect(walkLogs).toHaveLength(1);
+    expect(walkLogs[0]!.durationMin).toBe(15);
   });
 
   it("refuses a duplicate at the database, not merely in the app", async () => {
@@ -610,12 +729,19 @@ describe.skipIf(!configured)("recording the daily walk, scoped", () => {
     fixture = await seedFixture();
   });
 
-  /** The walk on every day of the week, sorting after whatever else a day has. */
+  /**
+   * One walk on every day of the week, sorting after whatever else a day has.
+   *
+   * Deliberately ONE. This block asserts what a single walk does, which is what
+   * every account held before FUEL-98 and what one holds again the moment
+   * somebody edits their template — and it is the shape "existing history still
+   * resolves" is a claim about. The pair has `seedBothWalks` below.
+   */
   async function seedWalk(userId: string): Promise<string> {
     const owned = scope(userId, getDb());
 
     const [walk] = await owned.insert(schema.workouts, {
-      name: "Daily Walk",
+      name: "Morning Walk",
       type: "walk",
     });
 
@@ -629,6 +755,36 @@ describe.skipIf(!configured)("recording the daily walk, scoped", () => {
     );
 
     return walk!.id;
+  }
+
+  /**
+   * Both walks on every day, as the seed now schedules them — FUEL-98.
+   *
+   * Two workouts and two entries per day, at sort orders 1 and 2. The two ids
+   * are what let one date hold two `workout_logs` rows; the two entries are
+   * what let two rows on a screen name different writes.
+   */
+  async function seedBothWalks(userId: string): Promise<[string, string]> {
+    const owned = scope(userId, getDb());
+
+    const ids: string[] = [];
+
+    for (const [index, name] of ["Morning Walk", "Afternoon Walk"].entries()) {
+      const [walk] = await owned.insert(schema.workouts, { name, type: "walk" });
+
+      await owned.insert(
+        schema.trainingTemplateEntries,
+        [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
+          dayOfWeek,
+          workoutId: walk!.id,
+          sortOrder: index + 1,
+        })),
+      );
+
+      ids.push(walk!.id);
+    }
+
+    return [ids[0]!, ids[1]!];
   }
 
   /** What `resolveWalk` does, minus the session it cannot have here. */
@@ -663,6 +819,53 @@ describe.skipIf(!configured)("recording the daily walk, scoped", () => {
     // 2026-01-10 is a Saturday. "Every day including weekends" is a property of
     // the template, and this is that property surviving the round trip.
     expect((await resolveWalk(fixture.alice.userId, SATURDAY))?.kind).toBe("walk");
+  });
+
+  it("resolves BOTH walks on a date, each with its own entry — FUEL-98", async () => {
+    // What the two rows on `/` and `/training` are built from. Two entries with
+    // one workout between them would draw two rows that wrote the same log —
+    // the defect, arriving through the resolver rather than through the index.
+    const [morningId, afternoonId] = await seedBothWalks(fixture.alice.userId);
+
+    const training = await loadTraining(fixture.alice.userId, ALICE_LOGGED, new Date());
+    const walks = training!.day.sessions.filter((item) => item.kind === "walk");
+
+    expect(walks.map((walk) => walk.workout.id)).toEqual([morningId, afternoonId]);
+    expect(new Set(walks.map((walk) => walk.entryId)).size).toBe(2);
+    // Template order, from `sort_order`, surviving the round trip — the order
+    // the screens draw the rows in and the reminder lists them in.
+    expect(walks.map((walk) => walk.workout.name)).toEqual([
+      "Morning Walk",
+      "Afternoon Walk",
+    ]);
+  });
+
+  it("clears one walk and leaves the other logged", async () => {
+    // § Feedback's "revertible from where it was performed", per walk, at the
+    // layer that actually deletes. `clearSession` is addressed by
+    // (date, workout), so this is the assertion that the address is narrow
+    // enough to take back one of two walks on one day.
+    const { userId } = fixture.alice;
+    const [morningId, afternoonId] = await seedBothWalks(userId);
+
+    for (const workoutId of [morningId, afternoonId]) {
+      await recordSession(userId, {
+        date: ALICE_LOGGED,
+        workoutId,
+        status: "done",
+        note: null,
+        durationMin: 20,
+      });
+    }
+
+    await clearSession(userId, ALICE_LOGGED, afternoonId);
+
+    const walkLogs = (await logsOf(userId)).filter(
+      (log) => log.workoutId === morningId || log.workoutId === afternoonId,
+    );
+
+    expect(walkLogs).toHaveLength(1);
+    expect(walkLogs[0]!.workoutId).toBe(morningId);
   });
 
   it("records one row for the walk beside the session's own", async () => {

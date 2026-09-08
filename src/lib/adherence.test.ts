@@ -42,7 +42,8 @@ const ANCHOR = "2026-04-08"; // a Wednesday, five weeks and two days in
 const CIRCUIT_A = "Bodyweight Circuit A";
 const CIRCUIT_B = "Bodyweight Circuit B";
 const INTERVALS = "Skipping Intervals + Core";
-const WALK = "Daily Walk";
+/** Both walks, joined the way `dayFor` writes the label. */
+const WALKS = "Morning Walk · Afternoon Walk";
 
 const idFor = (key: string) => `workout-${key}`;
 
@@ -74,7 +75,8 @@ const PLAN: TrainingPlan = {
 /** The workout ids the seed's names resolve to, for building log rows. */
 const CIRCUIT_A_ID = idFor("bodyweight-circuit-a");
 const CIRCUIT_B_ID = idFor("bodyweight-circuit-b");
-const WALK_ID = idFor("daily-walk");
+const MORNING_WALK_ID = idFor("morning-walk");
+const AFTERNOON_WALK_ID = idFor("afternoon-walk");
 
 /** Every day in the window, flattened — the grid's own reading order. */
 const daysOf = (logs: readonly SessionLog[] = [], anchor = ANCHOR) =>
@@ -162,11 +164,15 @@ describe("what a day says", () => {
     expect(dayOn("2026-04-10").status).toBe("none");
   });
 
-  it("gives a weekend the walk, so it is a small dot rather than an empty one", () => {
+  it("gives a weekend the walks, so it is a small dot rather than an empty one", () => {
     const saturday = dayOn("2026-03-07");
 
     expect(saturday.status).toBe("walk");
-    expect(saturday.label).toBe(WALK);
+    // BOTH names — FUEL-98. The dot stays one per day, because two walks are
+    // not two days; the label is where the day's content is stated in words
+    // (Brand Guide § Accessibility's data table), and naming one of two would
+    // be the table describing a plan nobody is following.
+    expect(saturday.label).toBe(WALKS);
   });
 
   it("draws nothing for a date before the program started", () => {
@@ -183,10 +189,14 @@ describe("what a day says", () => {
 });
 
 describe("the session is what the day is about", () => {
-  it("does not let the walk answer for the session it shares a day with", () => {
-    // Every weekday carries both. A grid keyed on the date alone would show a
-    // completed dot for a session that was never done, on the strength of a walk.
-    const logs: SessionLog[] = [{ date: "2026-03-02", workoutId: WALK_ID, status: "done" }];
+  it("does not let a walk answer for the session it shares a day with", () => {
+    // Every weekday carries all three. A grid keyed on the date alone would show
+    // a completed dot for a session that was never done, on the strength of a
+    // walk — and with two walks logged there are two rows arguing for it.
+    const logs: SessionLog[] = [
+      { date: "2026-03-02", workoutId: MORNING_WALK_ID, status: "done" },
+      { date: "2026-03-02", workoutId: AFTERNOON_WALK_ID, status: "done" },
+    ];
 
     const monday = dayOn("2026-03-02", logs);
 

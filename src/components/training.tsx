@@ -806,10 +806,11 @@ const NO_SETS: readonly LoggedSetView[] = [];
 /**
  * The screen for one date.
  *
- * @param sessions the date's items in template order — the session first, the
- *   walk after it, exactly as `resolveTraining` returns them. Order is the
- *   template's and is not re-sorted here; `lib/seed/plan.ts` gives the walk
- *   `sortOrder: 1` on days that have a session precisely so it lands second.
+ * @param sessions the date's items in template order — the session first, then
+ *   the morning walk and the afternoon walk, exactly as `resolveTraining`
+ *   returns them. Order is the template's and is not re-sorted here;
+ *   `lib/seed/plan.ts` gives the walks `sortOrder` 1 and 2 on days that have a
+ *   session precisely so they land second and third.
  */
 export function Training({
   date,
@@ -833,18 +834,26 @@ export function Training({
   bodyweightKg: number;
 }) {
   /*
-   * The session is what the BAR's actions act on. The walk is on the template
-   * every day and has its own row with its own one-tap log (FUEL-29), written
-   * through `actions/log-walk.ts`; `actions/training.ts` still refuses it, so
-   * the three statuses, the note and the duration field below can never be
-   * pointed at a row this screen renders as a row.
+   * The session is what the BAR's actions act on. The walks are on the template
+   * every day and have their own rows with their own one-tap logs (FUEL-29,
+   * FUEL-98), written through `actions/log-walk.ts`; `actions/training.ts`
+   * still refuses them, so the three statuses, the note and the duration field
+   * below can never be pointed at a row this screen renders as a row.
    *
-   * KNOWN LIMITATION: a date with TWO sessions renders only the first, and the
+   * KNOWN LIMITATION: a date with TWO SESSIONS renders only the first, and the
    * second is dropped with no sign of it. Nothing in the schema forbids two
    * non-walk entries on one weekday — `training_template_entries` has no unique
    * constraint on `(user_id, day_of_week)` and could not have one, since the
-   * walk shares every day with a session. PRD § P3 describes one session a day
+   * walks share every day with a session. PRD § P3 describes one session a day
    * and the seed schedules one, so the case does not arise today.
+   *
+   * The WALKS had the identical gap and it did arise: FUEL-98 put a second walk
+   * on every day, and a `find` here would have rendered one row for the pair.
+   * That one is fixed below, and it is fixed rather than recorded because a
+   * walk row needs no selection model — it is addressed by its entry, so two
+   * rows are two independent one-tap controls and nothing has to say WHICH.
+   * That is exactly what the paragraph above says a second session would not
+   * have, which is why the two gaps have different answers.
    *
    * It is recorded rather than handled because handling it is a product
    * question this task cannot answer alone: with two sessions, "Mark done" has
@@ -854,7 +863,17 @@ export function Training({
    * seed's second snack, which `resolveSlot` also never surfaces.
    */
   const session = sessions.find((item) => item.kind === "session");
-  const walk = sessions.find((item) => item.kind === "walk");
+
+  /*
+   * Every walk on the date, in template order — FUEL-98.
+   *
+   * A filter and not a `find`. There are two walks now, and a `find` would draw
+   * one row for the pair: the second walk would be unloggable from this screen
+   * entirely, and — because `walk-row.tsx` is addressed by entry — the row that
+   * WAS drawn would be the morning one on a screen someone opened in the
+   * evening to record the afternoon.
+   */
+  const walks = sessions.filter((item) => item.kind === "walk");
 
   const recorded = session?.entry ?? null;
 
@@ -1424,14 +1443,20 @@ export function Training({
           <div className="flex flex-col gap-3">
             <Eyebrow>Training</Eyebrow>
             <h1 className="text-title text-text-primary">
-              {walk ? "Walk only" : "Nothing scheduled"}
+              {walks.length > 0 ? "Walks only" : "Nothing scheduled"}
             </h1>
             {/* § Tone of Voice: describe what will appear. A weekend is a rest
               day by design, and a date before the program started simply has
-              no plan — neither is a failure to do something. */}
+              no plan — neither is a failure to do something.
+
+              Plural since FUEL-98, and the heading with it: a weekend is two
+              walks and no session, so "Walk only" named one of the two things
+              the day actually holds. The sentence says "walks" without counting
+              them, because the rows below are the count and a number here would
+              be a second one to keep in step. */}
             <SlashMeta>
-              {walk
-                ? "No session today. The daily walk still counts."
+              {walks.length > 0
+                ? "No session today. The daily walks still count."
                 : "The plan does not cover this date."}
             </SlashMeta>
           </div>
@@ -1660,30 +1685,40 @@ export function Training({
           <RecentSessions sessions={recentSessions(adherence, today)} viewing={date} />
         </section>
 
-        {walk && (
+        {walks.length > 0 && (
           <section className="flex flex-col gap-[14px]">
             <Eyebrow>Anytime</Eyebrow>
             {/*
-             * Loggable in one tap — FUEL-29, and the same row `/` renders. It is
-             * on the template every single day, so a screen that left it out
-             * would be describing a different plan from the one being followed,
-             * and a rest day is exactly when it is the only thing there is to
-             * log: the bar below this is absent on those days.
+             * Loggable in one tap each — FUEL-29, FUEL-98, and the same rows `/`
+             * renders. They are on the template every single day, so a screen
+             * that left one out would be describing a different plan from the
+             * one being followed, and a rest day is exactly when they are the
+             * only things there are to log: the bar below this is absent on
+             * those days.
+             *
+             * One row per walk, keyed by entry, so each has its own tap, its own
+             * duration presets and its own way back. That is the criterion —
+             * "loggable in one tap", and independently revertible from the row
+             * it was logged on — and it is why this is a list of rows rather
+             * than one row with a choice in front of it.
              *
              * The DATE is this screen's, not today's. That is the whole reason
-             * the walk's action is addressed by date rather than by a key the
+             * a walk's action is addressed by date rather than by a key the
              * way `/`'s logs are — a walk missed on Tuesday is recorded on
              * Tuesday, from the screen that shows Tuesday.
              */}
             <ul className="flex flex-col">
-              <WalkRow
-                date={date}
-                entryId={walk.entryId}
-                name={walk.name}
-                entry={
-                  walk.entry ? { durationMin: walk.entry.durationMin } : null
-                }
-              />
+              {walks.map((walk) => (
+                <WalkRow
+                  key={walk.entryId}
+                  date={date}
+                  entryId={walk.entryId}
+                  name={walk.name}
+                  entry={
+                    walk.entry ? { durationMin: walk.entry.durationMin } : null
+                  }
+                />
+              ))}
             </ul>
           </section>
         )}

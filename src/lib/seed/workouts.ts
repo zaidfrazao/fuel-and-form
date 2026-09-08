@@ -435,29 +435,76 @@ export const seedWorkouts: readonly SeedWorkout[] = [
   },
 
   /* ------------------------------------------------------------------------ */
-  /* Every day, including weekends                                            */
+  /* Every day, including weekends — and TWICE (FUEL-98)                      */
   /* ------------------------------------------------------------------------ */
 
+  /*
+   * Two walks, and they are two ROWS rather than one row logged twice.
+   *
+   * PRD § P1's routine table has always said "twice daily in practice", and its
+   * snack rows anchor Snack 1 to "the mid-morning walk" and Snack 2 to "the
+   * afternoon walk". The app modelled one, and the database could hold no more:
+   * `workout_logs` is unique on `(user_id, date, workout_id)` and
+   * `recordSession` upserts against that index, so a second walk on one date was
+   * not refused — it OVERWROTE the first, and the duration went with it.
+   *
+   * Two rows is what fixes that with no migration and no widened key: two
+   * workouts on one date are two `workout_id`s, which the index has always
+   * allowed and which `resolve-training.ts` already resolves as two items. The
+   * alternative — an occurrence number in the unique index — would be a live
+   * migration on a table holding history, and it would buy a distinction nothing
+   * could NAME. The names are the point: they are what makes § P1's anchoring
+   * sentence describe the app rather than contradict it, and what lets two rows
+   * on one screen be told apart by the person tapping them.
+   *
+   * Both keep `type: 'walk'`, so every layer that asks "is this the walk"
+   * (`WALK_TYPE`, `isWalk`, `EDITABLE_WORKOUT_TYPES`, the reminder's library
+   * read) goes on answering yes to both without learning a second vocabulary.
+   * Neither gets a window — see `persona.ts` and the `workout_times` column
+   * comment; a walk with a start time is the active card displacing a meal, and
+   * with two walks that argument doubles rather than weakening.
+   *
+   * The old single row's description carried the split as an apology for the
+   * model ("Split it if that's easier — 20 min after the midday work block and
+   * 20 min in the evening"). It is the schedule now, so each row says when it is
+   * and the sentence goes.
+   */
+
   {
-    key: "daily-walk",
-    name: "Daily Walk",
+    key: "morning-walk",
+    name: "Morning Walk",
     type: "walk",
     rotationGroup: null,
     rotationIndex: null,
     description: [
       "Separate from the training sessions, and every day including weekends.",
       "",
-      "30–45 min. Split it if that's easier — 20 min after the midday work block and",
-      "20 min in the evening — or do the lot in one go. Brisk enough that you could",
-      "talk but wouldn't want to sing.",
+      "20 min, mid-morning — the walk Snack 1 is anchored to. Brisk enough that you",
+      "could talk but wouldn't want to sing.",
       "",
-      "This is the single biggest lever available against a desk job, and it costs",
-      "nothing in hunger or recovery.",
+      "This and the afternoon one together are the single biggest lever available",
+      "against a desk job, and they cost nothing in hunger or recovery.",
     ].join("\n"),
 
     // No exercises. A walk is one undifferentiated activity, and P3 logs it with
     // a single tap rather than stepping through a list — an empty array is the
     // honest model, not a missing one.
+    exercises: [],
+  },
+
+  {
+    key: "afternoon-walk",
+    name: "Afternoon Walk",
+    type: "walk",
+    rotationGroup: null,
+    rotationIndex: null,
+    description: [
+      "Separate from the training sessions, and every day including weekends.",
+      "",
+      "20 min, late afternoon — the walk Snack 2 is anchored to. Do the lot in one",
+      "go if the morning got away from you; 30–45 min across the day is the target.",
+    ].join("\n"),
+
     exercises: [],
   },
 ];

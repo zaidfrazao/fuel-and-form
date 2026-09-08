@@ -78,6 +78,13 @@
       "when": 1788422814088,
       "tag": "0010_concerned_gauntlet",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788509214088,
+      "tag": "0011_lucky_shocker",
+      "breakpoints": true
     }
   ]
 }

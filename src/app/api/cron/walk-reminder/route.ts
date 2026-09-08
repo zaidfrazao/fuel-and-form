@@ -137,8 +137,8 @@ export async function GET(request: Request): Promise<Response> {
 
   for (const user of owed) {
     // Built once per user rather than once per device: the sentence is about the
-    // walk, not about the browser, so two phones get the same words.
-    const payload = JSON.stringify(walkNotification(user.at));
+    // walks, not about the browser, so two phones get the same words.
+    const payload = JSON.stringify(walkNotification(user.outstanding, user.at));
 
     for (const target of user.targets) {
       // P9's "one notification per day maximum", counted in the user's own zone

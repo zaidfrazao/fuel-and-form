@@ -139,10 +139,28 @@ const DINNER = at(
   1140,
 );
 
-const WALK: AnytimeItem = {
-  ...workoutItem(workout("w2", "Daily walk", { type: "walk" }), "e6"),
+/*
+ * The day's two walks — FUEL-98.
+ *
+ * Two workouts and two template entries, which is the shape the app has since
+ * the seed stopped modelling one: `workout_logs` is unique on
+ * `(user_id, date, workout_id)`, so two walks that shared a workout were two
+ * taps writing one row. A specimen still drawing one would be photographing a
+ * plan nobody is following — and these two states are the only place the
+ * day-complete branch's per-walk narrowing is drawn at all, the demo's own
+ * fixture never reaching that state.
+ */
+const MORNING_WALK: AnytimeItem = {
+  ...workoutItem(workout("w2", "Morning Walk", { type: "walk" }), "e6"),
   key: "workout:e6",
 };
+
+const AFTERNOON_WALK: AnytimeItem = {
+  ...workoutItem(workout("w6", "Afternoon Walk", { type: "walk" }), "e7"),
+  key: "workout:e7",
+};
+
+const WALKS = [MORNING_WALK, AFTERNOON_WALK];
 
 const TIMELINE = [COFFEE, BREAKFAST, SNACK, LUNCH, SESSION, DINNER];
 
@@ -232,7 +250,7 @@ const base = (minutesOfDay: number) => ({
   date: "2026-03-09",
   minutesOfDay,
   timeline: TIMELINE,
-  anytime: [WALK],
+  anytime: WALKS,
 });
 
 /**
@@ -264,9 +282,12 @@ const LOGGED: LoggedEntry[] = [
   { id: "l4", name: "Chicken and rice bowl", kind: "meal", status: "eaten", macros: { kcal: 612, proteinG: 54.2, fatG: 14.6, carbG: 63.8 } },
   { id: "l5", name: "Circuit A", kind: "workout", status: "done" },
   { id: "l6", name: "Beef chilli", kind: "meal", status: "eaten", macros: { kcal: 1024, proteinG: 68.3, fatG: 34.1, carbG: 82.5 } },
-  // The walk's line carries `walk` (FUEL-29), which is what keeps the Undo
-  // control off it: the bar's stack is over what the bar logged.
-  { id: "l7", name: "Daily walk", kind: "workout", status: "done", walk: true },
+  // Each walk's line carries `walk` (FUEL-29), which is what keeps the Undo
+  // control off them: the bar's stack is over what the bar logged. Two lines
+  // since FUEL-98, because a day holds two walks and the summary prints what
+  // was logged rather than a category.
+  { id: "l7", name: "Morning Walk", kind: "workout", status: "done", walk: true },
+  { id: "l8", name: "Afternoon Walk", kind: "workout", status: "done", walk: true },
 ];
 
 const activeAt = (
@@ -293,8 +314,11 @@ const CASES: Record<
     note: string;
     view: NowView;
     entries?: LoggedEntry[];
-    /** What is recorded against the walk — FUEL-29. Unlogged unless named. */
-    walk?: WalkEntryView;
+    /**
+     * What is recorded against each walk, by template entry — FUEL-29,
+     * FUEL-98. Absent entries are walks nobody has logged.
+     */
+    walks?: ReadonlyMap<string, WalkEntryView>;
   }
 > = {
   meal: {
@@ -324,9 +348,23 @@ const CASES: Record<
   },
   complete: {
     label: "Day complete",
-    note: "The finished page: actual against target, the day's log, and crop marks at the four corners. No ruler, no tab bar, no score.",
+    note: "The finished page: actual against target, the day's log, and crop marks at the four corners. No ruler, no tab bar, no score — and nothing offered, the walks being among the logs above.",
     view: { ...base(21 * 60 + 30), state: "day-complete" },
     entries: LOGGED,
+    /*
+     * Both walks logged, matching the two lines `LOGGED` carries for them.
+     *
+     * Without this the specimen drew the summary saying DONE against each walk
+     * and an Anytime row offering to log it underneath — a state the app cannot
+     * reach, since the row is rendered from the absence of exactly the log the
+     * line above it reports. It was wrong with one walk too and simply harder to
+     * see; FUEL-98 drew it twice. The outstanding cases are `complete-walk` and
+     * `complete-one-walk`, which carry summaries that agree with their rows.
+     */
+    walks: new Map([
+      ["e6", { durationMin: 20 }],
+      ["e7", { durationMin: 15 }],
+    ]),
   },
   "complete-empty": {
     label: "Day complete · nothing logged",
@@ -336,19 +374,26 @@ const CASES: Record<
   empty: {
     label: "Nothing planned",
     note: "Before the program starts, or a date the template does not cover. No ruler — there is no day to draw.",
-    view: { ...base(9 * 60), state: "nothing-planned", timeline: [], anytime: [WALK] },
+    view: { ...base(9 * 60), state: "nothing-planned", timeline: [], anytime: WALKS },
   },
   "walk-logged": {
-    label: "Walk logged",
-    note: "The Anytime row after one tap, with a duration set. Done and the minutes are words, not colour, and the presets stay on offer so 45 can become 60 or nothing.",
+    label: "One walk logged",
+    note: "The morning walk's row after one tap, with a duration set, beside an afternoon walk still on offer — the ordinary state of a day between the two. Done and the minutes are words, not colour, and the presets stay on offer so 20 can become 30 or nothing.",
     view: activeAt(5, 19 * 60 + 20),
-    walk: { durationMin: 45 },
+    walks: new Map([["e6", { durationMin: 20 }]]),
   },
   "complete-walk": {
-    label: "Day complete · walk outstanding",
-    note: "The one thing the closed page still offers. The evening is when the walk is usually logged, so the day being finished and the walk being unlogged routinely overlap — everything else about the page stays closed.",
+    label: "Day complete · both walks outstanding",
+    note: "The one thing the closed page still offers, once per walk. The evening is when the afternoon walk is usually logged, so the day being finished and a walk being unlogged routinely overlap — everything else about the page stays closed.",
     view: { ...base(21 * 60 + 30), state: "day-complete" },
     entries: LOGGED.slice(0, 6),
+  },
+  "complete-one-walk": {
+    label: "Day complete · one walk outstanding",
+    note: "The narrowing applied per walk — FUEL-98. The morning walk is a line in the summary above like any other log, and only the afternoon one is still offered. A page that drew both here would be reopening something it has already reported.",
+    view: { ...base(21 * 60 + 30), state: "day-complete" },
+    entries: LOGGED.slice(0, 7),
+    walks: new Map([["e6", { durationMin: 20 }]]),
   },
 };
 
@@ -393,9 +438,10 @@ export default async function RightNowSpecimen({
         view={current.view}
         exercises={EXERCISES}
         entries={current.entries ?? []}
-        // Keyed by the walk fixture's template entry, which is what a row holds
-        // and what a write names.
-        walks={new Map(current.walk ? [["e6", current.walk]] : [])}
+        // Keyed by each walk fixture's template entry, which is what a row holds
+        // and what a write names. Empty is the ordinary case: a walk with no
+        // entry here is a walk nobody has logged.
+        walks={current.walks ?? new Map()}
         target={TARGET}
         meals={LIBRARY}
         templatePlan={TEMPLATE_PLAN}

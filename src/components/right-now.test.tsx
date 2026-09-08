@@ -180,10 +180,33 @@ const LUNCH = at(mealItem({ id: "meal-2", name: "Chicken salad" }, "lunch"), "me
 const SESSION = at(workoutItem(), "workout:e3", "17:30", 1050);
 const DINNER = at(mealItem({ id: "meal-3", name: "Chilli" }, "dinner"), "meal:e4", "19:00", 1140);
 
-const WALK: AnytimeItem = { ...workoutItem({ id: "workout-2", name: "Daily walk", type: "walk" }), key: "workout:e5" };
+const WALK: AnytimeItem = { ...workoutItem({ id: "workout-2", name: "Morning Walk", type: "walk" }), key: "workout:e5" };
 
 /** The template entry the walk resolved from — what its row names on a write. */
 const WALK_ENTRY = "entry-2";
+
+/**
+ * The day's second walk — FUEL-98.
+ *
+ * Its own workout AND its own entry, which is the whole shape of the fix: two
+ * ids under a `workout_logs` index keyed by workout, and two entries because
+ * the entry is what a row names on a write.
+ *
+ * Most of this file runs with ONE walk on the day, deliberately — that is what
+ * every account looked like before this ticket and what one looks like after
+ * someone edits their template. The pair has its own block.
+ */
+const WALK_2_ENTRY = "entry-6";
+
+const WALK_2: AnytimeItem = {
+  kind: "workout",
+  workout: {
+    workout: workout({ id: "workout-6", name: "Afternoon Walk", type: "walk" }),
+    source: "fixed",
+    entryId: WALK_2_ENTRY,
+  },
+  key: "workout:e6",
+};
 
 const TIMELINE = [BREAKFAST, LUNCH, SESSION, DINNER];
 
@@ -275,8 +298,13 @@ const renderNow = (
   exercises: ReadonlyMap<string, WorkoutExercise[]> = EXERCISES,
   /** The day's log so far — what the summary prints, and what undo takes back. */
   entries: LoggedEntry[] = [],
-  /** What is recorded against the walk. Unlogged unless a case says otherwise. */
-  walk: WalkEntryView | null = null,
+  /**
+   * What is recorded against the walk, or against each of them by entry id.
+   *
+   * A bare entry is the one-walk shorthand every case below this line uses; a
+   * map is what the two-walk cases pass, because they have two answers to give.
+   */
+  walk: WalkEntryView | null | ReadonlyMap<string, WalkEntryView> = null,
 ) => (
   render(
     <RightNow
@@ -286,7 +314,9 @@ const renderNow = (
       target={TARGET}
       meals={LIBRARY}
       templatePlan={TEMPLATE_PLAN}
-      walks={new Map(walk ? [[WALK_ENTRY, walk]] : [])}
+      walks={
+        walk instanceof Map ? walk : new Map(walk ? [[WALK_ENTRY, walk]] : [])
+      }
     />,
   )
 );
@@ -742,7 +772,7 @@ describe("anytime items", () => {
 
     const list = screen.getByRole("heading", { name: "Anytime" }).nextElementSibling;
 
-    expect(within(list as HTMLElement).getByText("Daily walk")).toBeDefined();
+    expect(within(list as HTMLElement).getByText("Morning Walk")).toBeDefined();
     // Alongside — not the subject.
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Overnight oats");
   });
@@ -751,6 +781,75 @@ describe("anytime items", () => {
     renderNow(active(0, { anytime: [] }));
 
     expect(screen.queryByRole("heading", { name: "Anytime" })).toBeNull();
+  });
+
+  test("draws a row for each of the day's walks — FUEL-98", () => {
+    renderNow(active(0, { anytime: [WALK, WALK_2] }));
+
+    const list = screen.getByRole("heading", { name: "Anytime" })
+      .nextElementSibling as HTMLElement;
+
+    expect(within(list).getByText("Morning Walk")).toBeDefined();
+    expect(within(list).getByText("Afternoon Walk")).toBeDefined();
+    expect(within(list).getAllByRole("button", { name: "Log walk" })).toHaveLength(2);
+  });
+
+  test("logs each walk against its own entry, in one tap each", async () => {
+    // "Loggable in one tap" per walk. Two walks must not become a picker and a
+    // tap, and a tap on one must never write the other — which is the ticket's
+    // own defect in the shape a screen can make it.
+    const user = userEvent.setup();
+
+    renderNow(active(0, { anytime: [WALK, WALK_2] }));
+
+    const afternoon = screen.getByText("Afternoon Walk").closest("li")!;
+
+    await user.click(within(afternoon).getByRole("button", { name: "Log walk" }));
+
+    await waitFor(() =>
+      expect(logWalk).toHaveBeenCalledWith({
+        date: "2026-03-09",
+        entryId: WALK_2_ENTRY,
+        durationMin: null,
+      }),
+    );
+    expect(logWalk).toHaveBeenCalledTimes(1);
+  });
+
+  test("shows each walk its OWN duration, never the other's", () => {
+    // The reason `walkEntries` is a map keyed by entry. One answer for the pair
+    // would print the morning walk's minutes under the afternoon walk's name,
+    // with nothing on screen for a reader to tell by.
+    renderNow(
+      active(0, { anytime: [WALK, WALK_2] }),
+      EXERCISES,
+      [],
+      new Map([
+        [WALK_ENTRY, { durationMin: 20 }],
+        [WALK_2_ENTRY, { durationMin: 15 }],
+      ]),
+    );
+
+    const morning = screen.getByText("Morning Walk").closest("li")!;
+    const afternoon = screen.getByText("Afternoon Walk").closest("li")!;
+
+    expect(within(morning).getByRole("status").textContent).toContain("20 min");
+    expect(within(afternoon).getByRole("status").textContent).toContain("15 min");
+  });
+
+  test("leaves one walk logged and the other offered", () => {
+    renderNow(
+      active(0, { anytime: [WALK, WALK_2] }),
+      EXERCISES,
+      [],
+      new Map([[WALK_ENTRY, { durationMin: 20 }]]),
+    );
+
+    const morning = screen.getByText("Morning Walk").closest("li")!;
+    const afternoon = screen.getByText("Afternoon Walk").closest("li")!;
+
+    expect(within(morning).queryByRole("button", { name: "Log walk" })).toBeNull();
+    expect(within(afternoon).getByRole("button", { name: "Log walk" })).toBeDefined();
   });
 });
 
@@ -842,7 +941,7 @@ describe("the daily walk", () => {
 
     renderNow(active(0), EXERCISES, [], { durationMin: null });
 
-    expect(screen.getAllByRole("button", { name: "45 min" })).not.toHaveLength(0);
+    expect(screen.getAllByRole("button", { name: "20 min" })).not.toHaveLength(0);
   });
 
   test("records a duration against the walk already logged", async () => {
@@ -850,13 +949,13 @@ describe("the daily walk", () => {
 
     renderNow(active(0), EXERCISES, [], { durationMin: null });
 
-    await user.click(within(anytime()).getByRole("button", { name: "45 min" }));
+    await user.click(within(anytime()).getByRole("button", { name: "20 min" }));
 
     await waitFor(() =>
       expect(logWalk).toHaveBeenCalledWith({
         date: "2026-03-09",
         entryId: "entry-2",
-        durationMin: 45,
+        durationMin: 20,
       }),
     );
   });
@@ -864,9 +963,9 @@ describe("the daily walk", () => {
   test("clears the duration when its own preset is tapped again", async () => {
     const user = userEvent.setup();
 
-    renderNow(active(0), EXERCISES, [], { durationMin: 45 });
+    renderNow(active(0), EXERCISES, [], { durationMin: 20 });
 
-    const preset = within(anytime()).getByRole("button", { name: "45 min" });
+    const preset = within(anytime()).getByRole("button", { name: "20 min" });
 
     // The state is said to a screen reader as well as drawn.
     expect(preset.getAttribute("aria-pressed")).toBe("true");
@@ -1026,11 +1125,52 @@ describe("day-complete", () => {
 
   test("closes completely once the walk is logged", () => {
     renderNow({ ...BASE, state: "day-complete" }, EXERCISES, LOGGED, {
-      durationMin: 45,
+      durationMin: 20,
     });
 
     // The row is gone; the walk is a line in the summary above like any other
     // log. No ruler, no Up next, no Anytime — the page is closed again.
+    expect(screen.queryByRole("button", { name: "Log walk" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Anytime" })).toBeNull();
+  });
+
+  test("offers every outstanding walk, not just the first — FUEL-98", () => {
+    renderNow(
+      { ...BASE, state: "day-complete", anytime: [WALK, WALK_2] },
+      EXERCISES,
+      LOGGED,
+    );
+
+    expect(screen.getAllByRole("button", { name: "Log walk" })).toHaveLength(2);
+  });
+
+  test("narrows to the walk still outstanding, and not the pair", () => {
+    // The closed page's exception applied PER walk. With the morning walk
+    // logged, offering it again on a finished day would be the page reopening
+    // something the summary above already reports.
+    renderNow(
+      { ...BASE, state: "day-complete", anytime: [WALK, WALK_2] },
+      EXERCISES,
+      LOGGED,
+      new Map([[WALK_ENTRY, { durationMin: 20 }]]),
+    );
+
+    expect(screen.getByText("Afternoon Walk")).toBeDefined();
+    expect(screen.queryByText("Morning Walk")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Log walk" })).toHaveLength(1);
+  });
+
+  test("closes completely only when BOTH walks are logged", () => {
+    renderNow(
+      { ...BASE, state: "day-complete", anytime: [WALK, WALK_2] },
+      EXERCISES,
+      LOGGED,
+      new Map([
+        [WALK_ENTRY, { durationMin: 20 }],
+        [WALK_2_ENTRY, { durationMin: 15 }],
+      ]),
+    );
+
     expect(screen.queryByRole("button", { name: "Log walk" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Anytime" })).toBeNull();
   });
@@ -1218,7 +1358,7 @@ describe("nothing-planned", () => {
   test("still offers whatever can be logged whenever", () => {
     renderNow({ ...BASE, state: "nothing-planned", timeline: [] });
 
-    expect(screen.getByText("Daily walk")).toBeDefined();
+    expect(screen.getByText("Morning Walk")).toBeDefined();
   });
 });
 

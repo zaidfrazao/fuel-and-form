@@ -37,7 +37,10 @@ const renderReminder = async () => render(await WalkReminder());
 beforeEach(() => {
   vi.clearAllMocks();
   getSession.mockResolvedValue({ userId: USER_ID, kind: "owner" });
-  loadWalkReminder.mockResolvedValue({ at: "19:00" });
+  loadWalkReminder.mockResolvedValue({
+    at: "19:00",
+    outstanding: ["Morning Walk", "Afternoon Walk"],
+  });
 });
 
 describe("WalkReminder", () => {
@@ -45,24 +48,56 @@ describe("WalkReminder", () => {
     await renderReminder();
 
     expect(
-      screen.getByText(/Walk not logged\. Reminder set for 19:00\./),
+      screen.getByText(/Walks not logged\. Reminder set for 19:00\./),
     ).toBeTruthy();
   });
 
+  test("names only the walk still outstanding", async () => {
+    // FUEL-98. With the morning walk logged, a banner that still said "Walk not
+    // logged." would be the app contradicting its own record — and the query is
+    // the only thing that knows which, so the component takes its list rather
+    // than a count.
+    loadWalkReminder.mockResolvedValue({
+      at: "19:00",
+      outstanding: ["Afternoon Walk"],
+    });
+
+    await renderReminder();
+
+    expect(
+      screen.getByText(/Afternoon Walk not logged\. Reminder set for 19:00\./),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Morning Walk/)).toBeNull();
+  });
+
   test("names the configured time rather than a fixed one", async () => {
-    loadWalkReminder.mockResolvedValue({ at: "21:15" });
+    loadWalkReminder.mockResolvedValue({ at: "21:15", outstanding: ["Morning Walk"] });
 
     await renderReminder();
 
     expect(screen.getByText(/Reminder set for 21:15\./)).toBeTruthy();
   });
 
-  test("offers the way to log the walk, on `/`", async () => {
+  test("offers the way to log the walks, on `/`", async () => {
     await renderReminder();
 
-    const link = screen.getByRole("link", { name: "Log the walk." });
+    // Plural, because the subject in front of it is — FUEL-98. A link reading
+    // "Log the walk." under "Walks not logged." is a banner correcting itself
+    // halfway through.
+    const link = screen.getByRole("link", { name: "Log the walks." });
 
     expect(link.getAttribute("href")).toBe("/");
+  });
+
+  test("uses the singular link when one walk is outstanding", async () => {
+    loadWalkReminder.mockResolvedValue({
+      at: "19:00",
+      outstanding: ["Afternoon Walk"],
+    });
+
+    await renderReminder();
+
+    expect(screen.getByRole("link", { name: "Log the walk." })).toBeTruthy();
   });
 
   test("is a labelled landmark, so it can be skipped once per screen", async () => {

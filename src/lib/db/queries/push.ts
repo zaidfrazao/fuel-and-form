@@ -7,7 +7,7 @@ import { isReminderDue } from "@/lib/walk-reminder";
 import { getDb } from "../index";
 import * as schema from "../schema";
 import { scope } from "../scope";
-import { isWalkUnlogged } from "./walk-reminder";
+import { unloggedWalks } from "./walk-reminder";
 
 /**
  * The push subscriptions, and who is owed a notification tonight — FUEL-47,
@@ -49,7 +49,7 @@ import { isWalkUnlogged } from "./walk-reminder";
  *
  * Having read the subscriptions unscoped, the job then asks "is this user's walk
  * unlogged" — and that question is asked through `scope(userId, ...)`, per user,
- * against `isWalkUnlogged`. Not because a cross-user read would be wrong here
+ * against `unloggedWalks`. Not because a cross-user read would be wrong here
  * too, but because it would be a SECOND unscoped query, sharing none of the
  * argument above: it reads the training template and the logs, which is the
  * owner's actual history, and it would have to join three tables on a `user_id`
@@ -72,6 +72,15 @@ export type WalkOwed = {
   userId: string;
   /** The reminder time, for the sentence. Known well-formed by `isReminderDue`. */
   at: string;
+  /**
+   * The walks with no row against them, named, in the day's order — FUEL-98.
+   *
+   * The notification's sentence is the BANNER's sentence, so it needs the same
+   * subject: `unloggedWalks` answers both, which is the whole reason that
+   * function is shared. Never empty — a user with nothing outstanding is not
+   * owed a notification and is not in this list at all.
+   */
+  outstanding: readonly string[];
   /** Today in the user's own zone — what the once-a-day cap is counted in. */
   today: CalendarDate;
   targets: PushTarget[];
@@ -263,6 +272,9 @@ export async function walksOwedANotification(now: Date): Promise<WalkOwed[]> {
     byUser.set(row.userId, {
       userId: row.userId,
       at: row.walkReminderAt,
+      // Filled in below, once the walks have been read. Declared here so the
+      // grouping does not have to build a second shape to carry the rest.
+      outstanding: [],
       today: todayIn(row.timezone, now),
       programStartDate: row.programStartDate,
       targets: [target],
@@ -274,13 +286,15 @@ export async function walksOwedANotification(now: Date): Promise<WalkOwed[]> {
   for (const candidate of byUser.values()) {
     const { programStartDate, ...rest } = candidate;
 
-    const unlogged = await isWalkUnlogged(
+    const outstanding = await unloggedWalks(
       scope(candidate.userId, db),
       candidate.today,
       programStartDate,
     );
 
-    if (unlogged) owed.push(rest);
+    // Empty is "every walk today is logged", which is the whole of the check —
+    // and since FUEL-98 that means EVERY one, not merely one of them.
+    if (outstanding.length > 0) owed.push({ ...rest, outstanding });
   }
 
   return owed;

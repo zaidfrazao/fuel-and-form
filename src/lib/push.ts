@@ -1,5 +1,5 @@
 import { type CalendarDate } from "./date";
-import { REMINDER_LINK, reminderStatement } from "./walk-reminder";
+import { reminderLink, reminderStatement } from "./walk-reminder";
 
 /**
  * What a walk notification says, and the two decisions the scheduled job makes
@@ -72,7 +72,7 @@ export const WALK_NOTIFICATION_URL = "/";
 const TITLE = "Fuel & Form";
 
 /**
- * The notification for a walk unlogged at `at`.
+ * The notification for the walks in `outstanding`, unlogged at `at`.
  *
  * The body is the BANNER's sentence, from `reminderStatement`, plus the banner's
  * link text as a plain clause. Reusing it is the point rather than a saving:
@@ -81,14 +81,22 @@ const TITLE = "Fuel & Form";
  * place where "Walk not logged." quietly becomes "Don't forget your walk!"
  * because the notification was edited and the banner was not.
  *
- * `REMINDER_LINK` is already a full sentence — "Log the walk." — so it is
+ * That reuse is why FUEL-98 reaches this function at all: the sentence is built
+ * from the walks that are outstanding now, so both layers take the same list
+ * from the same query and neither can say something the other does not.
+ *
+ * The link text is already a full sentence — "Log the walk." — so it is
  * appended rather than wrapped in anything. On a lock screen there is no link to
- * be; the tap is the whole notification, and this is what says so.
+ * be; the tap is the whole notification, and this is what says so. It agrees in
+ * number with the sentence before it, which is `reminderLink`'s whole job.
  */
-export function walkNotification(at: string): WalkNotification {
+export function walkNotification(
+  outstanding: readonly string[],
+  at: string,
+): WalkNotification {
   return {
     title: TITLE,
-    body: `${reminderStatement(at)} ${REMINDER_LINK}`,
+    body: `${reminderStatement(outstanding, at)} ${reminderLink(outstanding)}`,
     url: WALK_NOTIFICATION_URL,
   };
 }

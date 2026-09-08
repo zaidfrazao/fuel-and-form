@@ -1171,12 +1171,17 @@ export function RightNow({
   const now = positionAt(base, progress.position);
 
   /*
-   * Today's walk, if the plan has one — the item, not its log.
+   * Today's walks, if the plan has any — the items, not their logs.
    *
-   * Needed on its own only for the day-complete branch below, which does not
-   * render the Anytime list. Everywhere else the row comes out of that list.
+   * Needed on their own only for the day-complete branch below, which does not
+   * render the Anytime list. Everywhere else the rows come out of that list.
+   *
+   * A filter and not a `find` since FUEL-98: there are two walks, and a `find`
+   * would close the page over whichever of them the template happened to put
+   * first — offering the morning walk after dark and hiding the afternoon one,
+   * which is the pair the wrong way round.
    */
-  const walkItem = base.anytime.find(isWalk);
+  const walkItems = base.anytime.filter(isWalk);
 
   const active = now.state === "active" ? now.active : undefined;
 
@@ -1520,42 +1525,63 @@ export function RightNow({
    * performed".
    */
   if (now.state === "day-complete") {
+    /*
+     * The walks with no row yet — the only thing the closed page still offers.
+     *
+     * Computed here rather than beside `walkItems` because this branch is the
+     * only caller: everywhere else the rows come from the Anytime list, which
+     * draws logged and unlogged walks alike.
+     */
+    const outstandingWalks = walkItems.filter(
+      (item) => !walks.has(item.workout.entryId),
+    );
+
     return (
       <Screen>
         <div className="flex flex-1 flex-col gap-[30px]">
           <DayComplete date={base.date} entries={progress.entries} target={target} />
 
           {/*
-           * The one thing the closed page still offers — FUEL-29.
+           * The one thing the closed page still offers — FUEL-29, FUEL-98.
            *
            * A deliberate narrowing of the rule above, and worth stating because
-           * it reads as a contradiction of it. The walk is on the template every
-           * single day and is logged whenever, which in practice is the evening
-           * — PRD § P9 exists precisely because it is the thing most likely to
-           * be still outstanding after dark. The last item of the day is often
-           * dinner, so "the day is walked through" and "the walk is unlogged"
-           * routinely overlap, and a closed page in that state would be a screen
-           * that hid the only thing left to do until midnight rolled the date.
+           * it reads as a contradiction of it. The walks are on the template
+           * every single day and are logged whenever, which for the afternoon
+           * one in practice is the evening — PRD § P9 exists precisely because
+           * it is the thing most likely to be still outstanding after dark. The
+           * last item of the day is often dinner, so "the day is walked
+           * through" and "a walk is unlogged" routinely overlap, and a closed
+           * page in that state would be a screen that hid the only thing left
+           * to do until midnight rolled the date.
            *
-           * Only while it is UNLOGGED, which is what keeps the page closed in
-           * every other respect: once the row exists it becomes a line in the
-           * summary above like every other log, and nothing is offered here at
-           * all. The transition covers the change-over, so there is no frame
-           * where the walk is in neither place.
+           * Only the ones still UNLOGGED, which is what keeps the page closed in
+           * every other respect: once a row exists it becomes a line in the
+           * summary above like every other log, and it is offered here no
+           * longer. The transition covers the change-over, so there is no frame
+           * where a walk is in neither place.
            */}
-          {walkItem && !walks.has(walkItem.workout.entryId) && (
+          {outstandingWalks.length > 0 && (
             <section className="flex flex-col gap-[14px]">
               {/* Labelled like the list it is a narrowing of, rather than left
                   as a bare row under the crop marks — an unlabelled control
                   below a closed page reads as something that fell off it. */}
               <Eyebrow>Anytime</Eyebrow>
               <ul className="flex flex-col">
-                <WalkRow
-                  date={base.date}
-                  entryId={walkItem.workout.entryId}
-                  name={itemName(walkItem)}
-                  entry={null}
-                />
+                {/* One row per walk still outstanding, and the logged ones are
+                    simply absent — which is the narrowing above applied per
+                    walk rather than to the pair. A day with the morning walk
+                    done shows the afternoon one alone, and nothing says the
+                    morning one is missing, because it is not: it is a line in
+                    the summary overhead like every other log. */}
+                {outstandingWalks.map((item) => (
+                  <WalkRow
+                    key={item.key}
+                    date={base.date}
+                    entryId={item.workout.entryId}
+                    name={itemName(item)}
+                    entry={null}
+                  />
+                ))}
               </ul>
             </section>
           )}

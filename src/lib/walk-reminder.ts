@@ -43,6 +43,15 @@ import { type TimeOfDay } from "./date";
 export const DEFAULT_WALK_REMINDER_AT: TimeOfDay = "19:00";
 
 /**
+ * The names of the walks with no row against them, in the day's own order.
+ *
+ * Names rather than a count, because the sentence names one of them when one of
+ * them is all there is — see `reminderStatement`. A count would answer the
+ * plural case and leave the singular one with nothing to say.
+ */
+export type OutstandingWalks = readonly string[];
+
+/**
  * The banner's words — § Tone of Voice, and the criterion attached to this task:
  * "Copy is factual: 'Walk not logged. Reminder set for 19:00.' — no
  * encouragement."
@@ -64,9 +73,65 @@ export const DEFAULT_WALK_REMINDER_AT: TimeOfDay = "19:00";
  */
 export const REMINDER_LINK = "Log the walk.";
 
-/** `Walk not logged. Reminder set for 19:00.` — the AC's sentence, given a time. */
-export function reminderStatement(at: TimeOfDay): string {
-  return `Walk not logged. Reminder set for ${at}.`;
+/**
+ * The link, agreeing with the sentence in front of it — FUEL-98.
+ *
+ * "Walks not logged. Log the walk." is a banner that corrects itself halfway
+ * through, and it is the kind of small wrongness that makes a reader stop
+ * trusting the rest of the sentence. The subject above is singular in exactly
+ * one case, so the object is too.
+ *
+ * `REMINDER_LINK` stays the singular one rather than being replaced by a second
+ * literal: § Terminology is a rule about the VERB — "Log", never "Track",
+ * "Record" or "Add" — and one constant to pin that against is what its test
+ * needs. This adds the plural beside it rather than a second thing to keep in
+ * step.
+ */
+export function reminderLink(names: OutstandingWalks): string {
+  return names.length === 1 ? REMINDER_LINK : "Log the walks.";
+}
+
+/**
+ * `Afternoon Walk not logged. Reminder set for 19:00.` — the AC's sentence,
+ * given the walks that are outstanding and a time.
+ *
+ * ## It names a walk only when naming one says something
+ *
+ * There is one walk outstanding, or there is more than one, and the two want
+ * different sentences.
+ *
+ * With MORE THAN ONE outstanding, no name is more informative than the plural:
+ * the reader has more than one walk to go and take, and listing which is a
+ * longer way to say so. "Walks not logged." is the whole of what they can act
+ * on.
+ *
+ * With exactly ONE, the plural would be the failure this ticket is about.
+ * "Walk not logged." was the sentence while there was one walk; with the
+ * morning one done and the afternoon one not, it is simply FALSE — the app
+ * reporting nothing logged about a day that has a log in it. § Tone of Voice
+ * asks for factual before it asks for anything else, so this is where the name
+ * goes, and it is the one case where the name is the news.
+ *
+ * ## Why not name them in both cases
+ *
+ * It was written that way first and the copy was too long to live in the band it
+ * is drawn in. "Morning Walk and Afternoon Walk not logged. Reminder set for
+ * 19:00. Log the walks." is about 82 characters, which wraps to two lines in the
+ * 331px measure a 375px screen leaves — and Brand Guide § Desktop counts this
+ * band by name in the arithmetic that gives `/` its 354px window. A reminder
+ * that cost the screen a line to say something the plural already said would be
+ * spending the one measurement that document makes.
+ *
+ * An EMPTY list is not a state this is called in: the caller establishes that
+ * something is outstanding before there is a banner at all. It renders as
+ * "Walks not logged", which is ungrammatical about nothing rather than
+ * misleading — a caller that reached it has a bug, and a sentence that quietly
+ * read well would be a bug nobody saw.
+ */
+export function reminderStatement(names: OutstandingWalks, at: TimeOfDay): string {
+  const subject = names.length === 1 ? names[0] : "Walks";
+
+  return `${subject} not logged. Reminder set for ${at}.`;
 }
 
 /**
