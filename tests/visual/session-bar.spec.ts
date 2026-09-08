@@ -255,7 +255,16 @@ test.describe("the session state", () => {
     for (const { width, height, band } of WIDTHS.filter((w) => w.width >= 1272)) {
       await page.setViewportSize({ width, height });
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-      await page.waitForFunction(() => true);
+      // The real condition, and not `() => true`: scrolling to the bottom is
+      // the point of this assertion — that is where the bar comes to rest and
+      // where an overlap would appear — so the wait has to be that the scroll
+      // actually got there. A wait that is trivially satisfied reads as
+      // synchronisation and provides none.
+      await page.waitForFunction(() => {
+        const doc = document.documentElement;
+
+        return Math.abs(window.scrollY - (doc.scrollHeight - window.innerHeight)) < 1;
+      });
 
       const clearance = await page.evaluate((sel) => {
         const bar = document.querySelector(sel)!.getBoundingClientRect();
