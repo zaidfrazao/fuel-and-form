@@ -117,6 +117,27 @@ export const MAX_ROUTE_POINTS = 500;
  * line, and a walk shorter than twice this figure stores no trace at all —
  * see `trimEnds`. The distance column is NOT trimmed, and `storableRoute` says
  * why.
+ *
+ * ## What this number does NOT promise, measured rather than assumed
+ *
+ * It is metres of WALKING removed, not a radius cleared around the door. On a
+ * loop the two differ, because a path that curves covers ground without getting
+ * proportionally further away: measured across the demo's forty generated
+ * routes, the closest surviving point sits about **96 metres** from the origin,
+ * not a hundred and fifty. Every trace still begins and ends well clear of the
+ * door, which is the property this exists for, but a reader assuming a cleared
+ * circle would be assuming something stronger than what is done.
+ *
+ * A radius trim was considered for that reason and refused. It would delete a
+ * short local loop entirely — a walk twice round the block never leaves the
+ * circle — so the trace would vanish for exactly the walks somebody does most
+ * often, and silently. Trimming by path length always leaves the middle of a
+ * walk that had a middle.
+ *
+ * Neither version defeats the attack that matters, and that is worth saying
+ * plainly: ten traces that all begin and end on a ring still have the door at
+ * the centre of that ring. The trim raises the cost of reading an address off
+ * one leaked trace. It is not a claim that many of them are anonymous.
  */
 export const TRIM_METRES = 150;
 
