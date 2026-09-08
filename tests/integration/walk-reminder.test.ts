@@ -283,9 +283,9 @@ describe.skipIf(!configured)("the walk reminder, scoped", () => {
 
     it("names a walk once, however many template rows point at it", async () => {
       // Nothing forbids two entries on one weekday naming the same walk, and
-      // the log is keyed by workout — so one tap satisfies both rows. A
-      // sentence that said "Morning Walk and Morning Walk" would be reporting
-      // on the template rather than on the day.
+      // the log is keyed by workout — so one tap satisfies both rows. Counted
+      // twice, the day would look like two outstanding walks and the sentence
+      // would take its plural form about a single unlogged one.
       const owned = scope(fixture.bob.userId, getDb());
 
       const [walk] = await owned.insert(schema.workouts, {

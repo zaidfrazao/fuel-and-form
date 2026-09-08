@@ -242,10 +242,11 @@ async function walksFor(
       // Deduplicated by WORKOUT, because the sentence is about walks and not
       // about template rows. Nothing forbids two entries on one weekday naming
       // the same walk — the table has no unique constraint on
-      // `(user_id, day_of_week, workout_id)` and could not have one — and the
-      // banner that came out of it would read "Morning Walk and Morning Walk
-      // not logged", which is a sentence about a database rather than about a
-      // day. One row logs both entries anyway: the log is keyed by workout.
+      // `(user_id, day_of_week, workout_id)` and could not have one — and one
+      // row logs both of them anyway, the log being keyed by workout. Left in,
+      // the count would be two where the day holds one walk, so the banner
+      // would say "Walks not logged" about a single unlogged walk and would
+      // never reach the branch that names it.
       if (seen.has(walk.id)) return [];
 
       seen.add(walk.id);
