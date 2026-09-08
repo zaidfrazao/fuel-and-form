@@ -186,6 +186,40 @@ describe.skipIf(!configured)("the two-walk data migration", () => {
     expect(entries.every((entry) => entry.sortOrder === 2)).toBe(true);
   });
 
+  it("follows the morning walk's own order rather than assuming it", async () => {
+    // The seed puts the morning walk at 1, so a literal 2 is right for every
+    // database that exists today. The template is editable, and
+    // `resolveTraining` orders a day by this column — a morning walk moved to
+    // 5 with its afternoon pinned at 2 would be drawn after its own afternoon
+    // on both screens, and listed second in the reminder's sentence.
+    const { userId } = fixture.alice;
+    const owned = scope(userId, getDb());
+
+    const [walk] = await owned.insert(schema.workouts, {
+      name: "Daily Walk",
+      type: "walk",
+    });
+
+    await owned.insert(schema.trainingTemplateEntries, {
+      dayOfWeek: 1,
+      workoutId: walk!.id,
+      sortOrder: 5,
+    });
+
+    await runMigration();
+
+    const afternoon = (await walksOf(userId)).find(
+      (row) => row.name === "Afternoon Walk",
+    );
+
+    const [entry] = await owned.select(
+      schema.trainingTemplateEntries,
+      eq(schema.trainingTemplateEntries.workoutId, afternoon!.id),
+    );
+
+    expect(entry!.sortOrder).toBe(6);
+  });
+
   it("does nothing on a second run", async () => {
     // The file's own idempotence claim. A re-run that inserted a second
     // afternoon walk would be two identical rows nobody could tell apart, on a
@@ -211,7 +245,9 @@ describe.skipIf(!configured)("the two-walk data migration", () => {
     // Two template rows on a weekday naming the same morning walk is a shape
     // nothing forbids, and the `NOT EXISTS` guard cannot see it: it is
     // evaluated against the snapshot the statement started with, so both source
-    // rows pass it and both would insert. `SELECT DISTINCT` is what stops that.
+    // rows pass it and both would insert. The GROUP BY is what stops that, and
+    // `min()` is why the pair collapses to ONE entry rather than one per
+    // distinct computed sort order.
     const { userId } = fixture.alice;
     const owned = scope(userId, getDb());
 
@@ -240,6 +276,8 @@ describe.skipIf(!configured)("the two-walk data migration", () => {
     );
 
     expect(entries).toHaveLength(1);
+    // One past the EARLIEST of the two, not one past each.
+    expect(entries[0]!.sortOrder).toBe(2);
   });
 
   it("leaves a database that already has two walks alone", async () => {

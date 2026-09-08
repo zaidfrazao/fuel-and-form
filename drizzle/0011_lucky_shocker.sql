@@ -57,23 +57,31 @@ WHERE
 --
 -- Not on all seven unconditionally: the template is editable, and a user
 -- who took the walk off Sunday has said something this migration must not
--- overrule. `sort_order` 2 puts it after the session (0) and the morning
--- walk (1), which is where it happens.
+-- overrule.
 --
--- DISTINCT as well as the NOT EXISTS, and the two guard different things.
+-- The sort order is DERIVED — one past the morning walk's — rather than the
+-- literal 2 that is right for the seed. The template is editable there too,
+-- and `resolveTraining` orders a day by this column: a morning walk somebody
+-- had moved to 5 would be drawn AFTER its own afternoon on both screens and
+-- listed second in the reminder's sentence. Following the row it belongs
+-- behind cannot be wrong about that; a constant can.
+--
+-- GROUP BY as well as the NOT EXISTS, and the two guard different things.
 -- NOT EXISTS looks at rows that were already there; it is evaluated against
 -- the snapshot the statement started with, so it cannot see the rows this
 -- statement is itself about to insert. Nothing forbids two template rows on
 -- one weekday naming the morning walk — the table has no unique constraint
--- on (user_id, day_of_week, workout_id) — and without DISTINCT each of them
--- would produce an afternoon entry of its own.
+-- on (user_id, day_of_week, workout_id) — and without the grouping each of
+-- them would produce an afternoon entry of its own. `min()` is what makes
+-- the pair collapse to one row: two morning entries at 1 and 3 are one
+-- afternoon entry at 2, not two at 2 and 4.
 INSERT INTO "training_template_entries" ("user_id", "day_of_week", "workout_id", "rotation_group", "sort_order")
-SELECT DISTINCT
+SELECT
   e."user_id",
   e."day_of_week",
   pm."afternoon_id",
   NULL,
-  2
+  min(e."sort_order") + 1
 FROM "training_template_entries" e
 JOIN (
   SELECT
@@ -90,4 +98,5 @@ WHERE NOT EXISTS (
   WHERE x."user_id" = e."user_id"
     AND x."day_of_week" = e."day_of_week"
     AND x."workout_id" = pm."afternoon_id"
-);
+)
+GROUP BY e."user_id", e."day_of_week", pm."afternoon_id";
