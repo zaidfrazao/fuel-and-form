@@ -234,7 +234,7 @@ describe("a successful send", () => {
     const payload = JSON.parse(sendNotification.mock.calls[0]?.[1] as string);
 
     expect(payload.body).toBe(
-      "Morning Walk and Afternoon Walk not logged. Reminder set for 19:00. Log the walks.",
+      "Walks not logged. Reminder set for 19:00. Log the walks.",
     );
     expect(payload.url).toBe("/");
   });

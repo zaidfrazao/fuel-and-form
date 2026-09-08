@@ -62,7 +62,7 @@ describe("the notification", () => {
     // Both assertions are needed: this one would survive `reminderStatement`
     // being inlined, and that one would survive the whole sentence changing.
     expect(walkNotification(OUTSTANDING, "19:00").body).toBe(
-      "Morning Walk and Afternoon Walk not logged. Reminder set for 19:00. Log the walks.",
+      "Walks not logged. Reminder set for 19:00. Log the walks.",
     );
   });
 

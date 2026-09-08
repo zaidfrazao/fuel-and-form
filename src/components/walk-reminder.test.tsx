@@ -48,9 +48,7 @@ describe("WalkReminder", () => {
     await renderReminder();
 
     expect(
-      screen.getByText(
-        /Morning Walk and Afternoon Walk not logged\. Reminder set for 19:00\./,
-      ),
+      screen.getByText(/Walks not logged\. Reminder set for 19:00\./),
     ).toBeTruthy();
   });
 
@@ -83,9 +81,9 @@ describe("WalkReminder", () => {
   test("offers the way to log the walks, on `/`", async () => {
     await renderReminder();
 
-    // Plural, because the sentence in front of it names two — FUEL-98. A link
-    // reading "Log the walk." under "Morning Walk and Afternoon Walk not
-    // logged." is a banner correcting itself halfway through.
+    // Plural, because the subject in front of it is — FUEL-98. A link reading
+    // "Log the walk." under "Walks not logged." is a banner correcting itself
+    // halfway through.
     const link = screen.getByRole("link", { name: "Log the walks." });
 
     expect(link.getAttribute("href")).toBe("/");

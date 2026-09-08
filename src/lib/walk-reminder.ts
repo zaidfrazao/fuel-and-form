@@ -74,10 +74,10 @@ export const REMINDER_LINK = "Log the walk.";
 /**
  * The link, agreeing with the sentence in front of it — FUEL-98.
  *
- * "Morning Walk and Afternoon Walk not logged. Log the walk." is a banner that
- * corrects itself halfway through, and it is the kind of small wrongness that
- * makes a reader stop trusting the rest of the sentence. There are two walks, so
- * there are two forms.
+ * "Walks not logged. Log the walk." is a banner that corrects itself halfway
+ * through, and it is the kind of small wrongness that makes a reader stop
+ * trusting the rest of the sentence. The subject above is singular in exactly
+ * one case, so the object is too.
  *
  * `REMINDER_LINK` stays the singular one rather than being replaced by a second
  * literal: § Terminology is a rule about the VERB — "Log", never "Track",
@@ -86,58 +86,49 @@ export const REMINDER_LINK = "Log the walk.";
  * step.
  */
 export function reminderLink(names: OutstandingWalks): string {
-  return names.length > 1 ? "Log the walks." : REMINDER_LINK;
+  return names.length === 1 ? REMINDER_LINK : "Log the walks.";
 }
 
 /**
- * "Morning Walk and Afternoon Walk" — the subject of the sentence.
+ * `Afternoon Walk not logged. Reminder set for 19:00.` — the AC's sentence,
+ * given the walks that are outstanding and a time.
  *
- * Written out rather than reached for through `Intl.ListFormat`, which would
- * make the copy depend on the runtime's locale and ICU build: `dot-grid.tsx`
- * refuses the same API for the same reason, and this string is asserted word for
- * word by a test that must mean the same thing on every machine it runs on.
+ * ## It names a walk only when naming one says something
  *
- * The Oxford comma is deliberate at three and above. There are two walks today
- * and a third is a template edit away, so the branch exists; it is one clause
- * and it is the one that stops "A, B and C" from being written as "A and B and
- * C" the first time someone adds one.
- */
-function nameList(names: OutstandingWalks): string {
-  if (names.length <= 2) return names.join(" and ");
-
-  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-}
-
-/**
- * `Morning Walk not logged. Reminder set for 19:00.` — the AC's sentence, given
- * the walks that are outstanding and a time.
+ * There is one walk outstanding, or there is more than one, and the two want
+ * different sentences.
  *
- * ## Why the walks are named, and the sentence is no longer a constant
+ * With MORE THAN ONE, no name is more informative than the plural: nothing has
+ * been logged, and listing what has not been is a longer way to say so. "Walks
+ * not logged." is the whole fact.
  *
- * It was "Walk not logged." while there was one walk. There are two since
- * FUEL-98, and with the morning one done and the afternoon one not, that
- * sentence is simply FALSE — the app reporting nothing logged about a day with
- * a log in it. § Tone of Voice asks for factual before it asks for anything
- * else, so the sentence says which.
+ * With exactly ONE, the plural would be the failure this ticket is about.
+ * "Walk not logged." was the sentence while there was one walk; with the
+ * morning one done and the afternoon one not, it is simply FALSE — the app
+ * reporting nothing logged about a day that has a log in it. § Tone of Voice
+ * asks for factual before it asks for anything else, so this is where the name
+ * goes, and it is the one case where the name is the news.
  *
- * The alternative was to keep it generic and let it be true "about the day".
- * That reads as an accusation the record contradicts, and it is exactly the
- * thing the walk reminder must not become: a banner someone learns to ignore
- * because it is sometimes wrong.
+ * ## Why not name them in both cases
  *
- * Singular and plural are one shape rather than two strings — the subject is a
- * list, the predicate never changes. "Morning Walk and Afternoon Walk not
- * logged" is a compound subject taking a plural verb that is not written down,
- * so nothing has to agree with anything.
+ * It was written that way first and the copy was too long to live in the band it
+ * is drawn in. "Morning Walk and Afternoon Walk not logged. Reminder set for
+ * 19:00. Log the walks." is about 82 characters, which wraps to two lines in the
+ * 331px measure a 375px screen leaves — and Brand Guide § Desktop counts this
+ * band by name in the arithmetic that gives `/` its 354px window. A reminder
+ * that cost the screen a line to say something the plural already said would be
+ * spending the one measurement that document makes.
  *
  * An EMPTY list is not a state this is called in: the caller establishes that
  * something is outstanding before there is a banner at all. It renders as
- * "not logged" with no subject, which is ungrammatical rather than misleading —
- * a caller that reached it has a bug, and a sentence that quietly read well
- * would be a bug nobody saw.
+ * "Walks not logged", which is ungrammatical about nothing rather than
+ * misleading — a caller that reached it has a bug, and a sentence that quietly
+ * read well would be a bug nobody saw.
  */
 export function reminderStatement(names: OutstandingWalks, at: TimeOfDay): string {
-  return `${nameList(names)} not logged. Reminder set for ${at}.`;
+  const subject = names.length === 1 ? names[0] : "Walks";
+
+  return `${subject} not logged. Reminder set for ${at}.`;
 }
 
 /**

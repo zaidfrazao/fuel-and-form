@@ -33,37 +33,42 @@ const at = (time: string) => parseTimeOfDay(time);
 describe("the copy", () => {
   it("is the criterion's sentence, exactly", () => {
     // The criterion writes "Walk not logged. Reminder set for 19:00." against
-    // one walk. There are two since FUEL-98, so the subject is the walk that is
-    // actually outstanding — the sentence's shape is unchanged and what it
-    // reports is now true of a day with one walk logged and one not.
-    expect(reminderStatement(["Morning Walk"], "19:00")).toBe(
-      "Morning Walk not logged. Reminder set for 19:00.",
-    );
-  });
-
-  it("names both walks when both are outstanding", () => {
+    // one walk. There are two since FUEL-98, so the subject is plural when
+    // nothing has been logged — the same sentence, agreeing with the day it is
+    // about.
     expect(reminderStatement(["Morning Walk", "Afternoon Walk"], "19:00")).toBe(
-      "Morning Walk and Afternoon Walk not logged. Reminder set for 19:00.",
+      "Walks not logged. Reminder set for 19:00.",
     );
   });
 
-  it("takes an Oxford comma from three", () => {
-    // Three walks is a template edit away, and this is the branch that stops
-    // "A and B and C" being written the day someone makes it.
-    expect(reminderStatement(["A", "B", "C"], "19:00")).toBe(
-      "A, B and C not logged. Reminder set for 19:00.",
+  it("names the walk when exactly one is outstanding", () => {
+    // The case the plural would be false in, and the reason the sentence takes
+    // a list at all: with the morning walk logged, "Walks not logged." is the
+    // app contradicting its own record.
+    expect(reminderStatement(["Afternoon Walk"], "19:00")).toBe(
+      "Afternoon Walk not logged. Reminder set for 19:00.",
     );
   });
 
-  it("names only what is outstanding, never the walk that was logged", () => {
-    // The reason the sentence takes a list at all. A banner that said "Walk not
-    // logged." on an evening when the morning walk IS logged would be the app
-    // contradicting its own record — and a banner that is sometimes wrong is
-    // one people learn to ignore.
+  it("never names the walk that WAS logged", () => {
     const statement = reminderStatement(["Afternoon Walk"], "19:00");
 
-    expect(statement).toContain("Afternoon Walk");
     expect(statement).not.toContain("Morning Walk");
+  });
+
+  it("stays inside one line of the notice band at 375px", () => {
+    // Brand Guide § Desktop counts the walk reminder by name in the arithmetic
+    // that leaves `/` a 354px window at 375×667, and that count is of a
+    // one-line band. Naming both walks came to 82 characters and wrapped it to
+    // two. A character budget is a proxy for a measurement — the browser is
+    // where the real one lives — but it is the proxy that fails in CI when
+    // somebody lengthens this copy without looking at the screen.
+    const longest = `${reminderStatement(
+      ["Morning Walk", "Afternoon Walk"],
+      "19:00",
+    )} ${reminderLink(["Morning Walk", "Afternoon Walk"])}`;
+
+    expect(longest.length).toBeLessThanOrEqual(60);
   });
 
   it("names the time it was actually configured for", () => {
@@ -83,7 +88,7 @@ describe("the copy", () => {
     const copy = `${reminderStatement(
       ["Morning Walk", "Afternoon Walk"],
       DEFAULT_WALK_REMINDER_AT,
-    )} ${REMINDER_LINK}`;
+    )} ${reminderLink(["Morning Walk", "Afternoon Walk"])}`;
 
     expect(copy).not.toMatch(/!/);
     expect(copy).not.toMatch(/\b(you|your|let's|don't forget|time to)\b/i);
@@ -96,7 +101,7 @@ describe("the copy", () => {
 
   it("agrees in number with the sentence in front of it", () => {
     // FUEL-98. The verb is pinned above; this is the object agreeing with a
-    // subject that is now sometimes two walks long.
+    // subject that is singular in exactly one case.
     expect(reminderLink(["Morning Walk"])).toBe("Log the walk.");
     expect(reminderLink(["Morning Walk", "Afternoon Walk"])).toBe("Log the walks.");
   });
