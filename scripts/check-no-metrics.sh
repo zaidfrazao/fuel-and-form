@@ -302,9 +302,26 @@ is_allowed() {
 #                    case above, and a lone coordinate stored on its own, which
 #                    the pair form cannot see at all.
 #
-# The name is anchored to a non-word character so that `translate: 1.2345` — a
-# transform, and the one plausible false positive in a codebase with CSS in it —
-# does not match on the `lat` inside it.
+# Two details, both found by TESTING the patterns against candidate strings
+# rather than by reasoning about them, which is the only way either would have
+# been noticed:
+#
+#   The name is anchored to a non-word character, so `translate: 1.2345` does
+#   not match on the `lat` inside it. Checked against translate, translateX,
+#   oscillate, plateau, correlation and relate — the plausible false positives
+#   in a codebase with CSS and statistics in it. None matches.
+#
+#   A quote is permitted on BOTH sides of the separator. The first draft allowed
+#   one only before the colon, for a JSON key, and therefore missed every quoted
+#   VALUE — a longitude field assigned a quoted decimal, and the same thing
+#   inside a JSON object, both passed a scan that looked like it was working. A
+#   GeoJSON document or an HTML attribute is exactly how a coordinate would
+#   arrive in this repository from outside it.
+#
+#   (Those two examples are described rather than written out. Spelled as
+#   literals they fired this very check on this very file, which is the rule at
+#   the top of this script demonstrating itself: no figure goes in here, not
+#   even an invented one, not even to explain a pattern.)
 #
 # ## Why gps-coordinate's allowlist is empty and stays empty
 #
@@ -471,8 +488,8 @@ readonly PATTERN_REGEX=(
   '(^|[^0-9A-Za-z.])[12][0-9]{2}[ ]?g[ ]?protein'
   '(^|[^0-9A-Za-z.])[12][0-9]{2}[ ]?g[ ]?carb'
   '(^|[^0-9A-Za-z.])[2-9][0-9][ ]?g[ ]?fat'
-  '(^|[^0-9A-Za-z.])-?[0-9]{1,2}\.[0-9]{4,}[ ]*,[ ]*-?[0-9]{1,3}\.[0-9]{4,}'
-  '(^|[^0-9A-Za-z_])[Ll](at|ng|on)[A-Za-z]*"?[ ]*[:=][ ]*-?[0-9]{1,3}\.[0-9]{4,}'
+  '(^|[^0-9A-Za-z.])-?[0-9]{1,2}\.[0-9]{4,}["'"'"']?[ ]*,[ ]*["'"'"']?-?[0-9]{1,3}\.[0-9]{4,}'
+  '(^|[^0-9A-Za-z_])[Ll](at|ng|on)[A-Za-z]*["'"'"']?[ ]*[:=][ ]*["'"'"']?-?[0-9]{1,3}\.[0-9]{4,}'
 )
 
 readonly PATTERN_ALLOW=(
