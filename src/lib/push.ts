@@ -81,9 +81,9 @@ const TITLE = "Fuel & Form";
  * place where "Walk not logged." quietly becomes "Don't forget your walk!"
  * because the notification was edited and the banner was not.
  *
- * That reuse is why FUEL-98 reaches this function at all: the sentence names
- * which walks are outstanding now, so both layers take the same list from the
- * same query and neither can name a different set from the other.
+ * That reuse is why FUEL-98 reaches this function at all: the sentence is built
+ * from the walks that are outstanding now, so both layers take the same list
+ * from the same query and neither can say something the other does not.
  *
  * The link text is already a full sentence — "Log the walk." — so it is
  * appended rather than wrapped in anything. On a lock screen there is no link to
