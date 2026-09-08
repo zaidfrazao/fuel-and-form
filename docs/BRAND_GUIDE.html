@@ -930,7 +930,15 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
            builds the screen — which is the intent, for FUEL-102. The stroke
            carries vector-effect="non-scaling-stroke" and the marks sit in an
            unscaled overlay at percentage positions: that IS the technique
-           § Data Display prescribes, not an artefact of drawing it small. -->
+           § Data Display prescribes, not an artefact of drawing it small.
+
+           The inline styles are deliberate and are not waiting to be tidied
+           into classes. This file has one flat, global stylesheet, so a new
+           class name reaches existing markup: FUEL-67 named week-grid cells
+           `cell`, the sheet already defined `.cell` as a flex column, and
+           seven table columns collapsed into one stack that still rendered
+           as a plausible layout. Everything above uses a class this file
+           already had, or no class at all. -->
       <div class="item" style="grid-column: 1 / -1;">
         <span class="item-head">Route trace · one walk — a data graphic, not a third device</span>
         <div class="plate">

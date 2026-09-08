@@ -563,7 +563,7 @@ Flat, radius 14, either `ink` or `surface`. Layout: name at top (15px/600), a si
 
 **Two graphics in this system are data displays rather than signature devices:** the weight trend on `/weight`, and the route trace on a walk. Neither is one of § Rule 4's two — those are the day ruler and the dot grid — but § Accessibility's obligations attach to what a graphic *is* rather than to which two are on the list, so both carry a summary and a data table like they do.
 
-That sentence was written for the chart alone (FUEL-35) and is **widened rather than rewritten (FUEL-99)**, because the second case is exactly what it anticipated: a graphic that has to be ruled without being promoted. The rules below are stated per graphic where they differ and shared where they do not — the scaling rule is one rule, and the second graphic inherits it rather than being given a copy.
+That rule was written for the chart alone (FUEL-35) and is **widened rather than replaced (FUEL-99)**, because the second case is exactly what it anticipated: a graphic that has to be ruled without being promoted. The rules below are stated per graphic where they differ and shared where they do not — the scaling rule is one rule, and the second graphic inherits it rather than being given a copy.
 
 #### The Weight Chart
 
