@@ -7,6 +7,7 @@ import {
   PAGE_BAND_SPAN,
   PAGE_MEASURE_COLUMN,
   PAGE_MEASURE_FOOT,
+  PAGE_SESSION_FOOT,
 } from "./frame";
 import { build, enclosingAtRules, utilities } from "./tailwind-build.test-helper";
 
@@ -188,6 +189,27 @@ describe("the page's own columns emit what they claim", () => {
     // carries the argument; this is that the CSS actually says it.
     expect(css).toContain("margin-top: 0");
     expect(css).toContain("align-self: flex-start");
+  });
+
+  test("the session state's bar spans the content rows and ends at their foot", async () => {
+    // FUEL-106, and the two halves that make the exception real rather than
+    // declared. A grid item's containing block is its own area and a sticky box
+    // is clamped to one, so the bar has to SPAN to have anywhere to travel; and
+    // a `bottom` offset only ever shifts a box UP, so it has to REST at the
+    // foot of that span to be a box the offset can reach. Row three aligned to
+    // its top satisfies neither, which is why `sticky` resolved and did nothing
+    // above 1272 for as long as this bar borrowed `PAGE_MEASURE_FOOT`.
+    const css = await build(utilities(PAGE_SESSION_FOOT));
+
+    expect(css).toContain("grid-column-start: 1");
+    expect(css).toContain("grid-row-start: 2");
+    expect(css).toContain("grid-row-end: 4");
+    expect(css).toContain("align-self: flex-end");
+
+    // FUEL-86's rule, unchanged and still load-bearing: an auto margin outranks
+    // `align-self` entirely, so the alignment has to be the only thing
+    // declaring the alignment.
+    expect(css).toContain("margin-top: 0");
   });
 
   test("the rows are declared, and the last one takes the aside's surplus", async () => {

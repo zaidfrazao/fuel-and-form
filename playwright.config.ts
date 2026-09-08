@@ -195,6 +195,20 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
     },
     /**
+     * The one bar that is NOT released — `/training`'s session state, FUEL-90,
+     * and the fault FUEL-106 fixed. A project for the same reason `action-bar`
+     * is one, and separate from it for the reason the spec sets out: that file
+     * asserts the release at 1023 and 1024, this one asserts the exception to
+     * it at 375, 1100, 1272 and 1920, and every assertion here has to enter the
+     * session state first.
+     */
+    {
+      name: "session-bar",
+      testMatch: /session-bar\.spec\.ts/,
+      dependencies: ["setup"],
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+    },
+    /**
      * The second column on `/` and `/training` — FUEL-77, and a project for the
      * reason the three above are. It asks how wide two columns are and which one
      * the primary action stands in, which has no theme; and it needs 1271, 1272,

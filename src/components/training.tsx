@@ -45,6 +45,7 @@ import {
   PAGE_HEADER_BAND,
   PAGE_MEASURE_COLUMN,
   PAGE_MEASURE_FOOT,
+  PAGE_SESSION_FOOT,
 } from "@/lib/frame";
 import {
   currentExercise,
@@ -1729,7 +1730,19 @@ export function Training({
         // § Desktop's one named exception to FUEL-72, argued in `action-bar.ts`:
         // that release is a claim about thumb targets, and a rest timer
         // (FUEL-93) rides in this slot at every width.
-        <div className={cn(inSession ? SESSION_ACTION_BAR : APP_ACTION_BAR, PAGE_MEASURE_FOOT)}>
+        <div
+          className={cn(
+            inSession ? SESSION_ACTION_BAR : APP_ACTION_BAR,
+            /*
+             * Placed differently in the two states, and only at `xl` —
+             * FUEL-106. The plan state's bar sits in the frame's third row and
+             * is released there; the session state's spans the content rows and
+             * aligns to their foot, which is the only place a `bottom` offset
+             * can reach it from. `frame.ts` carries the argument.
+             */
+            inSession ? PAGE_SESSION_FOOT : PAGE_MEASURE_FOOT,
+          )}
+        >
           {failure && (
             <div
               role="alert"

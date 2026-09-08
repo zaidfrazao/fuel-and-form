@@ -103,8 +103,32 @@ export const APP_ACTION_BAR = `${ACTION_BAR} lg:static`;
  * as a hard edge cutting through a line of type — the fault § The Scroll Edge
  * exists to prevent, now reachable at a width it never was before. globals.css
  * carries that argument and the shared value the two selectors both use.
+ *
+ * ## `lg:bottom-0`, because the offset was the one thing the release was hiding
+ * — FUEL-106
+ *
+ * Removing `lg:static` kept the pinning and inherited the OFFSET with it, and
+ * the offset is a below-1024px number. § Desktop is explicit, in the same
+ * sentence that scopes the variable: "`--nav-shell-h` is a below-1024px
+ * measurement and stays one... That stays true of the one bar that is [sticky]
+ * (`/training`'s session state, FUEL-90): it is pinned above 1024px to the
+ * bottom of the viewport, not to a shell height, because the thing it has to
+ * clear there is nothing."
+ *
+ * Measured at 1100 before the fix: `bottom` computed to `86px`, so the bar
+ * floated 86px above the foot of the viewport with the page scrolling through
+ * the strip beneath it — a gap the size of a shell that is not there. The other
+ * three bars never showed it because `lg:static` makes an inset inert, which is
+ * the whole of why this string is the one that had to say something.
+ *
+ * The variable is not touched, and that is the point: it stays a below-1024px
+ * measurement with one definition, and the bar that stops reading it above
+ * `lg` says so itself. `lg:` and not `xl:` because 1024 is where the shell
+ * becomes a rail — and because `xl` is redefined to 1272 and therefore SORTS
+ * BEFORE `lg` in the emitted stylesheet, so an `xl:` offset here would be
+ * overridden by this one at exactly the widths it was written for.
  */
-export const SESSION_ACTION_BAR = `${ACTION_BAR} action-bar-fade-pinned`;
+export const SESSION_ACTION_BAR = `${ACTION_BAR} lg:bottom-0 action-bar-fade-pinned`;
 
 /* -------------------------------------------------------------------------- */
 /* A control is its content plus air — § Buttons, FUEL-85; built in FUEL-86     */
