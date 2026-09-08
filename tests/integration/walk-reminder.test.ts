@@ -281,6 +281,31 @@ describe.skipIf(!configured)("the walk reminder, scoped", () => {
       ).toEqual(["Morning Walk", "Afternoon Walk"]);
     });
 
+    it("names a walk once, however many template rows point at it", async () => {
+      // Nothing forbids two entries on one weekday naming the same walk, and
+      // the log is keyed by workout — so one tap satisfies both rows. A
+      // sentence that said "Morning Walk and Morning Walk" would be reporting
+      // on the template rather than on the day.
+      const owned = scope(fixture.bob.userId, getDb());
+
+      const [walk] = await owned.insert(schema.workouts, {
+        name: "Morning Walk",
+        type: "walk",
+      });
+
+      for (const sortOrder of [1, 2]) {
+        await owned.insert(schema.trainingTemplateEntries, {
+          dayOfWeek: 1,
+          workoutId: walk!.id,
+          sortOrder,
+        });
+      }
+
+      expect(
+        (await loadWalkReminder(fixture.bob.userId, at("20:00")))?.outstanding,
+      ).toEqual(["Morning Walk"]);
+    });
+
     it("comes back if the log is taken away again", async () => {
       const owned = scope(fixture.alice.userId, getDb());
 

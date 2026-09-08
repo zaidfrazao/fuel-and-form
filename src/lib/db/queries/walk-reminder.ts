@@ -226,6 +226,8 @@ async function walksFor(
   // on every day it appears, because there is nothing for it to alternate with.
   // So a null here is a session's row and is skipped by the same test that
   // skips another workout's.
+  const seen = new Set<string>();
+
   return entries
     .flatMap((entry) => {
       const walk = entry.workoutId === null ? undefined : byId.get(entry.workoutId);
@@ -236,5 +238,18 @@ async function walksFor(
       (a, b) =>
         a.entry.sortOrder - b.entry.sortOrder || (a.walk.id < b.walk.id ? -1 : 1),
     )
-    .map(({ walk }) => ({ id: walk.id, name: walk.name }));
+    .flatMap(({ walk }) => {
+      // Deduplicated by WORKOUT, because the sentence is about walks and not
+      // about template rows. Nothing forbids two entries on one weekday naming
+      // the same walk — the table has no unique constraint on
+      // `(user_id, day_of_week, workout_id)` and could not have one — and the
+      // banner that came out of it would read "Morning Walk and Morning Walk
+      // not logged", which is a sentence about a database rather than about a
+      // day. One row logs both entries anyway: the log is keyed by workout.
+      if (seen.has(walk.id)) return [];
+
+      seen.add(walk.id);
+
+      return [{ id: walk.id, name: walk.name }];
+    });
 }
