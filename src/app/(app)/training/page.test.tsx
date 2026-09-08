@@ -91,6 +91,7 @@ const LOG: WorkoutLog = {
   status: "partial",
   note: "cut it short",
   durationMin: 18,
+  distanceM: null,
   loggedAt: new Date("2026-03-12T18:04:00Z"),
 };
 

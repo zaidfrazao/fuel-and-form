@@ -1,0 +1,1 @@
+ALTER TABLE "walk_routes" ADD CONSTRAINT "walk_routes_points_precision" CHECK (jsonb_typeof("points") = 'array' and jsonb_array_length("points") > 0 and not jsonb_path_exists("points", '$[*][*].lat ? (@ * 100000 != (@ * 100000).floor())') and not jsonb_path_exists("points", '$[*][*].lng ? (@ * 100000 != (@ * 100000).floor())'));

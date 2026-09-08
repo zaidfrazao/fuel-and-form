@@ -321,7 +321,12 @@ describe.skipIf(!configured)("demo isolation — Testing Strategy § 1.4", () =>
       // someone else can cause to appear on this user's phone. Fourteen since
       // FUEL-91 added `exercise_sets`, which needed a fixture row of its own
       // before the sweep over it could mean anything — see `fixtures.ts`.
-      expect(userOwnedTables).toHaveLength(14);
+      // Fifteen since FUEL-100 added `walk_routes`, which is the table this
+      // whole sweep matters most for: a cross-tenant read of a meal log is
+      // somebody's dinner, and a cross-tenant read of a route is where they
+      // live. Its fixture row is built from computed values because a
+      // coordinate literal may not appear in a fixture at all.
+      expect(userOwnedTables).toHaveLength(15);
     });
   });
 

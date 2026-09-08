@@ -3,6 +3,7 @@ import { getPool } from "@/lib/db/pool";
 import { scope } from "@/lib/db/scope";
 import * as schema from "@/lib/db/schema";
 import type { UserKind } from "@/lib/db/schema";
+import { reducePrecision } from "@/lib/route";
 
 /**
  * Two users, each owning a row in every user-owned table.
@@ -193,6 +194,10 @@ async function seedUser(
       date: options.date,
       workoutId: workout.id,
       status: "done",
+      // A recorded distance, so `workout_logs_distance_range` is exercised by
+      // a real insert rather than only asserted about — FUEL-100. Derived per
+      // user for the reason every other value in this fixture is.
+      distanceM: options.name.length * 100,
     }),
     "workout_logs",
   );
@@ -209,6 +214,42 @@ async function seedUser(
     exerciseId: exercise.id,
     setIndex: 1,
     reps: options.name.length,
+  });
+
+  // A trace, so the leak sweep over `walk_routes` has a row to be wrong about
+  // — FUEL-100, and the same argument `exercise_sets` makes above. It matters
+  // more here than for any other table in this file: the row on the other end
+  // of a cross-tenant read of THIS one is a home address.
+  //
+  // ## Every number below is computed, and that is a requirement rather than a
+  // ## flourish
+  //
+  // PRD § P11: no coordinate reaches a seed, a fixture, a test or the
+  // repository, and `scripts/check-no-metrics.sh` enforces it over this file
+  // like any other — a literal pair written here would turn the scan red, by
+  // design. So the geometry is derived from the user's name length, which
+  // also gives each fixture user a trace that could not be another's under any
+  // reading. The values are a few thousandths of a degree from null island:
+  // nowhere anybody walks, and nowhere the owner has been.
+  //
+  // Run through `reducePrecision` rather than trusting the arithmetic above to
+  // land on five decimals. It does not: `0.006 + 0.0005` is 0.006500000000000001
+  // in binary floating point, which serialises to seventeen decimal places and
+  // is refused by `walk_routes_points_precision` — as it should be. The
+  // constraint caught this fixture on the first run after it was added, which
+  // is the check earning itself before a second writer even exists.
+  const trace = Array.from({ length: 3 }, (_value, index) => ({
+    ...reducePrecision({
+      lat: options.name.length / 500 + index / 2_000,
+      lng: options.name.length / 800,
+    }),
+    t: index * 60,
+  }));
+
+  await owned.insert(schema.walkRoutes, {
+    workoutLogId: workoutLog.id,
+    points: [trace],
+    pointCount: trace.length,
   });
 
   await owned.insert(schema.weightLogs, {

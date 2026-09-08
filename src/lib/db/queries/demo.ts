@@ -272,27 +272,57 @@ export async function provisionDemoUser(ipHash: string, now: Date): Promise<Prov
     // `SET_HISTORY_WEEKS` is entirely INSIDE the horizon, so it gets sets from
     // its first day. It is empty when the program has not started, and it would
     // be empty for a library whose working rows all declined a rep range.
-    if (history.exerciseSets.length > 0) {
-      const logIds = new Map(logRows.map((log) => [`${log.date}|${log.workoutId}`, log.id]));
+    // Shared by the two batches below, both of which name a log by its natural
+    // key for the reason the paragraph above gives.
+    const logIds = new Map(logRows.map((log) => [`${log.date}|${log.workoutId}`, log.id]));
 
+    /** The log a keyed row belongs to, or a throw naming what went missing. */
+    const logIdFor = (table: string, date: string, workoutId: string): string => {
+      const workoutLogId = logIds.get(`${date}|${workoutId}`);
+
+      // Unreachable: the generator emits these rows only for a session it has
+      // just logged. A throw rather than a filter, because the alternative is
+      // silently dropping a visitor's history and never knowing — and a `!`
+      // here would insert a null into a NOT NULL column instead.
+      if (!workoutLogId) {
+        throw new Error(
+          `Seeding ${table}: no workout log for ${workoutId} on ${date}. ` +
+            `The generator produced a row for a session it did not log.`,
+        );
+      }
+
+      return workoutLogId;
+    };
+
+    if (history.exerciseSets.length > 0) {
       await owned.insert(
         schema.exerciseSets,
-        history.exerciseSets.map(({ date, workoutId, ...set }) => {
-          const workoutLogId = logIds.get(`${date}|${workoutId}`);
+        history.exerciseSets.map(({ date, workoutId, ...set }) => ({
+          ...set,
+          workoutLogId: logIdFor("exercise_sets", date, workoutId),
+        })),
+      );
+    }
 
-          // Unreachable: the generator emits a set only for a session it has
-          // just logged. A throw rather than a filter, because the alternative
-          // is silently dropping a visitor's history and never knowing — and a
-          // `!` here would insert a null into a NOT NULL column instead.
-          if (!workoutLogId) {
-            throw new Error(
-              `Seeding exercise_sets: no workout log for ${workoutId} on ${date}. ` +
-                `The generator produced a set for a session it did not log.`,
-            );
-          }
-
-          return { ...set, workoutLogId };
-        }),
+    // FUEL-100. § P11's routes, keyed to their walk exactly as the sets above
+    // are keyed to their session, and inserted as ONE batch for the reason
+    // FUEL-96 recorded: this path is priced per round trip rather than per
+    // row, so a second statement costs about as much as forty more rows do.
+    //
+    // The trace itself was truncated, trimmed and capped by `storableRoute`
+    // before it ever reached this function — the demo goes through the same
+    // write path a real recording will, so a row here cannot hold data a real
+    // walk could not.
+    //
+    // Empty for a program that has not started, and for one whose walks all
+    // fell outside `ROUTE_HISTORY_WEEKS` or were not recorded.
+    if (history.walkRoutes.length > 0) {
+      await owned.insert(
+        schema.walkRoutes,
+        history.walkRoutes.map(({ date, workoutId, ...route }) => ({
+          ...route,
+          workoutLogId: logIdFor("walk_routes", date, workoutId),
+        })),
       );
     }
 

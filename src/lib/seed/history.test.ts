@@ -10,12 +10,14 @@ import type {
 } from "@/lib/db/schema";
 import { resolveTraining } from "@/lib/rotation";
 import { WORKING_SECTION, working } from "@/lib/section";
+import { countPoints, distanceMetres, MAX_ROUTE_POINTS, TRIM_METRES } from "@/lib/route";
 import { PACE_TOLERANCE_KG, TRAILING_DAYS, weightStats } from "@/lib/weight-stats";
 
 import {
   demoHistory,
   type DemoHistoryInput,
   MEAL_LOG_WEEKS,
+  ROUTE_HISTORY_WEEKS,
   SET_HISTORY_WEEKS,
 } from "./history";
 import { seedMeals } from "./meals";
@@ -249,6 +251,7 @@ describe("the window it covers", () => {
       mealLogs: [],
       workoutLogs: [],
       exerciseSets: [],
+      walkRoutes: [],
     });
   });
 });
@@ -1030,5 +1033,176 @@ describe("set history", () => {
 
     expect(history.exerciseSets).toEqual([]);
     expect(history.workoutLogs.length).toBeGreaterThan(0);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Routes — § P11, FUEL-100                                                   */
+/* -------------------------------------------------------------------------- */
+
+describe("walk routes", () => {
+  const history = demoHistory(provisionedOn("2026-08-25"));
+
+  /** Every log that carries a recorded distance, by its natural key. */
+  const recorded = new Map(
+    history.workoutLogs
+      .filter((log) => log.distanceM != null)
+      .map((log) => [`${log.date}/${log.workoutId}`, log] as const),
+  );
+
+  it("records a route on some walks and not on others", () => {
+    // Both states, in one history. § P11: "recording is additive — a walk with
+    // no route is a complete walk with fewer figures, never a partial one". A
+    // demo where every walk had a trace would quietly assert the opposite.
+    expect(history.walkRoutes.length).toBeGreaterThan(0);
+    expect(history.walkRoutes.length).toBeLessThan(
+      history.workoutLogs.filter((log) => log.durationMin !== null).length,
+    );
+  });
+
+  it("gives every route at least one point", () => {
+    // The invariant standing in for a guard `history.ts` deliberately does not
+    // write — see the note there. `walk_routes_point_count_range` refuses a
+    // zero-point row, so this is what keeps provisioning from failing at the
+    // database if `DURATION_MIN.walk` is ever lowered past twice the trim.
+    for (const route of history.walkRoutes) {
+      expect(route.pointCount).toBeGreaterThan(0);
+      expect(route.pointCount).toBe(countPoints(route.points));
+    }
+  });
+
+  it("holds every route under the stored cap", () => {
+    for (const route of history.walkRoutes) {
+      expect(route.pointCount).toBeLessThanOrEqual(MAX_ROUTE_POINTS);
+    }
+  });
+
+  it("stores no coordinate at more than five decimal places", () => {
+    // The rule this whole ticket exists for, asserted against the rows that
+    // would actually be written rather than against the function that makes
+    // them. A demo that bypassed `storableRoute` would pass every test above.
+    for (const route of history.walkRoutes) {
+      for (const segment of route.points) {
+        for (const point of segment) {
+          expect(Math.round(point.lat * 1e5)).toBeCloseTo(point.lat * 1e5, 6);
+          expect(Math.round(point.lng * 1e5)).toBeCloseTo(point.lng * 1e5, 6);
+        }
+      }
+    }
+  });
+
+  it("trims the ends, so no trace begins where the walk did", () => {
+    // The stored geometry is shorter than the measured distance, by roughly
+    // twice the trim. That gap IS the privacy control, so a run where the two
+    // agreed would mean the trim had silently stopped happening.
+    for (const route of history.walkRoutes) {
+      const log = recorded.get(`${route.date}/${route.workoutId}`);
+      expect(log).toBeDefined();
+      if (log?.distanceM == null) continue;
+
+      const drawn = distanceMetres(route.points);
+      expect(drawn).toBeLessThan(log.distanceM);
+      expect(log.distanceM - drawn).toBeGreaterThan(TRIM_METRES);
+    }
+  });
+
+  it("walks at a believable pace", () => {
+    // The failure this catches is invisible in a diff and obvious on a screen:
+    // a 20-minute walk covering nine kilometres. Between three and seven km/h
+    // is the whole plausible range for walking, and the generator aims at the
+    // middle of it.
+    for (const [, log] of recorded) {
+      if (log.distanceM == null || log.durationMin == null) continue;
+      const kmh = (log.distanceM / 1000) / (log.durationMin / 60);
+      expect(kmh).toBeGreaterThan(3);
+      expect(kmh).toBeLessThan(7);
+    }
+  });
+
+  it("records a distance only on walks", () => {
+    // A circuit has no distance, and neither does a skipped walk. Null rather
+    // than zero throughout — § P11's "absent rather than zeroed", which is
+    // also what a walk logged before P11 looks like.
+    const walkIds = new Set(
+      LIBRARY.workouts.filter((workout) => workout.type === "walk").map((w) => w.id),
+    );
+
+    for (const log of history.workoutLogs) {
+      if (log.distanceM == null) continue;
+      expect(walkIds.has(log.workoutId)).toBe(true);
+      expect(log.status).not.toBe("skipped");
+    }
+  });
+
+  it("keeps routes inside their window, and logs outside it", () => {
+    // The dial, asserted the way `SET_HISTORY_WEEKS` is. A route outside the
+    // trailing weeks would be rows nobody opens, on a path priced per
+    // provisioning.
+    const input = provisionedOn("2026-08-25");
+    const cutoff = addDays(input.today, -ROUTE_HISTORY_WEEKS * 7);
+
+    for (const route of history.walkRoutes) {
+      expect(route.date >= cutoff).toBe(true);
+    }
+    // And there IS history before the cutoff, so the assertion above is not
+    // passing because everything happens to fall inside the window.
+    expect(history.workoutLogs.some((log) => log.date < cutoff)).toBe(true);
+  });
+
+  it("is deterministic, like everything else here", () => {
+    const input = provisionedOn("2026-08-25");
+    expect(demoHistory(input).walkRoutes).toEqual(demoHistory(input).walkRoutes);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* A third walk on one day                                                    */
+/* -------------------------------------------------------------------------- */
+
+describe("more walks than there are logged hours", () => {
+  /**
+   * `WALK_LOGGED_HOURS` holds two entries since FUEL-98, and a third walk on a
+   * day falls back to the last of them. `history.ts` states that as a
+   * deliberate choice — *"a stamp rather than a lie: nothing in the schema
+   * forbids a third walk, and a seed that threw on one would be a seed that
+   * could not load a template the app is happy to render"* — but nothing
+   * exercised it, so the gate on this file has been one branch short since the
+   * second walk was added and the fallback stopped being reachable by two.
+   *
+   * Found while adding routes (FUEL-100) rather than caused by them: `main`
+   * measures the same 98.41%.
+   */
+  it("stamps the extra walk with the last hour rather than throwing", () => {
+    const input = provisionedOn("2026-08-25");
+
+    const walk = LIBRARY.workouts.find((workout) => workout.type === "walk");
+    expect(walk).toBeDefined();
+    if (walk === undefined) return;
+
+    // A third walk on every Monday, on top of the two the seed schedules.
+    const trainingTemplate = [
+      ...input.trainingTemplate,
+      {
+        id: "training-entry-third-walk",
+        userId: "demo",
+        dayOfWeek: 1 as const,
+        workoutId: walk.id,
+        rotationGroup: null,
+        sortOrder: 99,
+      },
+    ];
+
+    const history = demoHistory({ ...input, trainingTemplate });
+
+    const mondayWalks = history.workoutLogs.filter(
+      (log) => log.workoutId === walk.id && dayOfWeek(log.date) === 1,
+    );
+
+    expect(mondayWalks.length).toBeGreaterThan(0);
+    // Nothing threw, every row got an instant, and no two walks on one date
+    // share one — which is the property the hours exist to give.
+    for (const log of mondayWalks) {
+      expect(log.loggedAt).toBeInstanceOf(Date);
+    }
   });
 });

@@ -15,8 +15,9 @@
 # become the leak.
 #
 # So it works the other way round. It matches the *shape* of a body metric —
-# a weight in kg, a height in cm, a daily kcal or macro target — and passes only
-# values that are known to belong to Sam Rivera, the fictional demo persona.
+# a weight in kg, a height in cm, a daily kcal or macro target, a GPS coordinate
+# — and passes only values that are known to belong to Sam Rivera, the fictional
+# demo persona.
 # Sam's figures are safe to name here precisely because Sam is invented; they are
 # already published in docs/PRD.md and labelled as fictional.
 #
@@ -27,6 +28,16 @@
 # The corollary is a rule for anyone editing this script: never add a real
 # figure to it, not even in a comment, not even to explain a false positive.
 # During development this check fired on its own source for exactly that reason.
+#
+# The same rule covers COMMIT MESSAGES, which is less obvious and was learnt the
+# hard way in FUEL-100: check 2 reads `git log -p`, and a patch includes the
+# message that carries it. A commit explaining a new pattern by spelling out the
+# values it catches puts those values in the history permanently — worse than a
+# file, because editing a file does not remove it from the commits behind it.
+# Describe the example, or write it at a precision the patterns do not match.
+# That commit was reworded before its branch was pushed. Had a pull request been
+# opened first, `refs/pull/N/head` would have kept it beyond the reach of any
+# force-push — which is exactly the state check 3 exists to track.
 #
 #
 # NO DIRECTORY IS EXEMPT
@@ -271,6 +282,100 @@ is_allowed() {
 #
 # ALLOW_* lists hold Sam Rivera's figures, per-unit rather than pooled: fifty is
 # a legitimate fat target but must not therefore pass as a body weight.
+#
+#
+# THE TWO COORDINATE PATTERNS (FUEL-100)
+#
+# PRD § Risks' leak row is EXTENDED for route data rather than inherited, and
+# these are the half of that extension this script owns. A trace of a
+# twice-daily walk starts and ends at a front door, repeats, and is timestamped,
+# so ten of them identify a home address — which no weight or macro figure does.
+#
+# They discriminate on SHAPE rather than on bounds, and that is what makes them
+# independent of the six above rather than a widened version of one. A body
+# metric is a number in a range next to a unit. A coordinate has no unit and its
+# range is most of the number line, so bounds could not tell one from an
+# ordinary decimal. What is distinctive is the FORM: a decimal degree carries
+# four or more places after the point — fewer than four is a hundred metres and
+# nobody writes a position that coarsely — and it appears either paired with a
+# second one or named by a field that says what it is.
+#
+# Hence two patterns, and both are needed because neither sees the other's case:
+#
+#   gps-coordinate — the PAIR form, two decimals separated by a comma. Catches
+#                    an array literal, a tuple, a "lat,lng" string, a GeoJSON
+#                    position. Blind to a pair written as named fields, because
+#                    what sits between the two numbers there is a field name and
+#                    not a comma.
+#   coord-field    — the FIELD form, a latitude- or longitude-ish name followed
+#                    by a colon or an equals and a decimal. Catches exactly the
+#                    case above, and a lone coordinate stored on its own, which
+#                    the pair form cannot see at all.
+#
+# Four details, every one of them found by TESTING the patterns against
+# candidate strings rather than by reasoning about them. Three of the four were
+# holes that a green scan was hiding, which is the argument for testing a check
+# the same way you would test the code it guards:
+#
+#   The name is anchored so `translate: 1.2345` does not match on the `lat`
+#   inside it — WITHOUT that anchor also excluding the way a coordinate is
+#   actually named in code. Those two pull against each other, and the first
+#   draft got it wrong in the direction that fails open. A lowercase `lat` needs
+#   a non-alphanumeric before it; an uppercase `L` may follow a lowercase letter
+#   or a digit, which is camelCase. So `startLat` and `gps_lat` are both caught
+#   and `translate` is not, because the `lat` inside it is lowercase and
+#   preceded by a letter.
+#
+#   That hole was the serious one. Anchoring only on non-alphanumerics missed
+#   every camelCase and snake_case spelling — which is precisely how a browser
+#   recorder names these variables, and FUEL-101 is a browser recorder. A scan
+#   that cannot see `const startLat = ...` would have reported CLEAN over the
+#   exact leak it exists to catch. Checked against translate, translateX,
+#   oscillate, plateau, correlation and relate: none matches.
+#
+#   Whitespace is `[[:space:]]`, not a literal space, so a tab between a field
+#   name and its value does not walk past. grep is line-oriented, so a value on
+#   its own line is beyond any pattern here — a limit of the mechanism rather
+#   than of these two, and worth knowing rather than assuming otherwise.
+#
+#   The pair form allows THREE digits before the point on both sides, not two.
+#   GeoJSON orders a position as [longitude, latitude], so the FIRST number is
+#   the one that reaches 180 — a two-digit first component missed every
+#   lng-first pair outside a narrow band of the globe.
+#
+#   A quote is permitted on BOTH sides of the separator. The first draft allowed
+#   one only before the colon, for a JSON key, and therefore missed every quoted
+#   VALUE — a longitude field assigned a quoted decimal, and the same thing
+#   inside a JSON object, both passed a scan that looked like it was working. A
+#   GeoJSON document or an HTML attribute is exactly how a coordinate would
+#   arrive in this repository from outside it.
+#
+#   (Those two examples are described rather than written out. Spelled as
+#   literals they fired this very check on this very file, which is the rule at
+#   the top of this script demonstrating itself: no figure goes in here, not
+#   even an invented one, not even to explain a pattern.)
+#
+# ## Why gps-coordinate's allowlist is empty and stays empty
+#
+# Every other pattern here has to wave something through, because the demo
+# persona's figures are legitimately in the repository. The pair form has no
+# such case: nothing in this codebase writes a coordinate as a bare pair. The
+# demo persona's route is GENERATED from a single named origin — see
+# src/lib/seed/history.ts, which does the same thing for the weigh-in series and
+# argues why — so the only coordinate literal that exists is written as named
+# fields and is caught by the other pattern. An empty allowlist means every pair
+# is reported, which is the strictest this mechanism can be.
+#
+# ## And why the tests are not scoped out of either
+#
+# The kcal pattern is narrowed away from test files because four-digit
+# kilocalorie figures are ordinary there. A coordinate in a test file is not
+# ordinary and is exactly what PRD § P11 forbids: *"no coordinate reaches a
+# seed, a fixture, a test or the repository"*. src/lib/route.test.ts and
+# tests/integration/fixtures.ts both need geometry and both COMPUTE it — the
+# tests project metres from an origin of zero, the fixture derives its points
+# from a user's name length — so the rule costs nothing and the scan is what
+# keeps it true.
 # ---------------------------------------------------------------------------
 
 readonly ALLOW_KG="84.2 76"
@@ -297,6 +402,40 @@ readonly ALLOW_CM="172"
 # wave through, so a new fixture should reuse one of these before adding another.
 readonly ALLOW_KG_FIXTURE="77.4 79.3 80.1 80.4 80.8 88.2"
 readonly ALLOW_KCAL="1780"
+
+# The coordinates this repository is allowed to contain — FUEL-100.
+#
+# Two values, and they are the two halves of ONE point: the origin Sam Rivera's
+# demo walks are generated around, in `src/lib/seed/history.ts`. Nothing else
+# belongs here, ever.
+#
+# That point is inside Greenwich Park — a large public park in London, coherent
+# with the persona's timezone, containing no residence, and a few hundred
+# metres from the Royal Observatory, whose position is published in every
+# reference work ever printed. It is safe to name for exactly the reason Sam's
+# weight is: it is already public and it belongs to nobody.
+#
+# The list is two values rather than dozens because the demo's routes are
+# DERIVED from this origin rather than enumerated — the same discipline
+# `history.ts` keeps for the weigh-in series, and for the same reason. An array
+# of positions committed there would be an allowlist entry per point, and every
+# one of them a coordinate this scan would then wave through for the rest of
+# the repository's life.
+#
+# Sign-less, because `extract_token` reports the digits and not the leading
+# minus. That is a widening — a southern latitude of the same magnitude would
+# also pass — and it is accepted here because the alternative is teaching the
+# tokeniser about signs for one pattern, and because a coordinate that matches
+# one of these to five decimal places is this origin.
+#
+# The rule at the top of this file applies here with more force than anywhere
+# else in it: a real coordinate added to this list would not merely be waved
+# through, it would be a home address published in a public repository, in the
+# file whose entire job is to prevent that.
+#
+# The PAIR pattern below has NO allowlist and must never be given one. See the
+# note beside it.
+readonly ALLOW_COORD="51.47912 0.00341"
 readonly ALLOW_PROTEIN="148"
 readonly ALLOW_CARB="185"
 readonly ALLOW_FAT="50"
@@ -370,6 +509,8 @@ readonly PATTERN_NAMES=(
   "target-protein-g"
   "target-carb-g"
   "target-fat-g"
+  "gps-coordinate"
+  "coord-field"
 )
 
 readonly PATTERN_REGEX=(
@@ -379,6 +520,8 @@ readonly PATTERN_REGEX=(
   '(^|[^0-9A-Za-z.])[12][0-9]{2}[ ]?g[ ]?protein'
   '(^|[^0-9A-Za-z.])[12][0-9]{2}[ ]?g[ ]?carb'
   '(^|[^0-9A-Za-z.])[2-9][0-9][ ]?g[ ]?fat'
+  '(^|[^0-9A-Za-z.])-?[0-9]{1,3}\.[0-9]{4,}["'"'"']?[[:space:]]*,[[:space:]]*["'"'"']?-?[0-9]{1,3}\.[0-9]{4,}'
+  '((^|[^0-9A-Za-z])[Ll]|[a-z0-9]L)(at|ng|on)[A-Za-z]*["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?-?[0-9]{1,3}\.[0-9]{4,}'
 )
 
 readonly PATTERN_ALLOW=(
@@ -392,6 +535,10 @@ readonly PATTERN_ALLOW=(
   "$ALLOW_PROTEIN"
   "$ALLOW_CARB"
   "$ALLOW_FAT"
+  # Empty on purpose, and not a placeholder: nothing in this repository writes
+  # a coordinate as a bare pair, so every match is a finding. See the note.
+  ""
+  "$ALLOW_COORD"
 )
 
 # Empty means "report every match"; otherwise the line must also match this.
@@ -402,6 +549,11 @@ readonly PATTERN_LINEFILTER=(
   ""
   ""
   "target|goal|cutting|daily|deficit"
+  # No line filter on either coordinate pattern. The shape is the whole
+  # discriminator, and a filter requiring a nearby word would miss the case
+  # that matters most: a bare array of positions with no prose around it.
+  ""
+  ""
 )
 
 # "all" scans every file; "notest" skips unit-test fixtures. Only the kcal
@@ -410,6 +562,8 @@ readonly PATTERN_SCOPE=(
   "all"
   "all"
   "notest"
+  "all"
+  "all"
   "all"
   "all"
   "all"
