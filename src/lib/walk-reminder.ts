@@ -45,7 +45,9 @@ export const DEFAULT_WALK_REMINDER_AT: TimeOfDay = "19:00";
 /**
  * The names of the walks with no row against them, in the day's own order.
  *
- * A list rather than a count, because the sentence NAMES them — see below.
+ * Names rather than a count, because the sentence names one of them when one of
+ * them is all there is — see `reminderStatement`. A count would answer the
+ * plural case and leave the singular one with nothing to say.
  */
 export type OutstandingWalks = readonly string[];
 
@@ -98,9 +100,10 @@ export function reminderLink(names: OutstandingWalks): string {
  * There is one walk outstanding, or there is more than one, and the two want
  * different sentences.
  *
- * With MORE THAN ONE, no name is more informative than the plural: nothing has
- * been logged, and listing what has not been is a longer way to say so. "Walks
- * not logged." is the whole fact.
+ * With MORE THAN ONE outstanding, no name is more informative than the plural:
+ * the reader has more than one walk to go and take, and listing which is a
+ * longer way to say so. "Walks not logged." is the whole of what they can act
+ * on.
  *
  * With exactly ONE, the plural would be the failure this ticket is about.
  * "Walk not logged." was the sentence while there was one walk; with the
