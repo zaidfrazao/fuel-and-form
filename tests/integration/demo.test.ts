@@ -398,6 +398,76 @@ describe.skipIf(!configured)("provisioning a demo account", () => {
       }
     });
 
+    it("stores routes against the walks that were actually recorded", async () => {
+      // FUEL-100, and `exercise_sets`' argument one table over: the generator
+      // emits a route keyed by `(date, workoutId)` and `provisionDemoUser`
+      // resolves that to a `workout_log_id`. A map that resolved every route
+      // to the same log would satisfy the foreign key, insert cleanly, and
+      // render — with one walk carrying four weeks of somebody else's shapes.
+      const userId = await provisioned();
+      const owned = scope(userId, getDb());
+
+      const routes = await owned.select(schema.walkRoutes);
+      const logs = await owned.select(schema.workoutLogs);
+      const workouts = await owned.select(schema.workouts);
+
+      // Non-empty, or every loop below passes vacuously.
+      expect(routes.length).toBeGreaterThan(0);
+
+      const logsById = new Map(logs.map((log) => [log.id, log]));
+      const workoutsById = new Map(workouts.map((workout) => [workout.id, workout]));
+
+      for (const route of routes) {
+        const log = logsById.get(route.workoutLogId);
+        expect(log).toBeDefined();
+        if (log === undefined) continue;
+
+        // A route belongs to a WALK, never to a circuit, and never to a
+        // session nobody performed.
+        expect(workoutsById.get(log.workoutId)?.type).toBe("walk");
+        expect(log.status).not.toBe("skipped");
+
+        // The log carries the distance and the route carries the shape, and
+        // the two arrive together or not at all.
+        expect(log.distanceM).not.toBeNull();
+      }
+
+      // One route per log at most — `walk_routes_user_log_key`, asked of the
+      // rows rather than assumed from the constraint.
+      const logIds = routes.map((route) => route.workoutLogId);
+      expect(new Set(logIds).size).toBe(logIds.length);
+    });
+
+    it("stores no coordinate at more than five decimal places", async () => {
+      // The rule PRD § P11 states, asserted after a full round trip through
+      // `jsonb` rather than against the function that produced the value.
+      // `storableRoute` truncating correctly and the DATABASE holding what it
+      // truncated are two claims, and only the second one is what a leak
+      // would read.
+      const userId = await provisioned();
+      const routes = await scope(userId, getDb()).select(schema.walkRoutes);
+
+      expect(routes.length).toBeGreaterThan(0);
+
+      for (const route of routes) {
+        expect(route.pointCount).toBeGreaterThan(0);
+
+        let counted = 0;
+        for (const segment of route.points) {
+          for (const point of segment) {
+            counted += 1;
+            for (const degrees of [point.lat, point.lng]) {
+              // Exactly representable at five places: scaling by 1e5 lands on
+              // an integer. A sixth decimal would not.
+              expect(Math.abs(degrees * 1e5 - Math.round(degrees * 1e5))).toBeLessThan(1e-6);
+            }
+          }
+        }
+
+        expect(counted).toBe(route.pointCount);
+      }
+    });
+
     it("still provisions when the generator returns nothing at all", async () => {
       // The empty-batch guard. Without it this throws before a statement is
       // built, the transaction rolls back, and every visitor gets a failed
@@ -461,6 +531,42 @@ describe.skipIf(!configured)("provisioning a demo account", () => {
             false,
           );
         }
+      }
+    });
+
+    it("cannot read the owner's routes", async () => {
+      // The AC's own wording, and the reason this table gets an assertion of
+      // its own rather than relying on the sweep above. The sweep compares two
+      // DEMO accounts; this asks the question the PRD actually promises a
+      // stranger on a public URL — that the person clicking "Try the demo"
+      // cannot reach the owner's rows.
+      //
+      // It matters more for this table than for any other in the schema. A
+      // leaked meal log is somebody's dinner. A leaked route is where they
+      // live, twice a day, with timestamps.
+      const fixture: Fixture = await seedFixture();
+      const demoUser = await provisioned();
+
+      const ownerRoutes = await scope(fixture.alice.userId, getDb()).select(schema.walkRoutes);
+      const demoRoutes = await scope(demoUser, getDb()).select(schema.walkRoutes);
+
+      // Both sides non-empty, or the comparison below proves nothing: an
+      // empty table cannot leak, and that is the vacuous pass this whole
+      // suite is shaped to refuse.
+      expect(ownerRoutes.length).toBeGreaterThan(0);
+      expect(demoRoutes.length).toBeGreaterThan(0);
+
+      const ownerIds = new Set(ownerRoutes.map((route) => route.id));
+      for (const route of demoRoutes) {
+        expect(ownerIds.has(route.id)).toBe(false);
+        expect(route.userId).toBe(demoUser);
+      }
+
+      // And the other direction, which is the one a scope bug would break:
+      // nothing the owner holds is visible from the demo's own scope.
+      const ownerPoints = new Set(ownerRoutes.map((route) => JSON.stringify(route.points)));
+      for (const route of demoRoutes) {
+        expect(ownerPoints.has(JSON.stringify(route.points))).toBe(false);
       }
     });
 

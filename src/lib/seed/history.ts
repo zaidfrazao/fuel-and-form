@@ -16,12 +16,18 @@ import type {
   PlanTemplateEntry,
   profiles,
   TrainingTemplateEntry,
+  walkRoutes,
   weightLogs,
   Workout,
   WorkoutExercise,
   workoutLogs,
 } from "@/lib/db/schema";
 import type { ScopedInsert } from "@/lib/db/scope";
+// § P11's storage rules, applied to the demo's own routes — FUEL-100. The
+// generator below produces a raw track and `storableRoute` is what truncates,
+// trims and caps it, so the demo goes through the same write path a real
+// recording will and cannot quietly hold data a real walk could not.
+import { EARTH_RADIUS_M, storableRoute, type Track, type TrackPoint } from "@/lib/route";
 import { type Plan, resolveDay, templateSlot } from "@/lib/resolve-plan";
 import { resolveTraining, type TrainingPlan } from "@/lib/rotation";
 import { working } from "@/lib/section";
@@ -152,6 +158,20 @@ export type DemoExerciseSet = Omit<ScopedInsert<typeof exerciseSets>, "workoutLo
   workoutId: string;
 };
 
+/**
+ * A route, keyed to its walk the way a set is keyed to its session.
+ *
+ * `workout_log_id` is not known until the logs are written, so this carries the
+ * log's natural key instead and the caller resolves it — `DemoExerciseSet`'s
+ * shape and `queries/demo.ts`'s lookup, reused rather than reinvented.
+ */
+export type DemoWalkRoute = Omit<ScopedInsert<typeof walkRoutes>, "workoutLogId"> & {
+  /** The walk's date — half of the log's natural key. */
+  date: CalendarDate;
+  /** The walk's workout — the other half. */
+  workoutId: string;
+};
+
 /** The rows to write, per table. Insert order is the caller's problem. */
 export type DemoHistory = {
   weightLogs: ScopedInsert<typeof weightLogs>[];
@@ -160,6 +180,8 @@ export type DemoHistory = {
   workoutLogs: ScopedInsert<typeof workoutLogs>[];
   /** Keyed to their log by `(date, workoutId)` — see `DemoExerciseSet`. */
   exerciseSets: DemoExerciseSet[];
+  /** Keyed the same way — see `DemoWalkRoute`. */
+  walkRoutes: DemoWalkRoute[];
 };
 
 /* -------------------------------------------------------------------------- */
@@ -206,6 +228,8 @@ const SALT = {
   swapPick: 71,
   setReps: 89,
   partialReach: 103,
+  routeRecorded: 127,
+  routeShape: 149,
 } as const;
 
 /* -------------------------------------------------------------------------- */
@@ -491,6 +515,153 @@ const SWAP_FALLBACK_TIME = "18:00";
  */
 const WALK_LOGGED_HOURS = [10, 16] as const;
 
+/* -------------------------------------------------------------------------- */
+/* Routes — § P11, FUEL-100                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Where Sam's walks happen.
+ *
+ * ## This is the only coordinate literal in the repository, and it is invented
+ *
+ * PRD § P11 requires the demo persona's route to be "invented, in a place the
+ * owner has never walked", and PRD § Risks' leak row names the same rule. The
+ * point below is inside **Greenwich Park** — a large public park in London,
+ * coherent with `DEMO_TIMEZONE`, containing no residence at all, and a few
+ * hundred metres off the Royal Observatory, whose position is published in
+ * every reference work ever printed. It is a landmark rather than an address,
+ * which is exactly the property the persona's weight has: safe to write down
+ * because it is already public and belongs to nobody.
+ *
+ * It is on `ALLOW_COORD` in `scripts/check-no-metrics.sh` for that reason, and
+ * it is the ONLY entry that list is allowed to hold. Every other coordinate in
+ * the repository is a finding.
+ *
+ * **If the owner walks in Greenwich Park, this constant must be moved.** That
+ * is the one thing this file cannot check for itself.
+ *
+ * ## Everything else about a route is DERIVED from it
+ *
+ * The same rule this module already keeps for the weigh-in series, and for the
+ * same reason: an array of positions written out here would be dozens of
+ * entries on the metrics allowlist, and every one of them a coordinate the
+ * scan then waves through for the rest of the repository's life. There is one
+ * origin, and the geometry is a pure function of the day.
+ */
+const ROUTE_ORIGIN = { lat: 51.47912, lng: -0.00341 };
+
+/**
+ * How much of the history carries a recorded route — the trailing four weeks.
+ *
+ * `SET_HISTORY_WEEKS`' dial, and its argument applies here unchanged: a route
+ * is seen on one screen only, reached by opening one walk's sheet, so filling
+ * the whole twelve weeks would be rows nobody looks at on a path that is
+ * priced per provisioning. Four weeks is deep enough that a visitor stepping
+ * back through recent days finds traces wherever they look.
+ */
+export const ROUTE_HISTORY_WEEKS = 4;
+
+/**
+ * How often a walk in that window was actually recorded.
+ *
+ * Not every walk. § P11 is explicit that "recording is additive — a walk with
+ * no route is a complete walk with fewer figures, never a partial one", and a
+ * demo where every single walk has a trace would quietly assert the opposite:
+ * that a walk without one is missing something. Roughly three in four also
+ * puts both states on the same screen, which is where the difference is worth
+ * being able to see.
+ */
+const ROUTE_RECORDED_RATE = 0.74;
+
+/** Seconds between fixes. `watchPosition` on a phone reports about this often. */
+const ROUTE_FIX_SECONDS = 5;
+
+/**
+ * Metres per second Sam walks — about 4.9 km/h, an ordinary walking pace.
+ *
+ * Not a body metric and not on any allowlist: it is a property of walking
+ * rather than of a person, it is the same figure for everybody, and it is what
+ * makes the generated distance agree with the duration already written beside
+ * it. A demo whose 20-minute walk covered nine kilometres would be the sort of
+ * wrong that is invisible in a diff and obvious on a screen.
+ */
+const ROUTE_PACE_M_PER_S = 1.36;
+
+/** Degrees per metre of latitude — the projection, from `route.ts`'s radius. */
+const METRES_PER_DEGREE = (Math.PI / 180) * EARTH_RADIUS_M;
+
+/**
+ * A position `east` and `north` metres from the origin.
+ *
+ * Longitude divided by the cosine of the latitude, because a degree of it is
+ * shorter than a degree of latitude everywhere but the equator — without that
+ * the loops below would come out visibly stretched, which is the one thing
+ * Brand Guide § The Route Trace says a trace must never be.
+ */
+function fromOrigin(east: number, north: number, t: number): TrackPoint {
+  const latitude = ROUTE_ORIGIN.lat + north / METRES_PER_DEGREE;
+  const lngScale = METRES_PER_DEGREE * Math.cos((ROUTE_ORIGIN.lat * Math.PI) / 180);
+  return { lat: latitude, lng: ROUTE_ORIGIN.lng + east / lngScale, t };
+}
+
+/**
+ * One walk's route: a closed loop, out from the origin and back to it.
+ *
+ * A loop rather than an out-and-back because that is what a walk from a fixed
+ * starting point usually is, and because it is the shape that exercises the
+ * interesting cases downstream — `perpendicularMetres` divides by zero on a
+ * span whose ends coincide, and a loop is where that happens.
+ *
+ * The shape is an ellipse with a per-walk radial wobble, so no two days draw
+ * the same picture and none of them draws a circle. Sized so the path length
+ * comes out at roughly pace × duration: the ellipse is approximated by its
+ * mean radius, which is loose, but nothing depends on the target being hit —
+ * `storableRoute` MEASURES what is generated and that measurement is what is
+ * stored, so the figure and the geometry cannot disagree however rough the
+ * sizing is.
+ *
+ * Deterministic, like everything else here: two demos provisioned a week apart
+ * show the same walk on the same date.
+ */
+function demoRoute(day: number, durationMin: number): Track {
+  const targetM = durationMin * 60 * ROUTE_PACE_M_PER_S;
+  const meanRadius = targetM / (2 * Math.PI);
+
+  // Between a circle and a decidedly oval loop, per walk.
+  const flatten = 0.55 + variation(day, SALT.routeShape) * 0.35;
+  // Rotated so the long axis does not point the same way every day.
+  const turn = variation(day, SALT.routeShape + 1) * Math.PI;
+
+  const fixes = Math.max(8, Math.round((durationMin * 60) / ROUTE_FIX_SECONDS));
+
+  const points = Array.from({ length: fixes + 1 }, (_value, index) => {
+    const angle = (index / fixes) * 2 * Math.PI;
+
+    // Two slow harmonics: enough to bend the loop into something with corners
+    // in it rather than an ellipse, and smooth enough that the result still
+    // reads as a path somebody walked.
+    const wobble =
+      1 +
+      0.18 * Math.sin(angle * 3 + variation(day, SALT.routeShape + 2) * 6) +
+      0.09 * Math.sin(angle * 5 + variation(day, SALT.routeShape + 3) * 6);
+
+    const radius = meanRadius * wobble;
+    const east = radius * Math.cos(angle + turn);
+    const north = radius * flatten * Math.sin(angle + turn);
+
+    // The loop is drawn around a centre one radius north of the origin, so it
+    // STARTS and ENDS at the origin — which is what makes the end-trim in
+    // `storableRoute` remove the thing it exists to remove.
+    return fromOrigin(
+      east - meanRadius * Math.cos(turn),
+      north - meanRadius * flatten * Math.sin(turn),
+      index * ROUTE_FIX_SECONDS,
+    );
+  });
+
+  return [points];
+}
+
 /** Used only for a workout type the profile has no window for. */
 const SESSION_FALLBACK_TIME = "07:00";
 
@@ -664,6 +835,7 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
     mealLogs: [],
     workoutLogs: [],
     exerciseSets: [],
+    walkRoutes: [],
   };
 
   // Nothing has happened yet. Reachable only from a `today` on or before the
@@ -781,6 +953,7 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
 
   const mealLogsFrom = daysBetween(programStart, addDays(today, -MEAL_LOG_WEEKS * 7));
   const setsFrom = daysBetween(programStart, addDays(today, -SET_HISTORY_WEEKS * 7));
+  const routesFrom = daysBetween(programStart, addDays(today, -ROUTE_HISTORY_WEEKS * 7));
 
   let runningWeightKg = profile.startWeightKg;
 
@@ -839,17 +1012,61 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
               profile.workoutTimes?.[workout.type] ?? SESSION_FALLBACK_TIME,
             ) + 60;
 
+      // A session that did not happen has no duration. Writing one would put
+      // time nobody spent into the export.
+      const durationMin =
+        status === "skipped"
+          ? null
+          : duration.from +
+            Math.floor(variation(day, SALT.workoutDuration) * duration.spread);
+
+      /* ---- The route, for the recent weeks only — § P11, FUEL-100 ------ */
+
+      // Four conditions, and each of them is a real state rather than a filter:
+      // only a walk has a route at all, a walk that did not happen has nothing
+      // to record, the window is `ROUTE_HISTORY_WEEKS`, and roughly a quarter
+      // of the walks inside it simply were not recorded — which § P11 requires
+      // to be an ordinary state rather than a degraded one.
+      //
+      // Run through `storableRoute` rather than stored as generated, so the
+      // demo's rows are truncated, trimmed and capped exactly as a real
+      // recording's will be. The distance is what that function MEASURED, so
+      // the figure on the row and the geometry in `walk_routes` are two views
+      // of one track and cannot drift apart.
+      const route =
+        workout.type === "walk" &&
+        durationMin !== null &&
+        dayIndex >= routesFrom &&
+        variation(day, SALT.routeRecorded) < ROUTE_RECORDED_RATE
+          ? storableRoute(demoRoute(day, durationMin))
+          : null;
+
+      // No `pointCount > 0` guard, deliberately. Every walk this seed
+      // schedules is at least fifteen minutes, which is well over a
+      // kilometre, so `storableRoute` always has something left after the
+      // 300m of end-trim — and a guard against a state that cannot arise is a
+      // branch no test can reach, which the gate on this file exists to make
+      // somebody notice. The invariant is asserted in `history.test.ts`
+      // instead, and `walk_routes_point_count_range` is the database's own
+      // copy of it: if `DURATION_MIN.walk` is ever lowered past the trim, the
+      // insert fails loudly rather than silently writing fewer routes.
+      if (route !== null) {
+        history.walkRoutes.push({
+          date,
+          workoutId: workout.id,
+          points: route.points,
+          pointCount: route.pointCount,
+        });
+      }
+
       history.workoutLogs.push({
         date,
         workoutId: workout.id,
         status,
-        // A session that did not happen has no duration. Writing one would put
-        // time nobody spent into the export.
-        durationMin:
-          status === "skipped"
-            ? null
-            : duration.from +
-              Math.floor(variation(day, SALT.workoutDuration) * duration.spread),
+        durationMin,
+        // Null for every session and for every unrecorded walk — "absent
+        // rather than zeroed", which is what a pre-P11 walk looks like too.
+        distanceM: route?.distanceM ?? null,
         // Rescaled by the rate it just passed, so the argument is back in
         // [0, 1) and `pick` is in range — which is why this asserts rather than
         // falling back. A `?? null` here would be a branch no test could reach,
