@@ -80,12 +80,26 @@ describe("WalkReminder", () => {
     expect(screen.getByText(/Reminder set for 21:15\./)).toBeTruthy();
   });
 
-  test("offers the way to log the walk, on `/`", async () => {
+  test("offers the way to log the walks, on `/`", async () => {
     await renderReminder();
 
-    const link = screen.getByRole("link", { name: "Log the walk." });
+    // Plural, because the sentence in front of it names two — FUEL-98. A link
+    // reading "Log the walk." under "Morning Walk and Afternoon Walk not
+    // logged." is a banner correcting itself halfway through.
+    const link = screen.getByRole("link", { name: "Log the walks." });
 
     expect(link.getAttribute("href")).toBe("/");
+  });
+
+  test("uses the singular link when one walk is outstanding", async () => {
+    loadWalkReminder.mockResolvedValue({
+      at: "19:00",
+      outstanding: ["Afternoon Walk"],
+    });
+
+    await renderReminder();
+
+    expect(screen.getByRole("link", { name: "Log the walk." })).toBeTruthy();
   });
 
   test("is a labelled landmark, so it can be skipped once per screen", async () => {

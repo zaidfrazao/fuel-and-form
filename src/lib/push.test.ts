@@ -6,7 +6,7 @@ import {
   WALK_NOTIFICATION_URL,
   walkNotification,
 } from "./push";
-import { REMINDER_LINK, reminderStatement } from "./walk-reminder";
+import { reminderLink, reminderStatement } from "./walk-reminder";
 
 /**
  * The notification's copy and the job's two decisions — FUEL-47, § P9.
@@ -52,7 +52,7 @@ describe("the notification", () => {
     // whatever the banner said, which is the exact drift this asserts against.
     // It is the banner's own two strings, composed.
     expect(walkNotification(OUTSTANDING, "19:00").body).toBe(
-      `${reminderStatement(OUTSTANDING, "19:00")} ${REMINDER_LINK}`,
+      `${reminderStatement(OUTSTANDING, "19:00")} ${reminderLink(OUTSTANDING)}`,
     );
   });
 
@@ -62,7 +62,7 @@ describe("the notification", () => {
     // Both assertions are needed: this one would survive `reminderStatement`
     // being inlined, and that one would survive the whole sentence changing.
     expect(walkNotification(OUTSTANDING, "19:00").body).toBe(
-      "Morning Walk and Afternoon Walk not logged. Reminder set for 19:00. Log the walk.",
+      "Morning Walk and Afternoon Walk not logged. Reminder set for 19:00. Log the walks.",
     );
   });
 

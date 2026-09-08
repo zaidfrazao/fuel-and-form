@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { loadWalkReminder } from "@/lib/db/queries/walk-reminder";
 import { FRAME, FRAME_MEASURE } from "@/lib/frame";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
-import { REMINDER_LINK, reminderStatement } from "@/lib/walk-reminder";
+import { reminderLink, reminderStatement } from "@/lib/walk-reminder";
 
 /**
  * The evening walk reminder — FUEL-46, PRD § P9, Brand Guide § Tone of Voice.
@@ -113,7 +113,7 @@ export async function WalkReminder() {
               className={`text-text-primary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
               href="/"
             >
-              {REMINDER_LINK}
+              {reminderLink(reminder.outstanding)}
             </Link>
           </p>
         </div>

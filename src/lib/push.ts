@@ -1,5 +1,5 @@
 import { type CalendarDate } from "./date";
-import { REMINDER_LINK, reminderStatement } from "./walk-reminder";
+import { reminderLink, reminderStatement } from "./walk-reminder";
 
 /**
  * What a walk notification says, and the two decisions the scheduled job makes
@@ -85,9 +85,10 @@ const TITLE = "Fuel & Form";
  * which walks are outstanding now, so both layers take the same list from the
  * same query and neither can name a different set from the other.
  *
- * `REMINDER_LINK` is already a full sentence — "Log the walk." — so it is
+ * The link text is already a full sentence — "Log the walk." — so it is
  * appended rather than wrapped in anything. On a lock screen there is no link to
- * be; the tap is the whole notification, and this is what says so.
+ * be; the tap is the whole notification, and this is what says so. It agrees in
+ * number with the sentence before it, which is `reminderLink`'s whole job.
  */
 export function walkNotification(
   outstanding: readonly string[],
@@ -95,7 +96,7 @@ export function walkNotification(
 ): WalkNotification {
   return {
     title: TITLE,
-    body: `${reminderStatement(outstanding, at)} ${REMINDER_LINK}`,
+    body: `${reminderStatement(outstanding, at)} ${reminderLink(outstanding)}`,
     url: WALK_NOTIFICATION_URL,
   };
 }

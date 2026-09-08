@@ -5,6 +5,7 @@ import {
   DEFAULT_WALK_REMINDER_AT,
   isReminderDue,
   REMINDER_LINK,
+  reminderLink,
   reminderStatement,
 } from "./walk-reminder";
 
@@ -91,6 +92,13 @@ describe("the copy", () => {
   it("uses the user's own vocabulary for the action", () => {
     // § Terminology: "Log", not "Track", "Record" or "Add".
     expect(REMINDER_LINK).toBe("Log the walk.");
+  });
+
+  it("agrees in number with the sentence in front of it", () => {
+    // FUEL-98. The verb is pinned above; this is the object agreeing with a
+    // subject that is now sometimes two walks long.
+    expect(reminderLink(["Morning Walk"])).toBe("Log the walk.");
+    expect(reminderLink(["Morning Walk", "Afternoon Walk"])).toBe("Log the walks.");
   });
 
   it("defaults to a time that is an evening", () => {

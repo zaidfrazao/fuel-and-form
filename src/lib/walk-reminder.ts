@@ -43,6 +43,13 @@ import { type TimeOfDay } from "./date";
 export const DEFAULT_WALK_REMINDER_AT: TimeOfDay = "19:00";
 
 /**
+ * The names of the walks with no row against them, in the day's own order.
+ *
+ * A list rather than a count, because the sentence NAMES them — see below.
+ */
+export type OutstandingWalks = readonly string[];
+
+/**
  * The banner's words — § Tone of Voice, and the criterion attached to this task:
  * "Copy is factual: 'Walk not logged. Reminder set for 19:00.' — no
  * encouragement."
@@ -65,11 +72,22 @@ export const DEFAULT_WALK_REMINDER_AT: TimeOfDay = "19:00";
 export const REMINDER_LINK = "Log the walk.";
 
 /**
- * The names of the walks with no row against them, in the day's own order.
+ * The link, agreeing with the sentence in front of it — FUEL-98.
  *
- * A list rather than a count, because the sentence NAMES them — see below.
+ * "Morning Walk and Afternoon Walk not logged. Log the walk." is a banner that
+ * corrects itself halfway through, and it is the kind of small wrongness that
+ * makes a reader stop trusting the rest of the sentence. There are two walks, so
+ * there are two forms.
+ *
+ * `REMINDER_LINK` stays the singular one rather than being replaced by a second
+ * literal: § Terminology is a rule about the VERB — "Log", never "Track",
+ * "Record" or "Add" — and one constant to pin that against is what its test
+ * needs. This adds the plural beside it rather than a second thing to keep in
+ * step.
  */
-export type OutstandingWalks = readonly string[];
+export function reminderLink(names: OutstandingWalks): string {
+  return names.length > 1 ? "Log the walks." : REMINDER_LINK;
+}
 
 /**
  * "Morning Walk and Afternoon Walk" — the subject of the sentence.
