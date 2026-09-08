@@ -804,6 +804,7 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
     // rolls off the same salt would tie them together — every skipped circuit
     // would come with a skipped walk, which is the opposite of how a bad
     // morning actually goes.
+
     // Which walk of the day this is, so the two get different hours below. The
     // resolver returns the day in template order, so counting as we go IS the
     // template's order — the same thing `sortOrder` configures and nothing here
