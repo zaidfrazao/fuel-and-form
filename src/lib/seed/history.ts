@@ -364,8 +364,8 @@ const ADHERENCE = {
 
 /** How long a session runs, by type: the shortest it gets, and the spread. */
 const DURATION_MIN = {
-  // Per WALK, and there are two of them — FUEL-98. PRD § Persona has "a 30–45
-  // minute walk every day", which is now the day's total rather than one
+  // Per WALK, and there are two of them — FUEL-98. PRD § Persona has "30–45
+  // minutes of walking every day", which is the day's total rather than one
   // outing's, so halving this is what keeps the demo's history describing the
   // persona it was built from instead of doubling their walking overnight.
   walk: { from: 15, spread: 11 },

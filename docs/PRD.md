@@ -31,7 +31,7 @@ Existing apps (MyFitnessPal and friends) solve a different problem: logging arbi
 > body metrics out of it; the owner's actual figures live in the database only,
 > loaded by a gitignored script (FUEL-15). Read the numbers here as illustrative.
 
-Sam Rivera. 34, 172cm, 84.2kg → 76kg target, cutting at ~0.5kg/week on ~1,780 kcal / 148g protein / 50g fat / 185g carb. Training 5 days/week at home — bodyweight circuits Mon/Wed/Fri, skipping intervals + core Tue/Thu, plus a 30–45 minute walk every day including weekends.
+Sam Rivera. 34, 172cm, 84.2kg → 76kg target, cutting at ~0.5kg/week on ~1,780 kcal / 148g protein / 50g fat / 185g carb. Training 5 days/week at home — bodyweight circuits Mon/Wed/Fri, skipping intervals + core Tue/Thu, plus 30–45 minutes of walking every day including weekends, taken as **two** walks — mid-morning and afternoon (§ P1).
 
 **Goals**
 - Get the answer to "what now?" in under three seconds, one-handed, mid-cook.
@@ -87,12 +87,16 @@ Default windows (**confirmed — Open Question 3, FUEL-21**). These are defaults
 | Lunch | 12:30 | start of the lunch break |
 | Snack 2 | 16:00 | the afternoon walk — **not yet resolvable, see below** |
 | Dinner | 18:30 | start of the evening meal |
-| Walk | any time (logged, not scheduled) | twice daily in practice |
+| Walks | any time (logged, not scheduled) | **two of them**, every day |
 
 Two of those eight rows do not resolve to a schedulable slot today, and both are deliberate:
 
 - **The two snacks share one window.** `meal_slot` has a single `snack` value, so 10:30 is the only snack time that currently resolves. Snack 2 at 16:00 is recorded here as the confirmed figure for FUEL-55, which adds the second.
-- **The walk has no window on purpose.** It is on the template every single day, so a start time would make it the active card every evening, displacing dinner on the five days that also have a real session. It is logged whenever.
+- **The walks have no window on purpose.** They are on the template every single day, so a start time would make a walk the active card twice over — over Snack 1 at 10:30, and over dinner on the five days that also have a real session. They are logged whenever.
+
+**There are two walks, and until FUEL-98 the app could only hold one.** This table said "twice daily in practice" from the day it was confirmed, and the snack rows above anchor themselves to a *mid-morning* walk and an *afternoon* one by name — but `workouts` held a single `Daily Walk` row, and `workout_logs` is unique on `(user_id, date, workout_id)`. So the afternoon walk was not refused; it **overwrote** the morning one, duration and all, and adherence, the export and the reminder then all agreed on a number that was half the truth.
+
+The fix is two rows rather than a widened key: **Morning Walk** and **Afternoon Walk**, each with its own template entry on all seven days. Two workouts on one date are two ids, which that index has always allowed. It is what makes the anchoring above mean something — the walk each snack names is now a row with that name — and it needed no schema change, which is § Gym-restart readiness' claim spent a second time. Neither walk gains a window; the displacement argument does not weaken with two, it doubles.
 
 **User Value:** Removes the recall cost that causes improvisation. This is the screen the app exists for.
 
@@ -140,7 +144,7 @@ Overrides are visually distinguished from template entries, and each is individu
 
 #### P3 — Training Log
 
-**Description:** Today's session — Circuit A, Circuit B, or skipping intervals + core — with its full exercise list and prescriptions. Mark done, partial, or skipped, with an optional free-text note (reps achieved, how it felt) and optional duration. The daily walk is a separate, always-present item logged with a single tap. Deliberately not a full workout tracker — which has narrowed rather than gone. Per-set logging is § P10's; the rest of the sentence still holds. There is no exercise search, no movement library beyond the workouts this app already has rows for, no personal-record tracking, and nothing that decides what to do next. The status, note and duration below are untouched by P10 and are not derived from anything it added.
+**Description:** Today's session — Circuit A, Circuit B, or skipping intervals + core — with its full exercise list and prescriptions. Mark done, partial, or skipped, with an optional free-text note (reps achieved, how it felt) and optional duration. The **two** daily walks are separate, always-present items, each logged with a single tap of its own (FUEL-98) — see § P1 for why there are two and what the app was doing before there were. Deliberately not a full workout tracker — which has narrowed rather than gone. Per-set logging is § P10's; the rest of the sentence still holds. There is no exercise search, no movement library beyond the workouts this app already has rows for, no personal-record tracking, and nothing that decides what to do next. The status, note and duration below are untouched by P10 and are not derived from anything it added.
 
 **The "visible without scrolling" criterion is re-aimed rather than met or dropped (FUEL-90).** As written it was one criterion about one screen, and § P10 makes `/training` two: a list you read before and after, and a surface you operate during. The whole list cannot survive what P10 adds to it — per-set entry, section headings, a form-media affordance and a rest timer are four tickets each spending the same measured window, and a warm-up, six exercises and a cool-down is eight rows and three headings under any density the Brand Guide is willing to define. So the criterion splits along the states rather than being softened: **the whole list is what is visible when you are planning; the active exercise is what is visible when you are working.** The escape clause is unchanged and still does its own work — "where the list allows" has always meant a long enough list scrolls, and a group heading spends that window exactly as a row does. What it does not license is rows drawn under the Brand Guide's 46px accessible minimum to buy the height back.
 
@@ -149,13 +153,14 @@ Circuit A/B **alternate across sessions**, not by fixed weekday — Mon=A, Wed=B
 **User Value:** Tells me what to do without opening the program document, and produces the adherence record the weekly export depends on.
 
 **Acceptance Criteria:**
-- [ ] Today's session resolves correctly per the 5-day schedule, with weekends showing walk-only
+- [ ] Today's session resolves correctly per the 5-day schedule, with weekends showing walks-only
 - [ ] Circuit A/B alternation is deterministic by date and correct after skipped sessions
 - [ ] **Planning:** the full exercise list with prescriptions (sets/reps/duration), grouped, is visible without scrolling on a 375px screen where the list allows
 - [ ] **Working:** the exercise being performed and its sets are what is visible without scrolling, on the same screen (§ P10's session state)
 - [ ] Status can be set to done / partial / skipped
 - [ ] Optional note and duration persist against that date's session
-- [ ] The daily walk is loggable in one tap, every day including weekends
+- [ ] Each of the two daily walks is loggable in one tap, and revertible from its own row, every day including weekends
+- [ ] Two walks on one date are both stored, and logging the second does not modify the first
 - [ ] Past sessions are viewable and editable by date
 
 #### P4 — Macro & Calorie Totals
@@ -240,12 +245,14 @@ Repository privacy: recipes and workout definitions ship as seed files (they're 
 
 #### P9 — Daily Walk Reminder
 
-**Description:** An evening nudge if the daily walk is unlogged. Two layers: an **in-app banner** on every screen after the reminder time (cheap, reliable, always built), and **web push** via a scheduled job for a notification when the app is closed (fits on iOS only as an installed PWA, and is historically unreliable there).
+**Description:** An evening nudge if a daily walk is unlogged. Two layers: an **in-app banner** on every screen after the reminder time (cheap, reliable, always built), and **web push** via a scheduled job for a notification when the app is closed (fits on iOS only as an installed PWA, and is historically unreliable there).
+
+**One reminder for two walks, and it names whichever are outstanding (FUEL-98).** Still one configurable time, one banner and one notification a day — two reminder times would be the shape most likely to breach the cap below. What changed is the question: "is the walk logged" became "is EVERY walk logged", because the first reading let a morning walk logged at 10:30 buy silence for the evening about an afternoon walk nobody took. And the sentence names them — "Morning Walk not logged. Reminder set for 19:00." — because with one of two done, a banner that says nothing is logged is contradicting the record it is reporting on.
 
 Walk *logging* is part of P3 and ships regardless. This item is only the reminder. **This is the first feature to cut if the weekend runs short** — the in-app banner alone satisfies most of the value.
 
 **Acceptance Criteria:**
-- [ ] In-app banner appears after the configured reminder time when the walk is unlogged, and dismisses on log
+- [ ] In-app banner appears after the configured reminder time while ANY walk is unlogged, names which, and dismisses when the last one is logged
 - [ ] Reminder time is configurable; the reminder can be disabled entirely
 - [ ] Web push: subscribe from settings, delivered by a scheduled job, one notification per day maximum
 - [ ] Push failure degrades silently to the banner — no errors surfaced to the user
@@ -365,6 +372,9 @@ meal_logs                      -- what was actually eaten
 workouts                       -- the workout library
   id, user_id, name, type ('circuit'|'intervals'|'walk'), description,
   rotation_group (e.g. 'bodyweight-circuit'), rotation_index (0 = A, 1 = B)
+  -- TWO rows carry type 'walk' since FUEL-98: Morning Walk and Afternoon
+  -- Walk. They are two rows and not one logged twice because `workout_logs`
+  -- is unique on (user_id, date, workout_id) — see § P1.
 
 workout_exercises
   id, workout_id, name, prescription ('3 x 12', '30s on / 30s off'),
@@ -379,6 +389,9 @@ training_template_entries
 workout_logs
   id, user_id, date, workout_id, status ('done'|'partial'|'skipped'),
   note, duration_min, logged_at
+  -- unique (user_id, date, workout_id). One row per workout per date, which
+  -- is what makes a correction an update — and what made a second walk on
+  -- one date an overwrite until there were two walk rows to key it by.
 
 exercise_sets                  -- one row per set performed, keyed to the log
   id, user_id, workout_log_id, exercise_id, set_index, reps,
@@ -481,7 +494,7 @@ None. No third-party APIs, no wearables, no health platforms. The only external 
 To resolve before or during the build — none of these block starting.
 
 1. ~~**Full recipe data**~~ — **Resolved (FUEL-14).** All ten rotation meals are seeded in `src/lib/seed/meals.ts`, with seven treat recipes alongside them. Two caveats remain: the three oats flavours, both snacks and all seven treats have **estimated** macros derived from their ingredient lists rather than supplied figures (each row is flagged `ESTIMATED` in its notes), and the ciabatta's stated 540 kcal disagrees with its own macros by 12.6%.
-2. ~~**Exact exercise lists**~~ — **Resolved (FUEL-14).** Circuit A, Circuit B, skipping intervals + core, and the daily walk are seeded in `src/lib/seed/workouts.ts` with full prescriptions, and the A/B alternation is pinned by test.
+2. ~~**Exact exercise lists**~~ — **Resolved (FUEL-14).** Circuit A, Circuit B, skipping intervals + core, and the daily walk are seeded in `src/lib/seed/workouts.ts` with full prescriptions, and the A/B alternation is pinned by test. The walk became two — Morning and Afternoon — in FUEL-98, which is a row each and no change to the prescriptions.
 3. ~~**Slot times**~~ — **Resolved (FUEL-21).** The table in § P1 above now holds the confirmed routine, and the times are editable in settings. Two corrections came out of confirming it: the workout moves from 17:30 to **06:30**, because 17:30 fell inside a work block and the session actually happens in the morning routine between the coffee and breakfast; and lunch, dinner and breakfast shift to 12:30, 18:30 and 07:30. Snacks are **fixed, not opportunistic** — they are anchored to the two daily walks, at 10:30 and 16:00.
 4. **Weekend meals** — should "fried eggs + bangers" and the flexible lunch/dinner be real library entries with macros, or a "flexible / untracked" placeholder slot?
 5. **Template weekday assignment** — which specific dinner and which oats flavour land on which weekday, so the template seeds correctly.
@@ -491,7 +504,8 @@ To resolve before or during the build — none of these block starting.
 ## Document History
 
 - **Created:** 2026-08-10
-- **Last Updated:** 2026-09-02 — `workout_exercises.section` built (FUEL-92), so § Data Model's listing carries it unmarked and § Gym-restart readiness states what it cost. One additive column with a default: no backfill, no existing constraint changed, and every session stored before it renders identically. The claim it is held against is narrower than it looks — "no schema migration" rules out a migration to add a new training SHAPE, and a section is not one — so the paragraph now says plainly that the column is a migration and that its CHECK makes a future 'finisher' one too. Cheaper than `ALTER TYPE`, and not free. The seed's warm-up and cool-down become rows on the way, which fixes something neither document had noticed: they were markdown in `workouts.description`, and nothing in the app renders that column, so the warm-up the program calls non-negotiable was invisible.
+- **Last Updated:** 2026-09-08 — the second daily walk built (FUEL-98). This document has said "twice daily in practice" since FUEL-21 confirmed the routine, and § P1's snack rows anchor themselves to a mid-morning walk and an afternoon one by name — while the app held one `workouts` row and a unique index that made the second walk overwrite the first rather than join it. So this is a defect against the document, not a feature added to it, and what moves is the description of a thing already stated: § P1 says there are two and why they are two rows rather than a widened key, § P3 gives each its own one-tap criterion and adds the storage claim whose absence let the defect live, § P9 records that one reminder now asks whether EVERY walk is logged and names the ones that are not, and § Data Model carries the two rows and the index that motivated them. No schema migration — the walks arrive as rows, which is § Gym-restart readiness' claim spent again.
+- **Previously:** 2026-09-02 — `workout_exercises.section` built (FUEL-92), so § Data Model's listing carries it unmarked and § Gym-restart readiness states what it cost. One additive column with a default: no backfill, no existing constraint changed, and every session stored before it renders identically. The claim it is held against is narrower than it looks — "no schema migration" rules out a migration to add a new training SHAPE, and a section is not one — so the paragraph now says plainly that the column is a migration and that its CHECK makes a future 'finisher' one too. Cheaper than `ALTER TYPE`, and not free. The seed's warm-up and cool-down become rows on the way, which fixes something neither document had noticed: they were markdown in `workouts.description`, and nothing in the app renders that column, so the warm-up the program calls non-negotiable was invisible.
 - **Previously:** 2026-09-01 — § P3's "visible without scrolling" criterion re-aimed along the two states of `/training`, and § P10 given the state its five additions arrive on (FUEL-90). The criterion was one line about one screen, and § P10 makes that screen two: per-set entry, section headings, a form affordance and a rest timer are four tickets spending one measured window, and a warm-up, six exercises and a cool-down does not fit it under any density the Brand Guide will define. So it splits — the whole list when you are planning, the active exercise when you are working — rather than being softened or quietly dropped. Its "where the list allows" clause is unchanged and still does its own work. The Brand Guide carries the composition, the group heading and the sub-list; nothing about the session's own record, the three-way status or the non-goals moves.
 - **Previously:** 2026-09-01 — the per-set non-goal reversed and § P10 written (FUEL-89), because every ticket in that milestone built something this document ruled out by name. § Non-Goals now rules out a progression engine instead; § P3's "not a full workout tracker" is narrowed rather than withdrawn; § Gym-restart readiness' conditional is spent; and § Data Model is reconciled with `schema.ts` — it counted nine tables, enumerated twelve, and had never listed P8's check state or P9's push subscriptions.
 - **Updated:** 2026-08-18 — slot-time defaults confirmed and corrected, and P1's § Slot times table rewritten (FUEL-21); Open Question 3 resolved.

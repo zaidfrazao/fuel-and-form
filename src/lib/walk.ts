@@ -170,7 +170,7 @@ export function walkEntries(
 /**
  * The durations the row offers, in minutes.
  *
- * PRD § Persona has "a 30–45 minute walk every day including weekends", and
+ * PRD § Persona has "30–45 minutes of walking every day including weekends", and
  * since FUEL-98 that is the DAY's figure across two walks rather than one
  * outing's: 15 and 20 are what each of them ordinarily is, and 30 is there for
  * the walk that took the whole day's allowance because the other one did not
