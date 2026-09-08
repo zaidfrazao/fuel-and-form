@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { todayIn } from "@/lib/date";
@@ -467,6 +467,59 @@ describe.skipIf(!configured)("provisioning a demo account", () => {
 
         expect(counted).toBe(route.pointCount);
       }
+    });
+
+    it("refuses a coordinate stored at more than five decimal places", async () => {
+      // The constraint asked to REFUSE, rather than trusted because inserts
+      // that satisfy it keep succeeding. `storableRoute` is the only writer
+      // today, so every row already passes; the question this answers is what
+      // happens when FUEL-101's browser recorder hands over what a device
+      // actually reports, which is seven decimals.
+      //
+      // Updated rather than inserted, so the unique index and the foreign key
+      // are not what refuses it — the precision check has to be the thing that
+      // fires, and an insert would have two other reasons to fail.
+      const userId = await provisioned();
+      const owned = scope(userId, getDb());
+
+      const [route] = await owned.select(schema.walkRoutes);
+      expect(route).toBeDefined();
+      if (route === undefined) return;
+
+      // DERIVED from a stored point, not written down. A coordinate literal
+      // here would be caught by `check-no-metrics.sh` like any other — the rule
+      // is "no coordinate reaches a seed, a fixture, a TEST or the repository",
+      // and it caught this line when it was first written as one. Adding a
+      // ten-millionth of a degree is what a device actually reports: a seventh
+      // decimal on an otherwise legitimate position.
+      const [first] = route.points.at(0) ?? [];
+      if (first === undefined) throw new Error("expected a point in the trace");
+
+      const overPrecise = [[{ lat: first.lat + 1e-7, lng: first.lng + 1e-7, t: 0 }]];
+
+      await expect(
+        owned.update(schema.walkRoutes, { points: overPrecise }, eq(schema.walkRoutes.id, route.id)),
+      ).rejects.toThrow();
+
+      // And the row is untouched — the statement was refused, not partly
+      // applied, which is what makes the constraint a guarantee rather than a
+      // warning.
+      const [after] = await owned.select(schema.walkRoutes);
+      expect(after?.points).toEqual(route.points);
+    });
+
+    it("refuses an empty trace", async () => {
+      // The other thing a careless writer produces. `point_count` would then
+      // disagree with the points it counts.
+      const userId = await provisioned();
+      const owned = scope(userId, getDb());
+
+      const [route] = await owned.select(schema.walkRoutes);
+      if (route === undefined) throw new Error("expected a demo route");
+
+      await expect(
+        owned.update(schema.walkRoutes, { points: [] }, eq(schema.walkRoutes.id, route.id)),
+      ).rejects.toThrow();
     });
 
     it("still provisions when the generator returns nothing at all", async () => {

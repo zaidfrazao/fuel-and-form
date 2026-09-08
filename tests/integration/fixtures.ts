@@ -3,6 +3,7 @@ import { getPool } from "@/lib/db/pool";
 import { scope } from "@/lib/db/scope";
 import * as schema from "@/lib/db/schema";
 import type { UserKind } from "@/lib/db/schema";
+import { reducePrecision } from "@/lib/route";
 
 /**
  * Two users, each owning a row in every user-owned table.
@@ -230,9 +231,18 @@ async function seedUser(
   // also gives each fixture user a trace that could not be another's under any
   // reading. The values are a few thousandths of a degree from null island:
   // nowhere anybody walks, and nowhere the owner has been.
+  //
+  // Run through `reducePrecision` rather than trusting the arithmetic above to
+  // land on five decimals. It does not: `0.006 + 0.0005` is 0.006500000000000001
+  // in binary floating point, which serialises to seventeen decimal places and
+  // is refused by `walk_routes_points_precision` — as it should be. The
+  // constraint caught this fixture on the first run after it was added, which
+  // is the check earning itself before a second writer even exists.
   const trace = Array.from({ length: 3 }, (_value, index) => ({
-    lat: options.name.length / 500 + index / 2_000,
-    lng: options.name.length / 800,
+    ...reducePrecision({
+      lat: options.name.length / 500 + index / 2_000,
+      lng: options.name.length / 800,
+    }),
     t: index * 60,
   }));
 

@@ -28,7 +28,7 @@ import { MEDIA_KINDS } from "../form-media";
 // anything this file drags in, and `MAX_ROUTE_POINTS` is imported rather than
 // re-spelled so the CHECK below and the simplifier cannot disagree about what
 // the cap is.
-import { MAX_ROUTE_POINTS, type Track } from "../route";
+import { COORD_DECIMALS, MAX_ROUTE_POINTS, type Track } from "../route";
 import { SECTIONS, WORKING_SECTION } from "../section";
 
 /**
@@ -1375,6 +1375,57 @@ export const walkRoutes = pgTable(
     check(
       "walk_routes_tolerance_positive",
       sql`"simplified_tolerance_m" is null or "simplified_tolerance_m" > 0`,
+    ),
+
+    /*
+     * The precision rule, enforced by the DATABASE and not only by the module
+     * that applies it.
+     *
+     * ## Why this rule gets a constraint when the trim and the cap do not
+     *
+     * `storableRoute` is the single entry point today and the demo seed is the
+     * only writer, so every rule in `route.ts` holds by discipline. FUEL-101
+     * adds the second writer — a browser recorder, taking positions from a
+     * device that reports seven decimals — and discipline is what a second
+     * writer is most likely to miss.
+     *
+     * Of the three rules only this one can be checked from a row alone.
+     * Whether a trace was trimmed by 150 metres, or thinned at a two-metre
+     * tolerance, cannot be recovered from what was stored; whether a coordinate
+     * carries a sixth decimal is visible in the value itself. So the
+     * enforceable rule is enforced and the other two are left to the entry
+     * point, rather than pretending all three have the same standing.
+     *
+     * It is also the rule whose breach cannot be undone. A trace stored at
+     * seven decimals and truncated afterwards was still stored at seven
+     * decimals — it was in the database, in a backup, in a replica.
+     *
+     * ## Declarative, and no function to drift
+     *
+     * `jsonb_path_exists` rather than a plpgsql predicate walking the array: a
+     * CHECK calling a user-defined function is a constraint whose meaning can
+     * be edited out from under it without revalidation, which is worse than no
+     * constraint. The cost is bounded by the cap above — at most five hundred
+     * points, scanned once per insert, on a table written twice a day.
+     *
+     * The test is exact rather than epsilon-based because `jsonb` holds numbers
+     * as `numeric`, so scaling by a power of ten and flooring is exact
+     * arithmetic here in a way it would not be in double precision. Verified
+     * against real Postgres before being written down: it accepts five
+     * decimals, trailing zeros and whole degrees, and rejects a sixth decimal
+     * anywhere in any segment, including a negative one.
+     *
+     * The shape test rides along because an empty array is the other thing a
+     * careless writer produces, and `point_count` above would then disagree
+     * with the points it counts.
+     */
+    check(
+      "walk_routes_points_precision",
+      sql.raw(
+        `jsonb_typeof("points") = 'array' and jsonb_array_length("points") > 0 ` +
+          `and not jsonb_path_exists("points", '$[*][*].lat ? (@ * ${10 ** COORD_DECIMALS} != (@ * ${10 ** COORD_DECIMALS}).floor())') ` +
+          `and not jsonb_path_exists("points", '$[*][*].lng ? (@ * ${10 ** COORD_DECIMALS} != (@ * ${10 ** COORD_DECIMALS}).floor())')`,
+      ),
     ),
   ],
 );

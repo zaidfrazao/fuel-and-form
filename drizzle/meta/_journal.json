@@ -92,6 +92,13 @@
       "when": 1788879831308,
       "tag": "0012_wakeful_terrax",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788888436817,
+      "tag": "0013_rich_maximus",
+      "breakpoints": true
     }
   ]
 }
