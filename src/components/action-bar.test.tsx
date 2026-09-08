@@ -261,5 +261,22 @@ describe("the scroll edge", () => {
       // between the two strings is exactly the release.
       expect(SESSION_ACTION_BAR).toContain(ACTION_BAR);
     });
+
+    test("stops reading the shell's height where there is no shell", () => {
+      // FUEL-106. Removing `lg:static` kept the pinning and inherited the
+      // OFFSET with it — and § Desktop scopes that offset in the same sentence
+      // that grants the exception: "`--nav-shell-h` is a below-1024px
+      // measurement and stays one... it is pinned above 1024px to the bottom of
+      // the viewport, not to a shell height". The variable is 86px at every
+      // width and is never overridden, so without this the bar floated a
+      // shell's worth of nothing above the foot of the viewport at 1100.
+      expect(SESSION_ACTION_BAR).toContain("lg:bottom-0");
+      // The shared string keeps the shell's offset, because below `lg` the
+      // shell is there and FUEL-65 is why the bar clears it.
+      expect(ACTION_BAR).toContain("bottom-[var(--nav-shell-h)]");
+      // The other three are unaffected only because `lg:static` makes an inset
+      // inert, which is why this utility belongs on this string and not shared.
+      expect(APP_ACTION_BAR).not.toContain("lg:bottom-0");
+    });
   });
 });

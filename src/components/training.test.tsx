@@ -5,7 +5,12 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { Week } from "@/components/dot-grid";
 import { APP_ACTION_BAR, SESSION_ACTION_BAR } from "@/components/action-bar";
 import type { TrainingItem } from "@/components/training";
-import { PAGE_ASIDE_COLUMN, PAGE_MEASURE_COLUMN, PAGE_MEASURE_FOOT } from "@/lib/frame";
+import {
+  PAGE_ASIDE_COLUMN,
+  PAGE_MEASURE_COLUMN,
+  PAGE_MEASURE_FOOT,
+  PAGE_SESSION_FOOT,
+} from "@/lib/frame";
 import { WORKING_SECTION } from "@/lib/section";
 
 /**
@@ -1052,13 +1057,22 @@ describe("entering and leaving the session state", () => {
     // is not `APP_ACTION_BAR`: a rest timer rides in this slot (FUEL-93) and a
     // live readout that scrolls out of sight has failed at its only job at 1920
     // exactly as at 375. Identity, so the string cannot quietly gain `lg:static`.
+    //
+    // The placement is the state's own too, since FUEL-106: `PAGE_SESSION_FOOT`
+    // spans the frame's content rows and aligns to their foot, which is where a
+    // `bottom` offset can reach the bar from. `PAGE_MEASURE_FOOT` — row three,
+    // aligned to its top — is what left the exception declared and inert above
+    // 1272. What that placement DOES is invisible here, jsdom applying no
+    // stylesheet; `tests/visual/session-bar.spec.ts` measures it in a browser
+    // and this holds the two strings apart.
     resumed();
     render(view());
 
     const bar = screen.getByRole("button", { name: "Mark done" }).closest(".action-bar-fade");
 
-    expect(bar?.className).toBe(`${SESSION_ACTION_BAR} ${PAGE_MEASURE_FOOT}`);
+    expect(bar?.className).toBe(`${SESSION_ACTION_BAR} ${PAGE_SESSION_FOOT}`);
     expect(bar?.className).not.toContain("lg:static");
+    expect(bar?.className).not.toContain(PAGE_MEASURE_FOOT);
   });
 
   test("does not offer Clear from inside a session", () => {

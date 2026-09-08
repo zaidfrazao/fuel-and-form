@@ -393,6 +393,72 @@ export const PAGE_ASIDE_COLUMN = `${PAGE_COLUMN_BASE} xl:col-start-2 xl:row-star
  */
 export const PAGE_MEASURE_FOOT = "xl:col-start-1 xl:row-start-3 xl:mt-0 xl:self-start";
 
+/**
+ * The same bar, in the one state that stays pinned — `/training`'s session
+ * state, FUEL-106.
+ *
+ * ## What was wrong with placing it in row three
+ *
+ * § Desktop gives this bar one exception to FUEL-72's release: it "stays sticky
+ * at every width", because it carries a running rest timer and "a live readout
+ * that scrolls out of sight has failed at its only job at 1920 exactly as at
+ * 375". `SESSION_ACTION_BAR` said so — it is `ACTION_BAR` without `lg:static`,
+ * so `position: sticky` survived — and above 1272 the bar scrolled away anyway.
+ *
+ * The reason is two facts meeting. A grid item's containing block is its own
+ * grid AREA, and a sticky box is clamped to its containing block; and a sticky
+ * box with a `bottom` offset is only ever shifted UP, to keep a box that would
+ * fall below the line from doing so. In row three the bar's area is the bar,
+ * so there was nothing to clamp and nothing to shift: `sticky` resolved, and
+ * did nothing, at every width above the cap. Measured before the fix at
+ * 1440×900 — the gap under the bar read 261, 411, 561, 711 as the page scrolled
+ * in steps of 150, which is a box moving with the page and not against it.
+ *
+ * ## Why the row SPAN is the fix, and why `self-end` comes with it
+ *
+ * Both facts have to be answered, and one utility does not do it:
+ *
+ *   - `row-end-4` spans the item across rows two and three, so the containing
+ *     block is the content of the measure plus whatever the aside pushes into
+ *     the flexible row — tall enough for the bar to travel through.
+ *   - `self-end` puts its resting place at the FOOT of that span, which at this
+ *     width is the foot of the page. That is what makes the offset reachable:
+ *     from there the bar is always the box that would fall below the line, so
+ *     it is pulled up to the viewport and held there for the whole scroll. With
+ *     `self-start` it would rest at the top of the span, above the line,
+ *     already visible and therefore never shifted — which is the fault again,
+ *     drawn 800px higher.
+ *
+ * It is the same resting place `mt-auto` gives the bar below this breakpoint —
+ * the end of the scrollable column — so the two regimes agree rather than each
+ * having their own rule. `xl:mt-0` stays for FUEL-86's reason, unchanged: an
+ * auto margin outranks `align-self` entirely, so the alignment has to be the
+ * only thing declaring the alignment.
+ *
+ * ## `self-end` and not `self-start`, and what that costs
+ *
+ * The bar's box is still its own height, which is the whole of what
+ * `xl:self-start` was protecting — `action-bar.spec.ts` and `page-columns.spec.ts`
+ * measure this box, and a stretched one makes their numbers mean something
+ * else. `end` and `start` are both alignments; neither stretches. Measured at
+ * 1272×900 and 1272×1600 after the fix: 151px in both.
+ *
+ * **What it does depend on is the aside being the taller column here**, which
+ * in this state it always is — the measure holds one exercise and its sets
+ * while the aside holds the whole session, the adherence grid and the recent
+ * list (563px against a 1413px page at 1272). If that ever inverted, row three
+ * would collapse and an item aligned to the end of rows two and three would
+ * draw over the foot of the measure. `session-bar.spec.ts` asserts the bar
+ * clears the measure's last section rather than leaving that to be noticed.
+ *
+ * `PAGE_MEASURE_FOOT` above is untouched and still carries the other three
+ * bars: `/`'s, this screen's plan state, and the skeleton. § Desktop's release
+ * is the rule and this is the exception to it, so the exception is the string
+ * that says something different.
+ */
+export const PAGE_SESSION_FOOT =
+  "xl:col-start-1 xl:row-start-2 xl:row-end-4 xl:mt-0 xl:self-end";
+
 /* -------------------------------------------------------------------------- */
 /* A screen with no aside, whose content is wider than its prose — FUEL-78     */
 /* -------------------------------------------------------------------------- */
