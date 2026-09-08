@@ -302,14 +302,36 @@ is_allowed() {
 #                    case above, and a lone coordinate stored on its own, which
 #                    the pair form cannot see at all.
 #
-# Two details, both found by TESTING the patterns against candidate strings
-# rather than by reasoning about them, which is the only way either would have
-# been noticed:
+# Four details, every one of them found by TESTING the patterns against
+# candidate strings rather than by reasoning about them. Three of the four were
+# holes that a green scan was hiding, which is the argument for testing a check
+# the same way you would test the code it guards:
 #
-#   The name is anchored to a non-word character, so `translate: 1.2345` does
-#   not match on the `lat` inside it. Checked against translate, translateX,
-#   oscillate, plateau, correlation and relate — the plausible false positives
-#   in a codebase with CSS and statistics in it. None matches.
+#   The name is anchored so `translate: 1.2345` does not match on the `lat`
+#   inside it — WITHOUT that anchor also excluding the way a coordinate is
+#   actually named in code. Those two pull against each other, and the first
+#   draft got it wrong in the direction that fails open. A lowercase `lat` needs
+#   a non-alphanumeric before it; an uppercase `L` may follow a lowercase letter
+#   or a digit, which is camelCase. So `startLat` and `gps_lat` are both caught
+#   and `translate` is not, because the `lat` inside it is lowercase and
+#   preceded by a letter.
+#
+#   That hole was the serious one. Anchoring only on non-alphanumerics missed
+#   every camelCase and snake_case spelling — which is precisely how a browser
+#   recorder names these variables, and FUEL-101 is a browser recorder. A scan
+#   that cannot see `const startLat = ...` would have reported CLEAN over the
+#   exact leak it exists to catch. Checked against translate, translateX,
+#   oscillate, plateau, correlation and relate: none matches.
+#
+#   Whitespace is `[[:space:]]`, not a literal space, so a tab between a field
+#   name and its value does not walk past. grep is line-oriented, so a value on
+#   its own line is beyond any pattern here — a limit of the mechanism rather
+#   than of these two, and worth knowing rather than assuming otherwise.
+#
+#   The pair form allows THREE digits before the point on both sides, not two.
+#   GeoJSON orders a position as [longitude, latitude], so the FIRST number is
+#   the one that reaches 180 — a two-digit first component missed every
+#   lng-first pair outside a narrow band of the globe.
 #
 #   A quote is permitted on BOTH sides of the separator. The first draft allowed
 #   one only before the colon, for a JSON key, and therefore missed every quoted
@@ -488,8 +510,8 @@ readonly PATTERN_REGEX=(
   '(^|[^0-9A-Za-z.])[12][0-9]{2}[ ]?g[ ]?protein'
   '(^|[^0-9A-Za-z.])[12][0-9]{2}[ ]?g[ ]?carb'
   '(^|[^0-9A-Za-z.])[2-9][0-9][ ]?g[ ]?fat'
-  '(^|[^0-9A-Za-z.])-?[0-9]{1,2}\.[0-9]{4,}["'"'"']?[ ]*,[ ]*["'"'"']?-?[0-9]{1,3}\.[0-9]{4,}'
-  '(^|[^0-9A-Za-z_])[Ll](at|ng|on)[A-Za-z]*["'"'"']?[ ]*[:=][ ]*["'"'"']?-?[0-9]{1,3}\.[0-9]{4,}'
+  '(^|[^0-9A-Za-z.])-?[0-9]{1,3}\.[0-9]{4,}["'"'"']?[[:space:]]*,[[:space:]]*["'"'"']?-?[0-9]{1,3}\.[0-9]{4,}'
+  '((^|[^0-9A-Za-z])[Ll]|[a-z0-9]L)(at|ng|on)[A-Za-z]*["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?-?[0-9]{1,3}\.[0-9]{4,}'
 )
 
 readonly PATTERN_ALLOW=(
