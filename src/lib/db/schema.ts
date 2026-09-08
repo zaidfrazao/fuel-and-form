@@ -1214,11 +1214,37 @@ export const exerciseSets = pgTable(
  * here than anywhere else in the schema: the row on the other end of a leaked
  * reference is a home address.
  *
- * `on delete no action`, as with every other history table. A log is history
- * and history is what the export exists to preserve. The demo reaper's
- * `delete from users` still cascades cleanly through this row's own `user_id`,
- * which is why `no action` rather than `restrict` — `ownedReference` gives the
- * end-of-statement timing argument in full.
+ * ## The log reference CASCADES, and the ticket asked for `no action`
+ *
+ * Recorded because it is a deliberate departure. FUEL-100 specified `no action`
+ * "as with every other history table", reasoning that the demo reaper's
+ * `delete from users` would still reach these rows "through each row's own
+ * `user_id`". That is true of `weight_logs` and `meal_logs`, which take
+ * `ownerId()` and therefore carry their own cascading reference to `users`. It
+ * is NOT true here: `user_id` is a plain column, pinned by the composite key
+ * above and cascaded through it, exactly as `exercise_sets` does. So `no
+ * action` on the only foreign key this table has would leave it reachable by no
+ * delete at all — the reaper's `delete from users` cascades into `workout_logs`
+ * and is then refused by this constraint, taking the whole statement with it.
+ *
+ * That is not a theory. Built that way first, it failed six integration files:
+ * *"update or delete on table workout_logs violates foreign key constraint
+ * walk_routes_log_fk"* — the reaper, `clearSession`, and every test that
+ * deletes a user.
+ *
+ * The right comparison is the one `exercise_sets` already makes, because the
+ * relationship is the same one: a route whose log is gone has no date, no
+ * workout and nothing to hang off, so "a session's record taken back takes its
+ * sets with it" reads identically for its trace. `clearSession` performs it
+ * deliberately, from a control that lives in the plan state, and a walk whose
+ * record was taken back keeping its shape on disk would be the opposite of what
+ * that control appears to do — a privacy surprise in the one table where a
+ * surprise is a home address.
+ *
+ * The history argument the ticket was reaching for still holds, and it is the
+ * `no action` on `ownedReference`'s LIBRARY references: retiring a walk from
+ * the workout library must not erase the record of having walked it. Nothing
+ * about that is weakened here, because this table names no library row.
  *
  * A route is NOT in the weekly export and is not in the full one either. PRD
  * § P11: the export is a file that gets emailed. `export.test.ts` names this
@@ -1309,7 +1335,7 @@ export const walkRoutes = pgTable(
       name: "walk_routes_log_fk",
       columns: [t.workoutLogId, t.userId],
       foreignColumns: [workoutLogs.id, workoutLogs.userId],
-    }).onDelete("no action"),
+    }).onDelete("cascade"),
 
     /**
      * One trace per walk, and the arbiter a re-save collides on.

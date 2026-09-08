@@ -92,6 +92,7 @@ vi.mock("@/lib/seed/history", async (importOriginal) => {
             mealLogs: [],
             workoutLogs: [],
             exerciseSets: [],
+            walkRoutes: [],
           }
         : actual.demoHistory(input),
   };
