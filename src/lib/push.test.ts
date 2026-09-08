@@ -30,13 +30,29 @@ import { REMINDER_LINK, reminderStatement } from "./walk-reminder";
  *     over a network.
  */
 
+/**
+ * The walks a day holds, both outstanding — the state the evening job is for.
+ *
+ * Named here rather than inline so the composition assertion below is composing
+ * the same list the sentence is, which is the drift it exists to catch.
+ */
+const OUTSTANDING = ["Morning Walk", "Afternoon Walk"];
+
 describe("the notification", () => {
+  it("names only the walk still outstanding", () => {
+    // FUEL-98. The banner and the notification take the same list from the same
+    // query, so a phone cannot buzz about a walk the screen says is done.
+    expect(walkNotification(["Afternoon Walk"], "19:00").body).toBe(
+      "Afternoon Walk not logged. Reminder set for 19:00. Log the walk.",
+    );
+  });
+
   it("says what the banner says", () => {
     // Not a copy of the sentence written out again here — that would pass
     // whatever the banner said, which is the exact drift this asserts against.
     // It is the banner's own two strings, composed.
-    expect(walkNotification("19:00").body).toBe(
-      `${reminderStatement("19:00")} ${REMINDER_LINK}`,
+    expect(walkNotification(OUTSTANDING, "19:00").body).toBe(
+      `${reminderStatement(OUTSTANDING, "19:00")} ${REMINDER_LINK}`,
     );
   });
 
@@ -45,8 +61,8 @@ describe("the notification", () => {
     // what actually arrives on a phone without assembling it from two modules.
     // Both assertions are needed: this one would survive `reminderStatement`
     // being inlined, and that one would survive the whole sentence changing.
-    expect(walkNotification("19:00").body).toBe(
-      "Walk not logged. Reminder set for 19:00. Log the walk.",
+    expect(walkNotification(OUTSTANDING, "19:00").body).toBe(
+      "Morning Walk and Afternoon Walk not logged. Reminder set for 19:00. Log the walk.",
     );
   });
 
@@ -54,14 +70,14 @@ describe("the notification", () => {
     // The banner's criterion, inherited. A notification with 19:00 baked in
     // would be wrong for everyone who moved the setting, and wrong in the one
     // place there is no surrounding screen to correct it.
-    expect(walkNotification("06:30").body).toContain("06:30");
+    expect(walkNotification(OUTSTANDING, "06:30").body).toContain("06:30");
   });
 
   it("carries no encouragement", () => {
     // § Tone of Voice, and the same guard the banner keeps. Asserted on the
     // whole notification rather than the body, because the title is the other
     // half a lock screen shows and it is just as editable.
-    const { title, body } = walkNotification("19:00");
+    const { title, body } = walkNotification(OUTSTANDING, "19:00");
 
     expect(`${title} ${body}`).not.toMatch(/!/);
   });
@@ -70,7 +86,7 @@ describe("the notification", () => {
     // A banner sits inside the app and needs no attribution. A notification
     // arrives on a lock screen beside a dozen others, and one that named
     // neither the app nor the subject is one nobody can act on.
-    expect(walkNotification("19:00").title).toBe("Fuel & Form");
+    expect(walkNotification(OUTSTANDING, "19:00").title).toBe("Fuel & Form");
   });
 
   it("deep-links to the screen the banner links to", () => {
@@ -78,7 +94,7 @@ describe("the notification", () => {
     // because the constant alone would follow the value wherever it was
     // changed to — and `walk-reminder.tsx` argues at length that `/` is the
     // screen the walk's row was designed into.
-    expect(walkNotification("19:00").url).toBe(WALK_NOTIFICATION_URL);
+    expect(walkNotification(OUTSTANDING, "19:00").url).toBe(WALK_NOTIFICATION_URL);
     expect(WALK_NOTIFICATION_URL).toBe("/");
   });
 });

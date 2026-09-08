@@ -125,13 +125,30 @@ describe("training template", () => {
     }
   });
 
-  it("schedules the walk every day, including weekends", () => {
-    const walkDays = seedTrainingTemplate
-      .filter((entry) => entry.workoutKey === "daily-walk")
-      .map((entry) => entry.dayOfWeek)
-      .sort();
+  it("schedules BOTH walks every day, including weekends", () => {
+    // FUEL-98, PRD § P1's "twice daily in practice". Asserted per walk rather
+    // than by counting fourteen entries: a count would pass a template that put
+    // the morning walk on all seven days twice.
+    for (const key of ["morning-walk", "afternoon-walk"]) {
+      const walkDays = seedTrainingTemplate
+        .filter((entry) => entry.workoutKey === key)
+        .map((entry) => entry.dayOfWeek)
+        .sort();
 
-    expect(walkDays).toEqual(ALL_DAYS);
+      expect(walkDays, key).toEqual(ALL_DAYS);
+    }
+  });
+
+  it("gives the two walks their own workouts, not one logged twice", () => {
+    // The defect FUEL-98 fixed, asserted at the place it was introduced.
+    // `workout_logs` is unique on (user_id, date, workout_id), so two entries
+    // naming ONE workout are two taps writing one row — the afternoon walk
+    // overwriting the morning one's duration with no error anywhere.
+    const walkKeys = seedTrainingTemplate
+      .filter((entry) => entry.dayOfWeek === 0 && entry.workoutKey?.endsWith("-walk"))
+      .map((entry) => entry.workoutKey);
+
+    expect(new Set(walkKeys).size).toBe(walkKeys.length);
   });
 
   it("puts the circuits on Mon/Wed/Fri and the cardio on Tue/Thu", () => {
@@ -160,13 +177,18 @@ describe("training template", () => {
     for (const entry of circuitEntries) expect(entry.workoutKey).toBeUndefined();
   });
 
-  it("sorts the walk after the session on days that have one", () => {
+  it("sorts the walks after the session on days that have one, and in order", () => {
     for (const day of [1, 2, 3, 4, 5]) {
       const entries = seedTrainingTemplate.filter((e) => e.dayOfWeek === day);
-      const walk = entries.find((e) => e.workoutKey === "daily-walk");
-      const session = entries.find((e) => e.workoutKey !== "daily-walk");
+      const session = entries.find((e) => !e.workoutKey?.endsWith("-walk"));
+      const morning = entries.find((e) => e.workoutKey === "morning-walk");
+      const afternoon = entries.find((e) => e.workoutKey === "afternoon-walk");
 
-      expect(walk?.sortOrder, `day ${day}`).toBeGreaterThan(session?.sortOrder ?? 0);
+      expect(morning?.sortOrder, `day ${day}`).toBeGreaterThan(session?.sortOrder ?? 0);
+      // The morning walk before the afternoon one, which is the order every
+      // reader takes as the template's: the screens' rows, the export's
+      // sessions and the reminder's sentence.
+      expect(afternoon?.sortOrder, `day ${day}`).toBeGreaterThan(morning?.sortOrder ?? 0);
     }
   });
 });

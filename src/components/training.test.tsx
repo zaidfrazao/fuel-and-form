@@ -109,7 +109,25 @@ const CIRCUIT: TrainingItem = {
 
 const WALK: TrainingItem = {
   entryId: "entry-walk",
-  name: "Daily Walk",
+  name: "Morning Walk",
+  type: "walk",
+  kind: "walk",
+  exercises: [],
+  entry: null,
+  sets: [],
+};
+
+/**
+ * The day's second walk — FUEL-98.
+ *
+ * Most of this file runs with ONE walk on the day, and deliberately: a template
+ * with a single walk is what every account looked like before this ticket and
+ * what one still looks like after someone edits theirs, so the single-walk
+ * screen has to go on working. The pair gets its own block below.
+ */
+const AFTERNOON_WALK: TrainingItem = {
+  entryId: "entry-walk-2",
+  name: "Afternoon Walk",
   type: "walk",
   kind: "walk",
   exercises: [],
@@ -123,7 +141,7 @@ const ADHERENCE: Week[] = [
     { date: "2026-08-10", label: "Bodyweight Circuit A", status: "done" },
     { date: "2026-08-11", label: "Skipping Intervals + Core", status: "partial" },
     { date: "2026-08-12", label: "Bodyweight Circuit B", status: "skipped" },
-    { date: "2026-08-15", label: "Daily Walk", status: "walk" },
+    { date: "2026-08-15", label: "Morning Walk · Afternoon Walk", status: "walk" },
   ],
   [{ date: TODAY, label: "Bodyweight Circuit B", status: "none" }],
 ];
@@ -215,7 +233,7 @@ describe("the session", () => {
     // different plan from the one being followed.
     render(view());
 
-    expect(screen.getByText("Daily Walk")).toBeTruthy();
+    expect(screen.getByText("Morning Walk")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Log walk" })).toBeTruthy();
   });
 
@@ -239,6 +257,91 @@ describe("the session", () => {
     expect(setSessionStatus).not.toHaveBeenCalled();
   });
 
+  test("draws a row for EVERY walk on the day, not just the first — FUEL-98", () => {
+    // The defect this ticket is against, at the screen. A `find` here rendered
+    // one row for the pair: the afternoon walk was unloggable from `/training`
+    // at all, and the row that WAS drawn was the morning one — on a screen
+    // somebody opened in the evening to record the afternoon.
+    render(view({ sessions: [CIRCUIT, WALK, AFTERNOON_WALK] }));
+
+    expect(screen.getByText("Morning Walk")).toBeTruthy();
+    expect(screen.getByText("Afternoon Walk")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Log walk" })).toHaveLength(2);
+  });
+
+  test("logs each walk against its own entry, in one tap each", async () => {
+    // "Loggable in one tap" is the criterion, and two walks must not become a
+    // picker followed by a tap. Each row is addressed by its own entry, which
+    // is what makes them two independent controls rather than one with a
+    // choice in front of it.
+    const user = userEvent.setup();
+
+    render(view({ sessions: [CIRCUIT, WALK, AFTERNOON_WALK] }));
+
+    const afternoon = screen.getByText("Afternoon Walk").closest("li")!;
+
+    await user.click(within(afternoon).getByRole("button", { name: "Log walk" }));
+
+    await waitFor(() =>
+      expect(logWalk).toHaveBeenCalledWith({
+        date: TODAY,
+        entryId: "entry-walk-2",
+        durationMin: null,
+      }),
+    );
+    // Never the morning walk's entry. That mistake is the ticket's own defect
+    // in its UI form — one tap standing in for the other.
+    expect(logWalk).toHaveBeenCalledTimes(1);
+  });
+
+  test("reverts each walk from its own row", async () => {
+    // § Feedback's "revertible from where it was performed", per walk. A single
+    // Undo for the pair would take back whichever the screen happened to draw
+    // first, which is the same silent substitution the database was making.
+    const user = userEvent.setup();
+
+    render(
+      view({
+        sessions: [
+          CIRCUIT,
+          { ...WALK, entry: { status: "done", note: null, durationMin: 20 } },
+          { ...AFTERNOON_WALK, entry: { status: "done", note: null, durationMin: 15 } },
+        ],
+      }),
+    );
+
+    const morning = screen.getByText("Morning Walk").closest("li")!;
+    const afternoon = screen.getByText("Afternoon Walk").closest("li")!;
+
+    // Each row shows its OWN duration. One shared answer would put the morning
+    // walk's minutes under the afternoon walk's name.
+    expect(within(morning).getByRole("status").textContent).toContain("20 min");
+    expect(within(afternoon).getByRole("status").textContent).toContain("15 min");
+
+    await user.click(within(afternoon).getByRole("button", { name: "Undo" }));
+
+    await waitFor(() =>
+      expect(clearWalk).toHaveBeenCalledWith({ date: TODAY, entryId: "entry-walk-2" }),
+    );
+  });
+
+  test("offers both walks on a rest day, which is when they are all there is", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: [WALK, AFTERNOON_WALK] }));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Walks only");
+    expect(screen.getAllByRole("button", { name: "Log walk" })).toHaveLength(2);
+
+    await user.click(
+      within(screen.getByText("Afternoon Walk").closest("li")!).getByRole("button", {
+        name: "Log walk",
+      }),
+    );
+
+    await waitFor(() => expect(logWalk).toHaveBeenCalled());
+  });
+
   test("offers the walk on a rest day, where there is no bar at all", async () => {
     const user = userEvent.setup();
 
@@ -256,7 +359,7 @@ describe("the session", () => {
       }),
     );
 
-    const walkRow = screen.getByText("Daily Walk").closest("li")!;
+    const walkRow = screen.getByText("Morning Walk").closest("li")!;
 
     expect(within(walkRow).getByRole("status").textContent).toContain("Done");
     expect(within(walkRow).getByRole("status").textContent).toContain("45 min");
@@ -277,7 +380,7 @@ describe("the session", () => {
       }),
     );
 
-    const walkRow = screen.getByText("Daily Walk").closest("li")!;
+    const walkRow = screen.getByText("Morning Walk").closest("li")!;
 
     await user.click(within(walkRow).getByRole("button", { name: "Undo" }));
 
@@ -290,9 +393,9 @@ describe("the session", () => {
   test("says a weekend is a rest day rather than an empty screen", () => {
     render(view({ sessions: [WALK] }));
 
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Walk only");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Walks only");
     // § Tone of Voice: describe what will appear; never nudge.
-    expect(screen.getByText(/The daily walk still counts/)).toBeTruthy();
+    expect(screen.getByText(/The daily walks still count/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Mark done" })).toBeNull();
   });
 

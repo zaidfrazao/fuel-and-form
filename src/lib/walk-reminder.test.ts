@@ -31,14 +31,47 @@ const at = (time: string) => parseTimeOfDay(time);
 
 describe("the copy", () => {
   it("is the criterion's sentence, exactly", () => {
-    expect(reminderStatement("19:00")).toBe("Walk not logged. Reminder set for 19:00.");
+    // The criterion writes "Walk not logged. Reminder set for 19:00." against
+    // one walk. There are two since FUEL-98, so the subject is the walk that is
+    // actually outstanding — the sentence's shape is unchanged and what it
+    // reports is now true of a day with one walk logged and one not.
+    expect(reminderStatement(["Morning Walk"], "19:00")).toBe(
+      "Morning Walk not logged. Reminder set for 19:00.",
+    );
+  });
+
+  it("names both walks when both are outstanding", () => {
+    expect(reminderStatement(["Morning Walk", "Afternoon Walk"], "19:00")).toBe(
+      "Morning Walk and Afternoon Walk not logged. Reminder set for 19:00.",
+    );
+  });
+
+  it("takes an Oxford comma from three", () => {
+    // Three walks is a template edit away, and this is the branch that stops
+    // "A and B and C" being written the day someone makes it.
+    expect(reminderStatement(["A", "B", "C"], "19:00")).toBe(
+      "A, B and C not logged. Reminder set for 19:00.",
+    );
+  });
+
+  it("names only what is outstanding, never the walk that was logged", () => {
+    // The reason the sentence takes a list at all. A banner that said "Walk not
+    // logged." on an evening when the morning walk IS logged would be the app
+    // contradicting its own record — and a banner that is sometimes wrong is
+    // one people learn to ignore.
+    const statement = reminderStatement(["Afternoon Walk"], "19:00");
+
+    expect(statement).toContain("Afternoon Walk");
+    expect(statement).not.toContain("Morning Walk");
   });
 
   it("names the time it was actually configured for", () => {
     // Not a hard-coded 19:00 in the sentence. The one question a banner that
     // appeared unbidden raises is why it appeared now, and a fixed time in the
     // copy would answer it wrongly for anyone who changed the setting.
-    expect(reminderStatement("06:45")).toBe("Walk not logged. Reminder set for 06:45.");
+    expect(reminderStatement(["Morning Walk"], "06:45")).toBe(
+      "Morning Walk not logged. Reminder set for 06:45.",
+    );
   });
 
   it("neither encourages nor addresses the reader", () => {
@@ -46,7 +79,10 @@ describe("the copy", () => {
     // string has: an exclamation mark, and second person about something not
     // done. "You haven't walked today" is a sentence away and is forbidden —
     // § Tone of Voice: no person for facts.
-    const copy = `${reminderStatement(DEFAULT_WALK_REMINDER_AT)} ${REMINDER_LINK}`;
+    const copy = `${reminderStatement(
+      ["Morning Walk", "Afternoon Walk"],
+      DEFAULT_WALK_REMINDER_AT,
+    )} ${REMINDER_LINK}`;
 
     expect(copy).not.toMatch(/!/);
     expect(copy).not.toMatch(/\b(you|your|let's|don't forget|time to)\b/i);

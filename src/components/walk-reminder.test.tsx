@@ -37,7 +37,10 @@ const renderReminder = async () => render(await WalkReminder());
 beforeEach(() => {
   vi.clearAllMocks();
   getSession.mockResolvedValue({ userId: USER_ID, kind: "owner" });
-  loadWalkReminder.mockResolvedValue({ at: "19:00" });
+  loadWalkReminder.mockResolvedValue({
+    at: "19:00",
+    outstanding: ["Morning Walk", "Afternoon Walk"],
+  });
 });
 
 describe("WalkReminder", () => {
@@ -45,12 +48,32 @@ describe("WalkReminder", () => {
     await renderReminder();
 
     expect(
-      screen.getByText(/Walk not logged\. Reminder set for 19:00\./),
+      screen.getByText(
+        /Morning Walk and Afternoon Walk not logged\. Reminder set for 19:00\./,
+      ),
     ).toBeTruthy();
   });
 
+  test("names only the walk still outstanding", async () => {
+    // FUEL-98. With the morning walk logged, a banner that still said "Walk not
+    // logged." would be the app contradicting its own record — and the query is
+    // the only thing that knows which, so the component takes its list rather
+    // than a count.
+    loadWalkReminder.mockResolvedValue({
+      at: "19:00",
+      outstanding: ["Afternoon Walk"],
+    });
+
+    await renderReminder();
+
+    expect(
+      screen.getByText(/Afternoon Walk not logged\. Reminder set for 19:00\./),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Morning Walk/)).toBeNull();
+  });
+
   test("names the configured time rather than a fixed one", async () => {
-    loadWalkReminder.mockResolvedValue({ at: "21:15" });
+    loadWalkReminder.mockResolvedValue({ at: "21:15", outstanding: ["Morning Walk"] });
 
     await renderReminder();
 

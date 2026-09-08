@@ -41,7 +41,7 @@ getSession.mockResolvedValue({
   userId: "11111111-2222-3333-4444-555555555555",
   kind: "demo",
 });
-loadWalkReminder.mockResolvedValue({ at: "19:00" });
+loadWalkReminder.mockResolvedValue({ at: "19:00", outstanding: ["Morning Walk"] });
 
 const { DemoBannerBar } = await import("@/components/demo-banner-bar");
 const { WalkReminder } = await import("@/components/walk-reminder");

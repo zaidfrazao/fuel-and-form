@@ -230,11 +230,27 @@ describe("walkEntries", () => {
 
 describe("WALK_PRESETS", () => {
   test("covers the program's own walk, and stays inside what the action takes", () => {
-    // PRD § Persona: "a 30–45 minute walk every day including weekends".
+    // PRD § Persona: "a 30–45 minute walk every day including weekends" — and
+    // since FUEL-98 that is the DAY's figure across two walks, so the presets
+    // are per walk. 30 is the one that survives from the single-walk list, as
+    // the walk that took the whole day's allowance.
     expect(WALK_PRESETS).toContain(30);
-    expect(WALK_PRESETS).toContain(45);
+    // The two ordinary answers, which is what the control is for. A preset list
+    // that started at 30 would offer nothing a twenty-minute walk could pick.
+    expect(WALK_PRESETS).toContain(15);
+    expect(WALK_PRESETS).toContain(20);
     // A preset the action would refuse is a control that reports a failure the
     // user cannot understand. `MAX_DURATION_MIN` is twelve hours.
     expect(WALK_PRESETS.every((minutes) => minutes > 0 && minutes <= 12 * 60)).toBe(true);
+  });
+
+  test("sums to the day's own figure across the two walks", () => {
+    // The presets are per walk and there are two walks, so the pair a person
+    // most often taps has to land on the persona's day rather than on double
+    // it. Two 15s and two 20s bracket "30–45 minutes every day".
+    const [shortest] = WALK_PRESETS;
+
+    expect(shortest! * 2).toBe(30);
+    expect(WALK_PRESETS[1]! * 2).toBe(40);
   });
 });

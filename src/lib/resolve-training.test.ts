@@ -32,10 +32,14 @@ import { seedWorkouts } from "./seed/workouts";
  * resolve-plan.test.ts's, so all three suites share one calendar. The first full
  * week of the program is therefore:
  *
- *   Mon 03-02  circuit (A) + walk      Fri 03-06  circuit (A) + walk
- *   Tue 03-03  intervals + walk        Sat 03-07  walk only
- *   Wed 03-04  circuit (B) + walk      Sun 03-08  walk only
- *   Thu 03-05  intervals + walk        Mon 03-09  circuit (B) + walk
+ *   Mon 03-02  circuit (A) + walks     Fri 03-06  circuit (A) + walks
+ *   Tue 03-03  intervals + walks       Sat 03-07  walks only
+ *   Wed 03-04  circuit (B) + walks     Sun 03-08  walks only
+ *   Thu 03-05  intervals + walks       Mon 03-09  circuit (B) + walks
+ *
+ * "walks", plural, since FUEL-98: the template puts a morning and an afternoon
+ * walk on all seven days, so every day below is a session and TWO walks, or on
+ * a weekend the two walks alone.
  *
  * The second Monday is the point: the alternation carries across the week
  * boundary, so a week is not a cycle and Monday is not Circuit A.
@@ -47,7 +51,11 @@ const PROGRAM_START = "2026-03-02"; // a Monday
 const CIRCUIT_A = "Bodyweight Circuit A";
 const CIRCUIT_B = "Bodyweight Circuit B";
 const INTERVALS = "Skipping Intervals + Core";
-const WALK = "Daily Walk";
+const MORNING_WALK = "Morning Walk";
+const AFTERNOON_WALK = "Afternoon Walk";
+
+/** Both walks, in template order — every day holds them, FUEL-98. */
+const WALKS = [MORNING_WALK, AFTERNOON_WALK];
 
 /** Stable stand-ins for the uuids the loader would generate. */
 const idFor = (key: string) => `workout-${key}`;
@@ -140,34 +148,58 @@ describe("a template entry that names a rotation group", () => {
     // whose workout a screen cannot cache against the entry.
     expect(
       trainingDay(PLAN, EXERCISES, "2026-03-03").sessions.map((s) => s.source),
-    ).toEqual(["fixed", "fixed"]);
+    ).toEqual(["fixed", "fixed", "fixed"]);
   });
 });
 
 describe("the five-day schedule", () => {
   it("resolves the program's first week day by day", () => {
-    expect(namesOn("2026-03-02")).toEqual([CIRCUIT_A, WALK]);
-    expect(namesOn("2026-03-03")).toEqual([INTERVALS, WALK]);
-    expect(namesOn("2026-03-04")).toEqual([CIRCUIT_B, WALK]);
-    expect(namesOn("2026-03-05")).toEqual([INTERVALS, WALK]);
-    expect(namesOn("2026-03-06")).toEqual([CIRCUIT_A, WALK]);
+    expect(namesOn("2026-03-02")).toEqual([CIRCUIT_A, ...WALKS]);
+    expect(namesOn("2026-03-03")).toEqual([INTERVALS, ...WALKS]);
+    expect(namesOn("2026-03-04")).toEqual([CIRCUIT_B, ...WALKS]);
+    expect(namesOn("2026-03-05")).toEqual([INTERVALS, ...WALKS]);
+    expect(namesOn("2026-03-06")).toEqual([CIRCUIT_A, ...WALKS]);
   });
 
   it("carries the alternation into the second week rather than restarting it", () => {
     // A week is not the cycle. Monday is B, Wednesday A, Friday B — the mirror
     // of the first week, which is what gives each circuit equal time over a
     // fortnight (seed/workouts.ts).
-    expect(namesOn("2026-03-09")).toEqual([CIRCUIT_B, WALK]);
-    expect(namesOn("2026-03-11")).toEqual([CIRCUIT_A, WALK]);
-    expect(namesOn("2026-03-13")).toEqual([CIRCUIT_B, WALK]);
+    expect(namesOn("2026-03-09")).toEqual([CIRCUIT_B, ...WALKS]);
+    expect(namesOn("2026-03-11")).toEqual([CIRCUIT_A, ...WALKS]);
+    expect(namesOn("2026-03-13")).toEqual([CIRCUIT_B, ...WALKS]);
   });
 
-  it("lists the session before the walk, as the template orders them", () => {
-    // `sort_order` 0 then 1, from the seed. The walk is the day's second
-    // activity, not its headline, and this file does not re-sort by kind.
+  it("lists the session before the walks, as the template orders them", () => {
+    // `sort_order` 0, then 1 and 2, from the seed. The walks are the day's
+    // second and third activities, not its headline, and this file does not
+    // re-sort by kind.
     const monday = trainingDay(PLAN, EXERCISES, "2026-03-02").sessions;
 
-    expect(monday.map((session) => session.kind)).toEqual(["session", "walk"]);
+    expect(monday.map((session) => session.kind)).toEqual(["session", "walk", "walk"]);
+  });
+
+  it("puts the morning walk before the afternoon one", () => {
+    // The order every reader downstream takes as the template's: the two rows
+    // on `/` and `/training`, the export's sessions, and the reminder's
+    // sentence. It comes from `sort_order` and nothing re-derives it.
+    const monday = trainingDay(PLAN, EXERCISES, "2026-03-02").sessions;
+
+    expect(monday.filter((s) => s.kind === "walk").map((s) => s.workout.name)).toEqual(
+      WALKS,
+    );
+  });
+
+  it("gives the two walks different workouts, which is what lets both be logged", () => {
+    // FUEL-98's defect, at the resolver. `workout_logs` is unique on
+    // (user_id, date, workout_id), so two walks resolving to ONE workout are
+    // two taps writing one row — the second silently replacing the first.
+    const walks = trainingDay(PLAN, EXERCISES, "2026-03-02").sessions.filter(
+      (session) => session.kind === "walk",
+    );
+
+    expect(new Set(walks.map((s) => s.workout.id)).size).toBe(2);
+    expect(new Set(walks.map((s) => s.entryId)).size).toBe(2);
   });
 
   it("echoes the date it was asked about", () => {
@@ -176,9 +208,9 @@ describe("the five-day schedule", () => {
 });
 
 describe("weekends", () => {
-  it("show the walk and nothing else", () => {
-    expect(namesOn("2026-03-07")).toEqual([WALK]); // Saturday
-    expect(namesOn("2026-03-08")).toEqual([WALK]); // Sunday
+  it("show the walks and nothing else", () => {
+    expect(namesOn("2026-03-07")).toEqual(WALKS); // Saturday
+    expect(namesOn("2026-03-08")).toEqual(WALKS); // Sunday
   });
 
   it("say so through `kind`, so a screen need not know which days are weekends", () => {
@@ -202,7 +234,7 @@ describe("weekends", () => {
 
     const plan = { ...PLAN, template: [saturdayCircuit, ...TEMPLATE] };
 
-    expect(namesOn("2026-03-07", plan)).toEqual([CIRCUIT_B, WALK]);
+    expect(namesOn("2026-03-07", plan)).toEqual([CIRCUIT_B, ...WALKS]);
   });
 });
 
@@ -371,6 +403,9 @@ describe("`kind`", () => {
 
     expect(monday.map((session) => [session.workout.type, session.kind])).toEqual([
       ["circuit", "session"],
+      // Both walks carry the same `type`, which is what keeps every layer that
+      // asks "is this a walk" answering about both — FUEL-98, seed/workouts.ts.
+      ["walk", "walk"],
       ["walk", "walk"],
     ]);
   });
@@ -429,13 +464,13 @@ describe("determinism", () => {
   it("gives a skipped Wednesday the Friday it would have had", () => {
     // Nothing was logged for Wednesday 03-04's Circuit B. Friday is still A and
     // the following Monday still B — the answers a completed week would give.
-    expect(namesOn("2026-03-06")).toEqual([CIRCUIT_A, WALK]);
-    expect(namesOn("2026-03-09")).toEqual([CIRCUIT_B, WALK]);
+    expect(namesOn("2026-03-06")).toEqual([CIRCUIT_A, ...WALKS]);
+    expect(namesOn("2026-03-09")).toEqual([CIRCUIT_B, ...WALKS]);
   });
 
   it("answers a date months out, and answers it the same way twice", () => {
     expect(namesOn("2026-09-07")).toEqual(namesOn("2026-09-07"));
-    expect(namesOn("2026-09-07")).toEqual([CIRCUIT_B, WALK]);
+    expect(namesOn("2026-09-07")).toEqual([CIRCUIT_B, ...WALKS]);
   });
 });
 
@@ -443,7 +478,7 @@ describe("a date the program does not cover", () => {
   it("has no sessions before the program starts, walk included", () => {
     const before = trainingDay(PLAN, EXERCISES, "2026-03-01");
 
-    // The walk is scheduled on all seven days, so this is the pre-start rule
+    // Both walks are scheduled on all seven days, so this is the pre-start rule
     // and not an empty weekday: day zero is the first day, not the day after.
     expect(before.sessions).toEqual([]);
     expect(before.date).toBe("2026-03-01");

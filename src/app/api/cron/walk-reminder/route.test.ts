@@ -94,7 +94,16 @@ const target = (id: string, lastNotifiedOn: string | null = null) => ({
 });
 
 const owed = (...targets: ReturnType<typeof target>[]) => [
-  { userId: "user-1", at: "19:00", today: "2026-08-26", targets },
+  {
+    userId: "user-1",
+    at: "19:00",
+    // Both of the day's walks outstanding — FUEL-98, and the state the evening
+    // job is for. The route passes this straight to the sentence, so a route
+    // that dropped it would print a notification with no subject.
+    outstanding: ["Morning Walk", "Afternoon Walk"],
+    today: "2026-08-26",
+    targets,
+  },
 ];
 
 const requestWith = (authorization?: string) =>
@@ -224,7 +233,9 @@ describe("a successful send", () => {
 
     const payload = JSON.parse(sendNotification.mock.calls[0]?.[1] as string);
 
-    expect(payload.body).toBe("Walk not logged. Reminder set for 19:00. Log the walk.");
+    expect(payload.body).toBe(
+      "Morning Walk and Afternoon Walk not logged. Reminder set for 19:00. Log the walk.",
+    );
     expect(payload.url).toBe("/");
   });
 
