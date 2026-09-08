@@ -785,8 +785,12 @@ scan_published_refs() {
         sort | uniq -c | sort -rn
     )
 
-    [ "$pattern_hits" -gt 0 ] &&
+    # `if` rather than `&&`, for the reason given at the ref loop below: this
+    # is the last statement in the pattern loop, so its status becomes the
+    # loop's. A final pattern with no hits would end the scan here instead.
+    if [ "$pattern_hits" -gt 0 ]; then
       observed_values="$observed_values$name:$pattern_hits"$'\n'
+    fi
   done
 
   if [ "$hits" -eq 0 ]; then
@@ -804,7 +808,16 @@ scan_published_refs() {
       while IFS= read -r ref; do
         [ -z "$ref" ] && continue
         sha="$(git log --format='%h' -1 -S"$match" "$ref" --not $local_refs 2>/dev/null || true)"
-        [ -n "$sha" ] && printf '%s\n' "${ref#"$PUBLISHED_NS/"}"
+        # `if` and not `[ … ] && printf`. The status of the last statement in
+        # this loop is the status of the loop, then of the `for` around it, then
+        # of the command substitution, then of the assignment it feeds — and a
+        # failing assignment under `set -e` kills the script. So a final ref
+        # that carries nothing ended the scan silently, with exit 1, before it
+        # could compare anything or print a verdict. That is not hypothetical:
+        # `refs/pull/*` sorts as text, so `pull/90` landed after `pull/9` and
+        # became the last ref examined — the first PR in this repository's
+        # history to sit past the pre-rewrite residue, and every one after it.
+        if [ -n "$sha" ]; then printf '%s\n' "${ref#"$PUBLISHED_NS/"}"; fi
       done <<<"$published_refs"
     done | sort -u -V
   )"
