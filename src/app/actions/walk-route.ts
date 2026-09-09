@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 
 import { resolveWalk } from "@/app/actions/resolve-walk";
+import { safeError } from "@/app/actions/safe-error";
 import { loadWalkRoute, nameWalkRoute, type WalkRouteView } from "@/lib/db/queries/route";
 import type { CalendarDate } from "@/lib/date";
 import { MAX_ROUTE_NAME } from "@/lib/route";
@@ -52,7 +53,7 @@ export async function openWalkRoute(input: {
 
     return await loadWalkRoute(resolved.userId, input.date, resolved.workoutId);
   } catch (error) {
-    console.error("Could not read the walk's route.", error);
+    console.error("Could not read the walk's route.", safeError(error));
 
     return null;
   }
@@ -105,7 +106,7 @@ export async function nameRoute(input: {
 
     return written ? DONE : FAILED;
   } catch (error) {
-    console.error("Could not name the walk's route.", error);
+    console.error("Could not name the walk's route.", safeError(error));
 
     return FAILED;
   }

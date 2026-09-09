@@ -333,6 +333,20 @@ is_allowed() {
 #   exact leak it exists to catch. Checked against translate, translateX,
 #   oscillate, plateau, correlation and relate: none matches.
 #
+#   A THIRD hole, found the same way in FUEL-102 and closed here. The suffix
+#   was `(at|ng|on)` — lowercase only — so a SCREAMING_CASE name walked past:
+#   `const LAT = 51.4xxxx` and `const START_LNG = -0.0xxxx` both scanned CLEAN,
+#   and the pair pattern misses them too because `LAT = x, LNG = y` puts an
+#   identifier between the comma and the second number. That is exactly how a
+#   test fixture names a constant, and it is how FUEL-102's first draft of
+#   `safe-error.test.ts` named one — a real coordinate pair, in the test
+#   asserting that coordinates do not leak, which this scan would have waved
+#   through. Now `([Aa][Tt]|[Nn][Gg]|[Oo][Nn])`, so LAT, Lat, lat, startLAT and
+#   GPS_LNG are all caught. The anchoring is untouched, so `translate` and its
+#   neighbours still do not match; the new exposure is an UPPERCASE identifier
+#   beginning LAT/LNG/LON assigned four or more decimals, which is a false
+#   positive this file would rather have than the leak it replaces.
+#
 #   Whitespace is `[[:space:]]`, not a literal space, so a tab between a field
 #   name and its value does not walk past. grep is line-oriented, so a value on
 #   its own line is beyond any pattern here — a limit of the mechanism rather
@@ -521,7 +535,7 @@ readonly PATTERN_REGEX=(
   '(^|[^0-9A-Za-z.])[12][0-9]{2}[ ]?g[ ]?carb'
   '(^|[^0-9A-Za-z.])[2-9][0-9][ ]?g[ ]?fat'
   '(^|[^0-9A-Za-z.])-?[0-9]{1,3}\.[0-9]{4,}["'"'"']?[[:space:]]*,[[:space:]]*["'"'"']?-?[0-9]{1,3}\.[0-9]{4,}'
-  '((^|[^0-9A-Za-z])[Ll]|[a-z0-9]L)(at|ng|on)[A-Za-z]*["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?-?[0-9]{1,3}\.[0-9]{4,}'
+  '((^|[^0-9A-Za-z])[Ll]|[a-z0-9]L)([Aa][Tt]|[Nn][Gg]|[Oo][Nn])[A-Za-z]*["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?-?[0-9]{1,3}\.[0-9]{4,}'
 )
 
 readonly PATTERN_ALLOW=(

@@ -16,6 +16,7 @@ import { type CalendarDate, parseCalendarDate } from "@/lib/date";
  * copy would be two places for one rule to drift, and the rule is an
  * authorisation check.
  */
+
 /**
  * The walk a template entry names on a date, for the caller's own user.
  *
@@ -54,4 +55,3 @@ export async function resolveWalk(
 
   return resolved && { userId: session.userId, workoutId: resolved.workout.id };
 }
-

@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 
 import { resolveWalk } from "@/app/actions/resolve-walk";
+import { safeError } from "@/app/actions/safe-error";
 import { getSession } from "@/lib/auth/session";
 import {
   clearSession,
@@ -147,7 +148,11 @@ export async function logWalk(input: {
   } catch (error) {
     // Names the failure for whoever runs the app. The user gets a banner and a
     // "Try again", which is everything they can act on.
-    console.error("Could not record the walk.", error);
+    //
+    // Through `safeError` since FUEL-102: a violated CHECK on `walk_routes`
+    // prints the failing ROW in its detail, which for this table is the whole
+    // trace. See `resolve-walk.ts`.
+    console.error("Could not record the walk.", safeError(error));
 
     return FAILED;
   }
@@ -240,7 +245,7 @@ export async function saveWalkRecording(input: {
 
     return DONE;
   } catch (error) {
-    console.error("Could not record the walk.", error);
+    console.error("Could not record the walk.", safeError(error));
 
     return FAILED;
   }
@@ -280,7 +285,7 @@ export async function clearWalk(input: {
 
     return DONE;
   } catch (error) {
-    console.error("Could not clear the walk.", error);
+    console.error("Could not clear the walk.", safeError(error));
 
     return FAILED;
   }
