@@ -381,10 +381,15 @@ export async function recordWalkRecording(
     );
 
     // `upsert` returns what it wrote and a `DO UPDATE` always writes a row, so
-    // this cannot be empty. Checked rather than asserted because the narrowing
-    // is needed either way and a throw here would roll back a walk somebody
-    // just finished — the one moment this app cannot ask them to try again.
-    if (!log) return;
+    // this cannot be empty. It THROWS rather than returning, and the difference
+    // matters: returning would commit the log — distance and duration updated —
+    // with the route never written or never deleted, which is precisely the
+    // half-landing the transaction exists to prevent, and the action would
+    // answer `{ ok: true }` about it. Throwing rolls the pair back, the action
+    // catches it and answers `{ ok: false }`, and the row keeps its draft and
+    // offers "Try again". Nothing is lost by being strict here, which is what
+    // makes strict the right choice.
+    if (!log) throw new Error("Upserting the walk's log returned no row.");
 
     if (record.route.pointCount === 0) {
       await s.delete(schema.walkRoutes, eq(schema.walkRoutes.workoutLogId, log.id));

@@ -359,6 +359,31 @@ describe("parseTrack", () => {
     expect(parseTrack([[], wire(2), []])).toEqual([wire(2)]);
   });
 
+  it("refuses a segment with a HOLE in it", () => {
+    /*
+     * `Array.prototype.every` and `map` both SKIP holes rather than visiting
+     * them, so `segment.every(isPoint)` passed vacuously for an array with a
+     * length and no elements — and `map` then carried the holes straight
+     * through. What came out was a "validated" track whose points were
+     * `undefined`, which `for...of` in `distanceMetres` does not skip: it
+     * yields them, and the first property read throws.
+     *
+     * A validator that passes by visiting nothing is the worst shape a check
+     * can have, which is why this is asserted rather than left to the wire
+     * format's good manners.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-array-constructor -- a
+    // sparse array is the subject of this test and there is no literal for one.
+    expect(parseTrack([new Array(3)])).toBeUndefined();
+
+    const punctured: unknown[] = [{ lat: 0, lng: 0, t: 0 }];
+
+    punctured[2] = { lat: 0, lng: 0, t: 2 };
+
+    expect(punctured).toHaveLength(3);
+    expect(parseTrack([punctured])).toBeUndefined();
+  });
+
   it("keeps only the three fields, so nothing else can ride along", () => {
     const smuggled = [[{ lat: 0, lng: 0, t: 0, accuracy: 5, note: "home" }]];
 
@@ -399,6 +424,16 @@ describe("parseRecording", () => {
     expect(parseRecording({ ...stored, startedAt: "soon" })).toBeUndefined();
     expect(parseRecording({ ...stored, segments: [] })).toBeUndefined();
     expect(parseRecording({ ...stored, segments: "walked" })).toBeUndefined();
+  });
+
+  it("refuses a draft whose last fix predates the walk's own origin", () => {
+    // `appendFix` can never produce this. A hand-edited draft that holds it
+    // would resume computing NEGATIVE seconds, and `parseTrack` then refuses
+    // those on the way to the server — so the walk would record fine and fail
+    // to save, with nothing on screen saying which half was wrong.
+    expect(
+      parseRecording({ ...stored, last: { ...(stored.last as object), at: 0 } }),
+    ).toBeUndefined();
   });
 
   it("refuses what is not an object at all", () => {

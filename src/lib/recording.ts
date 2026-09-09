@@ -467,6 +467,22 @@ function isPoint(value: unknown): value is TrackPoint {
  * Empty segments are dropped rather than refused. `trimEnds` already produces
  * them and `route.ts` already drops them; refusing one here would make a legal
  * intermediate shape illegal at the boundary.
+ *
+ * ## Holes are refused, and `every` is why this is written with an index
+ *
+ * A SPARSE array — `new Array(3)`, or one with a gap punched in it — has a
+ * length but no elements at those positions, and both `every` and `map` SKIP
+ * holes rather than visiting them. So `segment.every(isPoint)` returns true
+ * for a segment containing no points at all, vacuously, and `map` then carries
+ * the holes through untouched. What comes out is a "validated" track whose
+ * points are `undefined`, which `for...of` in `distanceMetres` does NOT skip —
+ * it yields them, and the first property read throws.
+ *
+ * A validator that passes by visiting nothing is the worst shape a check can
+ * have, so the walk is by INDEX and a missing position is a refusal. Whether a
+ * hole can survive the wire format is not the question: the cost of the check
+ * is three lines, and the cost of being wrong about the serialiser is a gate
+ * that reports CLEAN on input it never looked at.
  */
 export function parseTrack(value: unknown): Track | undefined {
   if (!Array.isArray(value)) return undefined;
@@ -485,9 +501,22 @@ export function parseTrack(value: unknown): Track | undefined {
 
   for (const segment of value as unknown[][]) {
     if (segment.length === 0) continue;
-    if (!segment.every(isPoint)) return undefined;
 
-    segments.push(segment.map(({ lat, lng, t }) => ({ lat, lng, t })));
+    const points: TrackPoint[] = [];
+
+    for (let index = 0; index < segment.length; index += 1) {
+      // `in` rather than an undefined check: a hole and a stored `undefined`
+      // are different things, and only the first is invisible to `every`.
+      if (!(index in segment)) return undefined;
+
+      const point: unknown = segment[index];
+
+      if (!isPoint(point)) return undefined;
+
+      points.push({ lat: point.lat, lng: point.lng, t: point.t });
+    }
+
+    segments.push(points);
   }
 
   return segments;
@@ -545,6 +574,13 @@ export function parseRecording(value: unknown): Recording | undefined {
   const fix = last as Fix;
 
   if (!isUsable(fix)) return undefined;
+
+  // The last kept fix cannot predate the walk's own origin. `appendFix` can
+  // never produce that, and a draft that holds it would resume computing
+  // NEGATIVE seconds through `pointAt` — points that `parseTrack` then refuses
+  // on the way to the server, so the walk would record fine and fail to save
+  // with nothing on screen explaining which of the two was wrong.
+  if (fix.at < startedAt) return undefined;
 
   return {
     startedAt,

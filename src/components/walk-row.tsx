@@ -414,34 +414,47 @@ export function WalkRow({
     wantsLock.current = true;
     void hold(lock, wantsLock);
 
-    watch.current = navigator.geolocation.watchPosition(
-      (position) => {
-        const next = appendFix(live.current, {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          at: position.timestamp,
-        });
+    const onFix = (position: GeolocationPosition) => {
+      const next = appendFix(live.current, {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        at: position.timestamp,
+      });
 
-        live.current = next;
-        setRecording(next);
-        // Every fix, which is the criterion. It is also what makes the recording
-        // survive the tab being killed by the platform mid-walk — the case that
-        // leaves no other trace.
-        cacheDraft(key, next);
-      },
-      (error) => {
-        if (error.code !== PERMISSION_DENIED) return;
+      live.current = next;
+      setRecording(next);
+      // Every fix, which is the criterion. It is also what makes the recording
+      // survive the tab being killed by the platform mid-walk — the case that
+      // leaves no other trace.
+      cacheDraft(key, next);
+    };
 
-        // Refused. The row goes back to what it was with NOTHING said about it:
-        // "a denial is a normal state, not an error". Whatever had been
-        // recorded before the refusal is kept as a draft rather than dropped.
-        end();
-        setRecording(null);
-        keepDraft(key, live.current.startedAt === null ? null : live.current);
-      },
-      WATCH_OPTIONS,
-    );
+    const onRefusal = (error: GeolocationPositionError) => {
+      if (error.code !== PERMISSION_DENIED) return;
+
+      // Refused. The row goes back to what it was with NOTHING said about it:
+      // "a denial is a normal state, not an error". Whatever had been recorded
+      // before the refusal is kept as a draft rather than dropped.
+      end();
+      setRecording(null);
+      keepDraft(key, live.current.startedAt === null ? null : live.current);
+    };
+
+    // Inside a `try` even though the capability was checked, because a
+    // capability is not a promise that the call succeeds: an insecure context,
+    // a Permissions-Policy, or an embedded webview can refuse at the call
+    // itself rather than through the error callback. What that would otherwise
+    // leave behind is the one state a user cannot get out of — a row showing
+    // "Stop", no watch running, and the screen held awake — so it is unwound
+    // into the ordinary refusal, which says nothing and leaves the walk
+    // loggable in one tap.
+    try {
+      watch.current = navigator.geolocation.watchPosition(onFix, onRefusal, WATCH_OPTIONS);
+    } catch {
+      end();
+      setRecording(null);
+    }
   };
 
   /**

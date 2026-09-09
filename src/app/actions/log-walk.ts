@@ -215,13 +215,20 @@ export async function logWalk(input: {
  * that reports seven decimals — and discipline is what a second writer is most
  * likely to miss". Going through it is that discipline.
  *
- * ## Validated before the day is resolved
+ * ## Refused in cost order: no session, then a malformed body, then the day
  *
- * `parseTrack` runs first, on the reasoning `logWalk` already applies to
+ * `getSession` first, and it is the cheapest of the three — a cookie and an
+ * HMAC, no query — so an unauthenticated POST is turned away before the server
+ * walks up to ten thousand positions on its behalf. It is `cache`d for the
+ * request, so `resolveWalk` calling it again below costs nothing.
+ *
+ * `parseTrack` second, on the reasoning `logWalk` already applies to
  * `durationMin`: a refusal that costs a query is a refusal that can be used to
  * make the database work, and this body is far larger than that one. It bounds
  * the point count before walking the points, so a body claiming a million
  * positions is refused by its length.
+ *
+ * The day last, because that is the one that reads.
  *
  * ## An empty track is a success, not a refusal
  *
@@ -247,6 +254,8 @@ export async function saveWalkRecording(input: {
   track?: unknown;
 }): Promise<WalkResult> {
   try {
+    if (!(await getSession())) return FAILED;
+
     const track = parseTrack(input.track);
 
     if (!track) return FAILED;

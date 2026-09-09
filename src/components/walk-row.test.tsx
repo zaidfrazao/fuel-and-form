@@ -216,6 +216,29 @@ describe("recording", () => {
     expect(watchPosition.mock.calls[0]?.[2]).toMatchObject({ enableHighAccuracy: true });
   });
 
+  test("unwinds cleanly when starting the watch throws", async () => {
+    // A capability check is not a promise that the call succeeds: an insecure
+    // context or an embedded webview can refuse at the call itself. Without the
+    // guard this leaves the one state a user cannot escape — a row showing
+    // "Stop", no watch running, and the screen held awake.
+    watchPosition.mockImplementation(() => {
+      throw new Error("Geolocation is not available in this context.");
+    });
+
+    render(row());
+
+    await userEvent.click(screen.getByRole("button", { name: "Record" }));
+
+    expect(screen.getByRole("button", { name: "Log walk" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    // Silent, like every other refusal on this row.
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    const sentinel = await requestLock.mock.results[0]?.value;
+
+    await waitFor(() => expect(sentinel.release).toHaveBeenCalled());
+  });
+
   test("takes the wake lock while it runs and gives it back on Stop", async () => {
     render(row());
 
