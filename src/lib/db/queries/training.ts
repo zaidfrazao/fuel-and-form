@@ -1,6 +1,7 @@
 import "server-only";
 
 import { and, asc, between, desc, eq, gt, inArray, lte, sql } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 import { adherenceWeeks, adherenceWindow } from "@/lib/adherence";
 import { nearestWeight } from "@/lib/energy";
@@ -9,6 +10,7 @@ import { type CalendarDate, todayIn } from "@/lib/date";
 import { type TrainingDay, trainingDay } from "@/lib/resolve-training";
 import type { TrainingPlan } from "@/lib/rotation";
 import type { StorableRoute } from "@/lib/route";
+import { estimateSteps } from "@/lib/steps";
 import { getDb } from "../index";
 import { getPool } from "../pool";
 import * as schema from "../schema";
@@ -358,6 +360,51 @@ export async function recordWalkRecording(
   await getPool().transaction(async (tx) => {
     const s = scope(userId, tx);
 
+    /*
+     * The height the step estimate is derived from — FUEL-103.
+     *
+     * Read inside the transaction rather than passed in, so the caller's
+     * signature is unchanged and no action has to remember to fetch it. It is
+     * one narrow row against a primary key, on the same connection the two
+     * writes below already hold.
+     *
+     * A missing profile is not an error here. `estimateSteps` refuses an absent
+     * or implausible height and returns null, and null is a walk that shows a
+     * distance and no step figure — a state every screen already renders,
+     * because a one-tap walk is that state.
+     */
+    const profile = await s.selectOne(schema.profiles);
+    const steps = estimateSteps({
+      distanceM: record.route.distanceM,
+      heightCm: profile?.heightCm ?? null,
+    });
+
+    /*
+     * A DEVICE COUNT IS NEVER OVERWRITTEN BY A RE-ESTIMATE — § P11, and the
+     * rule written where the write happens rather than only in the ticket.
+     *
+     * Inside `DO UPDATE`, the bare table name is the row that is ALREADY
+     * there and `excluded` is the row that was proposed. So this reads the
+     * stored source and keeps both columns whenever it says `device`: a count
+     * off a phone's coprocessor is a measurement, and re-saving a resumed
+     * recording must not replace it with a division. Nothing in the app writes
+     * `device` today — FUEL-105 is the ticket that would — so this branch is
+     * unreachable from the app and is proven by a test that plants the row
+     * itself.
+     *
+     * In SQL rather than as a read-then-write in this transaction, for two
+     * reasons. At READ COMMITTED a select followed by an upsert is a window a
+     * concurrent device write can land in. And a rule expressed as a statement
+     * travels with the write, where one expressed as a branch beside it is a
+     * thing the next caller has to know about.
+     *
+     * `distance_m` and `duration_min` are deliberately still overwritten in the
+     * same statement. They are measurements from a different instrument, and
+     * keeping a device step count does not make a stale distance correct.
+     */
+    const keepDeviceCount = (stored: AnyPgColumn, proposed: number | "estimated" | null) =>
+      sql`case when ${schema.workoutLogs.stepsSource} = 'device' then ${stored} else ${proposed} end`;
+
     const [log] = await s.upsert(
       schema.workoutLogs,
       {
@@ -367,6 +414,8 @@ export async function recordWalkRecording(
         note: null,
         durationMin: record.durationMin,
         distanceM: record.route.distanceM,
+        steps,
+        stepsSource: steps === null ? null : "estimated",
       },
       {
         target: [schema.workoutLogs.date, schema.workoutLogs.workoutId],
@@ -375,6 +424,11 @@ export async function recordWalkRecording(
           note: null,
           durationMin: record.durationMin,
           distanceM: record.route.distanceM,
+          steps: keepDeviceCount(schema.workoutLogs.steps, steps),
+          stepsSource: keepDeviceCount(
+            schema.workoutLogs.stepsSource,
+            steps === null ? null : "estimated",
+          ),
           loggedAt: sql`now()`,
         },
       },

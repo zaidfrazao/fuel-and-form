@@ -35,6 +35,10 @@ import {
   type Track,
 } from "../route";
 import { SECTIONS, WORKING_SECTION } from "../section";
+// The step vocabulary and the ceiling its arithmetic implies — FUEL-103, and
+// the same direction as the three imports above. `steps.ts` is pure and imports
+// only `format.ts`, so a client component calling `stepsLabel` pulls no pg-core.
+import { MAX_STEPS, STEP_SOURCES } from "../steps";
 
 /**
  * The data model — PRD § Technical Considerations → Data Model.
@@ -103,6 +107,28 @@ export const workoutLogStatus = pgEnum("workout_log_status", [
   "partial",
   "skipped",
 ]);
+
+/**
+ * Where a walk's step count came from — § P11, FUEL-103.
+ *
+ * A `pgEnum` rather than the `text` + CHECK that `workouts.type` and
+ * `form_media.kind` take, and the difference is the one that section argues:
+ * those vocabularies are deliberately OPEN, and this one is closed by argument.
+ * A figure from a coprocessor and a figure from a division are the only two
+ * kinds of claim there are about a step count, and a third would not be a new
+ * value so much as a new question.
+ *
+ * `'device'` is declared with nothing in the app able to write it. That is the
+ * seam rather than an oversight: `steps.ts` records why a browser cannot count
+ * steps and FUEL-105 is the deferred native companion that could, and declaring
+ * the value now costs nothing while adding it later is an `ALTER TYPE` on a
+ * table with history. `queries/training.ts` already refuses to overwrite a row
+ * that carries it.
+ *
+ * Built from `STEP_SOURCES` rather than re-spelled, so the database and the two
+ * components that draw the word cannot come to disagree about what it is.
+ */
+export const stepSource = pgEnum("step_source", STEP_SOURCES);
 
 /* -------------------------------------------------------------------------- */
 /* Shared column builders                                                     */
@@ -1014,6 +1040,53 @@ export const workoutLogs = pgTable(
      */
     distanceM: integer("distance_m"),
 
+    /**
+     * How many steps the walk took, and where that number came from — § P11,
+     * FUEL-103.
+     *
+     * ## Two columns, and neither is useful without the other
+     *
+     * `steps` is a count; `steps_source` is the KIND of claim it is. A figure
+     * off a phone's coprocessor and a figure from `distance / step length` are
+     * different assertions about the same walk, and a screen holding one
+     * without the other cannot say which it has — so the two are paired by
+     * `workout_logs_steps_paired` below rather than by everyone remembering.
+     *
+     * ## Stored rather than derived on read, which is a real trade
+     *
+     * The estimate could be computed at every read from `distance_m` and
+     * `profiles.height_cm`, and then this would be one column. It is stored for
+     * two reasons that outweigh the duplication. A device count HAS no
+     * derivation — it is a measurement, and it has to live somewhere — and a
+     * column that was sometimes-stored and sometimes-derived would be worse
+     * than either. And the precedence rule `recordWalkRecording` holds is only
+     * meaningful about a number that was actually written.
+     *
+     * **The cost, stated rather than discovered later: correcting
+     * `profiles.height_cm` does not re-estimate past walks.** A typo fixed in
+     * settings leaves every figure already stored where it was. That is the
+     * deliberate side of the trade — a settings save that silently rewrote the
+     * step count of every walk in somebody's history is the worse failure of
+     * the two, and it would do it to `'device'` rows as well, which are not
+     * derived from height at all. Re-saving a recording re-estimates that walk.
+     *
+     * ## No default, for `distance_m`'s reason
+     *
+     * Null for every session, for every one-tap walk and for every walk logged
+     * before this ticket. § P11 requires such a row to render and export
+     * "absent rather than zeroed", and a `NOT NULL DEFAULT 'estimated'` on the
+     * source would go further than an unhelpful default: it would claim an
+     * estimate exists for every bench press in the table.
+     *
+     * The ceiling comes from `steps.ts`, where it is derived from this table's
+     * own distance cap and the shortest step length a plausible height yields,
+     * rather than picked. The floor is 1 for the reason `distance_m`'s is:
+     * zero is the absence of a walk rather than a measurement of one, and the
+     * honest way to say a walk has no step figure is the absence of a number.
+     */
+    steps: integer(),
+    stepsSource: stepSource("steps_source"),
+
     loggedAt: instant("logged_at").notNull().defaultNow(),
   },
   (t) => [
@@ -1051,6 +1124,37 @@ export const workoutLogs = pgTable(
     check(
       "workout_logs_distance_range",
       sql`"distance_m" is null or "distance_m" between 1 and 100000`,
+    ),
+
+    /*
+     * A count and its origin arrive together or not at all — FUEL-103.
+     *
+     * The invariant the pair of columns above is only useful under. A `steps`
+     * with no `steps_source` is a number whose kind nobody can name, which is
+     * the exact confusion the source column exists to prevent; a
+     * `steps_source` with no `steps` is a claim about a figure that is not
+     * there. Both are unreachable through the app today and both are one
+     * careless `set` away, and this is a constraint rather than a convention
+     * because the second one is what a partial update writes.
+     */
+    check(
+      "workout_logs_steps_paired",
+      sql`("steps" is null) = ("steps_source" is null)`,
+    ),
+
+    /*
+     * The bound on a step count — `distance_m`'s argument, applied to the
+     * figure derived from it.
+     *
+     * The ceiling is `MAX_STEPS`, interpolated rather than spelled so that this
+     * and the arithmetic that has to fit inside it cannot drift apart;
+     * `steps.test.ts` asserts that the largest figure the estimator can produce
+     * clears it. Without a bound, a forged request or a future device
+     * integration stores 1e9 and the export presents it as fact.
+     */
+    check(
+      "workout_logs_steps_range",
+      sql.raw(`"steps" is null or "steps" between 1 and ${MAX_STEPS}`),
     ),
   ],
 );

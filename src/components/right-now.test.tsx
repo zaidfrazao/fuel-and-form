@@ -211,10 +211,20 @@ const WALK_ENTRY = "entry-2";
  */
 const walked = (
   durationMin: number | null,
-  route: { distanceM?: number | null; hasRoute?: boolean } = {},
+  route: {
+    distanceM?: number | null;
+    steps?: number | null;
+    hasRoute?: boolean;
+  } = {},
 ): WalkEntryView => ({
   durationMin,
   distanceM: route.distanceM ?? null,
+  // The pair the schema keeps together — FUEL-103. A case names the count and
+  // gets `estimated` with it, because the only figure this app can produce
+  // today is one, and a builder that let them be set apart would let a test
+  // assert a state the database refuses.
+  steps: route.steps ?? null,
+  stepsSource: route.steps == null ? null : "estimated",
   hasRoute: route.hasRoute ?? false,
 });
 

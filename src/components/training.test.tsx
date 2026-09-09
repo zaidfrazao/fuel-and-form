@@ -310,8 +310,8 @@ describe("the session", () => {
       view({
         sessions: [
           CIRCUIT,
-          { ...WALK, entry: { status: "done", note: null, durationMin: 20 }, figures: { durationMin: 20, distanceM: null, hasRoute: false } },
-          { ...AFTERNOON_WALK, entry: { status: "done", note: null, durationMin: 15 }, figures: { durationMin: 15, distanceM: null, hasRoute: false } },
+          { ...WALK, entry: { status: "done", note: null, durationMin: 20 }, figures: { durationMin: 20, distanceM: null, steps: null, stepsSource: null, hasRoute: false } },
+          { ...AFTERNOON_WALK, entry: { status: "done", note: null, durationMin: 15 }, figures: { durationMin: 15, distanceM: null, steps: null, stepsSource: null, hasRoute: false } },
         ],
       }),
     );
@@ -364,7 +364,7 @@ describe("the session", () => {
   test("shows what is recorded against the walk, with its duration", () => {
     render(
       view({
-        sessions: [CIRCUIT, { ...WALK, entry: { status: "done", note: null, durationMin: 45 }, figures: { durationMin: 45, distanceM: null, hasRoute: false } }],
+        sessions: [CIRCUIT, { ...WALK, entry: { status: "done", note: null, durationMin: 45 }, figures: { durationMin: 45, distanceM: null, steps: null, stepsSource: null, hasRoute: false } }],
       }),
     );
 
@@ -388,7 +388,7 @@ describe("the session", () => {
       view({
         sessions: [
           { ...CIRCUIT, entry: { status: "done", note: null, durationMin: 28 } },
-          { ...WALK, entry: { status: "done", note: null, durationMin: null }, figures: { durationMin: null, distanceM: null, hasRoute: false } },
+          { ...WALK, entry: { status: "done", note: null, durationMin: null }, figures: { durationMin: null, distanceM: null, steps: null, stepsSource: null, hasRoute: false } },
         ],
       }),
     );

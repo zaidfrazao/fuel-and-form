@@ -72,6 +72,8 @@ function sheet(load: RouteLoad = loaded(), figures: Record<string, unknown> = {}
       name="Morning Walk"
       durationMin={34}
       distanceM={3200}
+      steps={4500}
+      stepsSource="estimated"
       load={load}
       onRetry={() => {}}
       onNamed={() => {}}
@@ -174,6 +176,8 @@ describe("the trace", () => {
         name="Morning Walk"
         durationMin={34}
         distanceM={3200}
+        steps={4500}
+        stepsSource="estimated"
         load={{ state: "failed" }}
         onRetry={retry}
         onNamed={() => {}}

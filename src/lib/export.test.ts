@@ -208,6 +208,8 @@ const workoutLog = (id: string, date: string): WorkoutLog => ({
   note: null,
   durationMin: 32,
   distanceM: null,
+  steps: null,
+  stepsSource: null,
   loggedAt: new Date("2026-08-10T06:35:00.000Z"),
 });
 

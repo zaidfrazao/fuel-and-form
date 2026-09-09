@@ -156,6 +156,8 @@ function narrow(
         ? {
             durationMin: log.durationMin,
             distanceM: log.distanceM,
+            steps: log.steps,
+            stepsSource: log.stepsSource,
             hasRoute: routed.has(log.id),
           }
         : null,

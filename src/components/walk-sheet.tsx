@@ -11,6 +11,7 @@ import type { CalendarDate } from "@/lib/date";
 import type { WalkRouteView } from "@/lib/db/queries/route";
 import { MAX_ROUTE_NAME } from "@/lib/route";
 import { absences, geoUri, kilometres, pace, startCoordinate } from "@/lib/route-trace";
+import { type StepSource, stepsFigure } from "@/lib/steps";
 
 /**
  * What was that walk — Brand Guide § Data Display → The Route Trace, FUEL-102.
@@ -57,6 +58,8 @@ export function WalkSheet({
   name,
   durationMin,
   distanceM,
+  steps,
+  stepsSource,
   load,
   onRetry,
   onNamed,
@@ -69,6 +72,8 @@ export function WalkSheet({
   name: string;
   durationMin: number | null;
   distanceM: number | null;
+  steps: number | null;
+  stepsSource: StepSource | null;
   load: RouteLoad;
   onRetry: () => void;
   onNamed: (name: string | null) => void;
@@ -113,7 +118,15 @@ export function WalkSheet({
           figures every reader came for, and the key/value grid § Component
           Patterns already carries is what draws them, with nothing invented.
         */}
-        <KeyValueGrid items={figures(distanceM, durationMin, route?.name ?? null)} />
+        <KeyValueGrid
+          items={figures({
+            distanceM,
+            durationMin,
+            steps,
+            stepsSource,
+            routeName: route?.name ?? null,
+          })}
+        />
 
         {route && (
           <RouteName date={date} entryId={entryId} route={route} onNamed={onNamed} />
@@ -136,23 +149,43 @@ export function WalkSheet({
 }
 
 /**
- * Distance, duration, pace and the route's name.
+ * Distance, duration, pace, the step estimate and its source, and the route's
+ * name.
  *
- * § The Route Trace names exactly these, plus "the step estimate and its
- * source" — which is FUEL-103's and is deliberately absent rather than
- * stubbed. A column reading "—" would be this screen promising a figure the
- * app cannot yet produce.
+ * § The Route Trace names exactly these, in this order, as the trace's adjacent
+ * data table. The step figure was the one it named that the app could not yet
+ * produce; FUEL-103 is that ticket, and the paragraph that stood here saying so
+ * is replaced by the figure rather than kept beside it.
+ *
+ * **The estimate and its source are ONE row**, which is a reading of the guide
+ * rather than a quotation of it. A `Source` row would read `Estimated` for
+ * every walk in the app today — a column of one repeated value — and the rule
+ * directly below is that this grid drops what a walk does not have rather than
+ * drawing it. `stepsFigure` owns the wording, so the row's tilde and this
+ * grid's word cannot come to disagree.
  *
  * A figure the walk does not have is DROPPED rather than drawn empty, which is
  * § P11's "absent rather than zeroed" applied to a grid: a one-tap walk shows a
  * duration and nothing else, and the reader is not asked to interpret three
  * dashes.
+ *
+ * An object rather than five positional arguments. Four was already the point
+ * at which a caller has to count commas to see which `null` is which, and every
+ * one of these fields is nullable.
  */
-function figures(
-  distanceM: number | null,
-  durationMin: number | null,
-  routeName: string | null,
-): KeyValueItem[] {
+function figures({
+  distanceM,
+  durationMin,
+  steps,
+  stepsSource,
+  routeName,
+}: {
+  distanceM: number | null;
+  durationMin: number | null;
+  steps: number | null;
+  stepsSource: StepSource | null;
+  routeName: string | null;
+}): KeyValueItem[] {
   const items: KeyValueItem[] = [];
 
   if (distanceM !== null) items.push({ label: "Distance", value: kilometres(distanceM) });
@@ -161,6 +194,14 @@ function figures(
   const perKm = pace(distanceM, durationMin);
 
   if (perKm !== null) items.push({ label: "Pace", value: perKm });
+
+  // The pair is checked rather than the count, for `walk-row.tsx`'s reason:
+  // the source is what chooses the wording, so a figure without one has
+  // nothing to draw itself with. The schema refuses that combination.
+  if (steps !== null && stepsSource !== null) {
+    items.push({ label: "Steps", value: stepsFigure(steps, stepsSource) });
+  }
+
   if (routeName !== null) items.push({ label: "Route", value: routeName });
 
   return items;

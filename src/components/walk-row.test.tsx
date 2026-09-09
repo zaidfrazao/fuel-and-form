@@ -144,7 +144,14 @@ const row = (entry: Partial<WalkEntryView> | null = null) => (
       entryId={entryId}
       name="Morning Walk"
       entry={
-        entry && { durationMin: null, distanceM: null, hasRoute: false, ...entry }
+        entry && {
+          durationMin: null,
+          distanceM: null,
+          steps: null,
+          stepsSource: null,
+          hasRoute: false,
+          ...entry,
+        }
       }
     />
   </ul>

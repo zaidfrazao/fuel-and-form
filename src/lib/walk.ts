@@ -2,6 +2,7 @@ import type { WorkoutLog } from "./db/schema";
 import type { DayLogs } from "./log-intent";
 import type { NowItem } from "./resolve-now";
 import { WALK_TYPE } from "./resolve-training";
+import type { StepSource } from "./steps";
 
 /**
  * The daily walks, as the layers that are not a walk's own have to see them —
@@ -138,6 +139,22 @@ export type WalkEntryView = {
    */
   distanceM: number | null;
   /**
+   * The step figure and where it came from — § P11, FUEL-103.
+   *
+   * Carried as the stored pair rather than derived here, and `walk.ts` stays
+   * pure by importing only the TYPE: the estimate is computed once, at the
+   * write, from a height this module never sees. A view model that re-derived
+   * it would be a second answer free to disagree with the stored one, and it
+   * could not produce a `device` count at all.
+   *
+   * Both null together — the schema pairs them — which is every one-tap walk,
+   * every walk logged before P11, and every walk whose owner has no plausible
+   * height on file. § P11's "absent rather than zeroed": the row and the sheet
+   * each draw nothing rather than `0 steps`.
+   */
+  steps: number | null;
+  stepsSource: StepSource | null;
+  /**
    * Whether there is a trace to open — § The Route Trace's affordance.
    *
    * Not derivable from `distanceM`, and that is the reason it is carried
@@ -191,6 +208,8 @@ export function walkEntries(
       entries.set(item.workout.entryId, {
         durationMin: log.durationMin,
         distanceM: log.distanceM,
+        steps: log.steps,
+        stepsSource: log.stepsSource,
         hasRoute: routedLogIds.has(log.id),
       });
     }

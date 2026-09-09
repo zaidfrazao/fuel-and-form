@@ -86,6 +86,7 @@ export default defineConfig({
         "src/lib/shopping-text.ts",
         "src/lib/slot-times.ts",
         "src/lib/template-plan.ts",
+        "src/lib/steps.ts",
         "src/lib/walk.ts",
         "src/lib/walk-reminder.ts",
         "src/lib/weigh-in.ts",
@@ -339,6 +340,19 @@ export default defineConfig({
         // logged; one wrongly taken out of it leaves a real log with no control
         // anywhere that can take it back. Neither throws and neither looks
         // wrong on the screen that caused it.
+        // FUEL-103. Small, pure and gated for the reason cursor.ts and
+        // slot-times.ts are: every branch in it is a REFUSAL, and an unmeasured
+        // refusal is a wrong figure nobody looked at. § P11 asks for "no
+        // estimate rather than a wrong one" from a missing or implausible
+        // height and from a walk with no distance, and all four of those
+        // answers are branches whose only evidence is a number that does not
+        // appear on a screen — the hardest kind of absence to notice.
+        //
+        // The copy is covered here too, for demo-banner.ts's reason. The tilde
+        // is spent by the SOURCE, and nothing in the app writes `device` yet,
+        // so that branch would otherwise ship unmeasured and a real count from
+        // FUEL-105 would arrive labelled as a guess.
+        "src/lib/steps.ts": FULLY_COVERED,
         "src/lib/walk.ts": FULLY_COVERED,
         // FUEL-46, and demo-banner.ts's argument with a wider blast radius. It
         // is read from the ROOT LAYOUT, so every branch in it runs on every

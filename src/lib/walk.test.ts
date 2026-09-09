@@ -70,6 +70,8 @@ function workoutLog(fields: Partial<WorkoutLog> & { id: string }): WorkoutLog {
     note: null,
     durationMin: null,
     distanceM: null,
+    steps: null,
+    stepsSource: null,
     loggedAt: new Date(Date.UTC(2026, 2, 9, 8, 0)),
     ...fields,
   };
