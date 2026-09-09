@@ -1257,6 +1257,138 @@ describe.skipIf(!configured)("recording a walk with a route, scoped", () => {
     expect(await routesFor(userId, log!.id)).toHaveLength(0);
   });
 
+  /* ---------------------------------------------------------------------- */
+  /* The step figure and its source — FUEL-103                              */
+  /* ---------------------------------------------------------------------- */
+
+  it("estimates a step count and records that it was estimated", async () => {
+    // The expected figure is `estimateSteps` applied to the fixture profile's
+    // own height and a kilometre, and it is NOT restated here as arithmetic:
+    // this suite's business is that Postgres stores and returns what the
+    // estimator produced, and `steps.test.ts` is where the division itself is
+    // pinned. Writing the height out again would also put a body-metric-shaped
+    // figure in a public repository for no gain — `check-no-metrics.sh` says
+    // so, and it said so about the first draft of this comment.
+    //
+    // Asserted through what came BACK from Postgres, so the enum's round trip
+    // is part of the claim rather than assumed.
+    const { userId } = fixture.alice;
+    const workoutId = await seedDailyWalk(userId);
+
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: 12,
+      route: storableRoute(straightWalk(1000)),
+    });
+
+    const log = await walkLog(userId, workoutId);
+
+    expect(log!.steps).toBe(1400);
+    expect(log!.stepsSource).toBe("estimated");
+  });
+
+  it("reports no step figure rather than zero for a walk with no distance", async () => {
+    // § P11's "absent rather than zeroed", and the pair moving together:
+    // `workout_logs_steps_paired` refuses a count without a source and a
+    // source without a count, so this is one assertion about two columns.
+    const { userId } = fixture.alice;
+    const workoutId = await seedDailyWalk(userId);
+
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: null,
+      route: storableRoute([]),
+    });
+
+    const log = await walkLog(userId, workoutId);
+
+    expect(log!.steps).toBeNull();
+    expect(log!.stepsSource).toBeNull();
+  });
+
+  it("re-estimates when a better recording replaces the first", async () => {
+    // The ordinary half of the precedence rule, and the one that must NOT be
+    // sticky. An estimate is derived from the distance, so a longer recording
+    // of the same walk has to move it — otherwise the row would report 850
+    // steps beside 1.4km, and the two figures on one line would contradict
+    // each other with nothing to say which was stale.
+    const { userId } = fixture.alice;
+    const workoutId = await seedDailyWalk(userId);
+
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: 8,
+      route: storableRoute(straightWalk(600)),
+    });
+
+    expect((await walkLog(userId, workoutId))!.steps).toBe(850);
+
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: 15,
+      route: storableRoute(straightWalk(1400)),
+    });
+
+    expect((await walkLog(userId, workoutId))!.steps).toBe(2000);
+  });
+
+  it("never overwrites a device count with an estimate", async () => {
+    /*
+     * § P11: "a device count is never overwritten by a re-estimate".
+     *
+     * THE ROW IS PLANTED BY THIS TEST, and that is the whole reason the test
+     * is worth anything. Nothing in the app writes `device` — FUEL-105 is the
+     * deferred native companion that would — so the `case` in
+     * `recordWalkRecording`'s `DO UPDATE` is unreachable from every code path
+     * a user can take. A test that only ever wrote estimates would pass
+     * against an implementation that clobbers, which is exactly the shape of
+     * green that means nothing.
+     *
+     * The other columns are asserted too, and asserted as CHANGED. Keeping a
+     * device count must not turn the whole row read-only: distance and
+     * duration are measurements from a different instrument, and a walk
+     * re-recorded further has really gone further.
+     */
+    const { userId } = fixture.alice;
+    const workoutId = await seedDailyWalk(userId);
+
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: 8,
+      route: storableRoute(straightWalk(600)),
+    });
+
+    const planted = await scope(userId, getDb()).update(
+      schema.workoutLogs,
+      { steps: 1234, stepsSource: "device" },
+      eq(schema.workoutLogs.workoutId, workoutId),
+    );
+
+    expect(planted).toHaveLength(1);
+
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: 15,
+      route: storableRoute(straightWalk(1400)),
+    });
+
+    const log = await walkLog(userId, workoutId);
+
+    // Kept: the count and the claim about where it came from.
+    expect(log!.steps).toBe(1234);
+    expect(log!.stepsSource).toBe("device");
+
+    // Updated: everything the coprocessor did not measure.
+    expect(log!.distanceM).toBe(1400);
+    expect(log!.durationMin).toBe(15);
+  });
+
   it("keeps one user's route out of another's reach", async () => {
     // The most sensitive rows this app holds, on the scope that every other
     // table is read through. Asserted positively as well as negatively, so a

@@ -198,7 +198,16 @@ describe("the figures", () => {
 
     // Queried by TEXT rather than by the `term` role: a `dt` takes no
     // accessible name, so `getByRole("term", { name })` is an always-null query.
-    for (const shown of ["Distance", "3.2 km", "Duration", "34 min", "Pace", "10:38 /km"]) {
+    for (const shown of [
+      "Distance",
+      "3.2 km",
+      "Duration",
+      "34 min",
+      "Pace",
+      "10:38 /km",
+      "Steps",
+      "~4,500 (estimated)",
+    ]) {
       expect(screen.getByText(shown)).toBeDefined();
     }
   });
@@ -212,10 +221,52 @@ describe("the figures", () => {
     expect(screen.getByText("Duration")).toBeDefined();
   });
 
-  test("carry no step estimate, which is FUEL-103's and not stubbed here", () => {
+  test("are in the order § The Route Trace lists them", () => {
+    /*
+     * "Distance, duration, pace, the step estimate and its source, and the
+     * route's name when it has one." The order is the assertion — six presence
+     * checks pass on any arrangement, and the guide names a sequence.
+     */
+    // `document` rather than the render's `container`: a sheet is a PORTAL, so
+    // the container it returns is empty and every query here goes through
+    // `screen` for the same reason.
+    render(sheet(loaded({ name: "The river loop" })));
+
+    expect([...document.querySelectorAll("dt")].map((dt) => dt.textContent)).toEqual([
+      "Distance",
+      "Duration",
+      "Pace",
+      "Steps",
+      "Route",
+    ]);
+  });
+
+  test("say the step figure is an estimate, in a word and not only a tilde", () => {
+    // § P11 asks for the figure to be "labelled as an estimate in the copy",
+    // and this is the surface with room for the word. The row's `~` is a
+    // convention a reader has to already know; § Accessibility's data table is
+    // exactly where that should not be the only signal.
     render(sheet());
 
-    expect(screen.queryByText(/steps/i)).toBeNull();
+    expect(screen.getByText("~4,500 (estimated)")).toBeDefined();
+  });
+
+  test("a walk with no step figure shows no Steps row at all", () => {
+    // The pair moves together, so this is the one-tap walk, the pre-P11 walk
+    // and the implausible-height profile in a single state.
+    render(sheet(loaded(), { steps: null, stepsSource: null }));
+
+    expect(screen.queryByText("Steps")).toBeNull();
+    expect(screen.queryByText(/estimated/)).toBeNull();
+  });
+
+  test("a counted figure says so, and takes no tilde", () => {
+    // Planted, for `walk-row.test.tsx`'s reason: nothing writes `device` yet,
+    // so the branch would ship unmeasured and a real count would arrive
+    // labelled as a guess.
+    render(sheet(loaded(), { steps: 4317, stepsSource: "device" }));
+
+    expect(screen.getByText("4,317 (counted)")).toBeDefined();
   });
 
   test("show the route's name once it has one", () => {

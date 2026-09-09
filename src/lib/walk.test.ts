@@ -195,6 +195,8 @@ describe("walkEntries", () => {
     expect(entries.get("entry-workout-2")).toEqual({
       durationMin: 45,
       distanceM: null,
+      steps: null,
+      stepsSource: null,
       hasRoute: false,
     });
   });
@@ -212,6 +214,8 @@ describe("walkEntries", () => {
     expect(entries.get("entry-workout-2")).toEqual({
       durationMin: null,
       distanceM: null,
+      steps: null,
+      stepsSource: null,
       hasRoute: false,
     });
   });
@@ -228,6 +232,41 @@ describe("walkEntries", () => {
     expect(entries.get("entry-workout-2")).toEqual({
       durationMin: 25,
       distanceM: 2040,
+      steps: null,
+      stepsSource: null,
+      hasRoute: true,
+    });
+  });
+
+  test("carries the step count and its source, straight off the row", () => {
+    /*
+     * FUEL-103, and the assertion is that this function does NOT do the
+     * arithmetic. The estimate is computed once at the write, from a height
+     * this module never sees, so a count here that did not match the stored
+     * one would be a second answer free to disagree — and it could not produce
+     * a `device` count at all. 9,999 is deliberately not what 2,040m estimates
+     * to: a `walkEntries` that re-derived would overwrite it.
+     */
+    const entries = walkEntries(
+      [workoutItem(WALK)],
+      [
+        workoutLog({
+          id: "l1",
+          workoutId: "workout-2",
+          durationMin: 25,
+          distanceM: 2040,
+          steps: 9999,
+          stepsSource: "device",
+        }),
+      ],
+      new Set(["l1"]),
+    );
+
+    expect(entries.get("entry-workout-2")).toEqual({
+      durationMin: 25,
+      distanceM: 2040,
+      steps: 9999,
+      stepsSource: "device",
       hasRoute: true,
     });
   });
@@ -246,6 +285,8 @@ describe("walkEntries", () => {
     expect(entries.get("entry-workout-2")).toEqual({
       durationMin: 4,
       distanceM: 280,
+      steps: null,
+      stepsSource: null,
       hasRoute: false,
     });
   });
@@ -271,6 +312,8 @@ describe("walkEntries", () => {
     expect(entries.get("entry-workout-2")).toEqual({
       durationMin: 30,
       distanceM: null,
+      steps: null,
+      stepsSource: null,
       hasRoute: false,
     });
     expect(entries.has("entry-workout-3")).toBe(false);
