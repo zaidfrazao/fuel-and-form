@@ -233,6 +233,25 @@ describe("recording", () => {
     await waitFor(() => expect(sentinel.release).toHaveBeenCalled());
   });
 
+  test("gives the watch and the screen back when the row leaves mid-walk", async () => {
+    // Navigating away while recording. The effect's cleanup is the only thing
+    // that runs, so it has to do both: a watch left running keeps the receiver
+    // on for the life of the tab, and a lock left held is a screen that never
+    // sleeps with nothing on it to explain why.
+    render(row());
+
+    await userEvent.click(screen.getByRole("button", { name: "Record" }));
+    await waitFor(() => expect(requestLock).toHaveBeenCalledTimes(1));
+
+    const sentinel = await requestLock.mock.results[0]?.value;
+
+    walked(3);
+    cleanup();
+
+    expect(clearWatch).toHaveBeenCalledWith(watchId);
+    await waitFor(() => expect(sentinel.release).toHaveBeenCalled());
+  });
+
   test("re-takes the lock the platform dropped when the tab was hidden", async () => {
     // The platform releases it on hide and does not give it back. Without this
     // the second half of every walk runs with the screen free to sleep, and
@@ -465,6 +484,35 @@ describe("an interrupted recording", () => {
 
     await waitFor(() => expect(saveWalkRecording).toHaveBeenCalledTimes(2));
     expect(logWalk).not.toHaveBeenCalled();
+  });
+
+  test("survives leaving the screen mid-walk and coming back", async () => {
+    /*
+     * Navigating `/` -> `/training` unmounts this row, which ends the watch —
+     * expected, the platform only records in the foreground. What must NOT
+     * happen is the walk vanishing: the draft is on disk, and coming back has
+     * to offer it.
+     *
+     * The bug this pins is in the draft STORE rather than in storage. The
+     * module-level cache is read once per key and lives as long as the tab, so
+     * a per-fix write that touched only `localStorage` left the cache holding
+     * the `null` it read on first mount — and the row came back offering
+     * "Record", with a perfectly good recording sitting in storage that only a
+     * full page reload would ever surface. Silently lost, which is the one
+     * thing this ticket is written against.
+     */
+    render(row());
+
+    await userEvent.click(screen.getByRole("button", { name: "Record" }));
+    walked(7);
+
+    // Leaving the screen. The draft is already written; nothing else runs.
+    cleanup();
+
+    render(row());
+
+    expect(screen.getByText(/A recording was interrupted · 0\.6 km · 2:00/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
   });
 
   test("is not offered for a draft that did not come from the recorder", () => {

@@ -123,16 +123,6 @@ function readDraft(key: string): Recording | null {
   }
 }
 
-function writeDraft(key: string, recording: Recording): void {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(recording));
-  } catch {
-    // Full, blocked, or private. The recording continues in memory; what is
-    // lost is the ability to recover it, and there is nothing to tell the user
-    // that they could act on mid-walk.
-  }
-}
-
 /**
  * The drafts React reads, mirrored to `localStorage` — `rest-timer.tsx`'s
  * arrangement, keyed.
@@ -174,12 +164,22 @@ function subscribeDraft(key: string, listener: () => void): () => void {
 }
 
 /**
- * Records or clears one row's draft — one write, one notification.
+ * Records or clears one row's draft: the cache first, then the mirror.
  *
  * The in-memory value is set before the mirror is attempted, so a refused write
  * costs the recovery and not the render.
+ *
+ * ## The cache is written on EVERY fix, and that is not an optimisation
+ *
+ * `draftSnapshot` reads `localStorage` once per key and the map outlives every
+ * mount, so a write that touched only storage would leave the cache holding
+ * whatever was read on the first mount. Recording a walk and then navigating
+ * `/` → `/training` and back would come back offering **Record**, with a good
+ * recording sitting in storage that nothing short of a full page reload would
+ * ever surface again. That is the silent loss this feature is written against,
+ * reached without anything failing.
  */
-function keepDraft(key: string, recording: Recording | null): void {
+function store(key: string, recording: Recording | null, notify: boolean): void {
   drafts.set(key, recording);
 
   try {
@@ -189,8 +189,22 @@ function keepDraft(key: string, recording: Recording | null): void {
     // See the header. Nothing to do and nothing a reader could act on.
   }
 
-  for (const listener of listeners.get(key) ?? []) listener();
+  if (notify) for (const listener of listeners.get(key) ?? []) listener();
 }
+
+/** A draft the row is being told about — a stop, a refusal, a discard. */
+const keepDraft = (key: string, recording: Recording | null) =>
+  store(key, recording, true);
+
+/**
+ * The running recording's own write, on every fix.
+ *
+ * Silent, because the row is already re-rendering from `recording` state and
+ * the draft affordance is not on screen while a recording runs — so notifying
+ * would be a second render per fix to change nothing anybody can see.
+ */
+const cacheDraft = (key: string, recording: Recording) =>
+  store(key, recording, false);
 
 /* -------------------------------------------------------------------------- */
 /* The device                                                                 */
@@ -414,7 +428,7 @@ export function WalkRow({
         // Every fix, which is the criterion. It is also what makes the recording
         // survive the tab being killed by the platform mid-walk — the case that
         // leaves no other trace.
-        writeDraft(key, next);
+        cacheDraft(key, next);
       },
       (error) => {
         if (error.code !== PERMISSION_DENIED) return;
