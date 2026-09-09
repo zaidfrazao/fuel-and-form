@@ -379,6 +379,38 @@ export function kilometres(metres: number): string {
   return `${(metres / 1000).toFixed(1)} km`;
 }
 
+/**
+ * Minutes and seconds per kilometre, or null where there is no pace to state.
+ *
+ * § The Route Trace lists pace among the walk's figures, and it is the one
+ * figure here that is DERIVED rather than measured — so it is derived at the
+ * point of display rather than stored, and it disappears entirely when either
+ * operand is missing. A one-tap walk has a duration and no distance; a walk
+ * from before P11 has neither. Neither gets a pace of zero, on § P11's
+ * "absent rather than zeroed": a pace of nothing is not a speed somebody
+ * walked at.
+ *
+ * `m:ss` because that is how a walking pace is read, and because § Feedback
+ * already established the format for a figure of minutes and seconds when the
+ * rest timer needed one.
+ *
+ * The distance is the FULL walk's, measured before the trim, and the duration
+ * is the whole recording's — so the two agree with each other even though
+ * neither agrees with the drawn trace. § P11 makes that a deliberate
+ * disagreement rather than an inconsistency: the trim is a privacy control over
+ * stored geometry and these are measurements about somebody's day.
+ */
+export function pace(distanceM: number | null, durationMin: number | null): string | null {
+  if (distanceM === null || durationMin === null) return null;
+  if (distanceM <= 0 || durationMin <= 0) return null;
+
+  const secondsPerKm = Math.round((durationMin * 60) / (distanceM / 1000));
+  const minutes = Math.floor(secondsPerKm / 60);
+  const seconds = secondsPerKm % 60;
+
+  return `${minutes}:${String(seconds).padStart(2, "0")} /km`;
+}
+
 const COUNT_WORDS = ["no", "one", "two", "three", "four", "five"] as const;
 
 /** Small counts in words, because the summary is a sentence and not a readout. */

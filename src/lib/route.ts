@@ -96,6 +96,24 @@ export const COORD_DECIMALS = 5;
 export const MAX_ROUTE_POINTS = 500;
 
 /**
+ * The longest a route's name may be — FUEL-102.
+ *
+ * Declared here, beside the cap, because it has the same three readers and the
+ * same failure if they disagree: `db/schema.ts` builds the column's CHECK from
+ * it, `actions/walk-route.ts` refuses a longer name before it reaches the
+ * database, and the naming field wears it as a `maxLength`. Three spellings of
+ * one number would be three chances for the interface to accept what the
+ * database then rejects.
+ *
+ * Sixty characters is a bound rather than a judgement about names — it exists
+ * because the column is written from a text input by a request that can be
+ * forged, and an unbounded `text` behind an authenticated POST is a row
+ * somebody can make arbitrarily large. It is well past any name a person types
+ * for a walk they take twice a day.
+ */
+export const MAX_ROUTE_NAME = 60;
+
+/**
  * How much of each end is trimmed away before the trace is stored. 150 metres.
  *
  * The decision this ticket was asked to make, and the honest note that has to

@@ -28,7 +28,12 @@ import { MEDIA_KINDS } from "../form-media";
 // anything this file drags in, and `MAX_ROUTE_POINTS` is imported rather than
 // re-spelled so the CHECK below and the simplifier cannot disagree about what
 // the cap is.
-import { COORD_DECIMALS, MAX_ROUTE_POINTS, type Track } from "../route";
+import {
+  COORD_DECIMALS,
+  MAX_ROUTE_NAME,
+  MAX_ROUTE_POINTS,
+  type Track,
+} from "../route";
 import { SECTIONS, WORKING_SECTION } from "../section";
 
 /**
@@ -1441,7 +1446,10 @@ export const walkRoutes = pgTable(
      */
     check(
       "walk_routes_name_shape",
-      sql`"name" is null or (trim("name") <> '' and char_length("name") <= 60)`,
+      sql.raw(
+        `"name" is null or (trim("name") <> '' ` +
+          `and char_length("name") <= ${MAX_ROUTE_NAME})`,
+      ),
     ),
 
     /*

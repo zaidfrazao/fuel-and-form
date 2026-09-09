@@ -47,6 +47,7 @@ import {
   PAGE_MEASURE_FOOT,
   PAGE_SESSION_FOOT,
 } from "@/lib/frame";
+import type { WalkEntryView } from "@/lib/walk";
 import {
   currentExercise,
   type LoggedSet,
@@ -191,6 +192,20 @@ export type TrainingItem = {
   kind: "session" | "walk";
   exercises: readonly TrainingExercise[];
   entry: SessionEntryView | null;
+  /**
+   * The walk's own figures, for the row that draws them — FUEL-102.
+   *
+   * Absent for a session, and that is why it is here rather than on
+   * `SessionEntryView`: a gym session has no distance and no trace, so widening
+   * the entry type would have given every session two fields it can never hold
+   * and made every reader check `kind` before trusting them. `trainingDay`
+   * returns one list of items and `kind` separates them; this follows that
+   * seam rather than cutting a new one.
+   *
+   * Optional because most items are sessions and a screen that draws none of
+   * this should not have to say so.
+   */
+  figures?: WalkEntryView | null;
   /**
    * The sets performed against this session on this date — § P10, FUEL-91.
    *
@@ -1714,9 +1729,7 @@ export function Training({
                   date={date}
                   entryId={walk.entryId}
                   name={walk.name}
-                  entry={
-                    walk.entry ? { durationMin: walk.entry.durationMin } : null
-                  }
+                  entry={walk.figures ?? null}
                 />
               ))}
             </ul>

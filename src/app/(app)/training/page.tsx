@@ -5,6 +5,7 @@ import { PageMain } from "@/components/page-main";
 import { Training, type TrainingItem } from "@/components/training";
 import { getSession } from "@/lib/auth/session";
 import { type CalendarDate, parseCalendarDate } from "@/lib/date";
+import { routedLogIds } from "@/lib/db/queries/route";
 import { loadTraining } from "@/lib/db/queries/training";
 import { resolveFormMedia } from "@/lib/form-media";
 import type { TrainingSession } from "@/lib/resolve-training";
@@ -104,6 +105,7 @@ function narrow(
   session: TrainingSession,
   logs: readonly WorkoutLog[],
   sets: readonly ExerciseSet[],
+  routed: ReadonlySet<string>,
 ): TrainingItem {
   const log = logs.find((row) => row.workoutId === session.workout.id);
 
@@ -143,6 +145,20 @@ function narrow(
     entry: log
       ? { status: log.status, note: log.note, durationMin: log.durationMin }
       : null,
+    /*
+     * The walk's own figures — FUEL-102, and only for a walk.
+     *
+     * A session gets `null` rather than a row of empty fields: it has no
+     * distance and no trace, and the row that draws these is the walk's alone.
+     */
+    figures:
+      session.kind === "walk" && log
+        ? {
+            durationMin: log.durationMin,
+            distanceM: log.distanceM,
+            hasRoute: routed.has(log.id),
+          }
+        : null,
     /*
      * Only this session's sets, and only when there is a log for them to hang
      * off. Both filters are the same one really — a set's `workout_log_id`
@@ -189,6 +205,13 @@ export default async function TrainingPage({
     );
   }
 
+  /*
+   * Which of this date's walks have a trace — FUEL-102, and the same existence
+   * query `/` runs. After the guard because it is scoped to the RESOLVED date,
+   * which `loadTraining` decides and which a `?week=` may have moved.
+   */
+  const routed = await routedLogIds(session.userId, training.date);
+
   return (
     <Training
       // Remounts on navigation, which is what resets the note and duration
@@ -199,7 +222,7 @@ export default async function TrainingPage({
       date={training.date}
       today={training.today}
       sessions={training.day.sessions.map((item) =>
-        narrow(item, training.logs, training.sets),
+        narrow(item, training.logs, training.sets, routed),
       )}
       /*
        * What a session on this date is costed at — § P10's energy figure,

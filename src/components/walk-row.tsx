@@ -11,7 +11,9 @@ import {
 } from "react";
 
 import { clearWalk, logWalk, saveWalkRecording } from "@/app/actions/log-walk";
+import { openWalkRoute } from "@/app/actions/walk-route";
 import { Button } from "@/components/ui/button";
+import { type RouteLoad, WalkSheet } from "@/components/walk-sheet";
 import type { CalendarDate } from "@/lib/date";
 import {
   appendFix,
@@ -23,7 +25,9 @@ import {
   track,
   trackMinutes,
 } from "@/lib/recording";
-import { countPoints, distanceMetres, simplifyToCap } from "@/lib/route";
+import { FOCUS_RING, HOVER_LIFT, POINTER } from "@/lib/pointer";
+import { countPoints, distanceMetres, simplifyToCap, storableRoute } from "@/lib/route";
+import { kilometres } from "@/lib/route-trace";
 import { hold, release } from "@/lib/wake-lock";
 import { WALK_PRESETS, type WalkEntryView } from "@/lib/walk";
 
@@ -250,11 +254,6 @@ function clock(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
 
-/** Kilometres to one decimal — Brand Guide § The Route Trace's `3.2 km`. */
-function kilometres(metres: number): string {
-  return `${(metres / 1000).toFixed(1)} km`;
-}
-
 /**
  * What the row says while a recording runs.
  *
@@ -322,6 +321,8 @@ export function WalkRow({
    * row exists to prevent, arriving through the control offered to prevent it.
    */
   const [failure, setFailure] = useState<Retry | undefined>(undefined);
+  const [sheet, setSheet] = useState(false);
+  const [load, setLoad] = useState<RouteLoad>({ state: "loading" });
 
   const key = draftKey(date, entryId);
 
@@ -504,6 +505,51 @@ export function WalkRow({
    * statement on the server too: `logWalk` upserts and `clearWalk` deletes, and
    * which of them runs is decided by what the row is being asked to become.
    */
+  /**
+   * A duration change, keeping whatever the walk already measured.
+   *
+   * `logWalk` writes a duration and nothing else, so the distance and the trace
+   * are untouched by a preset tap — and the optimistic row has to say the same,
+   * or tapping "20 min" would blank the figures line for a frame and take the
+   * sheet's control with it.
+   */
+  const withDuration = (durationMin: number | null): WalkEntryView => ({
+    durationMin,
+    distanceM: shown?.distanceM ?? null,
+    hasRoute: shown?.hasRoute ?? false,
+  });
+
+  /**
+   * Open the sheet and ask for the trace — one tap, one request.
+   *
+   * The fetch lives here rather than in an effect inside the sheet because
+   * opening it and asking for the route are the SAME user action; an effect
+   * keyed on `open` would be re-deriving the trigger from the state the trigger
+   * set. It also keeps the geometry's arrival on the path a reader can follow
+   * from the control they pressed.
+   */
+  const openSheet = () => {
+    setSheet(true);
+    setLoad({ state: "loading" });
+
+    void (async () => {
+      try {
+        const route = await openWalkRoute({ date, entryId });
+
+        // A null answer is a refusal rather than an empty route: the row only
+        // draws this control where a trace exists, so reaching here with
+        // nothing means the walk moved under us or the session went.
+        setLoad(route ? { state: "loaded", route } : { state: "failed" });
+      } catch {
+        // The CALL failed rather than the action — no signal on the way back
+        // from a walk, a dropped connection, a cold start. The same wrapper
+        // `act` carries, for the same reason: an escaping rejection would leave
+        // the sheet empty with nothing on screen to say why.
+        setLoad({ state: "failed" });
+      }
+    })();
+  };
+
   const act = (next: WalkEntryView | null) => {
     setFailure(undefined);
 
@@ -578,7 +624,20 @@ export function WalkRow({
       // The duration the SERVER will derive, shown on this frame — the same
       // function on the same track, so the optimistic row and the row that
       // arrives say the same thing rather than flashing from one to the other.
-      apply({ durationMin: trackMinutes(track(finished)) });
+      // The figures the SERVER will derive, shown on this frame — the same
+      // functions on the same track, so the optimistic row and the row that
+      // arrives say the same thing rather than flashing from one to the other.
+      // `storableRoute` is what the action calls, so the distance is the
+      // untrimmed measure and `pointCount` is exactly the test for whether a
+      // trace survived the trim: a walk under 300m stores none, and its figures
+      // must not offer a sheet with nothing in it.
+      const stored = storableRoute(track(finished));
+
+      apply({
+        durationMin: trackMinutes(track(finished)),
+        distanceM: stored.distanceM,
+        hasRoute: stored.pointCount > 0,
+      });
 
       const refused = () =>
         startTransition(() => {
@@ -618,7 +677,7 @@ export function WalkRow({
     // "a complete walk with fewer figures, never a partial one".
     if (finished.startedAt === null) {
       keepDraft(key, null);
-      act({ durationMin: null });
+      act(withDuration(null));
 
       return;
     }
@@ -645,11 +704,20 @@ export function WalkRow({
            * is announced without moving focus, and what is announced is the
            * optimistic value, which is what the screen is showing.
            */
+          /*
+           * The minutes moved OUT of this status in FUEL-102, and the move is
+           * the point rather than a tidy-up. § The Route Trace makes the walk's
+           * own figures the affordance that opens its sheet — "the row opens the
+           * sheet rather than growing one" — and § Lists describes the logged
+           * row as reading `/ 3.2 km · 34 min` in the Slash register, which it
+           * did not yet do. Leaving the duration here as well would print it
+           * twice on one row, a line apart.
+           *
+           * `Done` stays because it is the STATUS, and status is what this
+           * corner of the row has always carried.
+           */
           <span role="status" className="text-micro uppercase text-text-secondary">
             Done
-            {shown.durationMin !== null && (
-              <span className="tabular-nums"> · {shown.durationMin} min</span>
-            )}
           </span>
         ) : (
           <div className="flex shrink-0 items-center gap-2">
@@ -664,7 +732,7 @@ export function WalkRow({
               variant="secondary"
               size="xs"
               className="shrink-0"
-              onClick={() => act({ durationMin: null })}
+              onClick={() => act(withDuration(null))}
             >
               Log walk
             </Button>
@@ -691,6 +759,29 @@ export function WalkRow({
           / {reading(recording)}
         </p>
       )}
+
+      {/*
+       * The walk's own figures, which are also the way into its sheet —
+       * § The Route Trace, FUEL-102.
+       *
+       * "On the row the walk reads in the Slash register — `/ 3.2 km · 34 min ·
+       * ~4,300 steps` — and those figures are also the affordance, which is
+       * FUEL-108's device applied a second time: the row opens the sheet rather
+       * than growing one." The step estimate is FUEL-103's and is absent rather
+       * than stubbed.
+       *
+       * The log control and the figures cannot collide, because the figures do
+       * not exist until the walk is logged: before the tap there is a walk to
+       * log and nothing to look at, and § P3's one tap is untouched.
+       *
+       * **A walk with no route gets the same line as plain text.** Not a
+       * disabled control — § The row as a control refuses "a state that would
+       * promise an action that does not exist", and § The Route Trace makes the
+       * same refusal in as many words: "a walk with no route draws nothing".
+       * A one-tap walk still has minutes worth reading, so the line stays and
+       * only its interactivity goes.
+       */}
+      {shown && !recording && <Figures entry={shown} onOpen={openSheet} />}
 
       {/*
        * The cost, before it is paid — FUEL-101's criterion, and § P11's
@@ -763,7 +854,7 @@ export function WalkRow({
               // rather than rewriting it — the way back from a mistap that is
               // not "take the whole walk back and log it again".
               onClick={() =>
-                act({ durationMin: shown.durationMin === minutes ? null : minutes })
+                act(withDuration(shown.durationMin === minutes ? null : minutes))
               }
             >
               {minutes} min
@@ -801,6 +892,91 @@ export function WalkRow({
           </Button>
         </div>
       )}
+      {/*
+        Mounted only while it is open, and only where there is a route.
+
+        Not a permanently mounted sheet with `open={false}`: this one FETCHES on
+        open, and a mounted-but-closed sheet on every logged walk would be two
+        components per row waiting to run an effect. `open` is redundant with
+        the conditional and is passed anyway, because Radix needs the state to
+        animate the close before the unmount.
+      */}
+      {shown?.hasRoute && (
+        <WalkSheet
+          open={sheet}
+          onOpenChange={setSheet}
+          date={date}
+          entryId={entryId}
+          name={name}
+          durationMin={shown.durationMin}
+          distanceM={shown.distanceM}
+          load={load}
+          onRetry={openSheet}
+          onNamed={(named) =>
+            setLoad((current) =>
+              current.state === "loaded"
+                ? {
+                    state: "loaded",
+                    // The suggestion goes with the name: an offer that has been
+                    // answered is not still a question, and leaving it drawn
+                    // would invite the reader to answer it twice.
+                    route: { ...current.route, name: named, suggestion: null },
+                  }
+                : current,
+            )
+          }
+        />
+      )}
     </li>
+  );
+}
+
+/**
+ * The logged walk's figures — a line, and where there is a route, a control.
+ *
+ * § The Route Trace: "the row shows figures; the sheet shows the shape. There
+ * is no rest state." The figures ARE the affordance, so this is a button when
+ * there is something to open and a plain line when there is not.
+ *
+ * Nothing is drawn for a walk with neither figure. A bare one-tap walk with no
+ * duration has `Done` beside its name and that is the whole of what is known
+ * about it — an empty Slash line would be a `/` with nothing after it.
+ */
+function Figures({
+  entry,
+  onOpen,
+}: {
+  entry: WalkEntryView;
+  onOpen: () => void;
+}) {
+  const parts = [
+    entry.distanceM === null ? null : kilometres(entry.distanceM),
+    entry.durationMin === null ? null : `${entry.durationMin} min`,
+  ].filter((part) => part !== null);
+
+  if (parts.length === 0) return null;
+
+  const line = parts.join(" · ");
+
+  if (!entry.hasRoute) {
+    return <p className="pb-3 text-slash tabular-nums text-text-secondary">/ {line}</p>;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={`group flex min-h-[34px] items-center pb-3 text-left text-slash tabular-nums text-text-secondary ${POINTER} ${FOCUS_RING}`}
+    >
+      {/* The mark stays `text-tertiary` under the lift, as § Slash Metadata
+          draws it everywhere else: what the hover moves is the figures. */}
+      <span aria-hidden className="text-text-tertiary">/&nbsp;</span>
+      <span className={HOVER_LIFT}>{line}</span>
+      {/* Named for a screen reader, which cannot see that a line of figures is
+          a control. The visible text is the figures; this says what pressing
+          them does, and § Navigation's rule that a label may say more than the
+          name is the same containment. */}
+      <span className="sr-only"> — see the route</span>
+    </button>
   );
 }

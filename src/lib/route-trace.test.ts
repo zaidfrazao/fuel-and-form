@@ -8,6 +8,7 @@ import {
   gapSeconds,
   geoUri,
   kilometres,
+  pace,
   LOOP_MAX_FRACTION,
   LOOP_TOLERANCE_M,
   percent,
@@ -430,6 +431,21 @@ describe("the readout", () => {
   it("says a distance the way the app says it everywhere", () => {
     expect(kilometres(3247)).toBe("3.2 km");
     expect(kilometres(0)).toBe("0.0 km");
+  });
+
+  it("states a walking pace in minutes and seconds per kilometre", () => {
+    // 3.2km in 34 minutes — the section's own example walk.
+    expect(pace(3200, 34)).toBe("10:38 /km");
+    expect(pace(5000, 50)).toBe("10:00 /km");
+  });
+
+  it("has no pace where either figure is missing, rather than a zero", () => {
+    expect(pace(null, 34)).toBeNull();
+    expect(pace(3200, null)).toBeNull();
+    // A one-tap walk, and a walk that measured no distance: neither was walked
+    // at a speed of nothing.
+    expect(pace(0, 34)).toBeNull();
+    expect(pace(3200, 0)).toBeNull();
   });
 
   it("turns a user unit into the overlay's percentage", () => {

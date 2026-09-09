@@ -123,7 +123,32 @@ export function withoutWalks(logs: DayLogs, ids: ReadonlySet<string>): DayLogs {
 }
 
 /** What the walk's row draws about itself. `null` until the walk is logged. */
-export type WalkEntryView = { durationMin: number | null };
+export type WalkEntryView = {
+  durationMin: number | null;
+  /**
+   * How far the walk went, in whole metres, or null — FUEL-102.
+   *
+   * The figure `workout_logs.distance_m` holds, which is the FULL walk measured
+   * before the trace's ends were trimmed. § P11: the two disagree by design,
+   * because the trim is a privacy control over stored geometry and this is a
+   * measured quantity about somebody's day.
+   *
+   * Null for every one-tap walk and for every walk logged before P11, which is
+   * "absent rather than zeroed" and not a zero the row would draw as `0.0 km`.
+   */
+  distanceM: number | null;
+  /**
+   * Whether there is a trace to open — § The Route Trace's affordance.
+   *
+   * Not derivable from `distanceM`, and that is the reason it is carried
+   * separately rather than inferred at the row. A walk shorter than twice the
+   * trim measures a distance and stores no trace at all, so a row that read the
+   * figure would offer a sheet with nothing in it — for exactly the walks whose
+   * absence is hardest to notice. § The Route Trace: "a walk with no route draws
+   * nothing — not a disabled control."
+   */
+  hasRoute: boolean;
+};
 
 /**
  * What is recorded against each of the day's walks, keyed by TEMPLATE ENTRY id.
@@ -152,6 +177,7 @@ export type WalkEntryView = { durationMin: number | null };
 export function walkEntries(
   items: readonly NowItem[],
   logs: readonly WorkoutLog[],
+  routedLogIds: ReadonlySet<string> = new Set(),
 ): ReadonlyMap<string, WalkEntryView> {
   const byWorkout = new Map(logs.map((log) => [log.workoutId, log]));
   const entries = new Map<string, WalkEntryView>();
@@ -161,7 +187,13 @@ export function walkEntries(
 
     const log = byWorkout.get(item.workout.workout.id);
 
-    if (log) entries.set(item.workout.entryId, { durationMin: log.durationMin });
+    if (log) {
+      entries.set(item.workout.entryId, {
+        durationMin: log.durationMin,
+        distanceM: log.distanceM,
+        hasRoute: routedLogIds.has(log.id),
+      });
+    }
   }
 
   return entries;

@@ -4,15 +4,26 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { appendFix, NOTHING_RECORDED, type Recording } from "@/lib/recording";
 import { EARTH_RADIUS_M } from "@/lib/route";
+import type { WalkEntryView } from "@/lib/walk";
 
 const logWalk = vi.fn();
 const clearWalk = vi.fn();
 const saveWalkRecording = vi.fn();
+const openWalkRoute = vi.fn();
+const nameRoute = vi.fn();
 
 vi.mock("@/app/actions/log-walk", () => ({
   logWalk: (...args: unknown[]) => logWalk(...args),
   clearWalk: (...args: unknown[]) => clearWalk(...args),
   saveWalkRecording: (...args: unknown[]) => saveWalkRecording(...args),
+}));
+
+// The logged row mounts the sheet where a route exists (FUEL-102), and the
+// sheet fetches on open. Stubbed here so this file stays about the RECORDER:
+// `walk-sheet.test.tsx` is where the sheet's own behaviour is asserted.
+vi.mock("@/app/actions/walk-route", () => ({
+  openWalkRoute: (...args: unknown[]) => openWalkRoute(...args),
+  nameRoute: (...args: unknown[]) => nameRoute(...args),
 }));
 
 const { WalkRow } = await import("./walk-row");
@@ -121,9 +132,21 @@ const walked = (count: number) => {
   for (let index = 0; index < count; index += 1) emit(index * 100, 0, index * 20_000);
 };
 
-const row = (entry: { durationMin: number | null } | null = null) => (
+/**
+ * The row under test. `entry` is the walk's logged figures — FUEL-102 widened
+ * it, and the default here is the one-tap walk: minutes, no distance, no trace.
+ * A case that wants the sheet's affordance asks for `hasRoute` explicitly.
+ */
+const row = (entry: Partial<WalkEntryView> | null = null) => (
   <ul>
-    <WalkRow date={DATE} entryId={entryId} name="Morning Walk" entry={entry} />
+    <WalkRow
+      date={DATE}
+      entryId={entryId}
+      name="Morning Walk"
+      entry={
+        entry && { durationMin: null, distanceM: null, hasRoute: false, ...entry }
+      }
+    />
   </ul>
 );
 

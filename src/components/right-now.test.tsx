@@ -198,6 +198,22 @@ const WALK_ENTRY = "entry-2";
  * every account looked like before this ticket and what one looks like after
  * someone edits their template. The pair has its own block.
  */
+/**
+ * A logged walk, as the row is given one — FUEL-102 widened this.
+ *
+ * The default is the one-tap walk: minutes and nothing else. A route is opted
+ * into per case, because "a walk with no route draws nothing" is the ordinary
+ * state and the one most of these cases are about.
+ */
+const walked = (
+  durationMin: number | null,
+  route: { distanceM?: number | null; hasRoute?: boolean } = {},
+): WalkEntryView => ({
+  durationMin,
+  distanceM: route.distanceM ?? null,
+  hasRoute: route.hasRoute ?? false,
+});
+
 const WALK_2_ENTRY = "entry-6";
 
 const WALK_2: AnytimeItem = {
@@ -827,8 +843,8 @@ describe("anytime items", () => {
       EXERCISES,
       [],
       new Map([
-        [WALK_ENTRY, { durationMin: 20 }],
-        [WALK_2_ENTRY, { durationMin: 15 }],
+        [WALK_ENTRY, walked(20)],
+        [WALK_2_ENTRY, walked(15)],
       ]),
     );
 
@@ -844,7 +860,7 @@ describe("anytime items", () => {
       active(0, { anytime: [WALK, WALK_2] }),
       EXERCISES,
       [],
-      new Map([[WALK_ENTRY, { durationMin: 20 }]]),
+      new Map([[WALK_ENTRY, walked(20)]]),
     );
 
     const morning = screen.getByText("Morning Walk").closest("li")!;
@@ -941,7 +957,7 @@ describe("the daily walk", () => {
 
     expect(within(anytime()).queryByRole("button", { name: "30 min" })).toBeNull();
 
-    renderNow(active(0), EXERCISES, [], { durationMin: null });
+    renderNow(active(0), EXERCISES, [], walked(null));
 
     expect(screen.getAllByRole("button", { name: "20 min" })).not.toHaveLength(0);
   });
@@ -949,7 +965,7 @@ describe("the daily walk", () => {
   test("records a duration against the walk already logged", async () => {
     const user = userEvent.setup();
 
-    renderNow(active(0), EXERCISES, [], { durationMin: null });
+    renderNow(active(0), EXERCISES, [], walked(null));
 
     await user.click(within(anytime()).getByRole("button", { name: "20 min" }));
 
@@ -965,7 +981,7 @@ describe("the daily walk", () => {
   test("clears the duration when its own preset is tapped again", async () => {
     const user = userEvent.setup();
 
-    renderNow(active(0), EXERCISES, [], { durationMin: 20 });
+    renderNow(active(0), EXERCISES, [], walked(20));
 
     const preset = within(anytime()).getByRole("button", { name: "20 min" });
 
@@ -984,7 +1000,7 @@ describe("the daily walk", () => {
   });
 
   test("shows the duration beside Done", () => {
-    renderNow(active(0), EXERCISES, [], { durationMin: 30 });
+    renderNow(active(0), EXERCISES, [], walked(30));
 
     expect(within(anytime()).getByRole("status").textContent).toContain("30 min");
   });
@@ -992,7 +1008,7 @@ describe("the daily walk", () => {
   test("takes the walk back from its own row", async () => {
     const user = userEvent.setup();
 
-    renderNow(active(0), EXERCISES, [], { durationMin: 30 });
+    renderNow(active(0), EXERCISES, [], walked(30));
 
     await user.click(within(anytime()).getByRole("button", { name: "Undo" }));
 
@@ -1126,9 +1142,7 @@ describe("day-complete", () => {
   });
 
   test("closes completely once the walk is logged", () => {
-    renderNow({ ...BASE, state: "day-complete" }, EXERCISES, LOGGED, {
-      durationMin: 20,
-    });
+    renderNow({ ...BASE, state: "day-complete" }, EXERCISES, LOGGED, walked(20));
 
     // The row is gone; the walk is a line in the summary above like any other
     // log. No ruler, no Up next, no Anytime — the page is closed again.
@@ -1154,7 +1168,7 @@ describe("day-complete", () => {
       { ...BASE, state: "day-complete", anytime: [WALK, WALK_2] },
       EXERCISES,
       LOGGED,
-      new Map([[WALK_ENTRY, { durationMin: 20 }]]),
+      new Map([[WALK_ENTRY, walked(20)]]),
     );
 
     expect(screen.getByText("Afternoon Walk")).toBeDefined();
@@ -1168,8 +1182,8 @@ describe("day-complete", () => {
       EXERCISES,
       LOGGED,
       new Map([
-        [WALK_ENTRY, { durationMin: 20 }],
-        [WALK_2_ENTRY, { durationMin: 15 }],
+        [WALK_ENTRY, walked(20)],
+        [WALK_2_ENTRY, walked(15)],
       ]),
     );
 
