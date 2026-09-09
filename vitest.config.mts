@@ -74,6 +74,7 @@ export default defineConfig({
         "src/lib/repeat.ts",
         "src/lib/rest-timer.ts",
         "src/lib/resolve-plan.ts",
+        "src/lib/recording.ts",
         "src/lib/route.ts",
         "src/lib/resolve-now.ts",
         "src/lib/resolve-training.ts",
