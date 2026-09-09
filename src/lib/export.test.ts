@@ -362,6 +362,39 @@ describe("what leaves the account", () => {
     expect(document.workoutExercises[0]?.workoutId).toBe(WORKOUT_ID);
   });
 
+  test("carries a walk's step figure and the origin of it — FUEL-103", () => {
+    /*
+     * The columns reach the backup MECHANICALLY: this builder spreads the
+     * whole `workout_logs` row, so nothing had to be edited for them to appear
+     * and nothing would have failed if they had not. That is the reason this
+     * test exists — the export's field list is otherwise recorded only in
+     * README.md, which no test reads.
+     *
+     * The SOURCE is the half worth asserting. A count and a division are
+     * different claims about the same walk, and a backup that carried the
+     * number alone would hand a reader a modelled figure indistinguishable
+     * from a measured one. § P11 asks for both, in both formats and both
+     * scopes; the weekly CSV's half is FUEL-104's.
+     */
+    const document = build({
+      ...TABLES,
+      workoutLogs: [
+        {
+          ...workoutLog(WORKOUT_LOG_ID, "2026-08-10"),
+          distanceM: 3200,
+          steps: 4500,
+          stepsSource: "estimated",
+        },
+      ],
+    });
+
+    expect(document.workoutLogs[0]).toMatchObject({
+      distanceM: 3200,
+      steps: 4500,
+      stepsSource: "estimated",
+    });
+  });
+
   test("writes every instant as an ISO string", () => {
     const document = build();
 
