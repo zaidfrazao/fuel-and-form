@@ -23,7 +23,7 @@ import {
   track,
   trackMinutes,
 } from "@/lib/recording";
-import { distanceMetres, simplifyToCap } from "@/lib/route";
+import { countPoints, distanceMetres, simplifyToCap } from "@/lib/route";
 import { hold, release } from "@/lib/wake-lock";
 import { WALK_PRESETS, type WalkEntryView } from "@/lib/walk";
 
@@ -511,11 +511,34 @@ export function WalkRow({
    * Saves a finished recording — the route, the distance and the duration.
    *
    * Only the geometry crosses the wire; `saveWalkRecording` derives every figure
-   * from it. It is thinned to `MAX_RECORDED_POINTS` first, with the same
-   * Ramer–Douglas–Peucker the storage path uses, so that a walk long enough to
-   * exceed the wire bound is SHORTENED rather than refused — a recording that
-   * came back too big to send would be exactly the silent loss this feature is
-   * written against. In practice it engages for nothing: three hours of fixes.
+   * from it.
+   *
+   * ## It is thinned ONLY when it is actually too big, and the guard is the fix
+   *
+   * `simplifyToCap` applies its 2m base epsilon whether or not the track is over
+   * the cap — "reduces a straight run to its two ends" is its first test — so
+   * calling it unconditionally thinned EVERY walk on the way out. That was
+   * written here as a one-line safeguard and it cost two things, both found by
+   * recording a walk in a browser and reading the row back:
+   *
+   *   - **`simplified_tolerance_m` lied.** The server re-derives it from what it
+   *     receives, so a track the client had already thinned arrived looking
+   *     pristine and stored `null` — "nothing was dropped". That column is the
+   *     only record of how lossy the stored shape is, and the schema says
+   *     exactly why it matters: without it "a straight two-point line is
+   *     indistinguishable from a walk down a straight road and a walk whose
+   *     shape was thinned away".
+   *   - **`distance_m` would have been short.** Distance is measured on what
+   *     arrives, and RDP cuts corners. On the straight synthetic track this was
+   *     found with, the figure survived; on a real walk round a park it would
+   *     have read low — in a number that reaches the export, the step estimate
+   *     and the energy range.
+   *
+   * So the raw track is sent, and the cap is a bound rather than a filter. It
+   * engages for nothing a walk produces — three hours of fixes at one a second
+   * — and when it does engage the walk is SHORTENED rather than refused, since
+   * a recording that came back too big to send would be exactly the silent loss
+   * this feature is written against.
    *
    * The draft is cleared only on success. A refusal keeps it, which is what
    * makes "Try again" mean something and what stops a dropped connection at the
@@ -537,8 +560,12 @@ export function WalkRow({
         });
 
       try {
-        const { track: thinned } = simplifyToCap(track(finished), MAX_RECORDED_POINTS);
-        const result = await saveWalkRecording({ date, entryId, track: thinned });
+        const walked = track(finished);
+        const sending =
+          countPoints(walked) > MAX_RECORDED_POINTS
+            ? simplifyToCap(walked, MAX_RECORDED_POINTS).track
+            : walked;
+        const result = await saveWalkRecording({ date, entryId, track: sending });
 
         if (result.ok) {
           startTransition(() => keepDraft(key, null));

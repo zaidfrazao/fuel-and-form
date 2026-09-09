@@ -286,9 +286,35 @@ describe("recording", () => {
     // number that can disagree with the shape it describes is a number a forged
     // body would send instead.
     expect(Object.keys(sent)).toEqual(["date", "entryId", "track"]);
-    // One continuous stretch. RDP thins the straight run to its two ends, which
-    // is `simplifyToCap` doing its job on the way out.
     expect(sent.track).toHaveLength(1);
+  });
+
+  test("sends every fix it kept, rather than thinning on the way out", async () => {
+    /*
+     * The bug this pins, found by recording a walk in a browser and reading the
+     * row back. `simplifyToCap` applies its 2m base epsilon whether or not the
+     * track is over the cap, so calling it unconditionally thinned EVERY walk —
+     * and because the server re-derives the tolerance from what it receives, an
+     * already-thinned track stored `simplified_tolerance_m` NULL: "nothing was
+     * dropped", about a trace that had been. Distance is measured on what
+     * arrives too, and RDP cuts corners, so a real walk's figure would have
+     * read low in a number that reaches the export and the energy range.
+     *
+     * Seven collinear fixes are the sharpest version of it: RDP reduces them to
+     * two, so a thinning send is the difference between 7 and 2 and nothing
+     * subtler is needed to catch it.
+     */
+    render(row());
+
+    await userEvent.click(screen.getByRole("button", { name: "Record" }));
+    walked(7);
+    await userEvent.click(screen.getByRole("button", { name: "Stop" }));
+
+    await waitFor(() => expect(saveWalkRecording).toHaveBeenCalled());
+
+    const sent = saveWalkRecording.mock.calls[0]?.[0];
+
+    expect(sent.track[0]).toHaveLength(7);
   });
 
   test("logs the walk plainly when the receiver never settled", async () => {
