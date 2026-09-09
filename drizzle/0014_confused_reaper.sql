@@ -1,0 +1,2 @@
+ALTER TABLE "walk_routes" ADD COLUMN "name" text;--> statement-breakpoint
+ALTER TABLE "walk_routes" ADD CONSTRAINT "walk_routes_name_shape" CHECK ("name" is null or (trim("name") <> '' and char_length("name") <= 60));

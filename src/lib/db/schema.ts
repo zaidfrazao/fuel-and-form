@@ -1328,6 +1328,47 @@ export const walkRoutes = pgTable(
      */
     simplifiedToleranceM: integer("simplified_tolerance_m"),
 
+    /**
+     * What the walker calls this route — FUEL-102, § P11's "a name for a route
+     * you walk often".
+     *
+     * Null until somebody names it, which is most routes. A trace shows a shape
+     * and cannot say Elm Street; this is the only thing in the schema that
+     * closes that gap without a basemap, and it closes it in the walker's own
+     * words rather than a cartographer's.
+     *
+     * ## It is per-walk, and there is deliberately no `routes` table
+     *
+     * Naming one walk's route writes the string here; a later walk that starts
+     * near it and has a similar shape is OFFERED the same string and copies it
+     * on acceptance. `lib/route-match.ts` performs the match and never applies
+     * one — § P11 requires the offer and forbids the silent application.
+     *
+     * A canonical `routes` row that both walks pointed at was the alternative.
+     * It buys one thing this feature does not need — renaming a route renames
+     * every walk on it — and costs a second table, a second foreign key, a
+     * second thing the reaper and `clearSession` have to know about, and an
+     * entity that has to be reconciled when two walks match each other but not
+     * the same parent. The copied string cannot drift into an inconsistency
+     * because there is nothing for it to be inconsistent WITH: each row says
+     * what that walk was called, which is the whole claim being made.
+     *
+     * ## It is personal data, on the same footing as the coordinates beside it
+     *
+     * A route name is a place in somebody's life said in their own words, and
+     * "the school run" identifies a household about as well as the trace does.
+     * So it takes this table's rules rather than a weaker set: never seeded,
+     * never in a fixture, never committed, and out of the export with the
+     * geometry. `history.ts` writes no name, and a test holds it to that.
+     *
+     * Not in the trace's accessible name either. § The Route Trace fixes that
+     * string as the walk, the distance, the duration, the shape word and the
+     * segment count; the name is rendered in the figures beside the graphic,
+     * where a reader can see it, rather than added to a label the section
+     * already enumerated.
+     */
+    name: text(),
+
     createdAt: instant("created_at").notNull().defaultNow(),
   },
   (t) => [
@@ -1375,6 +1416,32 @@ export const walkRoutes = pgTable(
     check(
       "walk_routes_tolerance_positive",
       sql`"simplified_tolerance_m" is null or "simplified_tolerance_m" > 0`,
+    ),
+
+    /*
+     * A name is absent or it is a name. Never a blank one, never an essay.
+     *
+     * The `trim` is `workout_exercises_media_complete`'s, for its reason: a
+     * space satisfies `is not null` and names nothing, and the interface would
+     * then draw an empty figure row and offer that emptiness to the next
+     * matching walk. Unnaming is expressed by writing null, which is a
+     * different statement from writing "".
+     *
+     * The cap is a bound rather than a judgement about names. It exists
+     * because this column is written from a text input by a request that can
+     * be forged, and an unbounded `text` behind an authenticated POST is a row
+     * somebody can make arbitrarily large. Sixty characters is well past any
+     * name a person types for a walk they take twice a day and well short of
+     * anything worth storing by mistake — and it is checked here rather than
+     * only in the action, on the reasoning the point cap already carries: the
+     * module bounds what it holds, and the constraint holds when a future
+     * caller forgets the module.
+     *
+     * Scoped so every row already stored satisfies it by holding null.
+     */
+    check(
+      "walk_routes_name_shape",
+      sql`"name" is null or (trim("name") <> '' and char_length("name") <= 60)`,
     ),
 
     /*
