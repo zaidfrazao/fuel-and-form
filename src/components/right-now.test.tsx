@@ -40,6 +40,10 @@ vi.mock("@/app/actions/log-walk", () => ({
   clearWalk: (...args: unknown[]) => clearWalk(...args),
   saveWalkRecording: (...args: unknown[]) => saveWalkRecording(...args),
 }));
+vi.mock("@/app/actions/walk-route", () => ({
+  openWalkRoute: vi.fn(),
+  nameRoute: vi.fn(),
+}));
 
 vi.mock("@/app/actions/log", () => ({
   logItem: (...args: unknown[]) => logItem(...args),
@@ -851,8 +855,12 @@ describe("anytime items", () => {
     const morning = screen.getByText("Morning Walk").closest("li")!;
     const afternoon = screen.getByText("Afternoon Walk").closest("li")!;
 
-    expect(within(morning).getByRole("status").textContent).toContain("20 min");
-    expect(within(afternoon).getByRole("status").textContent).toContain("15 min");
+    // Read off the figures LINE since FUEL-102, and scoped by selector: the
+    // presets are buttons carrying the same minutes. `Done` is the status now
+    // and holds no figure, so the two facts are asserted where each one lives.
+    expect(within(morning).getByRole("status").textContent).toBe("Done");
+    expect(within(morning).getByText(/20 min/, { selector: "p" })).toBeDefined();
+    expect(within(afternoon).getByText(/15 min/, { selector: "p" })).toBeDefined();
   });
 
   test("leaves one walk logged and the other offered", () => {
@@ -999,10 +1007,44 @@ describe("the daily walk", () => {
     );
   });
 
-  test("shows the duration beside Done", () => {
+  test("shows Done as the status, and the duration on the figures line", () => {
     renderNow(active(0), EXERCISES, [], walked(30));
 
-    expect(within(anytime()).getByRole("status").textContent).toContain("30 min");
+    // FUEL-102 split these, and the split is § The Route Trace's: the figures
+    // are the affordance that opens the walk's sheet, so they are a line of
+    // their own rather than a suffix on the status. Printing the duration in
+    // both would print it twice, a line apart.
+    expect(within(anytime()).getByRole("status").textContent).toBe("Done");
+    expect(within(anytime()).getByText(/30 min/, { selector: "p" })).toBeDefined();
+  });
+
+  test("draws the figures as plain text when the walk has no route", () => {
+    // § The Route Trace: "a walk with no route draws nothing — not a disabled
+    // control". The line stays, because the minutes are still worth reading;
+    // what goes is its being a button.
+    renderNow(active(0), EXERCISES, [], walked(30));
+
+    expect(within(anytime()).getByText(/30 min/, { selector: "p" })).toBeDefined();
+    expect(within(anytime()).queryByRole("button", { name: /see the route/ })).toBeNull();
+  });
+
+  test("makes the figures the control that opens the sheet, where there is one", () => {
+    renderNow(active(0), EXERCISES, [], walked(30, { distanceM: 2040, hasRoute: true }));
+
+    // The name is the figures plus an `sr-only` suffix saying what pressing
+    // them does — § Lists' rule for a row that becomes a control, which is an
+    // added PREFIX rather than an `aria-label` that would replace the figures.
+    const control = within(anytime()).getByRole("button", { name: /see the route/ });
+
+    // The name is the FIGURES plus an `sr-only` suffix saying what pressing
+    // them does — § Lists' rule for a row that becomes a control, which asks
+    // for an added prefix rather than an `aria-label` that would replace the
+    // figures and silence them. Asserted in parts rather than as one string,
+    // because the separator and the dash are typographic and a literal here
+    // pins the punctuation rather than the rule.
+    expect(control.textContent).toContain("2.0 km");
+    expect(control.textContent).toContain("30 min");
+    expect(control.textContent).toContain("see the route");
   });
 
   test("takes the walk back from its own row", async () => {

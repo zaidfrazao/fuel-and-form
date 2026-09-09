@@ -190,7 +190,11 @@ describe("walkEntries", () => {
 
     // Keyed by the ENTRY, which is what a row holds and what a write names.
     // Not the id, not the instant, not the note — none of them are drawn.
-    expect(entries.get("entry-workout-2")).toEqual({ durationMin: 45 });
+    expect(entries.get("entry-workout-2")).toEqual({
+      durationMin: 45,
+      distanceM: null,
+      hasRoute: false,
+    });
   });
 
   test("distinguishes a logged walk with no duration from an unlogged one", () => {
@@ -203,7 +207,45 @@ describe("walkEntries", () => {
     );
 
     expect(entries.has("entry-workout-2")).toBe(true);
-    expect(entries.get("entry-workout-2")).toEqual({ durationMin: null });
+    expect(entries.get("entry-workout-2")).toEqual({
+      durationMin: null,
+      distanceM: null,
+      hasRoute: false,
+    });
+  });
+
+  test("carries the distance and whether there is a trace to open", () => {
+    // FUEL-102. Both are the row's, and they are separate answers on purpose:
+    // the figure is what the line reads and the flag is what makes it a control.
+    const entries = walkEntries(
+      [workoutItem(WALK)],
+      [workoutLog({ id: "l1", workoutId: "workout-2", durationMin: 25, distanceM: 2040 })],
+      new Set(["l1"]),
+    );
+
+    expect(entries.get("entry-workout-2")).toEqual({
+      durationMin: 25,
+      distanceM: 2040,
+      hasRoute: true,
+    });
+  });
+
+  test("a measured distance is not a trace, so the row offers no sheet for one", () => {
+    // The case `distanceM` cannot answer, and the reason the flag is carried
+    // rather than inferred: a walk shorter than twice the trim measures a
+    // distance and stores no trace at all (§ P11, FUEL-100). A row keyed off
+    // the figure would open a sheet with nothing in it.
+    const entries = walkEntries(
+      [workoutItem(WALK)],
+      [workoutLog({ id: "l1", workoutId: "workout-2", durationMin: 4, distanceM: 280 })],
+      new Set(),
+    );
+
+    expect(entries.get("entry-workout-2")).toEqual({
+      durationMin: 4,
+      distanceM: 280,
+      hasRoute: false,
+    });
   });
 
   test("ignores the session's row on a day that has both", () => {
@@ -224,7 +266,11 @@ describe("walkEntries", () => {
       [workoutLog({ id: "l1", workoutId: "workout-2", durationMin: 30 })],
     );
 
-    expect(entries.get("entry-workout-2")).toEqual({ durationMin: 30 });
+    expect(entries.get("entry-workout-2")).toEqual({
+      durationMin: 30,
+      distanceM: null,
+      hasRoute: false,
+    });
     expect(entries.has("entry-workout-3")).toBe(false);
   });
 });

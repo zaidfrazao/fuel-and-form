@@ -114,6 +114,15 @@ vi.mock("@/lib/db/queries/profile", () => ({ loadSchedule }));
 vi.mock("@/app/actions/log", () => ({ logItem: vi.fn(), undoLastLog: vi.fn() }));
 vi.mock("@/app/actions/swap", () => ({ swapMeal: vi.fn(), revertSwap: vi.fn() }));
 vi.mock("@/app/actions/log-walk", () => ({ logWalk: vi.fn(), clearWalk: vi.fn() }));
+vi.mock("@/app/actions/walk-route", () => ({
+  openWalkRoute: vi.fn(),
+  nameRoute: vi.fn(),
+}));
+/* The query behind the sheet — FUEL-102. An empty set is "no walk on this
+   date has a trace", which is what these cases mean. */
+vi.mock("@/lib/db/queries/route", () => ({
+  routedLogIds: vi.fn(async () => new Set<string>()),
+}));
 vi.mock("@/app/actions/plan", () => ({
   swapPlannedMeal: vi.fn(),
   revertPlannedMeal: vi.fn(),

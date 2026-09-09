@@ -269,10 +269,14 @@ function RouteName({
               route.suggestion.metresApart,
             )}m from it`}
           </SlashMeta>
+          {/* Adjacent to the offer rather than pushed to the far edge. An
+              `ml-auto` here reads fine in the row's 331px column and badly in
+              the sheet's 596px one, where it leaves ~230px between a question
+              and its answer — the "islands rather than a grid" fault § Desktop
+              names when it measures the 2×2 macro grid at 584. */}
           <Button
             variant="secondary"
             size="xs"
-            className="ml-auto"
             onClick={() => write(route.suggestion!.name)}
           >
             Use this name
@@ -351,6 +355,7 @@ function RouteName({
  */
 function MapHandOff({ route }: { route: WalkRouteView }) {
   const start = startCoordinate(route.points);
+  const [copied, setCopied] = useState(false);
 
   // `useSyncExternalStore` rather than `useEffect`, so the server render and
   // the first client render agree: the server has no pointer and answers
@@ -363,9 +368,31 @@ function MapHandOff({ route }: { route: WalkRouteView }) {
 
   if (!start) return null;
 
+  const pair = `${start.lat}, ${start.lng}`;
+
+  const copy = () => {
+    // Best effort, and a failure is silent by design. The coordinate is already
+    // on screen and selectable, so the button is a convenience over a thing
+    // that already works — an error message about the clipboard would be the
+    // app making more of the failure than the failure deserves. § P9's silent
+    // degradation, at a much smaller scale.
+    void navigator.clipboard
+      ?.writeText(pair)
+      .then(() => setCopied(true))
+      .catch(() => {});
+  };
+
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <SlashMeta>{`Starts at ${start.lat}, ${start.lng}`}</SlashMeta>
+      <SlashMeta>{`Starts at ${pair}`}</SlashMeta>
+
+      {/* The desktop's half of the hand-off. A `geo:` link is dead on a machine
+          with no handler, so the coordinate itself is the affordance there —
+          and it is drawn at every width rather than swapped in below one,
+          because a pointer test cannot tell a hybrid laptop from a phone. */}
+      <Button variant="link" size="xs" onClick={copy}>
+        {copied ? "Copied" : "Copy"}
+      </Button>
 
       {coarse && (
         <Button variant="link" size="xs" className="ml-auto" asChild>

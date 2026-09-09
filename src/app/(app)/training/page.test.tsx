@@ -33,9 +33,14 @@ const { redirect, getSession, loadTraining } = vi.hoisted(() => ({
   loadTraining: vi.fn(),
 }));
 
+/* FUEL-102: which of the date's walks have a trace. An empty set is
+   "none", which is what every case here means. */
+const routedLogIds = vi.fn(async () => new Set<string>());
+
 vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("@/lib/auth/session", () => ({ getSession }));
 vi.mock("@/lib/db/queries/training", () => ({ loadTraining }));
+vi.mock("@/lib/db/queries/route", () => ({ routedLogIds }));
 // The screen is a client component importing a "use server" module, which
 // cannot be imported under jsdom. Same reason `/plan`'s test mocks its actions.
 vi.mock("@/app/actions/training", () => ({

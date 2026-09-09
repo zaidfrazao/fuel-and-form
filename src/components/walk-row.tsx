@@ -934,6 +934,21 @@ export function WalkRow({
 /**
  * The logged walk's figures — a line, and where there is a route, a control.
  *
+ * ## It carries no height of its own, and that was measured rather than assumed
+ *
+ * The line is **29px** — its 17px line-height plus the row's 12px bottom
+ * padding — which is the same 29px § Lists measured for the recording line in
+ * FUEL-101, in the same register on the same row. So the walk row's arithmetic
+ * stays one number rather than two.
+ *
+ * A `min-h-[34px]` stood here first, on the assumption that a control needs a
+ * bigger target than a line. Measuring killed it twice over: the padding is
+ * INSIDE the button, so the target was already 29px rather than the 17px the
+ * assumption was protecting against — comfortably past WCAG 2.5.8's 24×24 — and
+ * the floor was therefore buying 5px a row, 10px a screen, for nothing. § The
+ * row as a control's rule is that becoming a control adds no element to a row;
+ * this is the same rule about height, and it holds here for free.
+ *
  * § The Route Trace: "the row shows figures; the sheet shows the shape. There
  * is no rest state." The figures ARE the affordance, so this is a button when
  * there is something to open and a plain line when there is not.
@@ -966,7 +981,7 @@ function Figures({
     <button
       type="button"
       onClick={onOpen}
-      className={`group flex min-h-[34px] items-center pb-3 text-left text-slash tabular-nums text-text-secondary ${POINTER} ${FOCUS_RING}`}
+      className={`group flex items-center pb-3 text-left text-slash tabular-nums text-text-secondary ${POINTER} ${FOCUS_RING}`}
     >
       {/* The mark stays `text-tertiary` under the lift, as § Slash Metadata
           draws it everywhere else: what the hover moves is the figures. */}

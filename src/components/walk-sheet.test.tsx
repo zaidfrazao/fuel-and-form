@@ -377,6 +377,36 @@ describe("the map hand-off", () => {
     expect(href).not.toMatch(/https?:|\/\/|maps|google|apple/i);
   });
 
+  test("offers the coordinate for copying, which is the desktop's affordance", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+
+    render(sheet());
+
+    await userEvent.click(screen.getByRole("button", { name: "Copy" }));
+
+    const start = LOOP[0]![0]!;
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${start.lat}, ${start.lng}`));
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeDefined();
+  });
+
+  test("says nothing when the clipboard refuses, the text being on screen already", async () => {
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      clipboard: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+    });
+
+    render(sheet());
+
+    await userEvent.click(screen.getByRole("button", { name: "Copy" }));
+
+    // No alert, and the control does not claim to have copied.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeDefined();
+  });
+
   test("says that it leaves the app", () => {
     coarse = true;
 
