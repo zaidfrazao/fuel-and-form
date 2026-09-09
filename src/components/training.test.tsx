@@ -57,6 +57,10 @@ vi.mock("@/app/actions/training", () => ({
   removeExerciseSet,
 }));
 vi.mock("@/app/actions/log-walk", () => ({ logWalk, clearWalk, saveWalkRecording }));
+vi.mock("@/app/actions/walk-route", () => ({
+  openWalkRoute: vi.fn(),
+  nameRoute: vi.fn(),
+}));
 
 const { Training } = await import("./training");
 
@@ -306,8 +310,8 @@ describe("the session", () => {
       view({
         sessions: [
           CIRCUIT,
-          { ...WALK, entry: { status: "done", note: null, durationMin: 20 } },
-          { ...AFTERNOON_WALK, entry: { status: "done", note: null, durationMin: 15 } },
+          { ...WALK, entry: { status: "done", note: null, durationMin: 20 }, figures: { durationMin: 20, distanceM: null, hasRoute: false } },
+          { ...AFTERNOON_WALK, entry: { status: "done", note: null, durationMin: 15 }, figures: { durationMin: 15, distanceM: null, hasRoute: false } },
         ],
       }),
     );
@@ -316,9 +320,12 @@ describe("the session", () => {
     const afternoon = screen.getByText("Afternoon Walk").closest("li")!;
 
     // Each row shows its OWN duration. One shared answer would put the morning
-    // walk's minutes under the afternoon walk's name.
-    expect(within(morning).getByRole("status").textContent).toContain("20 min");
-    expect(within(afternoon).getByRole("status").textContent).toContain("15 min");
+    // walk's minutes under the afternoon walk's name. Read off the Slash line
+    // since FUEL-102 — `Done` is the status and the figures are beneath it.
+    // Scoped to the figures LINE by its selector: the presets are buttons
+    // reading the same minutes, and an unscoped match finds both.
+    expect(within(morning).getByText(/20 min/, { selector: "p" })).toBeDefined();
+    expect(within(afternoon).getByText(/15 min/, { selector: "p" })).toBeDefined();
 
     await user.click(within(afternoon).getByRole("button", { name: "Undo" }));
 
@@ -357,14 +364,18 @@ describe("the session", () => {
   test("shows what is recorded against the walk, with its duration", () => {
     render(
       view({
-        sessions: [CIRCUIT, { ...WALK, entry: { status: "done", note: null, durationMin: 45 } }],
+        sessions: [CIRCUIT, { ...WALK, entry: { status: "done", note: null, durationMin: 45 }, figures: { durationMin: 45, distanceM: null, hasRoute: false } }],
       }),
     );
 
     const walkRow = screen.getByText("Morning Walk").closest("li")!;
 
-    expect(within(walkRow).getByRole("status").textContent).toContain("Done");
-    expect(within(walkRow).getByRole("status").textContent).toContain("45 min");
+    // FUEL-102 split these. `Done` is the STATUS and carries no figure; the
+    // minutes moved to the Slash line beneath, which § The Route Trace makes
+    // the affordance that opens the walk's sheet. Printing the duration in both
+    // would print it twice, a line apart.
+    expect(within(walkRow).getByRole("status").textContent).toBe("Done");
+    expect(within(walkRow).getByText(/45 min/, { selector: "p" })).toBeDefined();
     // Server state, not an optimistic one — nothing was tapped, so `getBy` is
     // the right query here and no wait is being skipped.
     expect(within(walkRow).getByRole("button", { name: "Undo" })).toBeTruthy();
@@ -377,7 +388,7 @@ describe("the session", () => {
       view({
         sessions: [
           { ...CIRCUIT, entry: { status: "done", note: null, durationMin: 28 } },
-          { ...WALK, entry: { status: "done", note: null, durationMin: null } },
+          { ...WALK, entry: { status: "done", note: null, durationMin: null }, figures: { durationMin: null, distanceM: null, hasRoute: false } },
         ],
       }),
     );

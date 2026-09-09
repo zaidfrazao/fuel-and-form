@@ -2,14 +2,15 @@
 
 import { refresh } from "next/cache";
 
+import { resolveWalk } from "@/app/actions/resolve-walk";
+import { safeError } from "@/app/actions/safe-error";
 import { getSession } from "@/lib/auth/session";
 import {
   clearSession,
-  loadTraining,
   recordSession,
   recordWalkRecording,
 } from "@/lib/db/queries/training";
-import { type CalendarDate, parseCalendarDate } from "@/lib/date";
+import type { CalendarDate } from "@/lib/date";
 import { parseTrack, trackMinutes } from "@/lib/recording";
 import { storableRoute } from "@/lib/route";
 import { parseDuration } from "@/lib/session-entry";
@@ -96,45 +97,6 @@ const DONE: WalkResult = { ok: true };
 const FAILED: WalkResult = { ok: false };
 
 /**
- * The walk a template entry names on a date, for the caller's own user.
- *
- * `undefined` for no session, no profile row, a malformed date, an entry the
- * date does not hold, and — the one refusal this has that `training.ts` does not
- * — an entry that resolves to a SESSION. One answer for all five.
- *
- * That last refusal is the mirror image of the one `actions/training.ts` makes,
- * and both exist for the same reason: a row written against an item the screen
- * renders differently is a row no control on that screen can edit or take back.
- * A session recorded through here would be filed 'done' with no note and no way
- * to correct it to partial from the walk's row.
- *
- * The date is parsed before anything is fetched, on `plan.ts`'s reasoning: a
- * refusal that costs a query is a refusal that can be used to make the database
- * work.
- */
-async function resolveWalk(
-  date: CalendarDate,
-  entryId: string,
-): Promise<{ userId: string; workoutId: string } | undefined> {
-  const session = await getSession();
-
-  if (!session) return undefined;
-
-  parseCalendarDate(date);
-
-  const training = await loadTraining(session.userId, date, new Date());
-
-  // A date before `program_start_date`, and one the template does not cover,
-  // both resolve to no sessions — so both are refused here without a check of
-  // their own: there is no entry to match, so nothing matches.
-  const resolved = training?.day.sessions.find(
-    (item) => item.entryId === entryId && item.kind === "walk",
-  );
-
-  return resolved && { userId: session.userId, workoutId: resolved.workout.id };
-}
-
-/**
  * Records the walk on a date, with its optional duration.
  *
  * An upsert, so a repeated tap is an ordinary update writing the same values
@@ -186,7 +148,11 @@ export async function logWalk(input: {
   } catch (error) {
     // Names the failure for whoever runs the app. The user gets a banner and a
     // "Try again", which is everything they can act on.
-    console.error("Could not record the walk.", error);
+    //
+    // Through `safeError` since FUEL-102: a violated CHECK on `walk_routes`
+    // prints the failing ROW in its detail, which for this table is the whole
+    // trace. See `resolve-walk.ts`.
+    console.error("Could not record the walk.", safeError(error));
 
     return FAILED;
   }
@@ -279,7 +245,7 @@ export async function saveWalkRecording(input: {
 
     return DONE;
   } catch (error) {
-    console.error("Could not record the walk.", error);
+    console.error("Could not record the walk.", safeError(error));
 
     return FAILED;
   }
@@ -319,7 +285,7 @@ export async function clearWalk(input: {
 
     return DONE;
   } catch (error) {
-    console.error("Could not clear the walk.", error);
+    console.error("Could not clear the walk.", safeError(error));
 
     return FAILED;
   }

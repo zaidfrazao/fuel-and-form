@@ -5,6 +5,7 @@ import { RightNow } from "@/components/right-now";
 import { getSession } from "@/lib/auth/session";
 import { readCursor } from "@/lib/cursor-cookie";
 import { dayLog } from "@/lib/day-summary";
+import { routedLogIds } from "@/lib/db/queries/route";
 import { loadToday } from "@/lib/db/queries/today";
 import { walkEntries, walkWorkoutIds } from "@/lib/walk";
 
@@ -67,6 +68,20 @@ export default async function Home() {
 
   const { view, profile } = today;
 
+  /*
+   * Which of the day's walks have a trace behind them — FUEL-102.
+   *
+   * A second query rather than a column on the day's logs, and it selects
+   * `workout_log_id` alone. `db/schema.ts` keeps the point array out of every
+   * list and that rule holds here: what this asks is whether a trace EXISTS, so
+   * the row knows whether its figures open a sheet. § The Route Trace: "a walk
+   * with no route draws nothing — not a disabled control."
+   *
+   * Awaited after `loadToday` rather than beside it because it is scoped to the
+   * resolved day, and the day is what `loadToday` decides.
+   */
+  const routed = await routedLogIds(session.userId, view.date);
+
   return (
     <RightNow
       view={view}
@@ -83,10 +98,13 @@ export default async function Home() {
         walkWorkoutIds(view.anytime),
       )}
       // What is recorded against each of today's walks, by template entry —
-      // FUEL-29. The duration is the only field a row draws: the status is
-      // always 'done' (a walk that did not happen has no row), and the id, the
-      // instant and the note stay on the server like every other log's do.
-      walks={walkEntries(view.anytime, today.logs.workouts)}
+      // FUEL-29, widened by FUEL-102. The duration, the distance and whether
+      // there is a trace: the three things the row draws. The status is always
+      // 'done' (a walk that did not happen has no row), and the id, the instant
+      // and the note stay on the server like every other log's do — as do the
+      // COORDINATES, which cross only when a sheet is opened and only for the
+      // walk it was opened on.
+      walks={walkEntries(view.anytime, today.logs.workouts, routed)}
       // The four target figures, named one at a time rather than by handing over
       // the profile row. Everything else on it is a body metric — height, start
       // and target weight, goal pace — and this screen shows none of them, so

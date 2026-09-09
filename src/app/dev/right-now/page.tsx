@@ -362,8 +362,12 @@ const CASES: Record<
      * `complete-one-walk`, which carry summaries that agree with their rows.
      */
     walks: new Map([
-      ["e6", { durationMin: 20 }],
-      ["e7", { durationMin: 15 }],
+      // One walk with a trace and one without — FUEL-102. The pair is the
+      // point: the morning walk's figures are a control that opens the sheet,
+      // and the afternoon's are the same line as plain text, because "a walk
+      // with no route draws nothing — not a disabled control".
+      ["e6", { durationMin: 20, distanceM: 1800, hasRoute: true }],
+      ["e7", { durationMin: 15, distanceM: null, hasRoute: false }],
     ]),
   },
   "complete-empty": {
@@ -380,7 +384,7 @@ const CASES: Record<
     label: "One walk logged",
     note: "The morning walk's row after one tap, with a duration set, beside an afternoon walk still on offer — the ordinary state of a day between the two. Done and the minutes are words, not colour, and the presets stay on offer so 20 can become 30 or nothing.",
     view: activeAt(5, 19 * 60 + 20),
-    walks: new Map([["e6", { durationMin: 20 }]]),
+    walks: new Map([["e6", { durationMin: 20, distanceM: 1800, hasRoute: true }]]),
   },
   "complete-walk": {
     label: "Day complete · both walks outstanding",
@@ -393,7 +397,7 @@ const CASES: Record<
     note: "The narrowing applied per walk — FUEL-98. The morning walk is a line in the summary above like any other log, and only the afternoon one is still offered. A page that drew both here would be reopening something it has already reported.",
     view: { ...base(21 * 60 + 30), state: "day-complete" },
     entries: LOGGED.slice(0, 7),
-    walks: new Map([["e6", { durationMin: 20 }]]),
+    walks: new Map([["e6", { durationMin: 20, distanceM: 1800, hasRoute: true }]]),
   },
 };
 

@@ -40,6 +40,10 @@ vi.mock("@/app/actions/log-walk", () => ({
   clearWalk: (...args: unknown[]) => clearWalk(...args),
   saveWalkRecording: (...args: unknown[]) => saveWalkRecording(...args),
 }));
+vi.mock("@/app/actions/walk-route", () => ({
+  openWalkRoute: vi.fn(),
+  nameRoute: vi.fn(),
+}));
 
 vi.mock("@/app/actions/log", () => ({
   logItem: (...args: unknown[]) => logItem(...args),
@@ -198,6 +202,22 @@ const WALK_ENTRY = "entry-2";
  * every account looked like before this ticket and what one looks like after
  * someone edits their template. The pair has its own block.
  */
+/**
+ * A logged walk, as the row is given one — FUEL-102 widened this.
+ *
+ * The default is the one-tap walk: minutes and nothing else. A route is opted
+ * into per case, because "a walk with no route draws nothing" is the ordinary
+ * state and the one most of these cases are about.
+ */
+const walked = (
+  durationMin: number | null,
+  route: { distanceM?: number | null; hasRoute?: boolean } = {},
+): WalkEntryView => ({
+  durationMin,
+  distanceM: route.distanceM ?? null,
+  hasRoute: route.hasRoute ?? false,
+});
+
 const WALK_2_ENTRY = "entry-6";
 
 const WALK_2: AnytimeItem = {
@@ -827,16 +847,20 @@ describe("anytime items", () => {
       EXERCISES,
       [],
       new Map([
-        [WALK_ENTRY, { durationMin: 20 }],
-        [WALK_2_ENTRY, { durationMin: 15 }],
+        [WALK_ENTRY, walked(20)],
+        [WALK_2_ENTRY, walked(15)],
       ]),
     );
 
     const morning = screen.getByText("Morning Walk").closest("li")!;
     const afternoon = screen.getByText("Afternoon Walk").closest("li")!;
 
-    expect(within(morning).getByRole("status").textContent).toContain("20 min");
-    expect(within(afternoon).getByRole("status").textContent).toContain("15 min");
+    // Read off the figures LINE since FUEL-102, and scoped by selector: the
+    // presets are buttons carrying the same minutes. `Done` is the status now
+    // and holds no figure, so the two facts are asserted where each one lives.
+    expect(within(morning).getByRole("status").textContent).toBe("Done");
+    expect(within(morning).getByText(/20 min/, { selector: "p" })).toBeDefined();
+    expect(within(afternoon).getByText(/15 min/, { selector: "p" })).toBeDefined();
   });
 
   test("leaves one walk logged and the other offered", () => {
@@ -844,7 +868,7 @@ describe("anytime items", () => {
       active(0, { anytime: [WALK, WALK_2] }),
       EXERCISES,
       [],
-      new Map([[WALK_ENTRY, { durationMin: 20 }]]),
+      new Map([[WALK_ENTRY, walked(20)]]),
     );
 
     const morning = screen.getByText("Morning Walk").closest("li")!;
@@ -941,7 +965,7 @@ describe("the daily walk", () => {
 
     expect(within(anytime()).queryByRole("button", { name: "30 min" })).toBeNull();
 
-    renderNow(active(0), EXERCISES, [], { durationMin: null });
+    renderNow(active(0), EXERCISES, [], walked(null));
 
     expect(screen.getAllByRole("button", { name: "20 min" })).not.toHaveLength(0);
   });
@@ -949,7 +973,7 @@ describe("the daily walk", () => {
   test("records a duration against the walk already logged", async () => {
     const user = userEvent.setup();
 
-    renderNow(active(0), EXERCISES, [], { durationMin: null });
+    renderNow(active(0), EXERCISES, [], walked(null));
 
     await user.click(within(anytime()).getByRole("button", { name: "20 min" }));
 
@@ -965,7 +989,7 @@ describe("the daily walk", () => {
   test("clears the duration when its own preset is tapped again", async () => {
     const user = userEvent.setup();
 
-    renderNow(active(0), EXERCISES, [], { durationMin: 20 });
+    renderNow(active(0), EXERCISES, [], walked(20));
 
     const preset = within(anytime()).getByRole("button", { name: "20 min" });
 
@@ -983,16 +1007,50 @@ describe("the daily walk", () => {
     );
   });
 
-  test("shows the duration beside Done", () => {
-    renderNow(active(0), EXERCISES, [], { durationMin: 30 });
+  test("shows Done as the status, and the duration on the figures line", () => {
+    renderNow(active(0), EXERCISES, [], walked(30));
 
-    expect(within(anytime()).getByRole("status").textContent).toContain("30 min");
+    // FUEL-102 split these, and the split is § The Route Trace's: the figures
+    // are the affordance that opens the walk's sheet, so they are a line of
+    // their own rather than a suffix on the status. Printing the duration in
+    // both would print it twice, a line apart.
+    expect(within(anytime()).getByRole("status").textContent).toBe("Done");
+    expect(within(anytime()).getByText(/30 min/, { selector: "p" })).toBeDefined();
+  });
+
+  test("draws the figures as plain text when the walk has no route", () => {
+    // § The Route Trace: "a walk with no route draws nothing — not a disabled
+    // control". The line stays, because the minutes are still worth reading;
+    // what goes is its being a button.
+    renderNow(active(0), EXERCISES, [], walked(30));
+
+    expect(within(anytime()).getByText(/30 min/, { selector: "p" })).toBeDefined();
+    expect(within(anytime()).queryByRole("button", { name: /see the route/ })).toBeNull();
+  });
+
+  test("makes the figures the control that opens the sheet, where there is one", () => {
+    renderNow(active(0), EXERCISES, [], walked(30, { distanceM: 2040, hasRoute: true }));
+
+    // The name is the figures plus an `sr-only` suffix saying what pressing
+    // them does — § Lists' rule for a row that becomes a control, which is an
+    // added PREFIX rather than an `aria-label` that would replace the figures.
+    const control = within(anytime()).getByRole("button", { name: /see the route/ });
+
+    // The name is the FIGURES plus an `sr-only` suffix saying what pressing
+    // them does — § Lists' rule for a row that becomes a control, which asks
+    // for an added prefix rather than an `aria-label` that would replace the
+    // figures and silence them. Asserted in parts rather than as one string,
+    // because the separator and the dash are typographic and a literal here
+    // pins the punctuation rather than the rule.
+    expect(control.textContent).toContain("2.0 km");
+    expect(control.textContent).toContain("30 min");
+    expect(control.textContent).toContain("see the route");
   });
 
   test("takes the walk back from its own row", async () => {
     const user = userEvent.setup();
 
-    renderNow(active(0), EXERCISES, [], { durationMin: 30 });
+    renderNow(active(0), EXERCISES, [], walked(30));
 
     await user.click(within(anytime()).getByRole("button", { name: "Undo" }));
 
@@ -1126,9 +1184,7 @@ describe("day-complete", () => {
   });
 
   test("closes completely once the walk is logged", () => {
-    renderNow({ ...BASE, state: "day-complete" }, EXERCISES, LOGGED, {
-      durationMin: 20,
-    });
+    renderNow({ ...BASE, state: "day-complete" }, EXERCISES, LOGGED, walked(20));
 
     // The row is gone; the walk is a line in the summary above like any other
     // log. No ruler, no Up next, no Anytime — the page is closed again.
@@ -1154,7 +1210,7 @@ describe("day-complete", () => {
       { ...BASE, state: "day-complete", anytime: [WALK, WALK_2] },
       EXERCISES,
       LOGGED,
-      new Map([[WALK_ENTRY, { durationMin: 20 }]]),
+      new Map([[WALK_ENTRY, walked(20)]]),
     );
 
     expect(screen.getByText("Afternoon Walk")).toBeDefined();
@@ -1168,8 +1224,8 @@ describe("day-complete", () => {
       EXERCISES,
       LOGGED,
       new Map([
-        [WALK_ENTRY, { durationMin: 20 }],
-        [WALK_2_ENTRY, { durationMin: 15 }],
+        [WALK_ENTRY, walked(20)],
+        [WALK_2_ENTRY, walked(15)],
       ]),
     );
 

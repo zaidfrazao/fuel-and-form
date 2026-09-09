@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { addDays, todayIn } from "../../src/lib/date";
 import { FROZEN_NOW_MS } from "./constants";
 
 /**
@@ -25,6 +26,13 @@ import { FROZEN_NOW_MS } from "./constants";
  *     cost and the choice on opposite sides of a gutter would make it two".
  *   - **`meal-picker`** — the tile grid alone, from `/plan/template`, where
  *     choosing a meal costs nothing today and there are no totals to preview.
+ *   - **`walk-route`** — the walk's trace, its figures and the way out to a map
+ *     (FUEL-102). Added because the row it opens from is invisible to every
+ *     other baseline: `screens.spec.ts` photographs TODAY, and the demo's two
+ *     walks for today are not logged, so the figures line — which only exists
+ *     once a walk IS logged — appears in none of the fifty-six screens. The
+ *     trace would otherwise be the one graphic in this app with no photograph,
+ *     which is the gap § Data Display's other two do not have.
  *
  * ## Viewport captures, where every other spec is `fullPage`
  *
@@ -71,4 +79,55 @@ test("meal-picker", async ({ page }) => {
   await page.evaluate(() => document.fonts.ready);
 
   await expect(page).toHaveScreenshot("meal-picker.png");
+});
+
+/**
+ * A past date whose walk was recorded, found rather than hardcoded.
+ *
+ * The demo's history is generated from the frozen clock, so which days carry a
+ * route is deterministic — but it is decided in `seed/history.ts` and not here,
+ * and a date written down as a literal would rot silently the first time that
+ * file changed its mind. So this walks back from the frozen day and takes the
+ * first date offering a trace, and FAILS if none of the last fortnight does.
+ *
+ * That failure is the point. The alternative — a spec that photographs whatever
+ * it lands on — would rewrite this baseline into a picture of an ordinary
+ * training screen on the next `--update-snapshots`, which is the same fault the
+ * dialog assertion below exists to prevent.
+ */
+async function datedWalkWithRoute(page: import("@playwright/test").Page) {
+  const today = todayIn("Europe/London", new Date(FROZEN_NOW_MS));
+
+  for (let back = 1; back <= 14; back += 1) {
+    const date = addDays(today, -back);
+
+    await page.goto(`/training?date=${date}`);
+    await expect(page.getByRole("main")).toBeVisible();
+
+    const opener = page.getByRole("button", { name: /see the route/ }).first();
+
+    if ((await opener.count()) > 0) return { date, opener };
+  }
+
+  throw new Error(
+    "No walk with a route in the fortnight before the frozen clock. " +
+      "The demo history stopped generating one, or the row stopped offering it.",
+  );
+}
+
+test("walk-route", async ({ page }) => {
+  const { opener } = await datedWalkWithRoute(page);
+
+  await opener.click();
+
+  await expect(page.getByRole("dialog")).toBeVisible();
+
+  // The TRACE, not just the sheet. The geometry is fetched after the sheet
+  // opens, so a capture taken on the dialog alone would photograph the loading
+  // line about half the time — and would do it more often on a fast machine,
+  // which is the way round that gets rebaselined instead of fixed.
+  await expect(page.getByRole("dialog").getByRole("img")).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+
+  await expect(page).toHaveScreenshot("walk-route.png");
 });

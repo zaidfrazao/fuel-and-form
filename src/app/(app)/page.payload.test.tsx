@@ -33,9 +33,14 @@ const { redirect, getSession, loadToday, readCursor, rightNow } = vi.hoisted(() 
   rightNow: vi.fn(),
 }));
 
+/* FUEL-102: which of the date's walks have a trace. An empty set is
+   "none", which is what every case here means. */
+const routedLogIds = vi.fn(async () => new Set<string>());
+
 vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("@/lib/auth/session", () => ({ getSession }));
 vi.mock("@/lib/db/queries/today", () => ({ loadToday }));
+vi.mock("@/lib/db/queries/route", () => ({ routedLogIds }));
 vi.mock("@/lib/cursor-cookie", () => ({ readCursor }));
 
 vi.mock("@/components/right-now", () => ({
@@ -127,6 +132,11 @@ const WALK_LOG = {
   status: "done",
   note: "a note no screen shows",
   durationMin: 45,
+  // The column exists on every row, and is null for a walk logged with one tap
+  // — § P11's "absent rather than zeroed". Spelled here rather than omitted, so
+  // the payload asserts a null it would really receive instead of an undefined
+  // only a partial fixture can produce.
+  distanceM: null,
   loggedAt: new Date(Date.UTC(2026, 2, 9, 19, 4)),
 };
 
@@ -260,12 +270,20 @@ describe("the daily walk", () => {
       logs: { meals: [], workouts: [WALK_LOG] },
     });
 
-    // Asserted by equality rather than field by field: the row shows Done and
-    // the minutes, so the id, the instant, the status and the note have no
-    // reason to leave the server — and a fifth field added later has to be
-    // added here deliberately. Keyed by the template ENTRY, which is what the
-    // row holds and what a write names.
-    expect(payload.walks).toEqual(new Map([["entry-walk", { durationMin: 45 }]]));
+    // Asserted by equality rather than field by field: the row shows the
+    // status, the figures and whether there is a trace to open, so the id, the
+    // instant, the status and the note have no reason to leave the server — and
+    // a field added later has to be added here deliberately. Keyed by the
+    // template ENTRY, which is what the row holds and what a write names.
+    //
+    // FUEL-102 widened this from `{ durationMin }` to three fields, and the
+    // equality is what makes that visible rather than silent. `hasRoute` is a
+    // BOOLEAN and never the geometry: § P11's storage rules mean no coordinate
+    // belongs in the payload of a screen nobody asked a route question on, and
+    // this assertion is where that stays true.
+    expect(payload.walks).toEqual(
+      new Map([["entry-walk", { durationMin: 45, distanceM: null, hasRoute: false }]]),
+    );
   });
 
   test("has no entry for a walk that has not been logged", async () => {

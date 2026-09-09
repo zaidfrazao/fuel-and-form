@@ -1071,6 +1071,26 @@ describe("walk routes", () => {
     }
   });
 
+  /**
+   * FUEL-102's criterion, asserted against the rows rather than assumed.
+   *
+   * "Route names are database-only and appear in no seed or fixture." A name is
+   * a place in somebody's life said in their own words — "the school run"
+   * identifies a household about as well as the trace does — so it takes this
+   * table's rules rather than a weaker set. The demo persona's routes are
+   * invented geometry in a place the owner has never walked; giving one of them
+   * a NAME would be inventing a neighbourhood as well, and putting a plausible
+   * one in a public repository.
+   *
+   * Checked here rather than trusted to `history.ts` never adding one, because
+   * the failure is silent: a named demo route would look like a nicer demo.
+   */
+  it("names no route, because a name is personal data and this is a fixture", () => {
+    for (const route of history.walkRoutes) {
+      expect(route).not.toHaveProperty("name");
+    }
+  });
+
   it("holds every route under the stored cap", () => {
     for (const route of history.walkRoutes) {
       expect(route.pointCount).toBeLessThanOrEqual(MAX_ROUTE_POINTS);
