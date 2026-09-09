@@ -198,8 +198,11 @@ function figures({
   // The pair is checked rather than the count, for `walk-row.tsx`'s reason:
   // the source is what chooses the wording, so a figure without one has
   // nothing to draw itself with. The schema refuses that combination.
+  // Spread rather than picked apart: `stepsFigure` returns exactly a
+  // `KeyValueItem`'s `value` and `meta`, so the source lands on the grid's own
+  // slash line and this file states no copy of its own.
   if (steps !== null && stepsSource !== null) {
-    items.push({ label: "Steps", value: stepsFigure(steps, stepsSource) });
+    items.push({ label: "Steps", ...stepsFigure(steps, stepsSource) });
   }
 
   if (routeName !== null) items.push({ label: "Route", value: routeName });

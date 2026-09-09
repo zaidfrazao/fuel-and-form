@@ -383,11 +383,13 @@ export async function recordWalkRecording(
      * A DEVICE COUNT IS NEVER OVERWRITTEN BY A RE-ESTIMATE — § P11, and the
      * rule written where the write happens rather than only in the ticket.
      *
-     * Inside `DO UPDATE`, the bare table name is the row that is ALREADY
-     * there and `excluded` is the row that was proposed. So this reads the
-     * stored source and keeps both columns whenever it says `device`: a count
-     * off a phone's coprocessor is a measurement, and re-saving a resumed
-     * recording must not replace it with a division. Nothing in the app writes
+     * Inside `DO UPDATE`, a bare column name is the row that is ALREADY
+     * there — Postgres offers the proposed row under `excluded`, which is not
+     * needed here because the proposed value is the local `steps` and can be
+     * bound directly. So this reads the STORED source and keeps both columns
+     * whenever it says `device`: a count off a phone's coprocessor is a
+     * measurement, and re-saving a resumed recording must not replace it with
+     * a division of the distance. Nothing in the app writes
      * `device` today — FUEL-105 is the ticket that would — so this branch is
      * unreachable from the app and is proven by a test that plants the row
      * itself.

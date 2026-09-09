@@ -152,12 +152,12 @@ describe("the copy", () => {
    */
   test("an estimate is marked as one, on the row and in the sheet", () => {
     expect(stepsLabel(4500, "estimated")).toBe("~4,500 steps");
-    expect(stepsFigure(4500, "estimated")).toBe("~4,500 (estimated)");
+    expect(stepsFigure(4500, "estimated")).toEqual({ value: "~4,500", meta: "Estimated" });
   });
 
   test("a counted figure takes no tilde and says it was counted", () => {
     expect(stepsLabel(4500, "device")).toBe("4,500 steps");
-    expect(stepsFigure(4500, "device")).toBe("4,500 (counted)");
+    expect(stepsFigure(4500, "device")).toEqual({ value: "4,500", meta: "Counted" });
   });
 
   test("thousands are grouped, the way every other figure in the app is", () => {

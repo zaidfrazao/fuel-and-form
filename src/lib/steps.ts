@@ -216,21 +216,39 @@ export function stepsLabel(steps: number, source: StepSource): string {
 }
 
 /**
- * The figure as the walk's SHEET writes it — `~4,500 (estimated)`.
+ * The figure as the walk's SHEET writes it — a value and the slash line under
+ * it, shaped to drop straight into one `KeyValueItem`.
  *
  * Brand Guide § The Route Trace: the trace's adjacent data table is *"distance,
  * duration, pace, the step estimate and its source, and the route's name when
- * it has one"*. The estimate and its source are ONE grid row rather than two,
- * and that is a reading of the guide rather than a quotation of it: a `Source`
- * row would read `Estimated` for every walk in the app today, which is a column
- * of one repeated value, and the grid's own rule is to drop a figure a walk
- * does not have rather than draw it empty.
+ * it has one"* — *"the key/value grid § Component Patterns already carries,
+ * with nothing invented for it"*. The estimate and its source are ONE grid item
+ * rather than two, and the grid already has the slot for the second half: a
+ * `meta` line beneath the value, in the Slash register, which is where this app
+ * puts every secondary fact about a figure. `macro-grid.tsx` uses it for the
+ * same shape — a number, and what to make of it.
+ *
+ * A `Source` row of its own was the alternative and is refused: it would read
+ * `Estimated` for every walk in the app today, which is a column of one
+ * repeated value, and this grid's rule is to drop what a walk does not have
+ * rather than draw it.
+ *
+ * **The word was measured into this shape rather than reasoned into it.** It
+ * first went in the value — `~2,800 (estimated)` — which fits one line at 1272
+ * and wraps to two at 375, where it cost 26px of a sheet that had 36px of slack
+ * left. The meta line is its own line at every width, so the composition stops
+ * depending on how many characters the number happens to have.
  *
  * The word is what the row's tilde cannot be. `~` alone is a convention a
  * reader has to already know; the sheet is where there is room to say it, and
  * § Accessibility's data table is exactly the surface that should not depend on
  * a glyph being understood.
  */
-export function stepsFigure(steps: number, source: StepSource): string {
-  return source === "estimated" ? `~${figure(steps)} (estimated)` : `${figure(steps)} (counted)`;
+export function stepsFigure(
+  steps: number,
+  source: StepSource,
+): { value: string; meta: string } {
+  return source === "estimated"
+    ? { value: `~${figure(steps)}`, meta: "Estimated" }
+    : { value: figure(steps), meta: "Counted" };
 }

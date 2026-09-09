@@ -206,7 +206,8 @@ describe("the figures", () => {
       "Pace",
       "10:38 /km",
       "Steps",
-      "~4,500 (estimated)",
+      "~4,500",
+      "Estimated",
     ]) {
       expect(screen.getByText(shown)).toBeDefined();
     }
@@ -248,7 +249,8 @@ describe("the figures", () => {
     // exactly where that should not be the only signal.
     render(sheet());
 
-    expect(screen.getByText("~4,500 (estimated)")).toBeDefined();
+    expect(screen.getByText("~4,500")).toBeDefined();
+    expect(screen.getByText("Estimated")).toBeDefined();
   });
 
   test("a walk with no step figure shows no Steps row at all", () => {
@@ -257,7 +259,7 @@ describe("the figures", () => {
     render(sheet(loaded(), { steps: null, stepsSource: null }));
 
     expect(screen.queryByText("Steps")).toBeNull();
-    expect(screen.queryByText(/estimated/)).toBeNull();
+    expect(screen.queryByText("Estimated")).toBeNull();
   });
 
   test("a counted figure says so, and takes no tilde", () => {
@@ -266,7 +268,8 @@ describe("the figures", () => {
     // labelled as a guess.
     render(sheet(loaded(), { steps: 4317, stepsSource: "device" }));
 
-    expect(screen.getByText("4,317 (counted)")).toBeDefined();
+    expect(screen.getByText("4,317")).toBeDefined();
+    expect(screen.getByText("Counted")).toBeDefined();
   });
 
   test("show the route's name once it has one", () => {
