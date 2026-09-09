@@ -2,15 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import {
   appendFix,
-  durationMinutes,
   elapsedSeconds,
   type Fix,
   MAX_ACCURACY_M,
+  MAX_RECORDED_POINTS,
   MAX_SPEED_MPS,
   NOTHING_RECORDED,
+  parseTrack,
   type Recording,
   SEGMENT_GAP_S,
   track,
+  trackMinutes,
+  trackSeconds,
 } from "./recording";
 import { distanceMetres, EARTH_RADIUS_M } from "./route";
 
@@ -246,7 +249,7 @@ describe("appendFix — segments", () => {
   });
 });
 
-describe("elapsedSeconds and durationMinutes", () => {
+describe("trackSeconds and trackMinutes", () => {
   it("is zero for a recording with nothing in it, and for a single fix", () => {
     // A position is an instant, not a duration.
     expect(elapsedSeconds(NOTHING_RECORDED)).toBe(0);
@@ -260,6 +263,10 @@ describe("elapsedSeconds and durationMinutes", () => {
     const walk = record(fix(0, 0, 0), fix(100, 0, 20_000), fix(600, 0, 380_000));
 
     expect(elapsedSeconds(walk)).toBe(380);
+    // The same figure off the bare track, which is what the SERVER is handed —
+    // the browser and the write path cannot report different durations for one
+    // walk because there is only one derivation.
+    expect(trackSeconds(track(walk))).toBe(380);
   });
 
   it("excludes the time before the receiver settled", () => {
@@ -272,12 +279,12 @@ describe("elapsedSeconds and durationMinutes", () => {
     // `parseDuration` refuses zero — a session that took no time did not happen
     // — so a 20-second recording that rounded to 0 would fail the write instead
     // of recording a walk with fewer figures.
-    expect(durationMinutes(record(fix(0, 0, 0), fix(10, 0, 20_000)))).toBeNull();
-    expect(durationMinutes(NOTHING_RECORDED)).toBeNull();
+    expect(trackMinutes(track(record(fix(0, 0, 0), fix(10, 0, 20_000))))).toBeNull();
+    expect(trackMinutes(track(NOTHING_RECORDED))).toBeNull();
   });
 
   it("rounds to the nearest minute", () => {
-    expect(durationMinutes(record(fix(0, 0, 0), fix(100, 0, 100_000)))).toBe(2);
+    expect(trackMinutes(track(record(fix(0, 0, 0), fix(100, 0, 100_000))))).toBe(2);
   });
 });
 
@@ -297,5 +304,63 @@ describe("the draft that survives an interruption", () => {
 
     expect(continued.startedAt).toBe(walk.startedAt);
     expect(distanceMetres(track(continued))).toBeCloseTo(150, 3);
+  });
+});
+
+describe("parseTrack", () => {
+  /** A well-formed segment of `count` points, as it would arrive over the wire. */
+  const wire = (count: number) =>
+    Array.from({ length: count }, (_value, index) => ({
+      lat: 0,
+      lng: index / METRES_PER_DEGREE,
+      t: index,
+    }));
+
+  it("accepts what the recorder produces", () => {
+    const walk = record(fix(0, 0, 0), fix(100, 0, 20_000), fix(600, 0, 380_000));
+
+    expect(parseTrack(JSON.parse(JSON.stringify(track(walk))))).toEqual(track(walk));
+  });
+
+  it("refuses anything that is not an array of arrays", () => {
+    for (const bad of [null, undefined, 0, "", {}, [null], [{}], [[1]], [["x"]]]) {
+      expect(parseTrack(bad)).toBeUndefined();
+    }
+  });
+
+  it("refuses a point that is not a position", () => {
+    const bad = [
+      [{ lat: 91, lng: 0, t: 0 }],
+      [{ lat: 0, lng: 181, t: 0 }],
+      [{ lat: 0, lng: 0, t: -1 }],
+      [{ lat: Number.NaN, lng: 0, t: 0 }],
+      [{ lat: 0, lng: 0 }],
+    ];
+
+    for (const segment of bad) {
+      expect(parseTrack([segment])).toBeUndefined();
+    }
+  });
+
+  it("bounds the point count across every segment, not within one", () => {
+    // A body split into a thousand small segments is the same body. The bound
+    // is on the total because the total is what gets walked, parsed and stored.
+    expect(parseTrack([wire(MAX_RECORDED_POINTS)])).toHaveLength(1);
+    expect(parseTrack([wire(MAX_RECORDED_POINTS + 1)])).toBeUndefined();
+    expect(
+      parseTrack([wire(MAX_RECORDED_POINTS), wire(1)]),
+    ).toBeUndefined();
+  });
+
+  it("drops an empty segment rather than refusing the track", () => {
+    // `trimEnds` produces these and `route.ts` already drops them. Refusing one
+    // here would make a legal intermediate shape illegal at the boundary.
+    expect(parseTrack([[], wire(2), []])).toEqual([wire(2)]);
+  });
+
+  it("keeps only the three fields, so nothing else can ride along", () => {
+    const smuggled = [[{ lat: 0, lng: 0, t: 0, accuracy: 5, note: "home" }]];
+
+    expect(parseTrack(smuggled)).toEqual([[{ lat: 0, lng: 0, t: 0 }]]);
   });
 });

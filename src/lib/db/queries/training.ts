@@ -8,7 +8,9 @@ import type { Week } from "@/components/dot-grid";
 import { type CalendarDate, todayIn } from "@/lib/date";
 import { type TrainingDay, trainingDay } from "@/lib/resolve-training";
 import type { TrainingPlan } from "@/lib/rotation";
+import type { StorableRoute } from "@/lib/route";
 import { getDb } from "../index";
+import { getPool } from "../pool";
 import * as schema from "../schema";
 import type { ExerciseSet, WorkoutLog, WorkoutLogStatus } from "../schema";
 import { scope } from "../scope";
@@ -291,6 +293,125 @@ export async function recordSession(
       },
     },
   );
+}
+
+/** A recorded walk's row and its trace, written together — FUEL-101. */
+export type WalkRecording = {
+  date: CalendarDate;
+  workoutId: string;
+  /** From the recording's own span. Null for one too short to round to a minute. */
+  durationMin: number | null;
+  /** Already through `storableRoute` — trimmed, thinned and truncated. */
+  route: StorableRoute;
+};
+
+/**
+ * Records a walk that was recorded rather than tapped — FUEL-101, PRD § P11.
+ *
+ * `recordSession` writes the log and nothing else, which is right for a session
+ * and for a walk logged in one tap. This writes the log AND the trace, and it
+ * is a second function rather than a widened first one because the two differ
+ * in what they are allowed to say: `SessionRecord` carries a status and a note
+ * that a walk has no control for, and a route means nothing at all for a
+ * session. A single function taking both would have four fields that are only
+ * ever set by one of its two callers.
+ *
+ * ## One transaction, and what it is protecting
+ *
+ * The trace hangs off the log by `walk_routes_log_fk`, so the log has to exist
+ * before the route can reference it — two statements, in order. The transaction
+ * is what stops the pair from half-landing: a committed log with a distance on
+ * it and no trace beside it is a walk whose row says 3.2 km and whose sheet
+ * draws nothing, which reads to a user as data loss and reads to the next
+ * developer as a bug in the drawing. Either both or neither.
+ *
+ * `getPool()` for the reason `demo.ts` gives — the HTTP driver cannot hold a
+ * transaction — and the same scope runs inside it, so a second way to write
+ * rows is not a second way to get the scoping wrong.
+ *
+ * ## An upsert, twice, and the arbiter each collides on
+ *
+ * A recording saved after an interrupted one was resumed is ONE walk with a
+ * better trace, not two — which is `walk_routes_user_log_key`'s own stated
+ * reason for existing, written when the index was added with this ticket named
+ * in the comment. So the log upserts on `(date, workout_id)` exactly as a tap
+ * does, and the trace upserts on the log, and re-saving is an update rather
+ * than a collision surfacing as a "Try again" for something that worked.
+ *
+ * ## The walk that stores no trace, and why it deletes
+ *
+ * `storableRoute` returns no points for a walk shorter than twice the trim —
+ * one that never left the doorstep — and `walk_routes_point_count_range`
+ * refuses a row of zero points outright: "the honest way to say a walk has no
+ * route is the absence of a row". So that case deletes rather than writes.
+ *
+ * The delete is not defensive. Re-saving a walk whose second recording was too
+ * short to keep — a start tapped by accident on the doorstep, over a walk
+ * recorded properly an hour before — would otherwise leave yesterday's geometry
+ * attached to today's distance, which is the one way this table can hold a
+ * trace of a walk nobody took.
+ */
+export async function recordWalkRecording(
+  userId: string,
+  record: WalkRecording,
+): Promise<void> {
+  await getPool().transaction(async (tx) => {
+    const s = scope(userId, tx);
+
+    const [log] = await s.upsert(
+      schema.workoutLogs,
+      {
+        date: record.date,
+        workoutId: record.workoutId,
+        status: "done",
+        note: null,
+        durationMin: record.durationMin,
+        distanceM: record.route.distanceM,
+      },
+      {
+        target: [schema.workoutLogs.date, schema.workoutLogs.workoutId],
+        set: {
+          status: "done",
+          note: null,
+          durationMin: record.durationMin,
+          distanceM: record.route.distanceM,
+          loggedAt: sql`now()`,
+        },
+      },
+    );
+
+    // `upsert` returns what it wrote and a `DO UPDATE` always writes a row, so
+    // this cannot be empty. Checked rather than asserted because the narrowing
+    // is needed either way and a throw here would roll back a walk somebody
+    // just finished — the one moment this app cannot ask them to try again.
+    if (!log) return;
+
+    if (record.route.pointCount === 0) {
+      await s.delete(schema.walkRoutes, eq(schema.walkRoutes.workoutLogId, log.id));
+
+      return;
+    }
+
+    await s.upsert(
+      schema.walkRoutes,
+      {
+        workoutLogId: log.id,
+        points: record.route.points,
+        pointCount: record.route.pointCount,
+        simplifiedToleranceM: record.route.toleranceM,
+      },
+      {
+        // `user_id` is deliberately absent — the scope prepends it, and the
+        // index it collides on leads with it.
+        target: [schema.walkRoutes.workoutLogId],
+        set: {
+          points: record.route.points,
+          pointCount: record.route.pointCount,
+          simplifiedToleranceM: record.route.toleranceM,
+        },
+      },
+    );
+  });
 }
 
 /**

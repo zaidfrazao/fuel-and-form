@@ -342,7 +342,15 @@ export function track(recording: Recording): Track {
 }
 
 /**
- * How long the walk was, in seconds — first kept fix to last kept fix.
+ * How long the walk was, in seconds — its first point to its last.
+ *
+ * Derived from the TRACK rather than from the recording's own clock, and that
+ * is what lets the server compute it. The two are the same number by
+ * construction — every kept fix becomes a point, and `t` counts from the first
+ * of them — so deriving it from the track means the browser and the write path
+ * cannot report different durations for one walk. The alternative was to send
+ * the figure alongside the geometry, which is a second thing to trust from a
+ * public endpoint and a second thing to keep in step.
  *
  * The span the receiver actually saw, and NOT the wall clock from the tap on
  * Record to the tap on Stop. Three things follow, and the third is why:
@@ -353,20 +361,24 @@ export function track(recording: Recording): Track {
  *     `distanceMetres`, where it contributes nothing.
  *   - The minute spent indoors before the receiver settled is excluded, along
  *     with any fumbling after arriving home. Neither was walking.
- *   - It is a pure function of the state, with no `now` in it. A draft
- *     recovered the next morning therefore reports the length of the WALK
- *     rather than the length of the interruption, and needs no staleness rule
- *     to avoid claiming a nine-hour outing.
+ *   - There is no `now` in it. A draft recovered the next morning therefore
+ *     reports the length of the WALK rather than the length of the
+ *     interruption, and needs no staleness rule to avoid claiming a nine-hour
+ *     outing.
  *
- * Zero for a recording with no fixes and for one with exactly one — a single
- * position is an instant, not a duration.
+ * Zero for an empty track and for one with a single point — a position is an
+ * instant, not a duration.
  */
-export function elapsedSeconds(recording: Recording): number {
-  const { startedAt, last } = recording;
+export function trackSeconds(track: Track): number {
+  let last = 0;
 
-  if (startedAt === null || last === null) return 0;
+  for (const segment of track) {
+    for (const point of segment) {
+      if (point.t > last) last = point.t;
+    }
+  }
 
-  return Math.max(0, Math.round((last.at - startedAt) / 1000));
+  return last;
 }
 
 /**
@@ -379,8 +391,104 @@ export function elapsedSeconds(recording: Recording): number {
  * `storableRoute` gives `distanceM`, for the same reason, decided here so that
  * every caller inherits it rather than each remembering.
  */
-export function durationMinutes(recording: Recording): number | null {
-  const minutes = Math.round(elapsedSeconds(recording) / 60);
+export function trackMinutes(track: Track): number | null {
+  const minutes = Math.round(trackSeconds(track) / 60);
 
   return minutes > 0 ? minutes : null;
+}
+
+/** The walk's span so far, for the readout on the row. */
+export function elapsedSeconds(recording: Recording): number {
+  return trackSeconds(track(recording));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Coming back from somewhere untrusted                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The most points a single recording may hand the write path.
+ *
+ * Not `MAX_ROUTE_POINTS`. That is the cap on what is STORED, after
+ * `storableRoute` has thinned the geometry; this is the cap on what may be
+ * SENT, before it. A 45-minute walk at one fix a second is about 2,700
+ * positions, all of them real, and refusing them because five hundred is the
+ * storage bound would be enforcing the wrong number in the wrong place.
+ *
+ * Ten thousand is a little under three hours at that rate — past any walk this
+ * app is for, and past `WALK_PRESETS` by two orders of magnitude — while
+ * keeping the request comfortably inside the 1MB a Server Action accepts by
+ * default. The recorder thins its own track to this bound before sending, so a
+ * genuinely enormous walk is shortened rather than refused; the check on the
+ * far side is for a body that did not come from the recorder at all.
+ */
+export const MAX_RECORDED_POINTS = 10_000;
+
+/** Whether a value is a `TrackPoint` and not merely shaped like one. */
+function isPoint(value: unknown): value is TrackPoint {
+  if (typeof value !== "object" || value === null) return false;
+
+  const { lat, lng, t } = value as Record<string, unknown>;
+
+  return (
+    isReal(lat) &&
+    isReal(lng) &&
+    isReal(t) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180 &&
+    t >= 0
+  );
+}
+
+/**
+ * A track from a source that is not this module — or `undefined`.
+ *
+ * Two callers, and they are less different than they look: a Server Action,
+ * where the body is whatever anyone chose to POST, and a `localStorage` draft,
+ * where the JSON is whatever survived and whatever else was put there. Neither
+ * has been checked by anything, and both are parsed here so there is one gate
+ * rather than two that drift.
+ *
+ * ## What it refuses, and the order
+ *
+ * The point count is bounded BEFORE the points are walked, so a body claiming a
+ * million positions is rejected by its length rather than by validating a
+ * million objects — the check is cheap only if it comes first.
+ *
+ * Then every point: a real, finite, in-range coordinate with a non-negative
+ * second. `t` monotonic within a segment is deliberately NOT required. It is
+ * true of anything this recorder produces, but `distanceMetres` never reads
+ * `t`, `trackSeconds` takes a maximum, and FUEL-102 draws in order — so a
+ * shuffled track is ugly rather than dangerous, and a rule enforced here that
+ * nothing downstream depends on is a rule that will be quietly wrong one day.
+ *
+ * Empty segments are dropped rather than refused. `trimEnds` already produces
+ * them and `route.ts` already drops them; refusing one here would make a legal
+ * intermediate shape illegal at the boundary.
+ */
+export function parseTrack(value: unknown): Track | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  let total = 0;
+
+  for (const segment of value) {
+    if (!Array.isArray(segment)) return undefined;
+
+    total += segment.length;
+
+    if (total > MAX_RECORDED_POINTS) return undefined;
+  }
+
+  const segments: TrackPoint[][] = [];
+
+  for (const segment of value as unknown[][]) {
+    if (segment.length === 0) continue;
+    if (!segment.every(isPoint)) return undefined;
+
+    segments.push(segment.map(({ lat, lng, t }) => ({ lat, lng, t })));
+  }
+
+  return segments;
 }
