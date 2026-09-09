@@ -8,6 +8,7 @@ import {
   MAX_RECORDED_POINTS,
   MAX_SPEED_MPS,
   NOTHING_RECORDED,
+  parseRecording,
   parseTrack,
   type Recording,
   SEGMENT_GAP_S,
@@ -362,5 +363,54 @@ describe("parseTrack", () => {
     const smuggled = [[{ lat: 0, lng: 0, t: 0, accuracy: 5, note: "home" }]];
 
     expect(parseTrack(smuggled)).toEqual([[{ lat: 0, lng: 0, t: 0 }]]);
+  });
+});
+
+describe("parseRecording", () => {
+  const walk = record(fix(0, 0, 0), fix(100, 0, 20_000), fix(600, 0, 380_000));
+  const stored = JSON.parse(JSON.stringify(walk)) as Record<string, unknown>;
+
+  it("restores a draft this module wrote", () => {
+    expect(parseRecording(stored)).toEqual(walk);
+  });
+
+  it("resumes on the SAME time base rather than starting a second walk", () => {
+    // The reason `last` is restored at all. Dropped, the next fix would be
+    // treated as the walk's first, `startedAt` would reset, and the restored
+    // points would be counted from an origin that no longer exists.
+    const resumed = parseRecording(stored);
+    const continued = appendFix(resumed as Recording, fix(650, 0, 400_000));
+
+    expect(continued.startedAt).toBe(walk.startedAt);
+    expect(trackSeconds(track(continued))).toBe(400);
+  });
+
+  it("refuses a draft whose last fix is not a position", () => {
+    // The check that would otherwise pass silently: `metresBetween` on a
+    // nonsense `last` gives NaN, `NaN > MAX_SPEED_MPS` is false, and the speed
+    // rule would accept every reading for the rest of the walk.
+    for (const last of [null, {}, { lat: 0, lng: 0 }, { lat: 91, lng: 0, accuracy: 5, at: 1 }]) {
+      expect(parseRecording({ ...stored, last })).toBeUndefined();
+    }
+  });
+
+  it("refuses a draft whose fields disagree with each other", () => {
+    expect(parseRecording({ ...stored, startedAt: null })).toBeUndefined();
+    expect(parseRecording({ ...stored, startedAt: "soon" })).toBeUndefined();
+    expect(parseRecording({ ...stored, segments: [] })).toBeUndefined();
+    expect(parseRecording({ ...stored, segments: "walked" })).toBeUndefined();
+  });
+
+  it("refuses what is not an object at all", () => {
+    for (const bad of [null, undefined, 0, "", []]) {
+      expect(parseRecording(bad)).toBeUndefined();
+    }
+  });
+
+  it("repairs only the count it does not depend on", () => {
+    // `discarded` is diagnostic and nothing reads it back, so a missing or
+    // absurd one is zeroed rather than costing somebody their walk.
+    expect(parseRecording({ ...stored, discarded: -1 })?.discarded).toBe(0);
+    expect(parseRecording({ ...stored, discarded: undefined })?.discarded).toBe(0);
   });
 });

@@ -492,3 +492,64 @@ export function parseTrack(value: unknown): Track | undefined {
 
   return segments;
 }
+
+/**
+ * An interrupted recording read back out of `localStorage` — or `undefined`.
+ *
+ * The draft is the whole of what survives an interruption, and it is stored
+ * somewhere anyone with devtools can edit, that survives a deployment, and that
+ * this app shares an origin with everything else it has ever stored. So it is
+ * untrusted input, exactly as `rest-timer.ts` treats the instant it parses and
+ * `cursor.ts` treats its cookie — and for a stronger reason here, since what is
+ * restored is fed straight back into `appendFix`.
+ *
+ * ## `last` is the field that has to be checked
+ *
+ * It is tempting to restore the segments and drop `last`, since the points are
+ * what gets drawn. It does not work: with `last` null the next fix is treated
+ * as the walk's FIRST, which resets `startedAt` and throws away the origin every
+ * `t` in the restored track is counted from. The resumed walk would then hold
+ * two different time bases in one array.
+ *
+ * And it cannot be restored unchecked either. `metresBetween` on a `last` of
+ * `{lat: undefined}` returns `NaN`, `NaN > MAX_SPEED_MPS` is **false**, and the
+ * speed rule would accept every fix for the rest of the walk — a check that
+ * silently passes rather than failing, which is the worst shape a check can
+ * have. So `last` goes through the same gate a live reading does.
+ *
+ * ## The three fields agree, or there is no draft
+ *
+ * `startedAt`, `last` and a non-empty `segments` are created together by
+ * `appendFix` and none is ever cleared, so a draft holding some but not others
+ * did not come from this module. Refused whole rather than repaired: a repaired
+ * draft is a walk with invented parts in it, and the honest answer to "this is
+ * not a recording" is to offer the walk's ordinary one-tap log instead.
+ */
+export function parseRecording(value: unknown): Recording | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+
+  const { startedAt, segments, last, discarded } = value as Record<string, unknown>;
+
+  const track = parseTrack(segments);
+
+  if (!track) return undefined;
+
+  // The empty draft — started, nothing kept. Nothing to resume and nothing to
+  // save, so it is not a draft at all.
+  if (track.length === 0) return undefined;
+
+  if (!isReal(startedAt)) return undefined;
+
+  if (typeof last !== "object" || last === null) return undefined;
+
+  const fix = last as Fix;
+
+  if (!isUsable(fix)) return undefined;
+
+  return {
+    startedAt,
+    segments: track,
+    last: { lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy, at: fix.at },
+    discarded: isReal(discarded) && discarded >= 0 ? discarded : 0,
+  };
+}

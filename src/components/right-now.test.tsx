@@ -33,10 +33,12 @@ const repeatMeal = vi.fn();
 const revertSwap = vi.fn();
 const logWalk = vi.fn();
 const clearWalk = vi.fn();
+const saveWalkRecording = vi.fn();
 
 vi.mock("@/app/actions/log-walk", () => ({
   logWalk: (...args: unknown[]) => logWalk(...args),
   clearWalk: (...args: unknown[]) => clearWalk(...args),
+  saveWalkRecording: (...args: unknown[]) => saveWalkRecording(...args),
 }));
 
 vi.mock("@/app/actions/log", () => ({
