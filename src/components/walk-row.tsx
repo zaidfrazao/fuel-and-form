@@ -609,6 +609,7 @@ export function WalkRow({
             <Button
               variant="secondary"
               size="xs"
+              className="shrink-0"
               onClick={() => act({ durationMin: null })}
             >
               Log walk
@@ -621,6 +622,7 @@ export function WalkRow({
               <Button
                 variant="secondary"
                 size="xs"
+                className="shrink-0"
                 onClick={() => begin(draft ?? NOTHING_RECORDED)}
               >
                 {draft ? "Resume" : "Record"}
@@ -639,14 +641,24 @@ export function WalkRow({
       {/*
        * The cost, before it is paid — FUEL-101's criterion, and § P11's
        * "the foreground-only limitation is stated where recording is offered,
-       * not only in this document". Both facts in two factual sentences,
-       * § Tone of Voice's register: what it needs, and what it costs. It is
-       * shown only where the Record control is, because a cost stated on a row
-       * that offers nothing to spend it on is noise.
+       * not only in this document". Shown only where the Record control is,
+       * because a cost stated on a row that offers nothing to spend it on is
+       * noise.
+       *
+       * A Slash METADATA line — `a · b`, the register `/ 3.2 km · 34 min` uses
+       * — rather than the two sentences this was first written as, and the
+       * change was forced by measuring rather than by taste. Two sentences ran
+       * to 64 characters, which wrapped to two lines inside the row's measure
+       * at 375 and cost 46px a row; there are TWO walk rows on an ordinary
+       * weekday since FUEL-98, so the pair spent 92px of a screen § Desktop
+       * measured a 354px window for. Two identical sentences stacked also read
+       * as prose repeating itself, where two metadata lines read as what they
+       * are. § Content Guidelines made the same call on the walk reminder for
+       * the same reason, and named the measurement.
        */}
       {!recording && !shown && canRecord && !draft && (
         <p className="pb-3 text-slash text-text-tertiary">
-          / Recording needs the screen on and the app open. It uses battery.
+          / Screen on, app open · uses battery
         </p>
       )}
 

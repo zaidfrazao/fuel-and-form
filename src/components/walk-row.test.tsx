@@ -175,7 +175,7 @@ describe("what the row offers before anything is recorded", () => {
     // stated where recording is offered and not only in the document.
     render(row());
 
-    expect(screen.getByText(/needs the screen on and the app open/i)).toBeTruthy();
+    expect(screen.getByText(/screen on, app open/i)).toBeTruthy();
     expect(screen.getByText(/uses battery/i)).toBeTruthy();
   });
 
