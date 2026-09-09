@@ -1,4 +1,4 @@
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { recentSessions } from "@/lib/adherence";
@@ -8,12 +8,21 @@ import {
   loadTraining,
   logSet,
   recordSession,
+  recordWalkRecording,
   removeSet,
 } from "@/lib/db/queries/training";
 import * as schema from "@/lib/db/schema";
 import type { WorkoutExercise } from "@/lib/db/schema";
 import { scope } from "@/lib/db/scope";
 import { trainingDay } from "@/lib/resolve-training";
+import {
+  COORD_DECIMALS,
+  distanceMetres,
+  EARTH_RADIUS_M,
+  storableRoute,
+  type Track,
+  TRIM_METRES,
+} from "@/lib/route";
 import type { TrainingPlan } from "@/lib/rotation";
 
 import { testDatabaseUrl } from "./env";
@@ -963,6 +972,309 @@ describe.skipIf(!configured)("recording the daily walk, scoped", () => {
     expect(
       (await logsOf(fixture.alice.userId)).some((log) => log.workoutId === walkId),
     ).toBe(true);
+  });
+});
+
+/**
+ * A recorded walk's two rows, written together — FUEL-101, PRD § P11.
+ *
+ * `src/lib/recording.ts` and `src/lib/route.ts` are pure and are proved against
+ * synthetic geometry in the hermetic suite, where the arithmetic belongs. What
+ * neither can reach is the half of this feature that lives in Postgres, and it
+ * is not a small half — `walk_routes` carries three CHECK constraints and a
+ * unique index, and every one of them is a rule the application would otherwise
+ * be trusted to remember:
+ *
+ *   - `walk_routes_point_count_range` refuses a trace of zero points, so "a
+ *     walk with no route" has to be the ABSENCE of a row rather than an empty
+ *     one. A caller passing the zero through would turn a walk somebody took
+ *     into a failed insert.
+ *   - `workout_logs_distance_range` refuses zero metres, which is why
+ *     `storableRoute` reports `null` rather than 0 for a recording that
+ *     measured nothing.
+ *   - the precision CHECK refuses a sixth decimal place, and the schema names
+ *     THIS ticket as the reason it exists: FUEL-101 "adds the second writer — a
+ *     browser recorder, taking positions from a device that reports seven
+ *     decimals — and discipline is what a second writer is most likely to
+ *     miss".
+ *   - `walk_routes_user_log_key` is what makes a resumed recording "one walk
+ *     with a better trace, not two", and a conflict target that drifted would
+ *     be a second row nothing has a rule for choosing between.
+ *
+ * The trace also hangs off the log by a composite foreign key, so the two
+ * statements have an order and a transaction around them. That ordering is
+ * exactly the kind of thing that passes in a mock and fails on a database.
+ *
+ * ## No coordinate literal here either
+ *
+ * PRD § P11's rule, and `route.test.ts`'s: the geometry is metres east of an
+ * origin of zero, projected. It matters more in this file than in the pure one,
+ * because these rows are actually written.
+ */
+describe.skipIf(!configured)("recording a walk with a route, scoped", () => {
+  let fixture: Fixture;
+
+  beforeEach(async () => {
+    await truncateAll(getDb());
+    fixture = await seedFixture();
+  });
+
+  const METRES_PER_DEGREE = (Math.PI / 180) * EARTH_RADIUS_M;
+
+  /** A walk `metres` long as one continuous segment, a fix every 50m. */
+  function straightWalk(metres: number): Track {
+    const count = Math.floor(metres / 50) + 1;
+
+    return [
+      Array.from({ length: count }, (_value, index) => ({
+        lat: 0,
+        lng: (index * 50) / METRES_PER_DEGREE,
+        t: index * 20,
+      })),
+    ];
+  }
+
+  /** A walk on every day of the week, so any date resolves one. */
+  async function seedDailyWalk(userId: string): Promise<string> {
+    const owned = scope(userId, getDb());
+
+    const [walk] = await owned.insert(schema.workouts, {
+      name: "Morning Walk",
+      type: "walk",
+    });
+
+    await owned.insert(
+      schema.trainingTemplateEntries,
+      [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
+        dayOfWeek,
+        workoutId: walk!.id,
+        sortOrder: 1,
+      })),
+    );
+
+    return walk!.id;
+  }
+
+  /**
+   * The WALK's log row, and never the fixture's session row.
+   *
+   * Filtered by workout rather than taken as `[0]` of everything the user has.
+   * `seedFixture` already writes a `workout_logs` row with a distance on it —
+   * `name.length * 100`, so Alice's is 500 — and an unfiltered read here picked
+   * that up and compared a trace against another workout's figure. The
+   * assertion still failed, which is luck: it could as easily have passed.
+   */
+  async function walkLog(userId: string, workoutId: string) {
+    const [log] = await scope(userId, getDb()).select(
+      schema.workoutLogs,
+      eq(schema.workoutLogs.workoutId, workoutId),
+    );
+
+    return log;
+  }
+
+  /**
+   * The trace hanging off ONE log, as `userId` is allowed to see it.
+   *
+   * Addressed by log for the same reason, and it is what makes the scoping
+   * assertion below mean something: the fixture gives every user a route of
+   * their own, so a query that returned nothing at all could not pass it.
+   */
+  const routesFor = (userId: string, workoutLogId: string) =>
+    scope(userId, getDb()).select(
+      schema.walkRoutes,
+      eq(schema.walkRoutes.workoutLogId, workoutLogId),
+    );
+
+  it("writes the log and the trace in one go", async () => {
+    const { userId } = fixture.alice;
+    const workoutId = await seedDailyWalk(userId);
+
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: 12,
+      route: storableRoute(straightWalk(1000)),
+    });
+
+    const log = await walkLog(userId, workoutId);
+    const [route] = await routesFor(userId, log!.id);
+
+    expect(log).toMatchObject({ status: "done", note: null, durationMin: 12 });
+    // The FULL walk, measured before the trim — a kilometre, to the metre.
+    expect(log!.distanceM).toBe(1000);
+
+    expect(route).toBeDefined();
+    expect(route!.workoutLogId).toBe(log!.id);
+    expect(route!.pointCount).toBeGreaterThan(1);
+  });
+
+  it("stores a trace shorter than the distance it reports, by design", async () => {
+    // § P11: "distance is measured before the trim and the trace stored after
+    // it, so the two disagree by design". The assertion is the disagreement,
+    // because a trace that matched the figure would mean the trim never ran and
+    // the row still held the doorstep.
+    const { userId } = fixture.alice;
+    const workoutId = await seedDailyWalk(userId);
+
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: 12,
+      route: storableRoute(straightWalk(1000)),
+    });
+
+    const log = await walkLog(userId, workoutId);
+    const [route] = await routesFor(userId, log!.id);
+    const drawn = distanceMetres(route!.points);
+
+    expect(drawn).toBeLessThan(log!.distanceM!);
+    expect(log!.distanceM! - drawn).toBeGreaterThanOrEqual(2 * TRIM_METRES - 1);
+  });
+
+  it("stores nothing past the fifth decimal place", async () => {
+    // The one rule of the three that a row can be checked against on its own,
+    // which is why the database carries it. Asserted through what came BACK
+    // from Postgres rather than through what was sent.
+    const { userId } = fixture.alice;
+    const workoutId = await seedDailyWalk(userId);
+
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: 12,
+      route: storableRoute(straightWalk(1000)),
+    });
+
+    const log = await walkLog(userId, workoutId);
+    const [route] = await routesFor(userId, log!.id);
+
+    for (const point of route!.points.flat()) {
+      expect(point.lat).toBe(Number(point.lat.toFixed(COORD_DECIMALS)));
+      expect(point.lng).toBe(Number(point.lng.toFixed(COORD_DECIMALS)));
+    }
+  });
+
+  it("is one walk with a better trace, not two", async () => {
+    // What `walk_routes_user_log_key` is for, in the words of its own comment.
+    // A recording resumed after an interruption and saved again lands here.
+    const { userId } = fixture.alice;
+    const workoutId = await seedDailyWalk(userId);
+
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: 8,
+      route: storableRoute(straightWalk(600)),
+    });
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: 15,
+      route: storableRoute(straightWalk(1400)),
+    });
+
+    const walkRows = await scope(userId, getDb()).select(
+      schema.workoutLogs,
+      eq(schema.workoutLogs.workoutId, workoutId),
+    );
+
+    expect(walkRows).toHaveLength(1);
+
+    const log = walkRows[0]!;
+
+    expect(await routesFor(userId, log.id)).toHaveLength(1);
+    expect(log.distanceM).toBe(1400);
+    expect(log.durationMin).toBe(15);
+  });
+
+  it("writes no trace for a walk that never left the doorstep", async () => {
+    // Shorter than twice the trim, so `storableRoute` keeps no points — and
+    // `walk_routes_point_count_range` refuses a row of zero. The absence of a
+    // row IS the answer, and the distance is still recorded.
+    const { userId } = fixture.alice;
+    const workoutId = await seedDailyWalk(userId);
+
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: 2,
+      route: storableRoute(straightWalk(200)),
+    });
+
+    const log = await walkLog(userId, workoutId);
+
+    expect(await routesFor(userId, log!.id)).toHaveLength(0);
+    expect(log!.distanceM).toBe(200);
+  });
+
+  it("removes the trace it replaces when the new recording keeps none", async () => {
+    // The delete, and it is not defensive: a Record tapped by accident on the
+    // doorstep, over a walk recorded properly an hour earlier, would otherwise
+    // leave the old geometry attached to the new distance — the one way this
+    // table can hold a trace of a walk nobody took.
+    const { userId } = fixture.alice;
+    const workoutId = await seedDailyWalk(userId);
+
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: 15,
+      route: storableRoute(straightWalk(1400)),
+    });
+
+    const log = await walkLog(userId, workoutId);
+
+    expect(await routesFor(userId, log!.id)).toHaveLength(1);
+
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: 1,
+      route: storableRoute(straightWalk(200)),
+    });
+
+    expect(await routesFor(userId, log!.id)).toHaveLength(0);
+  });
+
+  it("reports no distance rather than zero for a recording that measured none", async () => {
+    // `workout_logs_distance_range` refuses 0 outright, so this is the
+    // difference between a walk with fewer figures and a failed write.
+    const { userId } = fixture.alice;
+    const workoutId = await seedDailyWalk(userId);
+
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: null,
+      route: storableRoute([]),
+    });
+
+    const log = await walkLog(userId, workoutId);
+
+    expect(log!.distanceM).toBeNull();
+    expect(log!.status).toBe("done");
+    expect(await routesFor(userId, log!.id)).toHaveLength(0);
+  });
+
+  it("keeps one user's route out of another's reach", async () => {
+    // The most sensitive rows this app holds, on the scope that every other
+    // table is read through. Asserted positively as well as negatively, so a
+    // query that returned nothing at all could not pass this.
+    const { userId } = fixture.alice;
+    const workoutId = await seedDailyWalk(userId);
+
+    await recordWalkRecording(userId, {
+      date: ALICE_LOGGED,
+      workoutId,
+      durationMin: 12,
+      route: storableRoute(straightWalk(1000)),
+    });
+
+    const log = await walkLog(userId, workoutId);
+
+    expect(await routesFor(fixture.alice.userId, log!.id)).toHaveLength(1);
+    expect(await routesFor(fixture.bob.userId, log!.id)).toHaveLength(0);
   });
 });
 

@@ -39,6 +39,7 @@ const {
   removeExerciseSet,
   logWalk,
   clearWalk,
+  saveWalkRecording,
 } = vi.hoisted(() => ({
   setSessionStatus: vi.fn(),
   clearSessionStatus: vi.fn(),
@@ -46,6 +47,7 @@ const {
   removeExerciseSet: vi.fn(),
   logWalk: vi.fn(),
   clearWalk: vi.fn(),
+  saveWalkRecording: vi.fn(),
 }));
 
 vi.mock("@/app/actions/training", () => ({
@@ -54,7 +56,7 @@ vi.mock("@/app/actions/training", () => ({
   logExerciseSet,
   removeExerciseSet,
 }));
-vi.mock("@/app/actions/log-walk", () => ({ logWalk, clearWalk }));
+vi.mock("@/app/actions/log-walk", () => ({ logWalk, clearWalk, saveWalkRecording }));
 
 const { Training } = await import("./training");
 

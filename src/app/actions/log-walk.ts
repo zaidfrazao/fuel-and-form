@@ -3,8 +3,15 @@
 import { refresh } from "next/cache";
 
 import { getSession } from "@/lib/auth/session";
-import { clearSession, loadTraining, recordSession } from "@/lib/db/queries/training";
+import {
+  clearSession,
+  loadTraining,
+  recordSession,
+  recordWalkRecording,
+} from "@/lib/db/queries/training";
 import { type CalendarDate, parseCalendarDate } from "@/lib/date";
+import { parseTrack, trackMinutes } from "@/lib/recording";
+import { storableRoute } from "@/lib/route";
 import { parseDuration } from "@/lib/session-entry";
 
 /**
@@ -179,6 +186,99 @@ export async function logWalk(input: {
   } catch (error) {
     // Names the failure for whoever runs the app. The user gets a banner and a
     // "Try again", which is everything they can act on.
+    console.error("Could not record the walk.", error);
+
+    return FAILED;
+  }
+}
+
+/**
+ * Records a walk that was RECORDED — the route, the distance and the duration.
+ *
+ * FUEL-101, PRD § P11. `logWalk` above is the one tap, and it does not change:
+ * a walk with no GPS at all still logs exactly as it did, which is § P3's
+ * criterion and § P11 says it "does not bend here". This is the additive path,
+ * and everything it writes is a figure the tap has no way to produce.
+ *
+ * ## Only the geometry crosses the wire
+ *
+ * Not the distance, not the duration, not the point count — all three are
+ * DERIVED here from the track itself. They are derivable, so accepting them
+ * would be accepting three numbers that can disagree with the shape they claim
+ * to describe, from an endpoint anyone can POST to. A forged body could then
+ * file a 40km walk with a two-point trace, and every figure downstream — the
+ * export, the step estimate, the energy range — would carry it.
+ *
+ * `storableRoute` does the deriving, which is FUEL-100's entry point and the
+ * one the schema names: `walk_routes`' precision comment says this ticket
+ * "adds the second writer — a browser recorder, taking positions from a device
+ * that reports seven decimals — and discipline is what a second writer is most
+ * likely to miss". Going through it is that discipline.
+ *
+ * ## Refused in cost order: no session, then a malformed body, then the day
+ *
+ * `getSession` first, and it is the cheapest of the three — a cookie and an
+ * HMAC, no query — so an unauthenticated POST is turned away before the server
+ * walks up to ten thousand positions on its behalf. It is `cache`d for the
+ * request, so `resolveWalk` calling it again below costs nothing.
+ *
+ * `parseTrack` second, on the reasoning `logWalk` already applies to
+ * `durationMin`: a refusal that costs a query is a refusal that can be used to
+ * make the database work, and this body is far larger than that one. It bounds
+ * the point count before walking the points, so a body claiming a million
+ * positions is refused by its length.
+ *
+ * The day last, because that is the one that reads.
+ *
+ * ## An empty track is a success, not a refusal
+ *
+ * A recording that was granted the permission and never got a usable fix
+ * produces no points, and this writes the walk with no distance and no trace —
+ * "a walk with no route is a complete walk with fewer figures, never a partial
+ * one". The refusals are reserved for a body that is malformed rather than one
+ * that is empty.
+ *
+ * ## A span that is not a duration
+ *
+ * The derived minutes go through `parseDuration` — the single place
+ * `MAX_DURATION_MIN` is spelled — and a span outside it is stored as NULL
+ * rather than refused. A recording left running from breakfast until the
+ * evening spans thirteen hours and is not a thirteen-hour walk; that figure is
+ * unknown, and `parseDuration` already says the honest way to record an unknown
+ * duration is to leave it empty. Refusing the save instead would throw away a
+ * real distance and a real route to protect a field that has a null in it.
+ */
+export async function saveWalkRecording(input: {
+  date: CalendarDate;
+  entryId: string;
+  track?: unknown;
+}): Promise<WalkResult> {
+  try {
+    if (!(await getSession())) return FAILED;
+
+    const track = parseTrack(input.track);
+
+    if (!track) return FAILED;
+
+    const resolved = await resolveWalk(input.date, input.entryId);
+
+    if (!resolved) {
+      refresh();
+
+      return FAILED;
+    }
+
+    await recordWalkRecording(resolved.userId, {
+      date: input.date,
+      workoutId: resolved.workoutId,
+      durationMin: parseDuration(trackMinutes(track)) ?? null,
+      route: storableRoute(track),
+    });
+
+    refresh();
+
+    return DONE;
+  } catch (error) {
     console.error("Could not record the walk.", error);
 
     return FAILED;

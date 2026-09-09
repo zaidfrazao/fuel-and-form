@@ -4,6 +4,7 @@ import { type RefObject, useEffect, useRef, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import { REST_PRESETS, parseRestEnd, restLabel, restReading } from "@/lib/rest-timer";
+import { hold, release } from "@/lib/wake-lock";
 
 /**
  * The rest timer — FUEL-93, PRD § P10, Brand Guide § Desktop and § Feedback.
@@ -367,72 +368,23 @@ function signal(context: AudioContext | null): void {
 /* The wake lock                                                               */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Held only while a timer runs.
+/*
+ * `hold` and `release` moved to `lib/wake-lock.ts` in FUEL-101, unchanged, when
+ * the walk recorder became the second caller. Their two guards — a released
+ * sentinel is not a held lock, and an in-flight request whose reason has since
+ * ended must be let go rather than filed — are argued there.
  *
- * Worth taking — a screen that stays up is the difference between glancing at
- * the readout and unlocking a phone to find it — and worth releasing the
- * instant the rest is over, because a lock held past its reason is a battery
- * cost with nothing on screen to explain it.
+ * What stays here is the timer's own reason for taking one: a screen that stays
+ * up is the difference between glancing at the readout and unlocking a phone to
+ * find it, and the lock is released the instant the rest is over, because one
+ * held past its reason is a battery cost with nothing on screen to explain it.
  *
  * It is **not** a substitute for the signals above and must not be treated as
  * one: the platform drops the lock when the tab is hidden and does not
  * reacquire it, so the case the timer exists for — a phone locked in a pocket —
  * is precisely the case the lock is not held in. That is what the
  * `visibilitychange` re-request in the effect below is for.
- *
- * `sentinel.released` is checked rather than the ref alone, because a dropped
- * lock leaves a sentinel object behind: a ref that is merely non-null would
- * make the re-request a no-op in exactly the case it was added for.
- *
- * ## `wanted` is not defensive — it closes a leak
- *
- * `request` is asynchronous, and the rest can end while the platform is still
- * deciding: a Stop tapped just after a start, an expiry on the next tick, or
- * `/training` being left altogether. The effect's cleanup runs first and finds
- * the ref still null, so `release` has nothing to let go of — and then this
- * `await` resolves and files a LIVE lock in a ref nothing will ever read again.
- * The result is a screen that never sleeps, with no timer on it, until the tab
- * is closed. It is the exact battery cost the paragraph above says to avoid,
- * reached by the one path that leaves nothing on screen to explain it.
- *
- * So the answer is re-checked after the await, and a lock that is no longer
- * wanted is released immediately rather than stored.
  */
-async function hold(
-  ref: RefObject<WakeLockSentinel | null>,
-  wanted: RefObject<boolean>,
-): Promise<void> {
-  if (ref.current && !ref.current.released) return;
-
-  try {
-    const sentinel = await navigator.wakeLock.request("screen");
-
-    if (!wanted.current) {
-      void sentinel.release().catch(() => {});
-      return;
-    }
-
-    ref.current = sentinel;
-  } catch {
-    // Unsupported — Firefox, and every iOS before 16.4 — or refused because the
-    // document was not visible at the moment of asking. Nothing depends on it.
-  }
-}
-
-function release(ref: RefObject<WakeLockSentinel | null>): void {
-  const sentinel = ref.current;
-
-  // Cleared first, so a release that rejects does not leave a sentinel the next
-  // `hold` would decline to replace.
-  ref.current = null;
-
-  try {
-    void sentinel?.release().catch(() => {});
-  } catch {
-    // Already released by the platform. There is nothing this could do about it.
-  }
-}
 
 /* -------------------------------------------------------------------------- */
 
