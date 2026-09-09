@@ -144,7 +144,14 @@ const row = (entry: Partial<WalkEntryView> | null = null) => (
       entryId={entryId}
       name="Morning Walk"
       entry={
-        entry && { durationMin: null, distanceM: null, hasRoute: false, ...entry }
+        entry && {
+          durationMin: null,
+          distanceM: null,
+          steps: null,
+          stepsSource: null,
+          hasRoute: false,
+          ...entry,
+        }
       }
     />
   </ul>
@@ -222,6 +229,49 @@ describe("what the row offers before anything is recorded", () => {
       expect(logWalk).toHaveBeenCalledWith({ date: DATE, entryId, durationMin: null }),
     );
     expect(saveWalkRecording).not.toHaveBeenCalled();
+  });
+});
+
+describe("the logged walk's figures — FUEL-102, FUEL-103", () => {
+  test("reads in the order § The Route Trace writes the line", () => {
+    // The guide spells this line out: `/ 3.2 km · 34 min · ~4,300 steps`. The
+    // ORDER is the assertion — one regex over the whole line rather than three
+    // presence checks, because three of those pass on any arrangement.
+    render(row({ durationMin: 34, distanceM: 3200, steps: 4500, stepsSource: "estimated" }));
+
+    expect(screen.getByText(/3\.2 km · 34 min · ~4,500 steps/)).toBeTruthy();
+  });
+
+  test("a walk with no step figure draws none, rather than a zero", () => {
+    // § P11's "absent rather than zeroed". A one-tap walk, a walk logged
+    // before P11, and a walk whose owner has no plausible height all land
+    // here, and the line is the two figures it does have.
+    render(row({ durationMin: 34, distanceM: 3200 }));
+
+    expect(screen.getByText(/3\.2 km · 34 min$/)).toBeTruthy();
+    expect(screen.queryByText(/steps/)).toBeNull();
+  });
+
+  test("a counted figure takes no tilde", () => {
+    /*
+     * The seam doing visible work — FUEL-103. Nothing in the app writes
+     * `device`, so this state is planted here exactly as the integration
+     * suite plants its row: the branch would otherwise ship unmeasured, and a
+     * real count from FUEL-105 would arrive drawn as a guess.
+     */
+    render(row({ durationMin: 34, distanceM: 3200, steps: 4317, stepsSource: "device" }));
+
+    expect(screen.getByText(/3\.2 km · 34 min · 4,317 steps/)).toBeTruthy();
+    expect(screen.queryByText(/~/)).toBeNull();
+  });
+
+  test("the step figure alone is enough of a line to draw", () => {
+    // The parts are filtered independently, so a walk that measured a distance
+    // and no duration still reads. Nothing is drawn only when there is nothing
+    // at all — "an empty Slash line would be a `/` with nothing after it".
+    render(row({ distanceM: 3200, steps: 4500, stepsSource: "estimated" }));
+
+    expect(screen.getByText(/3\.2 km · ~4,500 steps/)).toBeTruthy();
   });
 });
 

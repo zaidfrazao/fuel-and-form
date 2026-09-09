@@ -98,6 +98,8 @@ function workoutLog(fields: Partial<WorkoutLog> & { id: string }): WorkoutLog {
     note: null,
     durationMin: null,
     distanceM: null,
+    steps: null,
+    stepsSource: null,
     loggedAt: at(0),
     ...fields,
   };

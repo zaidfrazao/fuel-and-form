@@ -239,6 +239,8 @@ function workoutLog(
     note: null,
     durationMin: null,
     distanceM: null,
+    steps: null,
+    stepsSource: null,
     loggedAt: new Date("2026-08-17T18:00:00.000Z"),
     ...over,
   };

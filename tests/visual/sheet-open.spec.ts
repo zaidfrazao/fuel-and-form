@@ -104,6 +104,29 @@ async function datedWalkWithRoute(page: import("@playwright/test").Page) {
     await page.goto(`/training?date=${date}`);
     await expect(page.getByRole("main")).toBeVisible();
 
+    /*
+     * Wait for the WALK ROWS, and not for `main` alone — FUEL-103.
+     *
+     * `count()` below does not wait. `main` becomes visible before the Anytime
+     * list at the foot of it has painted, so a date whose walk row had not yet
+     * rendered read as "no route on this date" and the loop moved quietly on to
+     * an earlier one.
+     *
+     * The cost is not a flaky failure, which is the kind somebody notices. It
+     * is a baseline written from a DIFFERENT WALK by `--update-snapshots`, in
+     * silence — exactly what the paragraph above says this function exists to
+     * prevent, arriving through the one door it left open. It happened in
+     * FUEL-103, to `1272-light` alone out of the eight projects, and the
+     * picture was three days off the one every other width had photographed.
+     *
+     * § P3 puts a walk on the template every day of the week, so the walk's
+     * name is on every date this loop visits whether or not it was logged and
+     * whether or not it has a trace. That is what tells "no route here" apart
+     * from "not painted yet", and it is why the wait is on the NAME rather than
+     * on the control being looked for.
+     */
+    await expect(page.getByText("Morning Walk").first()).toBeVisible();
+
     const opener = page.getByRole("button", { name: /see the route/ }).first();
 
     if ((await opener.count()) > 0) return { date, opener };

@@ -216,6 +216,8 @@ const WORKOUT_LOG: WorkoutLog = {
   note: null,
   durationMin: DURATION_MIN,
   distanceM: null,
+  steps: null,
+  stepsSource: null,
   loggedAt: new Date("2026-08-17T18:00:00.000Z"),
 };
 

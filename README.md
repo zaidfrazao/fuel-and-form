@@ -631,7 +631,7 @@ restores a uuid pointing at nothing.
                                  "mediaKey", "mediaKind", "mediaAlt", "mediaCredit" } ],
   "trainingTemplateEntries": [ { "id", "dayOfWeek", "workoutId", "rotationGroup", "sortOrder" } ],
   "workoutLogs":             [ { "id", "date", "workoutId", "status", "note", "durationMin",
-                                 "distanceM", "loggedAt" } ],
+                                 "distanceM", "steps", "stepsSource", "loggedAt" } ],
   "exerciseSets":            [ { "id", "workoutLogId", "exerciseId", "setIndex", "reps", "loadKg", "createdAt" } ],
 
   "weightLogs":              [ { "id", "date", "weightKg", "note", "createdAt" } ],
@@ -745,7 +745,11 @@ file that gets emailed"*. A trace of a twice-daily walk starts and ends at a
 front door, repeats, and is timestamped, so ten of them are a home address in a
 document whose whole purpose is to be copied around. A lost trace is a missing
 picture of one walk; a leaked one is where somebody lives. The walk's
-`distanceM` and `durationMin` are exported in full — how far, without where.
+`distanceM`, `durationMin`, `steps` and `stepsSource` are exported in full —
+how far, without where. The step figure carries its origin because the two are
+different claims: `estimated` is `distanceM` divided by a stride derived from
+the stored height, and a reader that treated it as a measurement would be
+reading a division as a count.
 
 **Ids are kept.** `/weight` strips ids from the payload it sends the browser and
 argues why; that argument is about a screen's payload. This is a backup, and

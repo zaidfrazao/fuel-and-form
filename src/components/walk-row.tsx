@@ -28,6 +28,7 @@ import {
 import { FOCUS_RING, HOVER_LIFT, POINTER } from "@/lib/pointer";
 import { countPoints, distanceMetres, simplifyToCap, storableRoute } from "@/lib/route";
 import { kilometres } from "@/lib/route-trace";
+import { stepsLabel } from "@/lib/steps";
 import { hold, release } from "@/lib/wake-lock";
 import { WALK_PRESETS, type WalkEntryView } from "@/lib/walk";
 
@@ -516,6 +517,13 @@ export function WalkRow({
   const withDuration = (durationMin: number | null): WalkEntryView => ({
     durationMin,
     distanceM: shown?.distanceM ?? null,
+    // Carried through for the same reason the distance is: `recordSession` —
+    // the one-tap path — writes a status, a note and a duration, and names
+    // neither step column. So a preset tap changes no step figure on the
+    // server, and an optimistic row that dropped one would blank a line the
+    // server is about to send back unchanged.
+    steps: shown?.steps ?? null,
+    stepsSource: shown?.stepsSource ?? null,
     hasRoute: shown?.hasRoute ?? false,
   });
 
@@ -636,6 +644,25 @@ export function WalkRow({
       apply({
         durationMin: trackMinutes(track(finished)),
         distanceM: stored.distanceM,
+        /*
+         * The one figure the optimistic row cannot produce, and the reason is
+         * a rule rather than an oversight.
+         *
+         * `estimateSteps` needs `profiles.height_cm`, and `app/page.tsx` is
+         * explicit that the profile's body metrics — height among them — do
+         * not go into a payload the browser can read, on a screen that shows
+         * none of them. `page.payload.test.tsx` asserts it. Sending the step
+         * LENGTH instead would be the same metric multiplied by a constant,
+         * which is evading the rule rather than keeping it.
+         *
+         * So the estimate arrives with the server's render, one beat after the
+         * distance. That is an APPEND rather than a change — the line grows
+         * from `/ 3.2 km · 34 min` to `/ 3.2 km · 34 min · ~4,500 steps` —
+         * and nothing already on screen moves or contradicts itself, which is
+         * what the optimistic entry above exists to protect.
+         */
+        steps: null,
+        stepsSource: null,
         hasRoute: stored.pointCount > 0,
       });
 
@@ -910,6 +937,8 @@ export function WalkRow({
           name={name}
           durationMin={shown.durationMin}
           distanceM={shown.distanceM}
+          steps={shown.steps}
+          stepsSource={shown.stepsSource}
           load={load}
           onRetry={openSheet}
           onNamed={(named) =>
@@ -967,6 +996,19 @@ function Figures({
   const parts = [
     entry.distanceM === null ? null : kilometres(entry.distanceM),
     entry.durationMin === null ? null : `${entry.durationMin} min`,
+    /*
+     * The step figure — § The Route Trace writes this line out in full:
+     * `/ 3.2 km · 34 min · ~4,300 steps`, so it is third and it is last.
+     *
+     * The pair is checked rather than the count alone, which is the schema's
+     * invariant restated where TypeScript can see it: `steps_source` is what
+     * decides whether the tilde is drawn, so a figure without one has nothing
+     * to draw itself with. The database refuses that combination; this is what
+     * stops the narrowing needing a `!`.
+     */
+    entry.steps === null || entry.stepsSource === null
+      ? null
+      : stepsLabel(entry.steps, entry.stepsSource),
   ].filter((part) => part !== null);
 
   if (parts.length === 0) return null;

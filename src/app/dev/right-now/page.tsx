@@ -307,6 +307,25 @@ const activeAt = (
 /* The cases                                                                  */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The morning walk as it stands once a recording has been saved — FUEL-102,
+ * FUEL-103.
+ *
+ * One fixture rather than the same literal in three cases, because three of
+ * them draw this exact row and a step figure typed out three times is three
+ * chances for one of them to be arithmetic nobody checked. 1,800m divided by
+ * the step length the persona's 172cm implies is 2,527, and two significant
+ * figures of that is 2,500 — the same answer `estimateSteps` gives, computed
+ * the same way rather than copied off a screen.
+ */
+const WALK_RECORDED: WalkEntryView = {
+  durationMin: 20,
+  distanceM: 1800,
+  steps: 2500,
+  stepsSource: "estimated",
+  hasRoute: true,
+};
+
 const CASES: Record<
   string,
   {
@@ -361,13 +380,18 @@ const CASES: Record<
      * see; FUEL-98 drew it twice. The outstanding cases are `complete-walk` and
      * `complete-one-walk`, which carry summaries that agree with their rows.
      */
-    walks: new Map([
+    walks: new Map<string, WalkEntryView>([
       // One walk with a trace and one without — FUEL-102. The pair is the
       // point: the morning walk's figures are a control that opens the sheet,
       // and the afternoon's are the same line as plain text, because "a walk
       // with no route draws nothing — not a disabled control".
-      ["e6", { durationMin: 20, distanceM: 1800, hasRoute: true }],
-      ["e7", { durationMin: 15, distanceM: null, hasRoute: false }],
+      //
+      // It is also the step figure's pair — FUEL-103. 1,800m at the persona's
+      // 172cm estimates 2,500 steps; the afternoon walk measured no distance,
+      // so it has nothing to divide and draws no step figure at all rather
+      // than a zero. Those are the only two states this line has.
+      ["e6", WALK_RECORDED],
+      ["e7", { durationMin: 15, distanceM: null, steps: null, stepsSource: null, hasRoute: false }],
     ]),
   },
   "complete-empty": {
@@ -384,7 +408,7 @@ const CASES: Record<
     label: "One walk logged",
     note: "The morning walk's row after one tap, with a duration set, beside an afternoon walk still on offer — the ordinary state of a day between the two. Done and the minutes are words, not colour, and the presets stay on offer so 20 can become 30 or nothing.",
     view: activeAt(5, 19 * 60 + 20),
-    walks: new Map([["e6", { durationMin: 20, distanceM: 1800, hasRoute: true }]]),
+    walks: new Map<string, WalkEntryView>([["e6", WALK_RECORDED]]),
   },
   "complete-walk": {
     label: "Day complete · both walks outstanding",
@@ -397,7 +421,7 @@ const CASES: Record<
     note: "The narrowing applied per walk — FUEL-98. The morning walk is a line in the summary above like any other log, and only the afternoon one is still offered. A page that drew both here would be reopening something it has already reported.",
     view: { ...base(21 * 60 + 30), state: "day-complete" },
     entries: LOGGED.slice(0, 7),
-    walks: new Map([["e6", { durationMin: 20, distanceM: 1800, hasRoute: true }]]),
+    walks: new Map<string, WalkEntryView>([["e6", WALK_RECORDED]]),
   },
 };
 

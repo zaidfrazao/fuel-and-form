@@ -31,6 +31,7 @@ import { EARTH_RADIUS_M, storableRoute, type Track, type TrackPoint } from "@/li
 import { type Plan, resolveDay, templateSlot } from "@/lib/resolve-plan";
 import { resolveTraining, type TrainingPlan } from "@/lib/rotation";
 import { working } from "@/lib/section";
+import { estimateSteps } from "@/lib/steps";
 
 /**
  * Sam Rivera's twelve weeks of history — FUEL-41, PRD § P7.
@@ -1050,6 +1051,13 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
       // instead, and `walk_routes_point_count_range` is the database's own
       // copy of it: if `DURATION_MIN.walk` is ever lowered past the trim, the
       // insert fails loudly rather than silently writing fewer routes.
+      // Derived from the route's own measured distance, before the row is
+      // built, so the two cannot come to disagree about the same walk.
+      const walkSteps = estimateSteps({
+        distanceM: route?.distanceM ?? null,
+        heightCm: profile.heightCm,
+      });
+
       if (route !== null) {
         history.walkRoutes.push({
           date,
@@ -1068,6 +1076,27 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
         // Null for every session and for every unrecorded walk — "absent
         // rather than zeroed", which is what a pre-P11 walk looks like too.
         distanceM: route?.distanceM ?? null,
+        /*
+         * The step estimate — FUEL-103, and the same three-way absence.
+         *
+         * Computed here rather than left null, because otherwise the figure
+         * the walk's row and the walk's sheet were built to draw would be
+         * invisible to every reader of the demo AND to the visual suite,
+         * which photographs the demo and nothing else. A feature nobody can
+         * see is one nobody can review.
+         *
+         * `estimateSteps` is the same function the write path calls, given the
+         * same distance and the persona's own height, so the demo's figures
+         * are the app's arithmetic rather than a plausible-looking constant.
+         * A session and an unrecorded walk have no distance, so they get no
+         * figure — which is the state this seed already produces for the
+         * distance one line up.
+         *
+         * The source is `estimated` throughout. Nothing writes `device` and
+         * the seed is not the place to invent a walk the app cannot record.
+         */
+        steps: walkSteps,
+        stepsSource: walkSteps === null ? null : "estimated",
         // Rescaled by the rate it just passed, so the argument is back in
         // [0, 1) and `pick` is in range — which is why this asserts rather than
         // falling back. A `?? null` here would be a branch no test could reach,
