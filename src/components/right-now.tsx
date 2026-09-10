@@ -349,9 +349,16 @@ function DayTotals({
 }) {
   return (
     <section className={cn("flex flex-col gap-[14px]", className)}>
-      {/* "Today" rather than "Day totals": § Content Guidelines asks for the
-          shortest true label, and the screen is already about today. */}
-      <Eyebrow>Today</Eyebrow>
+      {/* "Planned" — FUEL-110. This read "Today", defended as § Content
+          Guidelines' shortest true label, and it was short and ambiguous: the
+          figures are the plan after swaps, not what has been logged, and every
+          nutrition app a reader has used labels its home figures as eaten or
+          remaining. It also doubled the folio's `TODAY · …` just above it at
+          the cap. "Planned" rather than § Terminology's bare "Plan"
+          because that is the nav's label for `/plan`, and a Micro heading
+          reading PLAN on this screen names the wrong one. The phone's merged
+          line says `plan` for width — see `MealDayGrid`. */}
+      <Eyebrow>Planned</Eyebrow>
 
       <MacroGrid totals={summariseDay(planned)} target={target} />
     </section>

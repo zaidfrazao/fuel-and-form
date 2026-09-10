@@ -77,7 +77,7 @@ function RulerBand({ className, at }: { className: string; at: string }) {
  * figures a slash line under it.
  *
  * `lines` is what separates the two shapes. The merged grid is three lines and
- * so is `Today`; `This meal` is two, because a meal's macros carry no target to
+ * so is `Planned`; `This meal` is two, because a meal's macros carry no target to
  * be measured against — `macro-grid.tsx` sets out which is which.
  */
 function Cell({ lines }: { lines: 2 | 3 }) {
@@ -255,7 +255,7 @@ export default function Loading() {
         </div>
 
         <div aria-hidden className={PAGE_ASIDE_COLUMN} data-column="aside">
-          {/* `Today` — first in this column, and first for the reason the screen
+          {/* `Planned` — first in this column, and first for the reason the screen
               gives: it was the last section of the measure before FUEL-86 and
               this group follows immediately, so the flat column below the cap is
               unchanged. Gated at `md` like the screen's, because below 768 the

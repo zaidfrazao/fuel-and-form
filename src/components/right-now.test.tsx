@@ -358,7 +358,7 @@ const renderNow = (
  *
  * `/` renders both: below 768px one grid carrying the meal's four macros with
  * the day's totals on the slash line, and at 768px and up the two named sections
- * `This meal` and `Today`. CSS chooses one. jsdom loads no stylesheet, so unlike
+ * `This meal` and `Planned`. CSS chooses one. jsdom loads no stylesheet, so unlike
  * a browser it has BOTH in the tree — and since all three grids carry the labels
  * `Calories / Protein / Fat / Carbs`, an unscoped `getByText("32.5 g")` finds
  * the meal's protein twice.
@@ -481,25 +481,25 @@ describe("the day's numbers, in two shapes", () => {
     );
   });
 
-  test("the merged shape carries the day's totals, so `Today` is hidden with it", () => {
+  test("the merged shape carries the day's totals, so `Planned` is hidden with it", () => {
     // The two must not both be showing at any width: the merged grid already
-    // prints the day's four figures on its slash lines, and `Today` beneath it
+    // prints the day's four figures on its slash lines, and `Planned` beneath it
     // would be the same numbers twice.
     renderNow(active(0));
 
-    const today = screen.getByRole("heading", { name: "Today" }).closest("section")!;
+    const today = screen.getByRole("heading", { name: "Planned" }).closest("section")!;
 
     expect(today.className).toContain("hidden md:flex");
   });
 
-  test("a workout card keeps `Today` at every width", () => {
+  test("a workout card keeps `Planned` at every width", () => {
     // There is no meal to merge the day's figures into, so the section is the
     // only place they appear and it may not be hidden on a phone. `DayTotals`
     // makes the point itself: the totals belong to the day, not to the item in
     // the middle of the screen.
     renderNow(active(2));
 
-    const today = screen.getByRole("heading", { name: "Today" }).closest("section")!;
+    const today = screen.getByRole("heading", { name: "Planned" }).closest("section")!;
 
     expect(today.className).not.toContain("hidden");
   });
@@ -676,7 +676,7 @@ describe("the active session", () => {
     // so that query answered null whether or not a grid was there, and the test
     // passed for the whole of the time it was checking nothing.
     expect(screen.queryByText("This meal")).toBeNull();
-    expect(screen.getByText("Today")).toBeDefined();
+    expect(screen.getByText("Planned")).toBeDefined();
   });
 });
 
@@ -714,7 +714,7 @@ describe("the day's totals", () => {
     renderNow(active(0));
 
     expect(screen.getByText("This meal")).toBeDefined();
-    expect(screen.getByText("Today")).toBeDefined();
+    expect(screen.getByText("Planned")).toBeDefined();
   });
 
   test("moves on a swap, before the server has answered", async () => {
@@ -1234,6 +1234,22 @@ describe("day-complete", () => {
     // take back — see the undo suite below.
     expect(screen.queryByRole("button", { name: "Log eaten" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();
+  });
+
+  test("labels nothing as planned, because its figures are the logged ones — FUEL-110", () => {
+    // The live state's figures are the plan, and say so. This screen's are
+    // `entryTotals(entries)` — what was actually logged — so the same word here
+    // would be the ambiguity FUEL-110 removed, pointing the other way.
+    const { container } = summary();
+
+    // 486 + 1,024: the two eaten entries, the skipped yoghurt contributing
+    // nothing. A planned figure would not know which of them was skipped.
+    expect(screen.getByText("1,510")).toBeDefined();
+
+    expect(screen.queryByRole("heading", { name: "Planned" })).toBeNull();
+    for (const dl of container.querySelectorAll("dl")) {
+      expect(dl.textContent).not.toMatch(/\bplan/i);
+    }
   });
 
   test("still offers the walk while it is outstanding — FUEL-29", () => {
@@ -2550,8 +2566,9 @@ describe("the second column", () => {
     // — it is the answer to the question the screen asks — and `This meal` is
     // the one grid beside it.
     //
-    // `Today` left for the aside in FUEL-86, which is the redraw's one real
-    // move on this screen: the meal's four figures and the day's four figures
+    // The day's totals (`Today` then, `Planned` since FUEL-110) left for the
+    // aside in FUEL-86, which is the redraw's one real move on this screen: the
+    // meal's four figures and the day's four figures
     // were two identical grids stacked, saying the same thing twice.
     expect(sectionsIn("measure")).toEqual(["Overnight oats", "This meal"]);
   });
@@ -2567,7 +2584,7 @@ describe("the second column", () => {
     // next stays in the DOM and stands down at the cap, because `The day`
     // contains its two items; both are here because both are the aside's, at
     // the width each is drawn at.
-    expect(sectionsIn("aside")).toEqual(["Today", "The day", "Up next", "Anytime"]);
+    expect(sectionsIn("aside")).toEqual(["Planned", "The day", "Up next", "Anytime"]);
   });
 
   test("the header band takes the folio and the ruler, and nothing else", () => {
@@ -2609,7 +2626,7 @@ describe("the second column", () => {
      * zones: subject, figures, ruler, up next, anytime, foot link.
      *
      * FUEL-86 moved two sections between groups and this list did not change,
-     * which is the property it exists to protect: `Today` was the last of the
+     * which is the property it exists to protect: `Planned` was the last of the
      * measure and became the first of the aside, and the two groups are
      * adjacent, so the flat column is the same list in the same order. The
      * header band contributes nothing here because everything in it is drawn
@@ -2629,7 +2646,7 @@ describe("the second column", () => {
       "Overnight oats",
       "ruler:wide",
       "This meal",
-      "Today",
+      "Planned",
       "ruler:phone",
       "The day",
       "Up next",
