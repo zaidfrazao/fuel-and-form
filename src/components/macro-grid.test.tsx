@@ -256,7 +256,7 @@ describe("the merged meal-and-day grid", () => {
     const calories = within(container.querySelector("dl")!.children[0] as HTMLElement);
 
     expect(calories.getByText("455")).toBeTruthy();
-    expect(calories.getByText(/day 1,655 of 2,000/)).toBeTruthy();
+    expect(calories.getByText(/plan 1,655 of 2,000/)).toBeTruthy();
   });
 
   test("keeps all four macros, each against target with a signed delta", () => {
@@ -268,13 +268,28 @@ describe("the merged meal-and-day grid", () => {
     );
 
     expect(lines).toEqual([
-      "Calories455/ day 1,800 of 2,000 · −200",
-      "Protein34.5 g/ day 128 g of 150 · −22",
-      "Fat16.5 g/ day 66 g of 60 · +6",
+      "Calories455/ plan 1,800 of 2,000 · −200",
+      "Protein34.5 g/ plan 128 g of 150 · −22",
+      "Fat16.5 g/ plan 66 g of 60 · +6",
       // A day that landed exactly on target reads `0`, not `+0` — `signed()`'s
       // convention, and the same one the two-grid shape prints.
-      "Carbs42.5 g/ day 200 g of 200 · 0",
+      "Carbs42.5 g/ plan 200 g of 200 · 0",
     ]);
+  });
+
+  test("names the day's figures as the plan on every line — FUEL-110", () => {
+    // The day here is `summariseDay(plannedToday)`, not what was eaten. The
+    // line read `day …` and was taken for consumed by anyone who has used
+    // another nutrition app, so the word is the fix and is pinned on all four
+    // lines rather than on the first: each cell is read on its own.
+    const { container } = merged();
+
+    const lines = [...container.querySelectorAll("dl .text-slash")].map((line) =>
+      line.textContent?.replace(/\s+/g, " "),
+    );
+
+    expect(lines).toHaveLength(4);
+    for (const line of lines) expect(line).toMatch(/^\/ plan /);
   });
 
   test("emphasises the meal's protein by weight, like every other grid", () => {

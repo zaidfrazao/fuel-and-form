@@ -154,12 +154,33 @@ export type CaloriesFigure = "actual" | "target";
  * dropping fat and carbs here would satisfy that criterion on no phone screen at
  * all. The compactness was worth having; the two figures were not.
  *
- * ## `day` prefixes the line rather than the label
+ * ## `plan` prefixes the line rather than the label
  *
  * The label is a Micro at 10.5px and § Accessibility permits that size "only
  * where the value sits adjacent at 22px or more" — a longer label wraps and
  * stops sitting adjacent. The word rides the slash line instead, where it is
  * 12.5px and free to wrap without moving anything.
+ *
+ * ## Why `plan`, and not `day` or `planned` — FUEL-110
+ *
+ * The figures are `summariseDay(plannedToday)`: the day as planned after swaps,
+ * not what has been logged. The line read `day 1,610 of 1,780 · −170`, and a
+ * reader who has used any other nutrition app takes 1,610 as eaten and −170 as
+ * "170 left to eat" — when it says the PLAN is 170 under target, whatever has
+ * been eaten. `day` was short and true, and ambiguous in exactly the way that
+ * mattered. § Terminology's word is Plan.
+ *
+ * `planned` was the clearer word and did not fit. Measured at 375 against the
+ * demo fixture, it wrapped at least one line on each day measured — the longest
+ * weekday, the weekend and the frozen demo day — and cost the grid 17–34px;
+ * `plan` wrapped none, so the grid stays 144px.
+ *
+ * The margin is thin: the frozen demo's protein line, `plan 113.5 g of 148 ·
+ * −34.5`, is 155.8px in a 157.5px cell. Dropping the day figure's unit was
+ * weighed and buys only 2.5px, because the calorie line — which has no unit —
+ * then becomes the widest at 153.3. Not worth a figure that no longer says what
+ * it counts. The heading over the ≥768 grid has no width limit and says
+ * `Planned` in full (`right-now.tsx`).
  */
 export function MealDayGrid({
   meal,
@@ -192,10 +213,10 @@ export function MealDayGrid({
     </span>
   );
 
-  /** The day's line beneath a meal's figure: where the day stands on this macro. */
+  /** The day's line beneath a meal's figure: where the planned day stands on this macro. */
   const dayLine = (dayValue: string, targetValue: number, deltaValue: ReactNode) => (
     <>
-      day {dayValue} of {figure(targetValue)} · {deltaValue}
+      plan {dayValue} of {figure(targetValue)} · {deltaValue}
     </>
   );
 

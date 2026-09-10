@@ -1056,12 +1056,14 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                    target with a signed delta, which is what PRD § P4 asks for
                    and what a two-figure summary could not have given. 14px
                    between the rows, because a three-line cell reads as a block.
-                   See § The Day's Numbers on a Phone. -->
+                   `plan` because these are the planned day, not the logged
+                   one (FUEL-110) — and `plan` rather than `planned`, which
+                   wrapped at 375. See § The Day's Numbers on a Phone. -->
               <div class="kv" style="row-gap:14px;">
-                <div class="kvi"><span class="u-micro">Calories</span><span class="u-val">612</span><span class="u-slash">day 1,178 of 1,780 · −602</span></div>
-                <div class="kvi"><span class="u-micro">Protein</span><span class="u-val em">48 g</span><span class="u-slash">day 98 g of 148 · −50</span></div>
-                <div class="kvi"><span class="u-micro">Fat</span><span class="u-val">18 g</span><span class="u-slash">day 41 g of 50 · −9</span></div>
-                <div class="kvi"><span class="u-micro">Carbs</span><span class="u-val">61 g</span><span class="u-slash">day 132 g of 185 · −53</span></div>
+                <div class="kvi"><span class="u-micro">Calories</span><span class="u-val">612</span><span class="u-slash">plan 1,178 of 1,780 · −602</span></div>
+                <div class="kvi"><span class="u-micro">Protein</span><span class="u-val em">48 g</span><span class="u-slash">plan 98 g of 148 · −50</span></div>
+                <div class="kvi"><span class="u-micro">Fat</span><span class="u-val">18 g</span><span class="u-slash">plan 41 g of 50 · −9</span></div>
+                <div class="kvi"><span class="u-micro">Carbs</span><span class="u-val">61 g</span><span class="u-slash">plan 132 g of 185 · −53</span></div>
               </div>
 
               <!-- Below the figures on a phone. On the longest meal names one of
@@ -1780,7 +1782,9 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                      and the phone is the one timed to three seconds. -->
                 <div class="daside">
                   <div class="blk">
-                    <span class="u-micro">Today</span>
+                    <!-- `Planned`, not `Today` — FUEL-110. The figures are the
+                         plan after swaps, and `Today` doubled the folio above. -->
+                    <span class="u-micro">Planned</span>
                     <div class="kv">
                       <div class="kvi"><span class="u-micro">Calories</span><span class="u-val">1,575</span><span class="u-slash">of 1,780 · −205</span></div>
                       <div class="kvi"><span class="u-micro">Protein</span><span class="u-val em">113.5 g</span><span class="u-slash">of 148 · −34.5</span></div>
