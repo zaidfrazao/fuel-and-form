@@ -1154,6 +1154,85 @@ describe("walk routes", () => {
     }
   });
 
+  it("gives a walk with a distance a step count that says it is an estimate", () => {
+    /*
+     * § P11's step figure in the demo — FUEL-103's columns, FUEL-104's
+     * criterion that the persona carries them.
+     *
+     * The PAIR is what is asserted, not the count. `workout_logs_steps_paired`
+     * refuses a count whose origin is unnamed, and a demo that wrote one
+     * without the other would be a fixture the database would reject — which
+     * is a failure worth catching here rather than at a provisioning that only
+     * runs against a real Postgres.
+     *
+     * `'estimated'` on every row and never `'device'`: nothing in this app can
+     * write a device count today, so a demo claiming one would be showing a
+     * state the code cannot produce.
+     */
+    const withSteps = history.workoutLogs.filter((log) => log.steps != null);
+
+    // Not vacuous — the demo does carry step figures.
+    expect(withSteps.length).toBeGreaterThan(0);
+
+    for (const log of history.workoutLogs) {
+      // Both null or neither, which is the CHECK constraint's own rule.
+      expect(log.steps == null).toBe(log.stepsSource == null);
+
+      if (log.steps == null) continue;
+
+      expect(log.stepsSource).toBe("estimated");
+      expect(log.steps).toBeGreaterThan(0);
+      // A step count with no distance to derive it from would be a figure the
+      // seed invented rather than estimated.
+      expect(log.distanceM).not.toBeNull();
+    }
+  });
+
+  it("walks a plausible number of steps per kilometre", () => {
+    // The check that catches a STRIDE coefficient used where a STEP one
+    // belongs — PRD § Data Model records that the two words are used
+    // interchangeably in casual writing and that taking the stride ratio would
+    // halve every count while leaving a figure that still looked plausible.
+    // Roughly 1,100-1,800 steps per km covers every adult step length.
+    for (const log of history.workoutLogs) {
+      if (log.steps == null || log.distanceM == null) continue;
+
+      const perKm = log.steps / (log.distanceM / 1000);
+
+      expect(perKm).toBeGreaterThan(1_100);
+      expect(perKm).toBeLessThan(1_800);
+    }
+  });
+
+  it("gives the persona two walks on every day it fills", () => {
+    /*
+     * § P11's twice-daily walk, FUEL-98 — and FUEL-104's criterion that the
+     * demo persona actually shows it.
+     *
+     * Counted per DATE rather than trusting the template, because the template
+     * asking for two and the history writing two are different claims and it
+     * is the second that a visitor sees. Skipped walks are included: a skipped
+     * walk is still a walk the day offered, and the pair is what makes "two a
+     * day" true of the plan rather than of the adherence.
+     */
+    const walkIds = new Set(
+      LIBRARY.workouts.filter((workout) => workout.type === "walk").map((w) => w.id),
+    );
+    const perDate = new Map<string, number>();
+
+    for (const log of history.workoutLogs) {
+      if (!walkIds.has(log.workoutId)) continue;
+      perDate.set(log.date, (perDate.get(log.date) ?? 0) + 1);
+    }
+
+    expect(walkIds.size).toBe(2);
+    expect(perDate.size).toBeGreaterThan(0);
+
+    for (const [date, count] of perDate) {
+      expect({ date, count }).toEqual({ date, count: 2 });
+    }
+  });
+
   it("keeps routes inside their window, and logs outside it", () => {
     // The dial, asserted the way `SET_HISTORY_WEEKS` is. A route outside the
     // trailing weeks would be rows nobody opens, on a path priced per

@@ -374,7 +374,8 @@ describe("what leaves the account", () => {
      * different claims about the same walk, and a backup that carried the
      * number alone would hand a reader a modelled figure indistinguishable
      * from a measured one. § P11 asks for both, in both formats and both
-     * scopes; the weekly CSV's half is FUEL-104's.
+     * scopes; the weekly CSV's half landed in FUEL-104 and is asserted in
+     * `export-week.test.ts`.
      */
     const document = build({
       ...TABLES,
@@ -393,6 +394,79 @@ describe("what leaves the account", () => {
       steps: 4500,
       stepsSource: "estimated",
     });
+  });
+
+  test("carries two walks on one date as two rows — FUEL-104", () => {
+    /*
+     * § P11's twice-daily walk. They are two `workouts` rows and therefore two
+     * logs (FUEL-98) — `workout_logs` is unique on `(user_id, date,
+     * workout_id)`, so one workout could not hold both — and the backup keeps
+     * them apart rather than summing or collapsing them.
+     *
+     * A restore is what this is for: a day that went out as one row with the
+     * distances added together could not be put back.
+     */
+    const document = build({
+      ...TABLES,
+      workoutLogs: [
+        {
+          ...workoutLog(WORKOUT_LOG_ID, "2026-08-10"),
+          distanceM: 3200,
+          steps: 4500,
+          stepsSource: "estimated",
+        },
+        {
+          ...workoutLog("dddddddd-0000-4000-8000-00000000009f", "2026-08-10"),
+          distanceM: 1800,
+          steps: 2400,
+          stepsSource: "estimated",
+        },
+      ],
+    });
+
+    expect(document.workoutLogs).toHaveLength(2);
+    expect(document.workoutLogs.map((row) => row.distanceM)).toEqual([3200, 1800]);
+    expect(document.workoutLogs.map((row) => row.steps)).toEqual([4500, 2400]);
+  });
+
+  test("leaves a walk logged before P11 absent rather than zeroed", () => {
+    /*
+     * § P11: such a row "renders and exports cleanly, its fields absent rather
+     * than zeroed". Constructed deliberately — once the demo is regenerated
+     * every walk in it carries figures, so this row cannot occur naturally in
+     * any other fixture here.
+     *
+     * `null` and not `0`, and the difference is the whole point: a zero is a
+     * measurement, and a restore would put a walk of no distance back into the
+     * database where a walk of unknown distance had been.
+     */
+    const document = build({
+      ...TABLES,
+      workoutLogs: [
+        {
+          ...workoutLog(WORKOUT_LOG_ID, "2026-08-10"),
+          durationMin: 30,
+          distanceM: null,
+          steps: null,
+          stepsSource: null,
+        },
+      ],
+    });
+
+    expect(document.workoutLogs[0]).toMatchObject({
+      durationMin: 30,
+      distanceM: null,
+      steps: null,
+      stepsSource: null,
+    });
+
+    // The keys are PRESENT and null, rather than dropped by the serialiser —
+    // a restorer reading the file can tell "not recorded" from "not exported".
+    const row = document.workoutLogs[0]!;
+
+    expect(Object.keys(row)).toEqual(
+      expect.arrayContaining(["distanceM", "steps", "stepsSource"]),
+    );
   });
 
   test("writes every instant as an ISO string", () => {
@@ -632,8 +706,27 @@ describe("drift", () => {
    *
    * If a route is ever exported it is on an explicit opt-in with the
    * consequence stated in the interface, and never in the weekly check-in
-   * scope. That is FUEL-104's to build if it is built at all; until then this
-   * entry is the decision, recorded where it is enforced.
+   * scope.
+   *
+   * ## FUEL-104 looked at this and built no opt-in, which is the decision
+   *
+   * That ticket owns the criterion "the route/export decision is made and
+   * recorded", and the decision is to leave the exclusion exactly as it
+   * stands. No opt-in, no flag, no scope that can carry geometry. The reason
+   * is that an opt-in is not free the way it looks: it is a control whose ON
+   * state writes a home address into a file, and every later feature that
+   * touches the export then has to keep asking whether this is the run where
+   * that happened. Nothing asked for it — § P6 wants the history back, and
+   * FUEL-102's hand-off already covers wanting the shape somewhere else — so
+   * the honest move was to decline to build the mechanism rather than build
+   * one nobody had a use for and leave it switched off.
+   *
+   * `walk_routes.name` is covered by the same exclusion and deliberately so.
+   * It is free text rather than geometry, which makes it look like the safe
+   * half of the table, and schema.ts refuses that reading in terms: a route
+   * name is "a place in somebody's life said in their own words", and it takes
+   * that table's rules rather than a weaker set. Excluding by TABLE is what
+   * keeps the name out without anybody having to notice it separately.
    */
   const EXCLUDED = new Set(["users", "push_subscriptions", "walk_routes"]);
 
@@ -1491,5 +1584,89 @@ describe("the sets round-trip", () => {
     // Every column survives too, `user_id` excepted — a round-trip that kept
     // the row and dropped its reps would pass an id-only assertion.
     expect(document.exerciseSets.map((row) => row.reps)).toEqual([12, 12, 12]);
+  });
+});
+
+describe("no coordinate reaches the backup", () => {
+  /**
+   * § P11's route exclusion, checked against the BYTES — FUEL-104.
+   *
+   * The `EXCLUDED` test above proves `walk_routes` is not a key in the
+   * document, which is the structural half. This is the other half, and it is
+   * a different question: geometry could reach the file without the table
+   * doing, by riding on a column somebody adds later to `workout_logs`, or
+   * through a summary field, or in anything else this builder spreads whole.
+   * Since `withoutUser` deliberately carries new columns in without an edit,
+   * the file's contents are exactly the thing a structural check cannot see.
+   *
+   * ## The check is proved before it is trusted
+   *
+   * A scan looking in the wrong place reports CLEAN forever, and "no
+   * coordinates found" is the most comfortable wrong answer in this
+   * repository. So the plant runs FIRST here, on the same builder and the same
+   * fixture, and the clean assertion is only meaningful because the case above
+   * it fails when a coordinate is present.
+   */
+
+  /**
+   * Anything shaped like a decimal degree pair.
+   *
+   * Deliberately looser than the trace's own format: `route.ts` truncates to
+   * five decimal places, but a leak that arrived at six or seven — straight
+   * off a receiver, before any of the app's own rounding — is exactly the leak
+   * worth catching, and a pattern pinned to five would miss it. Three decimals
+   * is about a hundred metres, which is the point where a number stops being a
+   * measurement and starts being a place.
+   */
+  const COORDINATE = /-?\d{1,3}\.\d{3,}\s*,\s*-?\d{1,3}\.\d{3,}/;
+
+  const routed = (note: string) =>
+    build({
+      ...TABLES,
+      workoutLogs: [{ ...workoutLog(WORKOUT_LOG_ID, "2026-08-10"), note }],
+    });
+
+  /**
+   * A coordinate-shaped pair, COMPUTED rather than written.
+   *
+   * `scripts/check-no-metrics.sh` reports every bare pair it finds and its own
+   * note says the pair pattern "has NO allowlist and must never be given one"
+   * — PRD § P11 being that "no coordinate reaches a seed, a fixture, a test or
+   * the repository". A literal here would be a finding in the file whose job
+   * is to prove such findings get caught, which is the joke that writes itself.
+   *
+   * So this follows the precedent that script names: `route.test.ts` and
+   * `tests/integration/fixtures.ts` both need geometry and both derive it. The
+   * digits below are arithmetic with no place attached to it, and the pattern
+   * under examination cannot tell the difference — which is the only property
+   * the plant needs.
+   */
+  const plantedPair = () =>
+    `${(1 / 3).toFixed(5)}, ${(-2 / 7).toFixed(5)}`;
+
+  test("the scan can see a coordinate that IS there", () => {
+    // Planted in a note, which is a field the export genuinely carries — so
+    // this proves the scan reads the part of the document a leak would land
+    // in, rather than proving a regex matches a string.
+    const planted = JSON.stringify(routed(`Finished at ${plantedPair()}`));
+
+    expect(planted).toMatch(COORDINATE);
+  });
+
+  test("and finds none in the document the app actually builds", () => {
+    expect(JSON.stringify(build())).not.toMatch(COORDINATE);
+    expect(JSON.stringify(routed("Long way round, felt good"))).not.toMatch(
+      COORDINATE,
+    );
+  });
+
+  test("carries no key named for a route, however the tables grow", () => {
+    // The name is as sensitive as the geometry — schema.ts calls a route name
+    // "a place in somebody's life said in their own words" — so neither the
+    // points nor the name may appear, under any spelling.
+    const keys = JSON.stringify(Object.keys(build()));
+
+    expect(keys).not.toMatch(/route/i);
+    expect(JSON.stringify(build())).not.toMatch(/"points"|"pointCount"/);
   });
 });
