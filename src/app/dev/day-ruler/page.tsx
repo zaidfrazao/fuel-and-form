@@ -48,7 +48,7 @@ const CASES: { label: string; note: string; slots: Slot[]; now?: number }[] = [
   },
   {
     label: "Now beside a scale mark",
-    note: "The pill and the scale share a row. This is where they collide.",
+    note: "The pill and the scale share a row. The label it reaches stands down whole, never half-covered.",
     slots: DAY,
     now: parseClock("12:05"),
   },
@@ -60,7 +60,7 @@ const CASES: { label: string; note: string; slots: Slot[]; now?: number }[] = [
   },
   {
     label: "Now at the span end",
-    note: "The pill stops at the edge rather than running off it, and covers 22.",
+    note: "The pill stops at the edge rather than running off it, and 22 stands down.",
     slots: untouched(DAY, "logged"),
     now: parseClock("22:00"),
   },

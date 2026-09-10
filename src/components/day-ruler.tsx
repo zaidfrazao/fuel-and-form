@@ -218,6 +218,79 @@ function scaleMarks(span: Span): number[] {
  */
 const NOW_PILL_HALF = "2.2em";
 
+/**
+ * The width of a scale label — `18` in the micro caps — FUEL-113.
+ *
+ * A measured 1.43em (15.05px at 10.5px, tracking included) and padded to 1.6em,
+ * which does two jobs. It is the safe direction, for the same reason as
+ * `NOW_PILL_HALF`: a label estimated too wide stands down a little early, and
+ * one estimated too narrow is the bug. And it keeps a hairline of air between
+ * the pill and a label that stays, so the row never reads `18NOW`. Measured in
+ * Liberation Sans; SF Pro's digits are wider, and the margin is what covers
+ * them rather than anything proven on a phone.
+ */
+const SCALE_LABEL_WIDTH = "1.6em";
+
+/**
+ * How far along its own box a scale label is anchored: the first sits to the
+ * right of its mark, the last to the left, and the rest are centred on theirs —
+ * so none hangs outside the ruler.
+ */
+export type LabelAnchor = 0 | 0.5 | 1;
+
+const ANCHOR_CLASS: Record<LabelAnchor, string> = {
+  0: "translate-x-0",
+  0.5: "-translate-x-1/2",
+  1: "-translate-x-full",
+};
+
+/**
+ * A scale label's `clip-path`: fully open while the NOW pill is clear of it, and
+ * fully closed once the two would touch — FUEL-113.
+ *
+ * The pill wins the overlap by design, but winning it by covering the label
+ * left the label half-drawn: at 18:54 on a phone the scale read "1 NOW". A label
+ * is either on the scale or not, so the one the pill reaches stands down whole.
+ *
+ * Computed in CSS because nothing else knows the two unknowns. This is a server
+ * component that never learns its width — three copies are rendered and CSS
+ * picks one, the phone's alone spanning ~275–723px — and `em` grows with
+ * Dynamic Type while the percentages do not. A threshold in minutes chosen here
+ * would be wrong at one end of that range or the other; `cqw` is the ruler's
+ * width as the browser laid it out (the box is an inline-size container for
+ * exactly this), and `em` is the label's text as drawn.
+ *
+ * The expression is the intersection of two boxes. The pill is centred at the
+ * same clamped `left` it is drawn at and reaches `NOW_PILL_HALF` either side;
+ * the label spans its mark, offset by its anchor. `min` of the two overlaps is
+ * positive only when they intersect, and multiplied up it saturates the inset
+ * at 100% — a zero-width region, which paints nothing. The label goes from open
+ * to closed across a millionth of a pixel of overlap, so there is no width at
+ * which it is visibly part-clipped. `min`, `max`, `clamp` and `cqw` only: no
+ * `abs()`, and no dividing one length by another. Their arguments take
+ * arithmetic without a `calc()` in every browser that has `cqw` at all
+ * (Safari 16, Chrome 105, Firefox 110), and Chromium and Firefox were both
+ * checked by hit-testing. A browser without container units drops the whole
+ * declaration, and the pill covers the label as it did before, which is a
+ * fallback to the old look rather than to anything worse.
+ *
+ * Exported so the test evaluates the string that ships rather than a twin of it.
+ */
+export function scaleLabelClip(
+  at: number,
+  anchor: LabelAnchor,
+  now: number,
+  span: Span = DEFAULT_SPAN,
+): string {
+  const pill = `clamp(${NOW_PILL_HALF}, ${positionInSpan(now, span)}cqw, 100cqw - ${NOW_PILL_HALF})`;
+  const mark = `${positionInSpan(at, span)}cqw`;
+  const left = `${mark} - ${SCALE_LABEL_WIDTH} * ${anchor}`;
+  const right = `${mark} + ${SCALE_LABEL_WIDTH} * ${1 - anchor}`;
+  const overlap = `min(${right} - (${pill} - ${NOW_PILL_HALF}), (${pill} + ${NOW_PILL_HALF}) - (${left}))`;
+
+  return `inset(0 0 0 clamp(0%, ${overlap} * 1000000, 100%))`;
+}
+
 const STATUS_LABEL: Record<SlotStatus, string> = {
   logged: "Logged",
   skipped: "Skipped",
@@ -300,11 +373,16 @@ export function DayRuler({
     <div className={cn("flex flex-col", className)}>
       {/* 41px: the NOW pill's baseline at 26 plus its 10.5px cap height and 2px
           of padding either side. "Roughly 40px including its scale", as the
-          guide has it. */}
+          guide has it.
+
+          `@container` so a scale label can measure itself against the pill in
+          `cqw` — see `scaleLabelClip`. Every child is absolutely positioned, so
+          the box's intrinsic width was already nothing and inline-size
+          containment changes no layout. */}
       <div
         role="img"
         aria-label={summarise(ordered, span, showNow ? now : undefined)}
-        className="relative h-[41px]"
+        className="@container relative h-[41px]"
       >
         <div className="absolute inset-x-0 top-[18px] h-px bg-border" />
 
@@ -327,22 +405,30 @@ export function DayRuler({
             pruning them, and Chrome still lists them in the tree. Hidden
             explicitly so no screen reader reads "06 12 18 22 Now" after a
             summary that has already said it better. */}
-        {marks.map((at, index) => (
-          <span
-            key={at}
-            aria-hidden
-            className={cn(
-              "absolute top-[26px] text-micro leading-none uppercase text-text-tertiary",
-              // The end labels would otherwise hang half outside the ruler.
-              index === 0 && "translate-x-0",
-              index > 0 && index < marks.length - 1 && "-translate-x-1/2",
-              index === marks.length - 1 && "-translate-x-full",
-            )}
-            style={{ left: `${positionInSpan(at, span)}%` }}
-          >
-            {formatClock(at).slice(0, 2)}
-          </span>
-        ))}
+        {marks.map((at, index) => {
+          // The end labels would otherwise hang half outside the ruler.
+          const anchor: LabelAnchor =
+            index === 0 ? 0 : index === marks.length - 1 ? 1 : 0.5;
+
+          return (
+            <span
+              key={at}
+              aria-hidden
+              className={cn(
+                "absolute top-[26px] text-micro leading-none uppercase text-text-tertiary",
+                ANCHOR_CLASS[anchor],
+              )}
+              style={{
+                left: `${positionInSpan(at, span)}%`,
+                clipPath: showNow
+                  ? scaleLabelClip(at, anchor, now, span)
+                  : undefined,
+              }}
+            >
+              {formatClock(at).slice(0, 2)}
+            </span>
+          );
+        })}
 
         {showNow && (
           <>
@@ -353,7 +439,9 @@ export function DayRuler({
             {/* Shares the scale's row, as in the mock, and wins the overlap when
                 the present moment falls near a six-hour mark. The scale can be
                 inferred from the ruler; the accent mark is the one thing on the
-                screen that says "you are here". */}
+                screen that says "you are here". Winning means the label stands
+                down whole rather than being drawn over (`scaleLabelClip`), so
+                the z-index no longer decides anything a reader can see. */}
             <span
               aria-hidden
               className="absolute top-[26px] z-10 -translate-x-1/2 rounded-full bg-accent px-[7px] py-[2px] text-micro leading-none uppercase text-accent-foreground"

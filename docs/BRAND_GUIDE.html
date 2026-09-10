@@ -888,7 +888,10 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
               <span class="now-pill" style="left:80.6%">NOW</span>
               <div class="ruler-scale">
                 <span style="left:0%">06</span><span style="left:37.5%">12</span>
-                <span style="left:75%">18</span><span style="left:100%">22</span>
+                <!-- The pill reaches the 18 at this width, so the label is not
+                     drawn rather than half-covered — FUEL-113. Kept in the
+                     markup so the scale still reads 06 · 12 · 18 · 22 here. -->
+                <span style="left:75%;visibility:hidden">18</span><span style="left:100%">22</span>
               </div>
             </div>
             <div class="legend" style="margin-top:8px;">
@@ -898,7 +901,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
             </div>
           </div>
         </div>
-        <p>Eight slots across a 06:00–22:00 span. Filled bars are logged, hatched are skipped, hairlines are still to come. The umber tick and pill mark the present. The whole day's shape in 40px of vertical space — and it answers “where am I?” before a single word is read.</p>
+        <p>Eight slots across a 06:00–22:00 span. Filled bars are logged, hatched are skipped, hairlines are still to come. The umber tick and pill mark the present, and a scale label the pill would touch is not drawn — here the 18. The whole day's shape in 40px of vertical space — and it answers “where am I?” before a single word is read.</p>
       </div>
 
       <div class="item">
@@ -1082,7 +1085,10 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                   <span class="now-pill" style="left:80.6%">NOW</span>
                   <div class="ruler-scale">
                     <span style="left:0%">06</span><span style="left:37.5%">12</span>
-                    <span style="left:75%">18</span><span style="left:100%">22</span>
+                    <!-- The pill reaches the 18 at this width, so the label is not
+                         drawn rather than half-covered — FUEL-113. Kept in the
+                         markup so the scale still reads 06 · 12 · 18 · 22 here. -->
+                    <span style="left:75%;visibility:hidden">18</span><span style="left:100%">22</span>
                   </div>
                 </div>
               </div>
