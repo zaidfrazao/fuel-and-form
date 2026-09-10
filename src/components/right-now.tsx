@@ -21,7 +21,7 @@ import { KeyValueGrid, SlashMeta } from "@/components/kv-grid";
 import { MacroGrid, MealDayGrid } from "@/components/macro-grid";
 import { PageMain } from "@/components/page-main";
 import { SwapSheet, type PlannedMeal, type SwappableMeal } from "@/components/swap-sheet";
-import { WalkRow } from "@/components/walk-row";
+import { WalkList, WalkRow } from "@/components/walk-row";
 import { Button } from "@/components/ui/button";
 import type { CalendarDate } from "@/lib/date";
 import {
@@ -580,7 +580,7 @@ function Anytime({
   return (
     <section className="flex flex-col gap-[14px]">
       <Eyebrow>Anytime</Eyebrow>
-      <ul className="flex flex-col">
+      <WalkList>
         {items.map((item) =>
           isWalk(item) ? (
             <WalkRow
@@ -605,7 +605,7 @@ function Anytime({
             </li>
           ),
         )}
-      </ul>
+      </WalkList>
     </section>
   );
 }
@@ -1627,7 +1627,7 @@ export function RightNow({
                   as a bare row under the crop marks — an unlabelled control
                   below a closed page reads as something that fell off it. */}
               <Eyebrow>Anytime</Eyebrow>
-              <ul className="flex flex-col">
+              <WalkList>
                 {/* One row per walk still outstanding, and the logged ones are
                     simply absent — which is the narrowing above applied per
                     walk rather than to the pair. A day with the morning walk
@@ -1643,7 +1643,7 @@ export function RightNow({
                     entry={null}
                   />
                 ))}
-              </ul>
+              </WalkList>
             </section>
           )}
 

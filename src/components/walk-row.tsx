@@ -1,9 +1,14 @@
 "use client";
 
 import {
+  createContext,
+  type ReactNode,
   startTransition,
   useCallback,
+  useContext,
   useEffect,
+  useId,
+  useLayoutEffect,
   useOptimistic,
   useRef,
   useState,
@@ -91,6 +96,16 @@ import { WALK_PRESETS, type WalkEntryView } from "@/lib/walk";
  * before the recorder. The placement is therefore decided here and written into
  * the guide in the same change, so FUEL-102 inherits it rather than settling it
  * again from a ticket.
+ *
+ * ## The cost is stated by the LIST, once — FUEL-112
+ *
+ * Every row that offers Record used to print `/ Screen on, app open · uses
+ * battery` beneath itself. There are two walk rows a day, so the screen printed
+ * the same caveat twice, 29px each time. `WalkList` prints it once, beneath the
+ * rows, whenever any row offers Record. Each row still decides whether it
+ * offers Record, because the facts that decide it are the row's own: the
+ * optimistic entry, the running recording and the draft. The row reports that
+ * answer up to the list.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -283,6 +298,96 @@ type Retry =
   | { kind: "recording"; recording: Recording };
 
 /* -------------------------------------------------------------------------- */
+/* The list, and the caveat it prints once                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How a row tells its list whether it offers Record right now.
+ *
+ * `null` outside a `WalkList`. A row rendered there reports to nobody, and no
+ * caveat is printed for it. Every screen that draws a walk row draws it inside
+ * a list, and those screens' tests check the caveat is on screen.
+ */
+const OffersRecord = createContext<((row: string, offers: boolean) => void) | null>(null);
+
+/**
+ * A list that holds walk rows — `/`'s Anytime list, the walks a closed `/`
+ * still offers, and `/training`'s. On `/` it also holds the items with no
+ * window, which are ordinary `<li>`s.
+ *
+ * ## One caveat per list, where any row offers Record — FUEL-112
+ *
+ * PRD § P11 requires the foreground-only limit to be "stated where recording is
+ * offered", and FUEL-101 requires the battery cost be stated before recording
+ * starts. One line under a list whose rows offer Record meets both. One line
+ * per row met them twice over and cost 58px a screen on a phone, since there
+ * are two walks a day.
+ *
+ * It is absent when no row offers Record — every walk logged, every walk
+ * recording, or a browser that cannot record. § The walk's row gives the
+ * reason and it still holds: a cost printed where nothing offers to spend it is
+ * noise.
+ *
+ * It is a Slash metadata line, `a · b`, rather than the two sentences FUEL-101
+ * first wrote. That was settled by measuring: the sentences ran to 64
+ * characters and wrapped to two lines at 375. § Content Guidelines made the
+ * same call on the walk reminder for the same reason.
+ *
+ * ## It is the list's footnote, so it gets a hairline
+ *
+ * The last row draws no hairline beneath itself. Without one here, a last row
+ * that is RECORDING would show its live line, `/ 0.6 km · 2:00`, with this line
+ * directly under it, and the two would read as one row's two figures. The
+ * hairline makes it the list's line rather than the last row's.
+ *
+ * ## The rows report; the list does not work it out
+ *
+ * Whether a row offers Record depends on its optimistic entry, its running
+ * recording and its draft. All three live in the row, and the first cannot be
+ * lifted: `useOptimistic` belongs to the component that applies it. So each row
+ * reports its answer from a layout effect, and the list keeps the set of rows
+ * that said yes. A layout effect rather than a plain one, so that the caveat
+ * disappears in the same paint as the row that tapped Log walk rather than a
+ * frame after it.
+ */
+export function WalkList({ children }: { children: ReactNode }) {
+  const [offering, setOffering] = useState<ReadonlySet<string>>(() => new Set());
+
+  const report = useCallback((row: string, offers: boolean) => {
+    setOffering((current) => {
+      // The same set back when nothing changed, so a report that changes
+      // nothing costs the list no render. Most reports change nothing: a row
+      // reports "no" as it unmounts and before each re-report, and it is
+      // usually "no" already.
+      if (current.has(row) === offers) return current;
+
+      const next = new Set(current);
+
+      if (offers) next.add(row);
+      else next.delete(row);
+
+      return next;
+    });
+  }, []);
+
+  return (
+    <OffersRecord value={report}>
+      {/* A box of its own, so the section's gap between its heading and its
+          list is not also put between the list and this line. */}
+      <div className="flex flex-col">
+        <ul className="flex flex-col">{children}</ul>
+
+        {offering.size > 0 && (
+          <p className="border-t border-border pt-3 text-slash text-text-tertiary">
+            / Screen on, app open · uses battery
+          </p>
+        )}
+      </div>
+    </OffersRecord>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 
 export function WalkRow({
   date,
@@ -352,9 +457,6 @@ export function WalkRow({
     () => false,
   );
 
-  /** The live recording, or `null` when none is running. */
-  const [recording, setRecording] = useState<Recording | null>(null);
-
   /**
    * An interrupted recording on this row, waiting to be resumed or saved.
    *
@@ -371,6 +473,29 @@ export function WalkRow({
     useCallback(() => draftSnapshot(key), [key]),
     () => null,
   );
+
+  /** The live recording, or `null` when none is running. */
+  const [recording, setRecording] = useState<Recording | null>(null);
+
+  /**
+   * Whether this row offers Record right now, told to the list that prints the
+   * caveat — FUEL-112.
+   *
+   * The condition the caveat used to be drawn under, unchanged. A row with a
+   * draft offers Resume and says so on its own line, which already states the
+   * recording, so it is left out here as it always was.
+   */
+  const offersRecord = canRecord && !recording && !shown && !draft;
+  const report = useContext(OffersRecord);
+  const row = useId();
+
+  useLayoutEffect(() => {
+    if (report === null) return;
+
+    report(row, offersRecord);
+
+    return () => report(row, false);
+  }, [report, row, offersRecord]);
 
   /**
    * The recording as the position callback sees it.
@@ -818,28 +943,10 @@ export function WalkRow({
       {shown && !recording && <Figures entry={shown} onOpen={openSheet} />}
 
       {/*
-       * The cost, before it is paid — FUEL-101's criterion, and § P11's
-       * "the foreground-only limitation is stated where recording is offered,
-       * not only in this document". Shown only where the Record control is,
-       * because a cost stated on a row that offers nothing to spend it on is
-       * noise.
-       *
-       * A Slash METADATA line — `a · b`, the register `/ 3.2 km · 34 min` uses
-       * — rather than the two sentences this was first written as, and the
-       * change was forced by measuring rather than by taste. Two sentences ran
-       * to 64 characters, which wrapped to two lines inside the row's measure
-       * at 375 and cost 46px a row; there are TWO walk rows on an ordinary
-       * weekday since FUEL-98, so the pair spent 92px of a screen § Desktop
-       * measured a 354px window for. Two identical sentences stacked also read
-       * as prose repeating itself, where two metadata lines read as what they
-       * are. § Content Guidelines made the same call on the walk reminder for
-       * the same reason, and named the measurement.
+       * The cost of recording is not stated here. `WalkList` states it once
+       * beneath the rows, and this row's part is `offersRecord` above —
+       * FUEL-112.
        */}
-      {!recording && !shown && canRecord && !draft && (
-        <p className="pb-3 text-slash text-text-tertiary">
-          / Screen on, app open · uses battery
-        </p>
-      )}
 
       {/*
        * An interrupted recording, offered back. § Tone of Voice: name what

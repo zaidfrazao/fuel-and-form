@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -26,7 +26,7 @@ vi.mock("@/app/actions/walk-route", () => ({
   nameRoute: (...args: unknown[]) => nameRoute(...args),
 }));
 
-const { WalkRow } = await import("./walk-row");
+const { WalkList, WalkRow } = await import("./walk-row");
 
 /**
  * FUEL-101 — recording a walk from the row, and everything that can go wrong.
@@ -138,24 +138,44 @@ const walked = (count: number) => {
  * A case that wants the sheet's affordance asks for `hasRoute` explicitly.
  */
 const row = (entry: Partial<WalkEntryView> | null = null) => (
-  <ul>
+  <WalkList>
+    <WalkRow date={DATE} entryId={entryId} name="Morning Walk" entry={logged(entry)} />
+  </WalkList>
+);
+
+/** A logged walk's figures, defaulting to the one-tap walk; `null` is unlogged. */
+const logged = (entry: Partial<WalkEntryView> | null): WalkEntryView | null =>
+  entry && {
+    durationMin: null,
+    distanceM: null,
+    steps: null,
+    stepsSource: null,
+    hasRoute: false,
+    ...entry,
+  };
+
+/**
+ * The day's two walks in one list, as all three screens draw them — FUEL-98.
+ * `null` is an unlogged walk. The morning walk is keyed by `entryId`, so the
+ * draft helpers below reach it; the afternoon one by `entryId` plus a suffix.
+ */
+const pair = (
+  morning: Partial<WalkEntryView> | null,
+  afternoon: Partial<WalkEntryView> | null,
+) => (
+  <WalkList>
+    <WalkRow date={DATE} entryId={entryId} name="Morning Walk" entry={logged(morning)} />
     <WalkRow
       date={DATE}
-      entryId={entryId}
-      name="Morning Walk"
-      entry={
-        entry && {
-          durationMin: null,
-          distanceM: null,
-          steps: null,
-          stepsSource: null,
-          hasRoute: false,
-          ...entry,
-        }
-      }
+      entryId={`${entryId}-afternoon`}
+      name="Afternoon Walk"
+      entry={logged(afternoon)}
     />
-  </ul>
+  </WalkList>
 );
+
+/** Every copy of the caveat on screen. */
+const caveats = () => screen.queryAllByText("/ Screen on, app open · uses battery");
 
 beforeEach(() => {
   entryId = `entry-${Math.random().toString(36).slice(2)}`;
@@ -229,6 +249,134 @@ describe("what the row offers before anything is recorded", () => {
       expect(logWalk).toHaveBeenCalledWith({ date: DATE, entryId, durationMin: null }),
     );
     expect(saveWalkRecording).not.toHaveBeenCalled();
+  });
+});
+
+describe("the recording caveat, once per list — FUEL-112", () => {
+  /*
+   * FUEL-101's criterion and § P11's still apply: the cost is stated where
+   * recording is offered, before it starts. FUEL-112 changed only how often.
+   * One line per LIST, whenever any row in it offers Record, and none when no
+   * row does. Every case here has two rows because that is the case the ticket
+   * is about; with one row, "once per list" and "once per row" agree.
+   */
+  test("is stated once for two walks that both offer Record", () => {
+    render(pair(null, null));
+
+    expect(screen.getAllByRole("button", { name: "Record" })).toHaveLength(2);
+    expect(caveats()).toHaveLength(1);
+  });
+
+  test("is stated once when one walk is logged, because the other still offers Record", () => {
+    render(pair({ durationMin: 20 }, null));
+
+    expect(screen.getAllByRole("button", { name: "Record" })).toHaveLength(1);
+    expect(caveats()).toHaveLength(1);
+  });
+
+  test("is absent once both walks are logged", () => {
+    render(pair({ durationMin: 20 }, { durationMin: 30 }));
+
+    expect(caveats()).toHaveLength(0);
+  });
+
+  test("is absent in a browser that cannot record", () => {
+    withoutGeolocation();
+    render(pair(null, null));
+
+    expect(caveats()).toHaveLength(0);
+  });
+
+  test("sits beneath the rows, not inside one, and is set off by a hairline", async () => {
+    // The criterion that a recording row's live figures do not collide with
+    // it. The afternoon walk is the LAST row and it is recording; the morning
+    // walk still offers Record, so the caveat stays. The last row draws no
+    // hairline of its own, so without this one the live line and the caveat
+    // would read as one row's two lines.
+    render(pair(null, null));
+
+    const afternoon = screen.getByText("Afternoon Walk").closest("li")!;
+
+    await userEvent.click(within(afternoon).getByRole("button", { name: "Record" }));
+    walked(7);
+
+    const live = within(afternoon).getByText(/0\.6 km · 2:00/);
+    const [caveat] = caveats();
+
+    expect(caveats()).toHaveLength(1);
+    expect(caveat?.closest("li")).toBeNull();
+    expect(live.compareDocumentPosition(caveat!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(caveat?.className).toMatch(/\bborder-t\b/);
+  });
+
+  test("goes when the only walk offering Record starts recording", async () => {
+    // A recording is the cost being paid, not offered. With the other walk
+    // logged, nothing on the list offers Record any more.
+    render(pair({ durationMin: 20 }, null));
+
+    await userEvent.click(screen.getByRole("button", { name: "Record" }));
+
+    expect(caveats()).toHaveLength(0);
+  });
+
+  test("is not stated for an interrupted recording, which states itself", () => {
+    // A row with a draft offers Resume, and its own line already says what it
+    // holds. So a list whose only unlogged walk has a draft states no caveat.
+    window.localStorage.setItem(
+      `fuel:walk-recording:${DATE}:${entryId}`,
+      JSON.stringify(
+        Array.from({ length: 7 }, (_value, index) => asFix(index * 100, 0, index * 20_000)).reduce(
+          appendFix,
+          NOTHING_RECORDED,
+        ),
+      ),
+    );
+    render(pair(null, { durationMin: 30 }));
+
+    expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
+    expect(caveats()).toHaveLength(0);
+  });
+
+  test("goes on the tap that logs the last walk offering Record, before the server answers", async () => {
+    // The row's optimistic value is what the screen shows, so the caveat has
+    // to follow it rather than the server. The action is HELD, so this can
+    // only pass on the optimistic render. Then it is refused, and the caveat
+    // comes back with the Record control it belongs to.
+    let answer: (result: { ok: boolean }) => void = () => {};
+
+    logWalk.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    render(pair({ durationMin: 20 }, null));
+
+    await userEvent.click(screen.getByRole("button", { name: "Log walk" }));
+
+    await waitFor(() => expect(caveats()).toHaveLength(0));
+    expect(logWalk).toHaveBeenCalledTimes(1);
+
+    await act(async () => answer({ ok: false }));
+
+    expect(await screen.findByText("/ Screen on, app open · uses battery")).toBeTruthy();
+  });
+
+  test("goes when the walk offering Record leaves the list", () => {
+    // `/` on a closed day drops a walk from its list once it is logged. The
+    // row that leaves has to take its report with it, or the list would go on
+    // stating a cost for a Record control that is no longer on screen.
+    const { rerender } = render(pair({ durationMin: 20 }, null));
+
+    expect(caveats()).toHaveLength(1);
+
+    rerender(
+      <WalkList>
+        <WalkRow
+          date={DATE}
+          entryId={entryId}
+          name="Morning Walk"
+          entry={logged({ durationMin: 20 })}
+        />
+      </WalkList>,
+    );
+
+    expect(caveats()).toHaveLength(0);
   });
 });
 
