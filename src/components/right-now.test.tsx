@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import { APP_ACTION_BAR } from "@/components/action-bar";
+import { ACTION_BAR_AT, APP_ACTION_BAR } from "@/components/action-bar";
 import { RightNow } from "@/components/right-now";
 import type { LoggedEntry } from "@/lib/day-summary";
 import { RULER_AT } from "@/components/day-ruler";
@@ -413,6 +413,35 @@ const dayRuler = (which: "wide" | "phone" | "aside" = "wide"): HTMLElement => {
   // typed as possibly-undefined, and an assertion is honest here where a `??`
   // fallback would invent an element that does not exist.
   return scoped ? within(scoped).getByRole("img") : screen.getAllByRole("img")[0]!;
+};
+
+/**
+ * One copy of the action bar — FUEL-114.
+ *
+ * The timeline state renders the bar twice, for the reason the ruler is
+ * rendered twice. Below 1024 it is sticky and last in the column. From 1024 it
+ * is released and written under the subject. A sticky box pins only from where
+ * it rests, so the two positions cannot be one element. CSS shows one of them.
+ * jsdom has no stylesheet, so both are in the tree here, and an unscoped
+ * `getByRole("button", { name: "Log eaten" })` finds two.
+ *
+ * Every query for a control in the bar, or for its banner, goes through a copy.
+ * `"phone"` is the default because it is the copy these tests were written
+ * against, and both copies are the same `Actions` with the same props.
+ *
+ * It falls back to the whole screen when the state renders no copy by name.
+ * The two quiet states draw a single bar with no attribute, because there it
+ * has only one position. And a query that expects no bar at all has to be able
+ * to look.
+ *
+ * Resolved at each call rather than held: a tap that finishes the day swaps
+ * the timeline state for day-complete, and a held copy would be a detached
+ * element that every later `findBy` waits on until it times out.
+ */
+const bar = (which: "phone" | "desktop" = "phone") => {
+  const scoped = document.querySelector<HTMLElement>(`[data-bar="${which}"]`);
+
+  return scoped ? within(scoped) : screen;
 };
 
 /** A day's log of `count` lines, for the cases that only care that there is one. */
@@ -1184,7 +1213,7 @@ describe("the daily walk", () => {
     // wrote, and it wrote none of this — see `lib/walk.ts`.
     renderNow(active(0), EXERCISES, [entry({ id: "l1", name: "Daily walk", status: "done", walk: true })]);
 
-    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(bar().queryByRole("button", { name: "Undo" })).toBeNull();
   });
 
   test("still offers the bar's Undo for a meal logged beside the walk", () => {
@@ -1193,7 +1222,7 @@ describe("the daily walk", () => {
       entry({ id: "l2", name: "Daily walk", status: "done", walk: true }),
     ]);
 
-    expect(screen.getByRole("button", { name: "Undo" })).toBeDefined();
+    expect(bar().getByRole("button", { name: "Undo" })).toBeDefined();
   });
 });
 
@@ -1278,8 +1307,8 @@ describe("day-complete", () => {
     // Nothing is active, so there is nothing to log, swap or skip. The only
     // control this screen can carry is undo, and only when there is a log to
     // take back — see the undo suite below.
-    expect(screen.queryByRole("button", { name: "Log eaten" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();
+    expect(bar().queryByRole("button", { name: "Log eaten" })).toBeNull();
+    expect(bar().queryByRole("button", { name: "Skip" })).toBeNull();
   });
 
   test("labels nothing as planned, because its figures are the logged ones — FUEL-110", () => {
@@ -1565,9 +1594,9 @@ describe("the actions", () => {
   test("a meal offers log, swap and skip", () => {
     renderNow(active(0));
 
-    expect(screen.getByRole("button", { name: "Log eaten" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Swap" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Skip" })).toBeDefined();
+    expect(bar().getByRole("button", { name: "Log eaten" })).toBeDefined();
+    expect(bar().getByRole("button", { name: "Swap" })).toBeDefined();
+    expect(bar().getByRole("button", { name: "Skip" })).toBeDefined();
   });
 
   test("a session offers mark-done and skip, but not swap", () => {
@@ -1575,9 +1604,9 @@ describe("the actions", () => {
     // isn't happening is a skip, not a substitution.
     renderNow(active(2));
 
-    expect(screen.getByRole("button", { name: "Mark done" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Skip" })).toBeDefined();
-    expect(screen.queryByRole("button", { name: "Swap" })).toBeNull();
+    expect(bar().getByRole("button", { name: "Mark done" })).toBeDefined();
+    expect(bar().getByRole("button", { name: "Skip" })).toBeDefined();
+    expect(bar().queryByRole("button", { name: "Swap" })).toBeNull();
   });
 
   test("no control on the action bar is disabled — swap opens the picker now", () => {
@@ -1587,7 +1616,7 @@ describe("the actions", () => {
     renderNow(active(0));
 
     for (const name of ["Log eaten", "Swap", "Skip"]) {
-      expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled, name).toBe(
+      expect((bar().getByRole("button", { name }) as HTMLButtonElement).disabled, name).toBe(
         false,
       );
     }
@@ -1598,12 +1627,21 @@ describe("the actions", () => {
     // primary is "the one action the screen exists for. One per screen."
     const { container } = renderNow(active(0));
 
-    const primaries = container.querySelectorAll('[data-variant="default"]');
+    const primaries = [...container.querySelectorAll('[data-variant="default"]')];
 
-    expect(primaries).toHaveLength(1);
-    expect(primaries[0]?.textContent).toBe("Log eaten");
-    expect(primaries[0]?.className).toContain("bg-ink");
-    expect(primaries[0]?.className).not.toContain("bg-accent");
+    // One per copy of the bar, and CSS draws one copy at any width — FUEL-114.
+    // Located rather than counted, so a second primary anywhere else on the
+    // screen still fails this.
+    expect(primaries.map((primary) => primary.closest("[data-bar]")?.getAttribute("data-bar"))).toEqual([
+      "desktop",
+      "phone",
+    ]);
+
+    for (const primary of primaries) {
+      expect(primary.textContent).toBe("Log eaten");
+      expect(primary.className).toContain("bg-ink");
+      expect(primary.className).not.toContain("bg-accent");
+    }
   });
 
   test("stays within thumb reach however tall the content is", () => {
@@ -1651,15 +1689,66 @@ describe("the actions", () => {
     // pinning — the skeleton exists so the primary does not move on swap-in —
     // and they now agree by taking one constant rather than by three literals
     // matching. Identity, so this screen cannot quietly add or drop a class.
-    const { container } = renderNow(active(0));
+    renderNow(active(0));
 
-    const bar = container.querySelector(".action-bar-fade");
+    const copy = (which: string) => document.querySelector(`[data-bar="${which}"]`);
 
-    // The shared string plus where the bar stands in the page's own grid —
-    // FUEL-77. Still identity rather than `toContain`, so this screen cannot
-    // quietly add or drop anything; what it may add is named here, and the two
-    // constants are the only things it is allowed to be made of.
-    expect(bar?.className).toBe(`${APP_ACTION_BAR} ${PAGE_MEASURE_FOOT}`);
+    // Two copies since FUEL-114, each the shared object's string, and the
+    // desktop one plus where it stands in the page's own grid — FUEL-77.
+    // Still identity rather than `toContain`, so this screen cannot quietly add
+    // or drop anything. What it may add is named here, and the constants are
+    // the only things it is allowed to be made of.
+    expect(copy("phone")?.className).toBe(ACTION_BAR_AT.phone);
+    expect(copy("desktop")?.className).toBe(`${ACTION_BAR_AT.desktop} ${PAGE_MEASURE_FOOT}`);
+  });
+
+  test("a quiet state keeps its one bar — FUEL-114", async () => {
+    // Day-complete's column is its subject, so the end of one is the end of the
+    // other. Nothing-planned has no primary to bring up. Each draws the single
+    // released bar it always had. It is reached here the way it is reached in
+    // the app, by logging the day's last item and leaving an Undo to offer.
+    const user = userEvent.setup();
+
+    renderNow(active(3));
+    await user.click(bar().getByRole("button", { name: "Log eaten" }));
+
+    await screen.findByRole("button", { name: "Undo" });
+    const bars = document.querySelectorAll(".action-bar-fade");
+
+    expect(bars).toHaveLength(1);
+    expect(bars[0]?.hasAttribute("data-bar")).toBe(false);
+    expect(bars[0]?.className).toBe(`${APP_ACTION_BAR} ${PAGE_MEASURE_FOOT}`);
+  });
+
+  test("the two copies of the bar are one sequence in two places — FUEL-114", () => {
+    // The desktop copy is written between the measure and the aside, which is
+    // the reading order at every width it is drawn: subject, actions, context.
+    // The phone's is last, because a sticky box pins only from where it rests.
+    // Asserted on document order, which is the order a screen reader walks,
+    // rather than on anything a stylesheet decides.
+    renderNow(active(0));
+
+    const measure = document.querySelector('[data-column="measure"]')!;
+    const aside = document.querySelector('[data-column="aside"]')!;
+    const desktop = document.querySelector('[data-bar="desktop"]')!;
+    const phone = document.querySelector('[data-bar="phone"]')!;
+    const follows = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+    expect(desktop.previousElementSibling).toBe(measure);
+    expect(desktop.nextElementSibling).toBe(aside);
+    expect(follows(aside, phone)).toBe(true);
+    // A child of `<main>` itself, outside the content column: the foot of the
+    // page, where `mt-auto` and `sticky` have always put it.
+    expect(phone.parentElement?.tagName).toBe("MAIN");
+
+    // The same controls, in the same order, in both.
+    const names = (which: "phone" | "desktop") =>
+      bar(which)
+        .getAllByRole("button")
+        .map((button) => button.textContent);
+
+    expect(names("desktop")).toEqual(names("phone"));
   });
 
   test("puts its controls on one row, the primary leading and taking the spare width", () => {
@@ -1668,7 +1757,7 @@ describe("the actions", () => {
     // is asserted here is that this screen wears them, in reading order.
     renderNow(active(0));
 
-    const logEaten = screen.getByRole("button", { name: "Log eaten" });
+    const logEaten = bar().getByRole("button", { name: "Log eaten" });
     const row = logEaten.closest(".action-bar-fade > div")!;
     const inRow = [...row.querySelectorAll("button")];
 
@@ -1771,7 +1860,7 @@ describe("logging the active item", () => {
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Overnight oats");
 
-    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+    await userEvent.click(bar().getByRole("button", { name: "Log eaten" }));
 
     await waitFor(() =>
       expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chicken salad"),
@@ -1784,7 +1873,7 @@ describe("logging the active item", () => {
   test("sends the item's key and the verb, and nothing else", async () => {
     renderNow(active(0));
 
-    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+    await userEvent.click(bar().getByRole("button", { name: "Log eaten" }));
 
     // A key, not a row. The server re-resolves the day and derives the date,
     // the slot and the meal id from its own answer — see app/actions/log.ts.
@@ -1794,7 +1883,7 @@ describe("logging the active item", () => {
   test("skip records a skip rather than a completion", async () => {
     renderNow(active(0));
 
-    await userEvent.click(screen.getByRole("button", { name: "Skip" }));
+    await userEvent.click(bar().getByRole("button", { name: "Skip" }));
 
     await waitFor(() => expect(logItem).toHaveBeenCalledWith("meal:e1", "skip"));
   });
@@ -1806,7 +1895,7 @@ describe("logging the active item", () => {
 
     renderNow(active(0));
 
-    await userEvent.click(screen.getByRole("button", { name: "Skip" }));
+    await userEvent.click(bar().getByRole("button", { name: "Skip" }));
 
     await waitFor(() =>
       expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chicken salad"),
@@ -1827,7 +1916,7 @@ describe("logging the active item", () => {
 
     renderNow(active(3));
 
-    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+    await userEvent.click(bar().getByRole("button", { name: "Log eaten" }));
 
     await waitFor(() => expect(screen.getByText("Chilli")).toBeDefined());
 
@@ -1846,9 +1935,9 @@ describe("logging the active item", () => {
 
     renderNow(active(3));
 
-    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+    await userEvent.click(bar().getByRole("button", { name: "Log eaten" }));
 
-    await waitFor(() => expect(screen.getByRole("alert")).toBeDefined());
+    await waitFor(() => expect(bar().getByRole("alert")).toBeDefined());
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chilli");
     expect(screen.queryByText("Eaten")).toBeNull();
@@ -1864,7 +1953,7 @@ describe("logging the active item", () => {
 
     renderNow(active(3));
 
-    await userEvent.click(screen.getByRole("button", { name: "Skip" }));
+    await userEvent.click(bar().getByRole("button", { name: "Skip" }));
 
     await waitFor(() => expect(screen.getByText("Skipped")).toBeDefined());
 
@@ -1884,7 +1973,7 @@ describe("logging the active item", () => {
 
     renderNow(active(3));
 
-    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+    await userEvent.click(bar().getByRole("button", { name: "Log eaten" }));
 
     await waitFor(() =>
       expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Day complete"),
@@ -1897,13 +1986,13 @@ describe("logging the active item", () => {
   test("says nothing at all when it works", async () => {
     renderNow(active(0));
 
-    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+    await userEvent.click(bar().getByRole("button", { name: "Log eaten" }));
 
     await waitFor(() => expect(logItem).toHaveBeenCalledOnce());
 
     // § Feedback: "Success: silent. The UI reflecting the new state IS the
     // confirmation." No toast, no banner, no status region.
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(bar().queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
   });
 });
@@ -1914,12 +2003,12 @@ describe("when a log fails", () => {
 
     renderNow(active(0));
 
-    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+    await userEvent.click(bar().getByRole("button", { name: "Log eaten" }));
 
     // § Feedback: "inline banner at the point of action, value reverted, 'Try
     // again'. Never a modal." Reverted means the card the tap was made from is
     // back — not the one the tap moved to.
-    const banner = await screen.findByRole("alert");
+    const banner = await bar().findByRole("alert");
 
     expect(banner.textContent).toContain("Couldn’t save that.");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Overnight oats");
@@ -1931,12 +2020,12 @@ describe("when a log fails", () => {
 
     renderNow(active(0));
 
-    await userEvent.click(screen.getByRole("button", { name: "Skip" }));
-    await screen.findByRole("alert");
+    await userEvent.click(bar().getByRole("button", { name: "Skip" }));
+    await bar().findByRole("alert");
 
     logItem.mockResolvedValue({ ok: true });
 
-    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await userEvent.click(bar().getByRole("button", { name: "Try again" }));
 
     // The same item and the same verb — a retry that quietly logged instead of
     // skipping would be worse than no retry at all.
@@ -1953,13 +2042,13 @@ describe("when a log fails", () => {
 
     renderNow(active(0));
 
-    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+    await userEvent.click(bar().getByRole("button", { name: "Log eaten" }));
 
-    const banner = await screen.findByRole("alert");
+    const banner = await bar().findByRole("alert");
 
     expect(banner.textContent).toContain("Couldn’t save that.");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Overnight oats");
-    expect(screen.getByRole("button", { name: "Try again" })).toBeDefined();
+    expect(bar().getByRole("button", { name: "Try again" })).toBeDefined();
   });
 
   test("the banner clears when the next tap is made", async () => {
@@ -1967,14 +2056,14 @@ describe("when a log fails", () => {
 
     renderNow(active(0));
 
-    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
-    await screen.findByRole("alert");
+    await userEvent.click(bar().getByRole("button", { name: "Log eaten" }));
+    await bar().findByRole("alert");
 
     logItem.mockResolvedValue({ ok: true });
 
-    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+    await userEvent.click(bar().getByRole("button", { name: "Log eaten" }));
 
-    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    await waitFor(() => expect(bar().queryByRole("alert")).toBeNull());
   });
 });
 
@@ -1982,13 +2071,13 @@ describe("undo", () => {
   test("is not offered when nothing has been logged today", () => {
     renderNow(active(0));
 
-    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(bar().queryByRole("button", { name: "Undo" })).toBeNull();
   });
 
   test("is offered from the action bar once something has been", () => {
     renderNow(active(1), EXERCISES, someLogs(1));
 
-    expect(screen.getByRole("button", { name: "Undo" })).toBeDefined();
+    expect(bar().getByRole("button", { name: "Undo" })).toBeDefined();
   });
 
   test("appears as soon as a log is made, without waiting for the server", async () => {
@@ -1998,9 +2087,9 @@ describe("undo", () => {
 
     renderNow(active(0));
 
-    await userEvent.click(screen.getByRole("button", { name: "Log eaten" }));
+    await userEvent.click(bar().getByRole("button", { name: "Log eaten" }));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Undo" })).toBeDefined());
+    await waitFor(() => expect(bar().getByRole("button", { name: "Undo" })).toBeDefined());
 
     pending.settle({ ok: true });
     await waitFor(() => expect(logItem).toHaveBeenCalledOnce());
@@ -2012,7 +2101,7 @@ describe("undo", () => {
     // state had no action bar for the undo to live in.
     renderNow({ ...BASE, state: "day-complete" }, EXERCISES, someLogs(1));
 
-    expect(screen.getByRole("button", { name: "Undo" })).toBeDefined();
+    expect(bar().getByRole("button", { name: "Undo" })).toBeDefined();
   });
 
   test("steps the card back", async () => {
@@ -2024,7 +2113,7 @@ describe("undo", () => {
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chicken salad");
 
-    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await userEvent.click(bar().getByRole("button", { name: "Undo" }));
 
     await waitFor(() =>
       expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Overnight oats"),
@@ -2039,9 +2128,9 @@ describe("undo", () => {
 
     renderNow(active(1), EXERCISES, someLogs(1));
 
-    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await userEvent.click(bar().getByRole("button", { name: "Undo" }));
 
-    expect((await screen.findByRole("alert")).textContent).toContain("Couldn’t undo that.");
+    expect((await bar().findByRole("alert")).textContent).toContain("Couldn’t undo that.");
   });
 
   test("reverts and says so when it fails", async () => {
@@ -2049,9 +2138,9 @@ describe("undo", () => {
 
     renderNow(active(1), EXERCISES, someLogs(1));
 
-    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await userEvent.click(bar().getByRole("button", { name: "Undo" }));
 
-    const banner = await screen.findByRole("alert");
+    const banner = await bar().findByRole("alert");
 
     expect(banner.textContent).toContain("Couldn’t undo that.");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chicken salad");
@@ -2082,7 +2171,7 @@ const swappedView = (): NowView =>
 
 /** Opens the sheet from the card and hands back the tile for `name`. */
 async function choose(user: ReturnType<typeof userEvent.setup>, name: string) {
-  await user.click(screen.getByRole("button", { name: "Swap" }));
+  await user.click(bar().getByRole("button", { name: "Swap" }));
 
   const sheet = screen.getByRole("dialog");
 
@@ -2096,7 +2185,7 @@ describe("swapping a meal", () => {
     const user = userEvent.setup();
 
     renderNow(active(3));
-    await user.click(screen.getByRole("button", { name: "Swap" }));
+    await user.click(bar().getByRole("button", { name: "Swap" }));
 
     // Named for the slot being swapped, not for the meal in it — the sheet is
     // asking "what goes in dinner", and the answer may be anything.
@@ -2107,7 +2196,7 @@ describe("swapping a meal", () => {
     const user = userEvent.setup();
 
     renderNow(active(3));
-    await user.click(screen.getByRole("button", { name: "Swap" }));
+    await user.click(bar().getByRole("button", { name: "Swap" }));
     await user.click(screen.getByRole("button", { name: "Show all meals" }));
 
     const sheet = screen.getByRole("dialog");
@@ -2173,7 +2262,7 @@ describe("swapping a meal", () => {
 
     await waitFor(() => expect(swapMeal).toHaveBeenCalled());
     expect(screen.queryByText(/Day complete/)).toBeNull();
-    expect(screen.getByRole("button", { name: "Log eaten" })).toBeTruthy();
+    expect(bar().getByRole("button", { name: "Log eaten" })).toBeTruthy();
   });
 
   test("reverts the card and says what happened when the write is refused", async () => {
@@ -2190,8 +2279,8 @@ describe("swapping a meal", () => {
 
     await user.click(within(sheet).getByRole("button", { name: "Swap" }));
 
-    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
-    expect(screen.getByRole("alert").textContent).toContain("Couldn’t swap that.");
+    await waitFor(() => expect(bar().getByRole("alert")).toBeTruthy());
+    expect(bar().getByRole("alert").textContent).toContain("Couldn’t swap that.");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chilli");
     expect(screen.queryByText("Swapped")).toBeNull();
   });
@@ -2206,9 +2295,9 @@ describe("swapping a meal", () => {
     const sheet = await choose(user, "Chickpea curry");
 
     await user.click(within(sheet).getByRole("button", { name: "Swap" }));
-    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    await waitFor(() => expect(bar().getByRole("alert")).toBeTruthy());
 
-    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await user.click(bar().getByRole("button", { name: "Try again" }));
 
     await waitFor(() => expect(swapMeal).toHaveBeenCalledTimes(2));
     // The SAME swap, not a fresh one — the retry cannot reopen the sheet to ask
@@ -2228,14 +2317,14 @@ describe("swapping a meal", () => {
     await user.click(within(sheet).getByRole("button", { name: "Swap" }));
 
     await waitFor(() => expect(swapMeal).toHaveBeenCalled());
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(bar().queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
   });
 
   test("a session offers no Swap", () => {
     renderNow(active(2));
 
-    expect(screen.queryByRole("button", { name: "Swap" })).toBeNull();
+    expect(bar().queryByRole("button", { name: "Swap" })).toBeNull();
   });
 });
 
@@ -2305,7 +2394,7 @@ describe("repeating a meal", () => {
     await repeat(user, "Chickpea curry", 3);
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chickpea curry");
-    expect(screen.getByRole("button", { name: "Log eaten" })).toBeTruthy();
+    expect(bar().getByRole("button", { name: "Log eaten" })).toBeTruthy();
 
     held.settle({ ok: true });
   });
@@ -2320,8 +2409,8 @@ describe("repeating a meal", () => {
     renderNow(active(3));
     await repeat(user, "Chickpea curry", 3);
 
-    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
-    expect(screen.getByRole("alert").textContent).toContain("Couldn’t repeat that.");
+    await waitFor(() => expect(bar().getByRole("alert")).toBeTruthy());
+    expect(bar().getByRole("alert").textContent).toContain("Couldn’t repeat that.");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chilli");
     expect(screen.queryByText("Swapped")).toBeNull();
   });
@@ -2336,9 +2425,9 @@ describe("repeating a meal", () => {
 
     renderNow(active(3));
     await repeat(user, "Chickpea curry", 5);
-    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    await waitFor(() => expect(bar().getByRole("alert")).toBeTruthy());
 
-    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await user.click(bar().getByRole("button", { name: "Try again" }));
 
     await waitFor(() => expect(repeatMeal).toHaveBeenCalledTimes(2));
     expect(repeatMeal.mock.calls[1]).toEqual(["meal:e4", "meal-4", 5]);
@@ -2351,7 +2440,7 @@ describe("repeating a meal", () => {
     await repeat(user, "Chickpea curry", 3);
 
     await waitFor(() => expect(repeatMeal).toHaveBeenCalled());
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(bar().queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
   });
 
@@ -2453,12 +2542,22 @@ describe("a slot that is already swapped", () => {
     const revert = screen.getByRole("button", { name: "Revert" });
     // The primary's own parent IS the bar: `Actions` renders it and the
     // Swap/Skip row inside one sticky container, with no wrapper between.
-    const bar = screen.getByRole("button", { name: "Log eaten" }).closest(".action-bar-fade");
+    const container = bar()
+      .getByRole("button", { name: "Log eaten" })
+      .closest(".action-bar-fade");
 
-    expect(bar?.className).toContain("sticky");
-    expect(bar?.contains(screen.getByRole("button", { name: "Swap" }))).toBe(true);
-    expect(bar?.contains(screen.getByRole("button", { name: "Skip" }))).toBe(true);
-    expect(bar?.contains(revert)).toBe(false);
+    expect(container?.className).toContain("sticky");
+    expect(container?.contains(bar().getByRole("button", { name: "Swap" }))).toBe(true);
+    expect(container?.contains(bar().getByRole("button", { name: "Skip" }))).toBe(true);
+    expect(container?.contains(revert)).toBe(false);
+
+    // And the desktop copy, which is under the subject rather than at the foot
+    // since FUEL-114, and so nearer the card Revert is on. It is still one
+    // container that Revert is not inside.
+    const desktop = document.querySelector('[data-bar="desktop"]');
+
+    expect(desktop?.contains(bar("desktop").getByRole("button", { name: "Swap" }))).toBe(true);
+    expect(desktop?.contains(revert)).toBe(false);
   });
 
   test("sits with the mark it takes back", () => {
@@ -2490,10 +2589,10 @@ describe("a slot that is already swapped", () => {
     renderNow(swappedView());
     await user.click(screen.getByRole("button", { name: "Revert" }));
 
-    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    await waitFor(() => expect(bar().getByRole("alert")).toBeTruthy());
     // Not "Couldn't save that" — a revert was not saving anything, and
     // § Tone of Voice asks copy to name what happened.
-    expect(screen.getByRole("alert").textContent).toContain("Couldn’t revert that.");
+    expect(bar().getByRole("alert").textContent).toContain("Couldn’t revert that.");
     expect(screen.getByText("Swapped")).toBeTruthy();
   });
 });
@@ -2660,16 +2759,22 @@ describe("the second column", () => {
   });
 
   test("the action bar is in neither group, and lands under the measure", () => {
-    const { container } = renderNow(active(0));
+    renderNow(active(0));
 
-    const bar = container.querySelector<HTMLElement>(".action-bar-fade")!;
+    const desktop = document.querySelector<HTMLElement>('[data-bar="desktop"]')!;
+    const phone = document.querySelector<HTMLElement>('[data-bar="phone"]')!;
 
-    // Outside both wrappers in the DOM — it is `<main>`'s own child, placed by
-    // `PAGE_MEASURE_FOOT` into the first column's second row. A bar inside the
-    // measure group would be a fourth thing in a flex column with a 30px gap,
-    // which is 60px with its own `pt-[30px]`.
-    expect(bar.closest("[data-column]")).toBeNull();
-    expect(bar.className).toContain(PAGE_MEASURE_FOOT);
+    // Outside both wrappers in the DOM. The desktop copy sits between them
+    // since FUEL-114 and is placed by `PAGE_MEASURE_FOOT` into the first
+    // column's third row. A bar inside the measure group would be a fourth thing
+    // in a flex column with a 30px gap, which is 60px with its own `pt-[30px]`.
+    expect(desktop.closest("[data-column]")).toBeNull();
+    expect(desktop.className).toContain(PAGE_MEASURE_FOOT);
+
+    // The phone's copy is `<main>`'s own child and is never drawn at the cap,
+    // so it has no place in the grid to be given.
+    expect(phone.closest("[data-column]")).toBeNull();
+    expect(phone.className).not.toContain(PAGE_MEASURE_FOOT);
   });
 
   test("grouping the sections moved none of them", () => {

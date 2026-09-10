@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 
-import { APP_ACTION_BAR } from "@/components/action-bar";
+import { ACTION_BAR_AT } from "@/components/action-bar";
 import { RULER_AT } from "@/components/day-ruler";
 import { KV_GRID_COLUMNS } from "@/components/kv-grid";
 import {
@@ -193,11 +193,32 @@ describe("the skeleton stands in the same frame as the screen", () => {
     // disagreed about the placement.
     const container = skeleton();
 
-    const bar = [...container.querySelectorAll("div")].find((node) =>
-      node.className.includes("action-bar-fade"),
-    )!;
+    const copy = (which: string) => container.querySelector(`[data-bar="${which}"]`);
 
-    expect(bar.className).toBe(`${APP_ACTION_BAR} ${PAGE_MEASURE_FOOT}`);
+    // Two since FUEL-114, as the screen's timeline state has two, from the same
+    // object. A skeleton with one bar would swap in at the foot of the column at
+    // 1024 while the screen draws it under the figures.
+    expect(container.querySelectorAll(".action-bar-fade")).toHaveLength(2);
+    expect(copy("phone")?.className).toBe(ACTION_BAR_AT.phone);
+    expect(copy("desktop")?.className).toBe(`${ACTION_BAR_AT.desktop} ${PAGE_MEASURE_FOOT}`);
+  });
+
+  test("puts each copy of the bar where the screen puts it — FUEL-114", () => {
+    const container = skeleton();
+
+    const desktop = container.querySelector('[data-bar="desktop"]')!;
+    const phone = container.querySelector('[data-bar="phone"]')!;
+
+    // Between the measure and the aside, which is where `right-now.tsx` writes
+    // its desktop copy. In the band that is what puts the bar under the
+    // figures; at the cap the placement does it, so the order is what matters
+    // below 1272.
+    expect(desktop.previousElementSibling?.getAttribute("data-column")).toBe("measure");
+    expect(desktop.nextElementSibling?.getAttribute("data-column")).toBe("aside");
+
+    // And the phone's last, as `<main>`'s own child, where sticky pins from.
+    expect(phone.parentElement?.tagName).toBe("MAIN");
+    expect(phone.nextElementSibling).toBeNull();
   });
 
   test("opens at the head clearance the screen opens at", () => {

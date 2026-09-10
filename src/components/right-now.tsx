@@ -9,6 +9,7 @@ import {
   ACTION_BAR_PRIMARY,
   ACTION_BAR_SECONDARY,
   ACTION_BAR_SPLIT,
+  ACTION_BAR_AT,
   APP_ACTION_BAR,
 } from "@/components/action-bar";
 import { repeatMeal, revertSwap, swapMeal } from "@/app/actions/swap";
@@ -617,7 +618,8 @@ function Anytime({
  *
  * Everything under that heading is a phone's, and since FUEL-72 it is scoped to
  * one: below 1024px the bar is pinned, for the reasons argued at length below.
- * At and above it the bar is `static` and sits at the end of its column, because
+ * At and above it the bar is `static` and sits at the end of its subject (the
+ * copy `ACTION_BAR_AT.desktop`, FUEL-114), because
  * § Desktop's carry-over rule retires the sentence this section is built on — a
  * mobile decision carries to desktop unless its written rationale names the
  * phone, and "within thumb reach" names it. `action-bar.ts` carries that half.
@@ -684,12 +686,20 @@ function Anytime({
  * genuinely none of the three.
  */
 function Actions({
+  at,
   item,
   undoable,
   failure,
   onAct,
   onSwap,
 }: {
+  /**
+   * Which of the timeline state's two copies this is — FUEL-114,
+   * `ACTION_BAR_AT`. Absent on the two quiet states, which keep one bar at the
+   * end of the column: day-complete's column is its subject, and nothing-planned
+   * has no primary to bring up.
+   */
+  at?: keyof typeof ACTION_BAR_AT;
   item?: ScheduledItem;
   undoable: boolean;
   failure: Attempt | null;
@@ -702,10 +712,18 @@ function Actions({
     // `PAGE_MEASURE_FOOT` places the bar under the first column at ≥1272 —
     // FUEL-77. Inert everywhere else, including on day-complete, where the
     // screen never becomes a grid and a grid-placement property on a flex item
-    // does nothing. Stated on the bar rather than passed in per state, because
-    // it says the same thing in all three: the primary action is at the end of
-    // the measure, and never in the aside.
-    <div className={cn(APP_ACTION_BAR, PAGE_MEASURE_FOOT)}>
+    // does nothing. The phone's copy does not take it because it is not drawn
+    // at the cap. Every bar drawn there takes it, because it says the same
+    // thing in all three states: the primary action is at the end of the
+    // measure, and never in the aside.
+    <div
+      className={
+        at === "phone"
+          ? ACTION_BAR_AT.phone
+          : cn(at ? ACTION_BAR_AT.desktop : APP_ACTION_BAR, PAGE_MEASURE_FOOT)
+      }
+      data-bar={at}
+    >
       {/*
        * § Feedback: "inline banner at the point of action, value reverted,
        * 'Try again'. Never a modal." The point of action is this bar, so the
@@ -907,8 +925,10 @@ function SwapNote({
  * about `flex-1` stops applying there. `PAGE_ASIDE_GRID` packs its rows to the
  * top, so the bar is 30px under the last figure the way the mock draws it rather
  * than at the foot of the window — which is `mt-auto` going inert, exactly as
- * `bottom-[…]` went inert under FUEL-72's `lg:static`. Below 1272, including the
- * whole 1024–1271 band, `flex-1` and `mt-auto` do what they have always done.
+ * `bottom-[…]` went inert under FUEL-72's `lg:static`. Below 1024, `flex-1` and
+ * `mt-auto` do what they have always done. In the 1024–1271 band they still do
+ * it for the two quiet states. The timeline state's bar sits under its subject
+ * there since FUEL-114, so it no longer rests at the foot.
  */
 function Screen({ className, children }: { className?: string; children: ReactNode }) {
   return (
@@ -1315,8 +1335,13 @@ export function RightNow({
       )
     : null;
 
-  const actions = (
+  /*
+   * A function rather than one element since FUEL-114: the timeline state draws
+   * the bar twice, and the two quiet states once. See `ACTION_BAR_AT`.
+   */
+  const actions = (at?: keyof typeof ACTION_BAR_AT) => (
     <Actions
+      at={at}
       item={active}
       /*
        * Every line except the walk's — FUEL-29.
@@ -1651,7 +1676,7 @@ export function RightNow({
           {settingsFootLink}
         </div>
 
-        {actions}
+        {actions()}
       </Screen>
     );
   }
@@ -1717,7 +1742,7 @@ export function RightNow({
           </div>
         </div>
 
-        {actions}
+        {actions()}
       </Screen>
     );
   }
@@ -1827,6 +1852,20 @@ export function RightNow({
         </div>
 
         {/*
+         * The bar from 1024 up, at the end of its subject — FUEL-114.
+         *
+         * Between 1024 and 1271 this group is the whole screen's column, and the
+         * bar written after the aside came after the day, Up next and both walk
+         * rows. Here it follows the measure's last section with the column's own
+         * 30px, which is where the cap already draws it. At the cap the group
+         * dissolves and `PAGE_MEASURE_FOOT` places it in row three, as before.
+         * Below 1024 it is `display: none`, and the phone's sticky copy at the
+         * foot of `<main>` is the one drawn. `ACTION_BAR_AT` carries why there
+         * are two.
+         */}
+        {actions("desktop")}
+
+        {/*
          * The aside — § Desktop, as FUEL-85 redrew it: "the aside takes the
          * day's totals, the day's own items with their status, and the Anytime
          * list". The zone's question is "what is the context?", and each of the
@@ -1848,8 +1887,10 @@ export function RightNow({
          * side of the boundary it is written on and its POSITION is decided by
          * the order of the whole list.
          *
-         * Below 1272 the sequence reads: the figures, the ruler's phone copy,
-         * Up next, Anytime, the foot link. Exactly as it did.
+         * Below 1024 the sequence reads: the figures, the ruler's phone copy,
+         * Up next, Anytime, the foot link. Exactly as it did. From 1024 the
+         * action bar's desktop copy sits between the figures and this group,
+         * which is FUEL-114's one change to the sequence.
          */}
         <div className={PAGE_ASIDE_COLUMN} data-column="aside">
           {/* After the swap note, and that order is the argument: the note says
@@ -1883,7 +1924,9 @@ export function RightNow({
         </div>
       </div>
 
-      {actions}
+      {/* The phone's copy: last, because a sticky box pins only from where it
+          rests. Not drawn from 1024, where the copy above stands in. */}
+      {actions("phone")}
       {sheet}
     </Screen>
   );
