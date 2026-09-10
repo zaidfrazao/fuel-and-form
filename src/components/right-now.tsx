@@ -427,7 +427,11 @@ function DayTotals({
  *
  * `items-baseline` rather than `items-center`, so the time sits on the name's
  * first line, the way a timetable prints it, instead of floating between two.
- * Both halves are one body line, so a row that does not wrap is unmoved.
+ * A row that does not wrap moves by half a pixel at most, and only the last:
+ * it has no hairline, so its content box is 24px around a 23px line, and
+ * centring had set its text at 11.5px where every row above sat at 11. On the
+ * baseline every row's text starts 11px below its top. Measured in a browser;
+ * the baselines at 375 and 820 draw it as a 1px step on a one-row Up next.
  */
 function UpNext({ items }: { items: readonly ScheduledItem[] }) {
   const next = items.slice(0, 2);
