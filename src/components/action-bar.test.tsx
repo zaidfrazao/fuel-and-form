@@ -122,7 +122,8 @@ describe("the controls are one row — FUEL-109", () => {
     // because a secondary is its content's width below the cap as well as at it.
     const { container } = render(<Loading />);
     const controls = container.querySelector(".action-bar-fade > div")!;
-    const [lead, pair] = [...controls.children];
+    const lead = controls.children[0]!;
+    const pair = controls.children[1]!;
 
     expect(classes(lead.className)).toContain("flex-1");
     expect(classes(lead.className)).toContain("min-w-[121px]");

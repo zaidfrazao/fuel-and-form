@@ -834,9 +834,9 @@ describe("up next", () => {
   test("is the dense row, and the time is the half that does not give", () => {
     renderNow(active(0));
 
-    const [first] = within(
+    const first = within(
       screen.getByRole("heading", { name: "Up next" }).nextElementSibling as HTMLElement,
-    ).getAllByRole("listitem");
+    ).getAllByRole("listitem")[0]!;
 
     // The spelling only: jsdom lays nothing out, and the 46px it produces was
     // measured in a browser. § Lists' dense row is `training.tsx`'s — 11px of
