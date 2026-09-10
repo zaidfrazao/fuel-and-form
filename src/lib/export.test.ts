@@ -1660,6 +1660,68 @@ describe("no coordinate reaches the backup", () => {
     );
   });
 
+  /**
+   * The second pattern — a coordinate written as NAMED FIELDS.
+   *
+   * `COORDINATE` above is the pair form, and `scripts/check-no-metrics.sh`
+   * records why one pattern is never enough: the pair form is "blind to a pair
+   * written as named fields, because what sits between the two numbers there
+   * is a field name and not a comma". That is not an edge case here. It is the
+   * exact shape a route point takes — `Coordinate` in `lib/route.ts` is
+   * `{ lat, lng }` — so the likeliest leak of all, a point riding in on a
+   * column somebody adds to `workout_logs` later, would serialise as
+   * `"lat":…,"lng":…` and sail past the pair pattern entirely. This file's
+   * first version had only that pattern; an external review caught it.
+   *
+   * Matched on KEYS rather than on values, split on camelCase and snake_case
+   * the way the scan's own field pattern is anchored: `startLat` and `gps_lat`
+   * are caught, `translate` is not. No key in this document has any business
+   * naming a latitude or a longitude, so the presence of one is the finding —
+   * whatever value it holds.
+   */
+  const COORDINATE_KEY = /^(lat|lng|lon|latitude|longitude)$/;
+
+  const coordinateKeys = (json: string) =>
+    [...json.matchAll(/"([^"]+)"\s*:/g)]
+      .map((match) => match[1]!)
+      .filter((key) =>
+        key
+          .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+          .toLowerCase()
+          .split(/[^a-z0-9]+/)
+          .some((token) => COORDINATE_KEY.test(token)),
+      );
+
+  test("the key scan can see a coordinate that IS there, however it is named", () => {
+    /*
+     * Planted as an extra COLUMN on a `workout_logs` row, which is the most
+     * faithful plant available: it goes through `withoutUser`'s real spread,
+     * the mechanism that carries a new column into this file without an edit.
+     * A plant in a note would prove the regex, not the path.
+     *
+     * The values are computed, for the pair plant's reason above.
+     */
+    const withColumn = {
+      ...workoutLog(WORKOUT_LOG_ID, "2026-08-10"),
+      startLat: 1 / 3,
+      start_lng: -2 / 7,
+    };
+    const planted = JSON.stringify(build({ ...TABLES, workoutLogs: [withColumn] }));
+
+    expect(coordinateKeys(planted)).toEqual(["startLat", "start_lng"]);
+
+    // And a route point in its own stored shape, which is the case the pair
+    // pattern cannot see at all.
+    const point = { lat: 1 / 3, lng: -2 / 7, t: 0 };
+
+    expect(JSON.stringify(point)).not.toMatch(COORDINATE);
+    expect(coordinateKeys(JSON.stringify(point))).toEqual(["lat", "lng"]);
+  });
+
+  test("and finds no coordinate key in the document the app builds", () => {
+    expect(coordinateKeys(JSON.stringify(build()))).toEqual([]);
+  });
+
   test("carries no key named for a route, however the tables grow", () => {
     // The name is as sensitive as the geometry — schema.ts calls a route name
     // "a place in somebody's life said in their own words" — so neither the
