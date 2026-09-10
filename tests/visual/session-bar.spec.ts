@@ -49,10 +49,21 @@ import { FROZEN_NOW_MS } from "./constants";
  */
 const BAR = "main .action-bar-fade:not([aria-hidden])";
 
-/** The four widths the criterion names, one from each of § Desktop's bands. */
+/**
+ * The four widths the criterion names, one from each of § Desktop's bands.
+ *
+ * The two below the frame's cap are shorter than they were — 375×600 rather
+ * than ×667, 1100×540 rather than ×600 — and the widths are the ones the
+ * criterion names. FUEL-109 put every bar below 1272 on one row, 58px shorter
+ * than the slab over a pair, and this state's page lost the same 58: travel
+ * fell from 150 to 92 at 375 and from 134 to 76 at 1100, both under the 100
+ * that `gapsWhileScrolling` requires before a measurement means anything. The
+ * height is this file's instrument, not its subject — the bar clears the shell
+ * at 375×667 in the test below, which keeps the named size.
+ */
 const WIDTHS = [
-  { width: 375, height: 667, band: "the phone" },
-  { width: 1100, height: 600, band: "the fluid band above the shell" },
+  { width: 375, height: 600, band: "the phone" },
+  { width: 1100, height: 540, band: "the fluid band above the shell" },
   { width: 1272, height: 900, band: "the frame's cap" },
   { width: 1920, height: 1080, band: "wide" },
 ] as const;
@@ -113,9 +124,10 @@ async function enterSession(page: Page) {
  * Sampled as fractions of the page's own travel rather than in fixed steps.
  * The first draft stepped by 150 and asserted more than two steps existed,
  * which the 375 case fails honestly: the session state there is one exercise
- * and its sets, and it overruns a 667px viewport by 150px in total. A fixed
- * step would either skip that width or shrink until it measured nothing at the
- * wide ones. Five samples describe the same line at any length.
+ * and its sets, and it overran a 667px viewport by 150px in total — 92 since
+ * FUEL-109's one-row bar, which is why `WIDTHS` draws the phone 600 tall. A
+ * fixed step would either skip that width or shrink until it measured nothing
+ * at the wide ones. Five samples describe the same line at any length.
  */
 async function gapsWhileScrolling(page: Page, samples = 5) {
   const bar = page.locator(BAR);

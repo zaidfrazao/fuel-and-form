@@ -5,6 +5,7 @@ import { type ReactNode, startTransition, useOptimistic, useState } from "react"
 import { logItem, undoLastLog } from "@/app/actions/log";
 import {
   ACTION_BAR_CONTROLS,
+  ACTION_BAR_LEAD,
   ACTION_BAR_PRIMARY,
   ACTION_BAR_SECONDARY,
   ACTION_BAR_SPLIT,
@@ -383,6 +384,24 @@ function DayTotals({
  * is safe from the emission-order trap that produced two rulers in FUEL-77:
  * that needed two VARIANTS on one property, and there is no `md:` rule on this
  * one for `xl:` to have to outrank.
+ *
+ * ## The dense row, time first — FUEL-109
+ *
+ * § Lists: "`/`'s two Up next rows are the dense row, and each is one line:
+ * the time, then the name." They were a 54px row holding the name over a Micro
+ * slot label, with the time trailing — 67px each once the label's line was
+ * counted — and at 375×667 both sat behind the action bar on arrival.
+ *
+ * The label is gone because the time says it: a slot is a time of day, and
+ * `LUNCH` over `12:30` is one fact printed twice. The hero keeps its eyebrow,
+ * because that is where the slot's name is the orientation. A session's row
+ * loses "Training" on the ground `itemLabel` already gives for the eyebrow —
+ * the session's name says what it is better than its type does.
+ *
+ * The 46px is the dense row as `training.tsx` draws it: `py-[11px]` around a
+ * 23px body line and a 1px hairline. `tabular-nums` on the time so the two
+ * names start on one x; `shrink-0` so a long name gives way and the time never
+ * does. The name still truncates — whether it should wrap is FUEL-111's.
  */
 function UpNext({ items }: { items: readonly ScheduledItem[] }) {
   const next = items.slice(0, 2);
@@ -396,13 +415,12 @@ function UpNext({ items }: { items: readonly ScheduledItem[] }) {
         {next.map((item) => (
           <li
             key={item.key}
-            className="flex min-h-[54px] items-center justify-between gap-4 border-b border-border py-3 last:border-b-0"
+            className="flex min-h-[46px] items-center gap-3 border-b border-border py-[11px] last:border-b-0"
           >
-            <span className="flex min-w-0 flex-col gap-[3px]">
-              <span className="truncate text-body text-text-primary">{itemName(item)}</span>
-              <span className="text-micro uppercase text-text-tertiary">{itemLabel(item)}</span>
+            <span className="shrink-0 text-body tabular-nums text-text-secondary">{item.at}</span>
+            <span className="min-w-0 flex-1 truncate text-body text-text-primary">
+              {itemName(item)}
             </span>
-            <span className="text-body text-text-secondary">{item.at}</span>
           </li>
         ))}
       </ul>
@@ -670,15 +688,16 @@ function Actions({
         </div>
       )}
 
-      {/* The controls, which are a column of slabs on a phone and a row of
-          content-width buttons at the frame's cap — § Buttons, FUEL-85. The
-          banner above stays outside it: it is a block that spans the column,
-          and `action-bar.ts` carries the argument. */}
+      {/* The controls, one row at every width — § Buttons, FUEL-85 at the
+          frame's cap and FUEL-109 below it, where the primary takes the spare
+          width and the secondaries their own. The banner above stays outside
+          it: it is a block that spans the column, and `action-bar.ts` carries
+          the argument. */}
       <div className={ACTION_BAR_CONTROLS}>
         {item && (
           <>
             <Button
-              className={ACTION_BAR_PRIMARY}
+              className={ACTION_BAR_LEAD}
               onClick={() => onAct({ kind: "act", item, verb: "log" })}
             >
               {item.kind === "meal" ? "Log eaten" : "Mark done"}
@@ -721,8 +740,10 @@ function Actions({
         {/* The fourth item in the row, at the cap — which is § Buttons' own
             stated reason for the row existing: "a row is what lets a fourth
             control — Undo, when there is a log to take back — be a fourth item
-            rather than a third row of slabs". Below the cap it is the third
-            row it has always been. */}
+            rather than a third row of slabs". Below the cap it takes a line of
+            its own beneath the row, as it always has: it appears after a tap,
+            and as a fourth item there it would pull the row sideways under the
+            thumb that made it (§ Buttons, FUEL-109). */}
         {undoable && (
           <div className={cn("flex items-center gap-4", ACTION_BAR_PRIMARY)}>
             <Button variant="link" onClick={() => onAct({ kind: "undo" })}>

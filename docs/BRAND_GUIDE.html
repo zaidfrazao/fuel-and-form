@@ -1043,7 +1043,8 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
 
             <!-- 22px rhythm and 12px of head, not the 30 and 22 the wider
                  screens keep: below 768px the bands above have taken 77px and
-                 the action bar and shell take 226 more. -->
+                 the action bar and shell take 168 more
+                 (226 before FUEL-109 put the bar on one row). -->
             <div class="app" style="gap:22px;padding-top:12px;">
               <div style="display:flex;flex-direction:column;gap:4px;">
                 <span class="u-micro" style="color:var(--text-3);">Dinner · 19:00</span>
@@ -1084,12 +1085,14 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                 </div>
               </div>
 
-              <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:4px;">
-                <button class="btn btn-primary" type="button">Log eaten</button>
-                <div class="btn-row">
-                  <button class="btn btn-secondary" type="button">Swap</button>
-                  <button class="btn btn-secondary" type="button">Skip</button>
-                </div>
+              <!-- One row spanning the column, not a slab over a pair — FUEL-109.
+                   The primary takes what the secondaries leave and they take
+                   their content width, as the ≥1272 bar does: 82px of bar
+                   where the column was 140. -->
+              <div class="act-row" style="padding-bottom:4px;">
+                <button class="btn btn-primary" type="button" style="flex:1;">Log eaten</button>
+                <button class="btn btn-secondary auto" type="button" style="padding:0 16px;">Swap</button>
+                <button class="btn btn-secondary auto" type="button" style="padding:0 16px;">Skip</button>
               </div>
 
               <nav class="tabbar" aria-label="Primary">
@@ -1108,6 +1111,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
           <h3>Right Now</h3>
           <p>40px name, 10.5px labels, macros as a key/value grid rather than a strip. One umber mark on the screen and it means “now”.</p>
           <p>Drawn to the space the chrome actually leaves &mdash; FUEL-82. The two notice bands are part of this screen and were missing from this frame for as long as it existed, which is how four bands each took their share without anything summing them. Below 768px the meal's macros and the day's totals are <strong>one</strong> grid &mdash; the meal in the value, the day on the slash line &mdash; and the ruler follows the figures rather than preceding them. See &sect; The Day's Numbers on a Phone; at 768px and up the two named sections are unchanged.</p>
+          <p><b>One row of controls since FUEL-109.</b> The bar was a slab over a pair and 140px tall, and on a phone it covered both Up next rows on arrival. It is one row spanning the column now &mdash; the primary takes the spare width, Swap and Skip their own &mdash; and 82px. Still full-width as a whole, still in the bottom third, every control still 44&times;44 or more. See &sect; Buttons.</p>
         </div>
       </div>
 
@@ -1321,12 +1325,14 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                 </div>
               </div>
 
-              <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:4px;">
-                <button class="btn btn-primary" type="button">Mark done</button>
-                <div class="btn-row">
-                  <button class="btn btn-secondary" type="button">Partial</button>
-                  <button class="btn btn-secondary" type="button">Skip</button>
-                </div>
+              <!-- One row spanning the column, not a slab over a pair — FUEL-109.
+                   The primary takes what the secondaries leave and they take
+                   their content width, as the ≥1272 bar does: 82px of bar
+                   where the column was 140. -->
+              <div class="act-row" style="padding-bottom:4px;">
+                <button class="btn btn-primary" type="button" style="flex:1;">Mark done</button>
+                <button class="btn btn-secondary auto" type="button" style="padding:0 16px;">Partial</button>
+                <button class="btn btn-secondary auto" type="button" style="padding:0 16px;">Skip</button>
               </div>
 
               <nav class="tabbar" aria-label="Primary">
@@ -1344,6 +1350,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
           <span class="tagline">P3 · /training · dark</span>
           <h3>Training — the plan state</h3>
           <p>Numbered exercise rows, and six weeks of adherence as dots. Skipped is an outline, never red — the pattern is visible and deliberately ungraded. This is the screen you read <b>before and after</b>; the one you operate <i>during</i> is drawn next (&sect; Desktop, FUEL-90), and the primary here becomes <b>Start session</b> the day that state is built.</p>
+          <p><b>The bar is one row since FUEL-109</b>, in both states, because it is the same bar as <code>/</code>&rsquo;s: three answers to one question read better side by side than as a slab and two afterthoughts, and the 58px it gives back go to this list&rsquo;s window.</p>
           <p><b>Grouped since FUEL-90</b>, and the cost is the point rather than a side effect. Warm-up, work and cool-down are the group heading &sect; Lists now names — the Slash register, uppercase and tracked, which <code>shopping-list-view.tsx</code> has drawn since it shipped, so this is its second case and not a second device. Grouping the five rows drawn here took the exercise block from <b>281px to 597px</b> and this frame from <b>973px to 1290px</b>: nine rows and three headings, each heading 20px and its gap 10. Against a window that ends where the sticky bar begins, that is a list which has stopped being the thing on the screen — which is the argument for the frame below, not an objection to it. The tagline read <code>P3 · /</code> until FUEL-90 and was a copy-paste from the frame above it; the route is <code>/training</code> and always was.</p>
           <p><b>The rows are the form affordance since FUEL-108</b>, and the <b>underline on the title</b> is what says so. FUEL-90 gave &ldquo;Show form&rdquo; to the session state alone on two grounds: the accordion ban, which <b>stands</b> and is why the row <i>opens the sheet</i> rather than expanding, and the height budget, which is <b>spent</b> &mdash; that objection is to a control drawn beside a row, and this one <b>is</b> the row. <b>The mark was drawn as a trailing chevron first, and measured, and it cost 17px.</b> A dense row&rsquo;s name column is <code>flex-1</code> and holds all the slack, so a glyph and its gap come out of the text: Plank&rsquo;s note re-wrapped and that row grew 101px to 118. The underline is the link treatment this file already draws, at the same decoration and offset; it occupies no box, so nothing narrows and nothing re-wraps. <b>Row 03 is unmarked deliberately</b> &mdash; a reference exists for thirteen of fourteen exercises, and a row without one stays an inert row rather than becoming a disabled control. <code>/</code> marks no row on the same list: &sect; Materials admits imagery inside a sheet, and media is never loaded there.</p>
         </div>
@@ -1401,10 +1408,10 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                   <span class="timerval">1:12</span>
                   <button class="btn btn-text" type="button" style="width:auto;min-height:0;padding:0;">Stop</button>
                 </div>
-                <button class="btn btn-primary" type="button">Mark done</button>
-                <div class="btn-row">
-                  <button class="btn btn-secondary" type="button">Partial</button>
-                  <button class="btn btn-secondary" type="button">Skip</button>
+                <div class="act-row">
+                  <button class="btn btn-primary" type="button" style="flex:1;">Mark done</button>
+                  <button class="btn btn-secondary auto" type="button" style="padding:0 16px;">Partial</button>
+                  <button class="btn btn-secondary auto" type="button" style="padding:0 16px;">Skip</button>
                 </div>
               </div>
 

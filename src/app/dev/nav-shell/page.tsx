@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { ACTION_BAR } from "@/components/action-bar";
+import { ACTION_BAR, ACTION_BAR_CONTROLS } from "@/components/action-bar";
 import { NavShell } from "@/components/nav-shell";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -222,13 +222,27 @@ export default function NavShellSpecimen() {
                   </p>
                 ))}
 
+                {/* The bar's one row since FUEL-109, at the real bar's 52 and
+                    46, so the height resting on the shell is the one `/`
+                    draws. `ACTION_BAR_CONTROLS` has no `xl:` half and is taken
+                    as it is; the primary's `flex-1` and the secondaries'
+                    `flex-none` are written out rather than taken from
+                    `ACTION_BAR_LEAD` and `_SECONDARY`, for the reason
+                    `action-bar.ts` gives for this specimen not taking
+                    `APP_ACTION_BAR`: their `xl:` halves would answer to the
+                    browser window, not to this 375px frame. */}
                 <div className={ACTION_BAR}>
-                  <span className="flex h-12 items-center justify-center rounded-md bg-ink text-body font-medium text-ink-fg">
-                    Log eaten
-                  </span>
-                  <span className="flex h-12 items-center justify-center rounded-md border border-border text-body font-medium text-text-primary">
-                    Swap
-                  </span>
+                  <div className={ACTION_BAR_CONTROLS}>
+                    <span className="flex h-13 flex-1 items-center justify-center rounded-md bg-ink text-body font-medium whitespace-nowrap text-ink-fg">
+                      Log eaten
+                    </span>
+                    <span className="flex h-[2.875rem] flex-none items-center justify-center rounded-md border border-border px-4 text-body font-medium text-text-primary">
+                      Swap
+                    </span>
+                    <span className="flex h-[2.875rem] flex-none items-center justify-center rounded-md border border-border px-4 text-body font-medium text-text-primary">
+                      Skip
+                    </span>
+                  </div>
                 </div>
               </main>
 
