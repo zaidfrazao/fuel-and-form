@@ -118,12 +118,13 @@ const BURN = { lowKcal: 190, highKcal: 310 };
  *
  * ## Why this fixture grew a second session
  *
- * FUEL-104 gave the walk its own estimate, priced off a measured distance. The
- * ticket notes what that means for this file: two walks a day makes it the most
- * frequently shown estimate in the app, so the artefact-level guarantee this
- * whole file exists to provide has to cover it. A fixture with only a circuit
- * in it would keep passing while the figure a user actually sees twice a day
- * went unchecked.
+ * FUEL-104 gave the walk its own estimate, priced off a measured distance, and
+ * it reaches the export and nowhere else — Brand Guide § The Route Trace closes
+ * the list of what the walk shows on screen, and a burn range is not on it. So
+ * these two files are the ONLY place the figure exists outside the model, and
+ * with two walks a day it is the estimate they carry most often. A fixture with
+ * only a circuit in it would keep passing while the commonest estimate in the
+ * file the assistant reads went unchecked.
  *
  * ## The numbers
  *
@@ -521,7 +522,9 @@ describe("the estimate is present in both artefacts", () => {
 
   test("the JSON carries the range under `derived`", () => {
     // Both sessions, the walk included — FUEL-104. Ordered as `buildExport`
-    // orders them, which is by date then by log id.
+    // orders them, which is by date then by WORKOUT id. The log ids here sort
+    // the same way, so this does not pin that tie-break and is not meant to —
+    // `export.test.ts` owns the ordering, and this file owns the arithmetic.
     expect(document.derived.sessionEnergy).toEqual([
       { date: MONDAY, workoutId: WORKOUT_ID, ...BURN },
       { date: MONDAY, workoutId: WALK_ID, ...WALK_BURN },
