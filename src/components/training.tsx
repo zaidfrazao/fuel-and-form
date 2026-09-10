@@ -82,6 +82,7 @@ const FormMediaSheet = dynamic(
 import { sectionLabel, WORKING_SECTION, working } from "@/lib/section";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { MAX_NOTE_LENGTH } from "@/lib/session-entry";
+import { titleText } from "@/lib/title";
 import { cn } from "@/lib/utils";
 
 /**
@@ -339,7 +340,7 @@ function Subject({ item }: { item: TrainingItem }) {
   return (
     <div className="flex flex-col gap-3">
       <Eyebrow>{item.kind === "walk" ? "Walk" : "Training"}</Eyebrow>
-      <h1 className="text-title text-text-primary">{item.name}</h1>
+      <h1 className="text-title text-text-primary">{titleText(item.name)}</h1>
       <SlashMeta>{item.type}</SlashMeta>
     </div>
   );
@@ -1407,7 +1408,7 @@ export function Training({
                   ? session.name
                   : `${session.name} · ${sectionLabel(WORKING_SECTION)}`}
               </Eyebrow>
-              <h1 className="text-title text-text-primary">{currentEx.name}</h1>
+              <h1 className="text-title text-text-primary">{titleText(currentEx.name)}</h1>
               {/* Verbatim, and then where you are. `resolve-training.ts` keeps
                   the exercises in section order and in `sort_order` within one,
                   so the position is the list's own and not a second ordering

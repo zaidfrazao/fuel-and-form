@@ -46,6 +46,7 @@ import { type MacroBearing, type MacroTarget, summariseDay } from "@/lib/macros"
 import { folioLabel, itemLabel, itemName, rulerSlots } from "@/lib/now-display";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { swapNote } from "@/lib/swap-note";
+import { titleText } from "@/lib/title";
 import { cn } from "@/lib/utils";
 import { isWalk, type WalkEntryView } from "@/lib/walk";
 import {
@@ -245,7 +246,7 @@ function Subject({
       </div>
       {/* The one h1 on the page. A screen whose whole job is answering "what
           now?" should have the answer as its heading, not the product name. */}
-      <h1 className="text-title text-text-primary">{name ?? itemName(item)}</h1>
+      <h1 className="text-title text-text-primary">{titleText(name ?? itemName(item))}</h1>
       {at !== undefined && <SlashMeta className="hidden md:block">{at}</SlashMeta>}
     </header>
   );
