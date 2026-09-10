@@ -796,6 +796,58 @@ describe("up next", () => {
 
     expect(screen.queryByRole("heading", { name: "Up next" })).toBeNull();
   });
+
+  /*
+   * FUEL-109 — § Lists: "each is one line: the time, then the name". Both rows
+   * were behind the action bar on arrival at 375×667; the bar's row shape and
+   * these rows together are what bring the first clear.
+   */
+  test("leads each row with its time, then the name", () => {
+    renderNow(active(0));
+
+    const list = screen.getByRole("heading", { name: "Up next" }).nextElementSibling!;
+    const rows = within(list as HTMLElement).getAllByRole("listitem");
+
+    // Order in the DOM, which is the order a screen reader walks and the order
+    // drawn: the time is the row's first child and the name its last.
+    expect(rows.map((row) => [row.firstElementChild?.textContent, row.lastElementChild?.textContent])).toEqual([
+      ["13:00", "Chicken salad"],
+      ["17:30", "Circuit A"],
+    ]);
+  });
+
+  test("carries no slot label under the name — the time already says it", () => {
+    renderNow(active(0));
+
+    const list = screen.getByRole("heading", { name: "Up next" }).nextElementSibling!;
+
+    // `Lunch` over `13:00` was one fact printed twice, on a second line that
+    // cost each row ~21px. A session's row loses `Training` on the same ground.
+    expect(within(list as HTMLElement).queryByText(/^lunch$/i)).toBeNull();
+    expect(within(list as HTMLElement).queryByText(/^training$/i)).toBeNull();
+    // Each row is exactly the two facts, and nothing else is printed in it.
+    for (const row of within(list as HTMLElement).getAllByRole("listitem")) {
+      expect(row.children).toHaveLength(2);
+    }
+  });
+
+  test("is the dense row, and the time is the half that does not give", () => {
+    renderNow(active(0));
+
+    const [first] = within(
+      screen.getByRole("heading", { name: "Up next" }).nextElementSibling as HTMLElement,
+    ).getAllByRole("listitem");
+
+    // The spelling only: jsdom lays nothing out, and the 46px it produces was
+    // measured in a browser. § Lists' dense row is `training.tsx`'s — 11px of
+    // padding either side of a 23px body line, and the hairline.
+    expect(first.className).toContain("min-h-[46px]");
+    expect(first.className).toContain("py-[11px]");
+    // A long name truncates; the time is `shrink-0` so it is never the part cut.
+    expect(first.firstElementChild!.className).toContain("shrink-0");
+    expect(first.firstElementChild!.className).toContain("tabular-nums");
+    expect(first.lastElementChild!.className).toContain("truncate");
+  });
 });
 
 describe("anytime items", () => {
@@ -1533,6 +1585,24 @@ describe("the actions", () => {
     // quietly add or drop anything; what it may add is named here, and the two
     // constants are the only things it is allowed to be made of.
     expect(bar?.className).toBe(`${APP_ACTION_BAR} ${PAGE_MEASURE_FOOT}`);
+  });
+
+  test("puts its controls on one row, the primary leading and taking the spare width", () => {
+    // FUEL-109. The primary wears `ACTION_BAR_LEAD` and the secondaries
+    // `ACTION_BAR_SECONDARY`; `action-bar.test.tsx` asserts what those say. What
+    // is asserted here is that this screen wears them, in reading order.
+    renderNow(active(0));
+
+    const logEaten = screen.getByRole("button", { name: "Log eaten" });
+    const row = logEaten.closest(".action-bar-fade > div")!;
+    const inRow = [...row.querySelectorAll("button")];
+
+    expect(inRow.map((button) => button.textContent)).toEqual(["Log eaten", "Swap", "Skip"]);
+    expect(logEaten.className).toContain("flex-1");
+    for (const secondary of inRow.slice(1)) {
+      expect(secondary.className).toContain("flex-none");
+      expect(secondary.className).not.toContain("flex-1");
+    }
   });
 
   test("no longer carries the safe-area inset, which the shell owns", () => {

@@ -7,6 +7,10 @@ import { describe, expect, test } from "vitest";
 
 import {
   ACTION_BAR,
+  ACTION_BAR_CONTROLS,
+  ACTION_BAR_LEAD,
+  ACTION_BAR_PRIMARY,
+  ACTION_BAR_SECONDARY,
   APP_ACTION_BAR,
   SESSION_ACTION_BAR,
 } from "@/components/action-bar";
@@ -61,6 +65,71 @@ describe("the skeleton takes the same string as the bar it stands in for", () =>
     // below 1272, and the placement decides which column it is in above it, so
     // a skeleton that disagreed about either would move the primary on swap-in.
     expect(bar?.className).toBe(`${APP_ACTION_BAR} ${PAGE_MEASURE_FOOT}`);
+  });
+});
+
+describe("the controls are one row — FUEL-109", () => {
+  /*
+   * § Buttons: "On a phone the bar is one row that spans the column... The
+   * primary takes whatever width the others leave; a secondary takes its
+   * content's width." The bar was 140px as a slab over a pair and covered both
+   * of `/`'s Up next rows at 375×667; as one row it is 82. What is asserted here
+   * is the spelling — jsdom lays nothing out — and the geometry it produces was
+   * measured in a browser and is recorded on the ticket.
+   */
+  const classes = (value: string) => value.split(/\s+/);
+
+  test("the controls are a flex row at every width, not `contents` below the cap", () => {
+    // `contents` is what made the phone's controls the bar's own flex items,
+    // and the bar is a column — so they stacked. A bare `flex` with no prefix
+    // is the row at every width.
+    expect(classes(ACTION_BAR_CONTROLS)).toContain("flex");
+    expect(ACTION_BAR_CONTROLS).not.toContain("contents");
+    expect(ACTION_BAR_CONTROLS).not.toMatch(/\bflex-col\b/);
+  });
+
+  test("and they wrap, so a too-narrow column breaks the row rather than the gutter", () => {
+    // A 320 screen's column is 276 and the row needs 287. `Button` is
+    // `whitespace-nowrap`, so without `flex-wrap` the row runs off the side.
+    // The same wrap is what puts Undo on its own line on a phone.
+    expect(classes(ACTION_BAR_CONTROLS)).toContain("flex-wrap");
+  });
+
+  test("the primary that leads the row takes the spare width below the cap and its own at it", () => {
+    expect(classes(ACTION_BAR_LEAD)).toContain("flex-1");
+    expect(classes(ACTION_BAR_LEAD)).toContain("xl:flex-none");
+  });
+
+  test("a secondary is its content's width at every width", () => {
+    // `flex-1` split the phone's second row in half — 159px each for Swap and
+    // Skip, which is the height FUEL-109 took back. No width prefix may grow it.
+    expect(classes(ACTION_BAR_SECONDARY)).toContain("flex-none");
+    expect(ACTION_BAR_SECONDARY).not.toMatch(/flex-1|\bgrow\b|w-full/);
+  });
+
+  test("a primary alone on its line keeps the full-width rule it always had", () => {
+    // The Undo row, `/training`'s note controls, and the one primary of
+    // `weigh-ins.tsx` and `slot-times-form.tsx`. `w-full` is also what makes the
+    // Undo row wrap onto its own line in the row above, so it must not become
+    // the lead's `flex-1` by accident.
+    expect(ACTION_BAR_PRIMARY).toBe("w-full xl:w-auto");
+  });
+
+  test("the skeleton's primary has its label's floor, so it wraps where the real one does", () => {
+    // A label-less block has no min-content width. Without the floor it would
+    // shrink to fit a 320 column and stay on one line, while the real bar wraps
+    // to two — a 58px jump on swap-in. The secondaries' widths are unprefixed,
+    // because a secondary is its content's width below the cap as well as at it.
+    const { container } = render(<Loading />);
+    const controls = container.querySelector(".action-bar-fade > div")!;
+    const [lead, pair] = [...controls.children];
+
+    expect(classes(lead.className)).toContain("flex-1");
+    expect(classes(lead.className)).toContain("min-w-[121px]");
+    expect([...pair.children].map((block) => classes(block.className))).toEqual([
+      expect.arrayContaining(["flex-none", "w-[76px]"]),
+      expect.arrayContaining(["flex-none", "w-[66px]"]),
+    ]);
   });
 });
 

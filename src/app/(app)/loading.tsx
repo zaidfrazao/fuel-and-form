@@ -40,7 +40,7 @@ import type { ReactNode } from "react";
 
 import {
   ACTION_BAR_CONTROLS,
-  ACTION_BAR_PRIMARY,
+  ACTION_BAR_LEAD,
   ACTION_BAR_SECONDARY,
   ACTION_BAR_SPLIT,
   APP_ACTION_BAR,
@@ -132,25 +132,47 @@ function Grid({
 }
 
 /**
- * A list of rows at one height — `The day`'s 44 and `Up next`'s 54.
+ * A list of rows at one height — `The day`'s 44 and `Up next`'s 46.
  *
  * Two shapes rather than one, because the aside holds a different list at each
  * side of the frame's cap: `Up next`'s two rows below it, `The day`'s whole
  * timeline above. `right-now.tsx` carries the argument for the pair.
+ *
+ * `timeFirst` is `Up next`'s since FUEL-109, which leads each row with the time
+ * and lets the name take the rest: so the short block leads and the long one
+ * follows, where `The day` keeps its name on the left and its word on the right.
  */
-function Rows({ count, height }: { count: number; height: string }) {
+function Rows({
+  count,
+  height,
+  timeFirst = false,
+}: {
+  count: number;
+  height: string;
+  timeFirst?: boolean;
+}) {
   return (
     <>
       {Array.from({ length: count }, (_, row) => (
         <div
           key={row}
           className={cn(
-            "flex items-center justify-between border-b border-border last:border-b-0",
+            "flex items-center border-b border-border last:border-b-0",
+            timeFirst ? "gap-3" : "justify-between",
             height,
           )}
         >
-          <Block className="h-[23px] w-40" />
-          <Block className="h-[23px] w-12" />
+          {timeFirst ? (
+            <>
+              <Block className="h-[23px] w-12" />
+              <Block className="h-[23px] w-40" />
+            </>
+          ) : (
+            <>
+              <Block className="h-[23px] w-40" />
+              <Block className="h-[23px] w-12" />
+            </>
+          )}
         </div>
       ))}
     </>
@@ -255,7 +277,7 @@ export default function Loading() {
           </Section>
 
           <Section className="xl:hidden" data-section="up-next">
-            <Rows count={2} height="min-h-[54px] py-3" />
+            <Rows count={2} height="min-h-[46px] py-[11px]" timeFirst />
           </Section>
         </div>
       </div>
@@ -282,20 +304,31 @@ export default function Loading() {
           `/`'s bar and this one wear the pair. */}
       <div aria-hidden className={cn(APP_ACTION_BAR, PAGE_MEASURE_FOOT)}>
         {/*
-         * The controls, in the shapes the bar takes — `action-bar.ts`, FUEL-86.
-         * A column of slabs below the frame's cap and a row of content-width
-         * controls at it.
+         * The controls, in the shape the bar takes — `action-bar.ts`: one row
+         * at every width since FUEL-109, the primary taking the spare width
+         * below the frame's cap and its own at it.
          *
-         * ## The widths at the cap are measured rather than derived
+         * ## The widths are measured rather than derived
          *
-         * `xl:w-auto` on a real button is its label plus the size variant's
-         * padding. A `Block` has no label, so the same utility would draw it at
-         * zero and the row would swap in from nothing. The three numbers below
-         * are the rendered widths of `Log eaten`, `Swap` and `Skip` at 1272,
-         * read out of the browser rather than computed from the padding — the
+         * A real button's width is its label plus the size variant's padding.
+         * A `Block` has no label, so the same utilities would draw it at zero
+         * and the row would swap in from nothing. The three numbers below are
+         * the rendered widths of `Log eaten`, `Swap` and `Skip` at 1272, read
+         * out of the browser rather than computed from the padding — the
          * label's own width is a font metric and § Desktop's mock is drawn at a
          * different type scale from the app's, which `kv-grid`'s 86-versus-100
          * already cost one ticket.
+         *
+         * The secondaries' two are unprefixed since FUEL-109, because a
+         * secondary is its content's width at every width now and measured the
+         * same 76 and 66 at 375 as at 1272. The primary's 121 is stated twice:
+         * as its width at the cap, and below it as a FLOOR under `flex-1`. The
+         * real primary's floor is its label — `Button` is `whitespace-nowrap`
+         * and a flex item does not shrink under its min-content width — and
+         * that floor is what wraps the pair onto a second line on a 320
+         * screen. A label-less block has no floor, so without the `min-w` it
+         * would shrink to fit, stay on one line, and swap in 58px short of the
+         * bar that replaces it.
          *
          * They are approximate by nature: a workout card's primary says `Mark
          * done` and has no Swap beside it, so one skeleton cannot be exact for
@@ -305,14 +338,12 @@ export default function Loading() {
          * way, so nothing moves vertically on swap-in at any width.
          */}
         <div className={ACTION_BAR_CONTROLS}>
-          <Block className={cn("h-13 rounded-md", ACTION_BAR_PRIMARY, "xl:w-[121px]")} />
+          <Block
+            className={cn("h-13 min-w-[121px] rounded-md", ACTION_BAR_LEAD, "xl:w-[121px]")}
+          />
           <div className={ACTION_BAR_SPLIT}>
-            <Block
-              className={cn("h-[2.875rem] rounded-md", ACTION_BAR_SECONDARY, "xl:w-[76px]")}
-            />
-            <Block
-              className={cn("h-[2.875rem] rounded-md", ACTION_BAR_SECONDARY, "xl:w-[66px]")}
-            />
+            <Block className={cn("h-[2.875rem] rounded-md", ACTION_BAR_SECONDARY, "w-[76px]")} />
+            <Block className={cn("h-[2.875rem] rounded-md", ACTION_BAR_SECONDARY, "w-[66px]")} />
           </div>
         </div>
       </div>

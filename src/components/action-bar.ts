@@ -132,31 +132,50 @@ export const SESSION_ACTION_BAR = `${ACTION_BAR} lg:bottom-0 action-bar-fade-pin
 
 /* -------------------------------------------------------------------------- */
 /* A control is its content plus air — § Buttons, FUEL-85; built in FUEL-86     */
+/* One row at every width — FUEL-109                                           */
 /* -------------------------------------------------------------------------- */
 
 /**
- * The controls, as a row at the frame's cap.
+ * The controls, as one row.
  *
- * § Buttons, amended by FUEL-85: "On a phone a page's action bar is full-width,
- * because a full-width target is what a thumb wants and § Touch Targets asks
- * for it. That is a phone's reason, so by this section's own carry-over test it
- * does not travel: at ≥1272 the buttons in a **page action bar** take their
- * content's width and sit in a row. A 584px slab is a thumb target drawn on a
- * screen with no thumb, and a row is what lets a fourth control — Undo, when
- * there is a log to take back — be a fourth item rather than a third row of
- * slabs."
+ * § Buttons, amended by FUEL-85: at ≥1272 "the buttons in a **page action bar**
+ * take their content's width and sit in a row". FUEL-109 took the same row to
+ * the phone: "Full-width is a property of the bar, not of each control... On a
+ * phone the bar is one row that spans the column", with the primary taking the
+ * width the others leave. Below the cap this was `contents`, so the primary,
+ * the Swap/Skip pair and the Undo row were the bar's own flex items, stacked —
+ * a 140px bar that covered both of `/`'s Up next rows at 375×667 on arrival.
+ * It is 82px now: the bar's 30px head and the 52px primary.
  *
  * ## Why this is a wrapper inside the bar rather than the bar itself
  *
- * Because the bar holds one thing that is not a control. § Feedback puts a
+ * Because the bar holds things that are not controls. § Feedback puts a
  * refusal "at the point of action", so the inline banner is the bar's first
- * child and it is a block that spans the column — turning the BAR into a row
- * would stand the banner beside the buttons it is reporting on. The bar stays a
- * flex column of at most two things: the banner, and this.
+ * child and it is a block that spans the column; `/training`'s rest timer
+ * (FUEL-93) is a row in the same slot. Turning the BAR into a row would stand
+ * both beside the buttons. The bar stays a flex column — banner, timer, this.
  *
- * `contents` below `xl`, so the phone is untouched: the primary, the
- * Swap/Skip pair and the Undo row are the bar's own flex items in the order
- * they are written, with the 12px gap they have always had.
+ * ## `flex-wrap`, and what it is for
+ *
+ * Two things, both of them lines of their own rather than breakpoints.
+ *
+ * The Undo row (and `/training`'s note controls) is `ACTION_BAR_PRIMARY`, which
+ * is `w-full` below the cap, so in a wrapping row it takes a line to itself
+ * beneath the controls — where § Buttons keeps it on a phone, because it
+ * appears after a tap and as a fourth item would pull the row sideways under
+ * the thumb that just used it. At the cap it is `w-auto` and the row's fourth
+ * item, as FUEL-85 drew it.
+ *
+ * And a column too narrow for the row. `Log eaten`, `Swap`, `Skip` and two gaps
+ * come to 287px; a 320 screen's column is 276. There the pair wraps to a second
+ * line — the shape the bar had before — instead of the row running past the
+ * gutter, which `whitespace-nowrap` on `Button` would otherwise make it do. It
+ * happens where the labels stop fitting rather than at a width somebody
+ * measured once, so a longer label moves the point with it.
+ *
+ * Nothing wraps at the cap: the widest row there is ~370px in a 584 measure,
+ * and a wrapping container with one line lays out exactly as a non-wrapping
+ * one, which the 1272 and 1920 baselines hold to the pixel.
  *
  * ## The gap is 12 and the mock draws 10
  *
@@ -166,21 +185,41 @@ export const SESSION_ACTION_BAR = `${ACTION_BAR} lg:bottom-0 action-bar-fade-pin
  * number no rule in the guide can defend. Recorded rather than silently
  * rounded: it is the one place this bar does not transcribe the drawing.
  */
-export const ACTION_BAR_CONTROLS = "contents xl:flex xl:flex-row xl:items-center xl:gap-3";
+export const ACTION_BAR_CONTROLS = "flex flex-wrap items-center gap-3";
 
 /**
- * A pair of controls that share a row below the cap and dissolve into the row
- * above it — Swap and Skip, Partial and Skip.
+ * A pair of controls that share the row — Swap and Skip, Partial and Skip.
  *
- * The same `display: contents` device the column groups use in `lib/frame.ts`,
- * for the same reason: one DOM, two shapes, and nothing reordered at either, so
- * a screen reader meets these controls in one sequence at every width.
+ * One flex item below the cap, so that when the row is too narrow the pair
+ * wraps as a pair rather than leaving Skip alone on a second line. At the cap
+ * it dissolves into the row with the same `display: contents` device the
+ * column groups use in `lib/frame.ts` — one DOM, and nothing reordered at
+ * either width, so a screen reader meets these controls in one sequence.
  */
 export const ACTION_BAR_SPLIT = "flex gap-3 xl:contents";
 
 /**
- * The primary, and the Undo row's wrapper: full-width below the cap, its own
- * width at it.
+ * The primary that leads the row — FUEL-109.
+ *
+ * `flex-1` below the cap: it takes whatever width the secondaries leave, so the
+ * bar is still full-width as a whole and the primary is still its widest
+ * target. Its basis is 0, which is what lets the secondaries be measured first;
+ * its floor is its own label, because `Button` is `whitespace-nowrap` and a
+ * flex item does not shrink below its min-content width. `flex-1` also displaces
+ * `Button`'s `shrink-0` through `cn`'s merge, which is the intent.
+ *
+ * `xl:flex-none` gives the shorthand back at the cap, where the primary is its
+ * content plus air like every other control in the row.
+ */
+export const ACTION_BAR_LEAD = "flex-1 xl:flex-none";
+
+/**
+ * A primary on a line of its own: full-width below the cap, its own width at it.
+ *
+ * The Undo row's wrapper and `/training`'s note controls, which take a line
+ * beneath the bar's row; and the primaries of `weigh-ins.tsx` and
+ * `slot-times-form.tsx`, which are not in a bar at all but are the one action
+ * of their page and follow § Buttons' width rule with it.
  *
  * `xl:w-auto` rather than a width, because the whole rule is that the control
  * is its content plus air. `Button` already carries the air — the size variants
@@ -189,11 +228,11 @@ export const ACTION_BAR_SPLIT = "flex gap-3 xl:contents";
 export const ACTION_BAR_PRIMARY = "w-full xl:w-auto";
 
 /**
- * A control that shares the phone's second row.
+ * A secondary in the row: its content's width, at every width — FUEL-109.
  *
- * `flex-1` splits that row in two; `xl:flex-none` gives the shorthand back at
- * the cap, where the pair has become two items of the controls row and `flex: 1
- * 1 0%` would stretch them to fill the measure — the slab this rule exists to
- * remove, drawn twice instead of once.
+ * This was `flex-1` below the cap, which split the phone's second row in two
+ * and gave Swap and Skip 159px each — the width no thumb asked for that
+ * FUEL-109 took back. `flex-none` rather than nothing, because `Button` is
+ * `shrink-0` already and `flex-none` says the same thing about growing.
  */
-export const ACTION_BAR_SECONDARY = "flex-1 xl:flex-none";
+export const ACTION_BAR_SECONDARY = "flex-none";

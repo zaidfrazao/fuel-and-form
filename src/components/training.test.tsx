@@ -730,6 +730,35 @@ describe("the action bar", () => {
     // this screen cannot quietly add or drop anything else.
     expect(bar?.className).toBe(`${APP_ACTION_BAR} ${PAGE_MEASURE_FOOT}`);
   });
+
+  test.each([
+    ["the plan state, today", "Start session", () => render(view())],
+    ["the plan state, another date", "Mark done", () => render(view({ date: YESTERDAY }))],
+    [
+      "the session state",
+      "Mark done",
+      () => {
+        resumed();
+        return render(view());
+      },
+    ],
+  ])("takes `/`'s one row in %s — FUEL-109", (_state, primary, draw) => {
+    // § Buttons: "`/training`'s bar takes the same row, in both of its states."
+    // Decided rather than inherited from a shared string: the primary leads and
+    // takes the spare width, Partial and Skip take their own, in that order.
+    draw();
+
+    const lead = screen.getByRole("button", { name: primary });
+    const row = lead.closest(".action-bar-fade > div")!;
+    const inRow = [...row.querySelectorAll("button")];
+
+    expect(inRow.map((button) => button.textContent)).toEqual([primary, "Partial", "Skip"]);
+    expect(lead.className).toContain("flex-1");
+    for (const secondary of inRow.slice(1)) {
+      expect(secondary.className).toContain("flex-none");
+      expect(secondary.className).not.toContain("flex-1");
+    }
+  });
 });
 
 describe("the rules the guide states as absolutes", () => {

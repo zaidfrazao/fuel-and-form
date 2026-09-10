@@ -18,6 +18,7 @@ import {
 } from "@/app/actions/training";
 import {
   ACTION_BAR_CONTROLS,
+  ACTION_BAR_LEAD,
   ACTION_BAR_PRIMARY,
   ACTION_BAR_SECONDARY,
   ACTION_BAR_SPLIT,
@@ -1315,9 +1316,10 @@ export function Training({
 
   return (
     // 12px of head clearance below 768px — FUEL-82, the same reduction `/` takes
-    // and for the same reason: this screen carries the identical 140px action bar
-    // and 86px shell under the same two notice bands, so the fold sits in the
-    // same place and the head room is the same 10px that cannot be spared.
+    // and for the same reason: this screen carries the identical action bar —
+    // 140px when this was written, 82 since FUEL-109 put it on one row — and
+    // 86px shell under the same two notice bands, so the fold sits in the same
+    // place and the head room is the same 10px that cannot be spared.
     <PageMain className={`pt-3 md:pt-[22px] ${PAGE_ASIDE_GRID}`}>
       {/*
        * The two columns — § Desktop, FUEL-77. At 1272 this wrapper stops
@@ -1860,10 +1862,12 @@ export function Training({
            * is the reason these are three buttons rather than a primary and two
            * alternatives: they are one choice with three answers.
            */}
-          {/* A column of slabs on a phone, a row of content-width controls at
-              the frame's cap — § Buttons, FUEL-85. `action-bar.ts` carries the
-              argument and the strings; the banner above stays outside the row
-              because it is a block that spans the column. */}
+          {/* One row at every width — § Buttons: FUEL-85 at the frame's cap,
+              FUEL-109 below it, which took this bar with `/`'s rather than
+              leaving a slab over a pair here. Three answers to one question
+              read as one choice side by side. `action-bar.ts` carries the
+              argument and the strings; the banner and the timer above stay
+              outside the row because each is a block that spans the column. */}
           <div className={ACTION_BAR_CONTROLS}>
             {/*
              * The primary changes because the screen's question does — § Desktop.
@@ -1881,12 +1885,12 @@ export function Training({
              * primary is Start session exactly where the state is reachable.
              */}
             {canEnter && !inSession ? (
-              <Button className={ACTION_BAR_PRIMARY} onClick={enter}>
+              <Button className={ACTION_BAR_LEAD} onClick={enter}>
                 Start session
               </Button>
             ) : (
               <Button
-                className={ACTION_BAR_PRIMARY}
+                className={ACTION_BAR_LEAD}
                 aria-pressed={entry?.status === "done"}
                 onClick={() => (inSession ? finish("done") : record("done"))}
               >

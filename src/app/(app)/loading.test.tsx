@@ -175,7 +175,15 @@ describe("the skeleton stands in the same frame as the screen", () => {
     expect(theDay.querySelectorAll(".min-h-\\[44px\\]")).toHaveLength(6);
 
     expect(upNext.className).toContain("xl:hidden");
-    expect(upNext.querySelectorAll(".min-h-\\[54px\\]")).toHaveLength(2);
+    // § Lists' dense row since FUEL-109, and time-first like the real one: the
+    // short block leads, so the long one swaps in where the name does.
+    const upNextRows = upNext.querySelectorAll(".min-h-\\[46px\\]");
+    expect(upNextRows).toHaveLength(2);
+    for (const row of upNextRows) {
+      expect(row.className).toContain("py-[11px]");
+      expect(row.firstElementChild!.className).toContain("w-12");
+      expect(row.lastElementChild!.className).toContain("w-40");
+    }
   });
 
   test("the bar is the shared string and the shared placement", () => {
