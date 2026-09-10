@@ -42,7 +42,7 @@ export const ACTION_BAR =
  *
  * Brand Guide § Desktop: "above 1024px there is no thumb, so the bar has no
  * posture to serve, and a control pinned over content the reader is reading is
- * only a cost. The primary action sits at the end of its column." That is
+ * only a cost. The primary action sits at the end of its subject." That is
  * § Desktop's carry-over rule applied rather than a taste exercised — a mobile
  * decision carries to desktop unless its written rationale names the phone, and
  * § Touch Targets' "primary actions sit in the bottom third, within thumb
@@ -69,9 +69,10 @@ export const ACTION_BAR =
  * It does separate work at every width: it puts the bar at the foot of a short
  * page. A released bar without it would sit directly beneath whatever content
  * there was and end mid-screen with a gap under it, which is the state
- * `app/(app)/layout.tsx` bought `flex-1` to prevent. So the desktop bar is at
- * the end of its column in both senses — after the content in the DOM, and at
- * the bottom of `<main>` when the content does not reach it.
+ * `app/(app)/layout.tsx` bought `flex-1` to prevent. So `/training`'s plan-state
+ * bar is at the end of its column in both senses — after the content in the
+ * DOM, and at the bottom of `<main>` when the content does not reach it. `/`'s
+ * is not, since FUEL-114: see `ACTION_BAR_AT` below.
  *
  * ## The specimen
  *
@@ -81,6 +82,64 @@ export const ACTION_BAR =
  * arrangement in a specimen labelled with the phone's dimensions.
  */
 export const APP_ACTION_BAR = `${ACTION_BAR} lg:static`;
+
+/**
+ * `/`'s bar, at the two places it is drawn — FUEL-114.
+ *
+ * § Desktop amended "the end of its column" to "the end of its subject".
+ * Between 1024 and 1271 the bar is released but the aside has not arrived, so
+ * the column is the whole screen. The end of it was y 903 in the frozen demo,
+ * on a window 768 or 820 tall. At 1272 the same buttons sit under the meal's
+ * figures at 368. The band now takes the cap's order early.
+ *
+ * ## Two copies, because the two widths want two sequences
+ *
+ * Below 1024 the bar is sticky, and a sticky box only ever shifts UP from its
+ * resting place. Written between the subject and the aside, it would pin until
+ * the reader scrolled past it and then leave with the page. So the phone's copy
+ * stays last. The band wants the bar before the aside. `order`, or a grid
+ * placement, would draw one sequence and read out another. This is the
+ * ruler's device instead (`RULER_AT` in `day-ruler.tsx`): both copies are in the
+ * DOM, CSS shows one, and the other is `display: none` and out of the
+ * accessibility tree.
+ *
+ * The split is at `lg` rather than at the band's two edges, because 1024 is
+ * where the pinning already changes. At ≥1272 the desktop copy wears
+ * `PAGE_MEASURE_FOOT`, the placement the single bar had, so nothing moves on
+ * screen. The reading order there becomes subject, actions, context, where it
+ * had been subject, context, actions.
+ *
+ * `right-now.tsx` and the `loading.tsx` skeleton both take this object, so the
+ * two cannot disagree about which copy is drawn at a width.
+ */
+export const ACTION_BAR_AT = {
+  /**
+   * Below 1024, last in the column and sticky. This is `ACTION_BAR` rather than
+   * `APP_ACTION_BAR`, because the release has nothing to release on a copy that
+   * is not drawn above `lg`.
+   */
+  phone: `${ACTION_BAR} lg:hidden`,
+  /**
+   * From 1024, written directly after the measure's sections.
+   *
+   * `max-lg:hidden` is bound to the band it hides in, rather than being
+   * `hidden lg:flex` overriding the shared string's `flex`: one rule true in one
+   * band, with nothing to outrank.
+   *
+   * `lg:max-xl:pt-0`: in the band this copy is a flex item of the screen's
+   * content column, whose `md:gap-[30px]` already puts 30px above it. The shared
+   * `pt-[30px]` would make that 60. At the cap the column dissolves into the
+   * grid, which has no row gap, so the padding is the 30px again. It is bound
+   * to the band rather than overridden at `xl`, because `xl` sorts first
+   * (§ The breakpoints).
+   *
+   * `lg:max-xl:mt-0`: the content column is content-sized, so an auto margin has
+   * no free space to take there today. It is declared anyway, for the reason
+   * `PAGE_MEASURE_FOOT` gives for `xl:mt-0`: the inertness that was only true
+   * by luck is the one that broke.
+   */
+  desktop: `${APP_ACTION_BAR} max-lg:hidden lg:max-xl:mt-0 lg:max-xl:pt-0`,
+} as const;
 
 /**
  * The one bar that stays pinned at every width — `/training`'s session state,

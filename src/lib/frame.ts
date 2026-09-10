@@ -346,8 +346,9 @@ export const PAGE_ASIDE_COLUMN = `${PAGE_COLUMN_BASE} xl:col-start-2 xl:row-star
  * the next free slot and get the same answer today for a reason no one wrote
  * down — the answer changes the moment a screen renders a third group.
  *
- * § Desktop: "the primary action sits at the end of its column", and the mock
- * draws it 30px under the last figure at the measure's width.
+ * § Desktop: "the primary action sits at the end of its subject" (FUEL-114,
+ * which amended "column"), and the mock draws it 30px under the last figure at
+ * the measure's width.
  *
  * Row three since FUEL-86 put the header band in row one. The bar is still the
  * row after the measure's sections; what changed is what is above them.

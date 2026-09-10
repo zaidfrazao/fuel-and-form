@@ -7,6 +7,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   ACTION_BAR,
+  ACTION_BAR_AT,
   ACTION_BAR_CONTROLS,
   ACTION_BAR_LEAD,
   ACTION_BAR_PRIMARY,
@@ -55,16 +56,67 @@ describe("the skeleton takes the same string as the bar it stands in for", () =>
     // `toContain`, so a skeleton that gains or loses one class is caught too.
     const { container } = render(<Loading />);
 
-    const bar = container.querySelector(".action-bar-fade");
+    const copy = (which: string) => container.querySelector(`[data-bar="${which}"]`);
 
-    expect(bar).not.toBeNull();
+    expect(copy("phone")).not.toBeNull();
+    expect(copy("desktop")).not.toBeNull();
 
-    // The shared string plus the page's own placement — FUEL-77, and `/`'s bar
-    // and `/training`'s carry exactly the same pair. Both halves matter to the
-    // property this test is about: the pinning decides where the primary sits
-    // below 1272, and the placement decides which column it is in above it, so
-    // a skeleton that disagreed about either would move the primary on swap-in.
-    expect(bar?.className).toBe(`${APP_ACTION_BAR} ${PAGE_MEASURE_FOOT}`);
+    // `ACTION_BAR_AT`'s two strings, and the desktop one plus the page's own
+    // placement — FUEL-77 and FUEL-114, and `/`'s two copies carry exactly the
+    // same. Every part matters to the property this test is about: the pinning
+    // decides where the primary sits below 1024, the copy's position decides it
+    // in the band, and the placement decides which column it is in above it.
+    // A skeleton that disagreed about any of them would move the primary on
+    // swap-in.
+    expect(copy("phone")?.className).toBe(ACTION_BAR_AT.phone);
+    expect(copy("desktop")?.className).toBe(`${ACTION_BAR_AT.desktop} ${PAGE_MEASURE_FOOT}`);
+  });
+});
+
+describe("`/`'s two copies are one bar in two places — FUEL-114", () => {
+  const classes = (value: string) => value.split(/\s+/).filter(Boolean);
+
+  test("the phone's is the shared string, and stands down where the pinning ends", () => {
+    // Sticky, offset by the shell, faded at its top edge: everything
+    // `ACTION_BAR` is. Plus the one utility that hands over at 1024.
+    expect(classes(ACTION_BAR_AT.phone)).toEqual([...classes(ACTION_BAR), "lg:hidden"]);
+  });
+
+  test("the desktop's is the released bar, drawn only where the release is", () => {
+    // `APP_ACTION_BAR` so the release is the same one `/training`'s bar takes,
+    // and hidden by a variant bound to the band below it rather than by
+    // `hidden` overriding the shared `flex` — the two would have to be ordered
+    // correctly by Tailwind for the override to land.
+    const desktop = classes(ACTION_BAR_AT.desktop);
+
+    expect(desktop.slice(0, classes(APP_ACTION_BAR).length)).toEqual(classes(APP_ACTION_BAR));
+    expect(desktop).toContain("max-lg:hidden");
+    expect(desktop).not.toContain("hidden");
+    expect(desktop).not.toContain("lg:flex");
+  });
+
+  test("the handover is one width, so exactly one copy is drawn at any width", () => {
+    // `lg:hidden` on one and `max-lg:hidden` on the other: complementary
+    // halves of the same 1024, with nothing in between where both or neither
+    // would draw. A copy handed over at a different breakpoint, or at `xl`,
+    // would draw two bars in some band — the fault FUEL-77 shipped with the
+    // ruler. `action-bar.css.test.ts` reads the two widths out of the emitted
+    // media queries.
+    expect(classes(ACTION_BAR_AT.phone).filter((c) => c.endsWith("hidden"))).toEqual(["lg:hidden"]);
+    expect(classes(ACTION_BAR_AT.desktop).filter((c) => c.endsWith("hidden"))).toEqual([
+      "max-lg:hidden",
+    ]);
+  });
+
+  test("the band's own spacing is bound to the band", () => {
+    // The column's gap is the 30px above it there, so the shared padding and
+    // auto margin are zeroed for 1024–1271 only. An `xl:` override of a
+    // smaller breakpoint would lose to it, because `xl` sorts first.
+    const desktop = classes(ACTION_BAR_AT.desktop);
+
+    expect(desktop).toContain("lg:max-xl:pt-0");
+    expect(desktop).toContain("lg:max-xl:mt-0");
+    expect(desktop.filter((c) => /^lg:(pt|mt)-/.test(c))).toEqual([]);
   });
 });
 

@@ -4,8 +4,8 @@
  *
  * Every block below is the size and position of the thing it stands in for in
  * `right-now.tsx`: the 10.5px eyebrow, the 40px title, the 41px ruler band, the
- * macro grid, two up-next rows, and the action bar held at the foot by the same
- * `mt-auto`. Nothing shifts when the real content swaps in, which is the only
+ * macro grid, two up-next rows, and the action bar in both of the places the
+ * screen draws it. Nothing shifts when the real content swaps in, which is the only
  * property a skeleton has that a spinner does not.
  *
  * ## Three shapes, because the screen has three — FUEL-77
@@ -42,8 +42,8 @@ import {
   ACTION_BAR_CONTROLS,
   ACTION_BAR_LEAD,
   ACTION_BAR_SECONDARY,
+  ACTION_BAR_AT,
   ACTION_BAR_SPLIT,
-  APP_ACTION_BAR,
 } from "@/components/action-bar";
 import { RULER_AT } from "@/components/day-ruler";
 import { KV_GRID_COLUMNS } from "@/components/kv-grid";
@@ -254,6 +254,10 @@ export default function Loading() {
           </div>
         </div>
 
+        {/* The bar from 1024 up, under the measure — FUEL-114, the same copy in
+            the same place as the screen's. See `Bar` below. */}
+        <Bar at="desktop" />
+
         <div aria-hidden className={PAGE_ASIDE_COLUMN} data-column="aside">
           {/* `Planned` — first in this column, and first for the reason the screen
               gives: it was the last section of the measure before FUEL-86 and
@@ -282,71 +286,90 @@ export default function Loading() {
         </div>
       </div>
 
-      {/* The action bar, at the same 52px / 46px heights, the same 30px off the
-          content above it and pinned the same way, so the primary does not move
-          on swap-in. "Pinned the same way" used to be a claim about two class
-          strings that happened to match — a skeleton pinned to 0 while the real
-          bar cleared `--nav-shell-h` would put its primary 86px lower and the
-          swap-in would jump. FUEL-83 made it the same string: `APP_ACTION_BAR`,
-          which both take, so the two cannot disagree about the pinning or about
-          the fade over the bar's top.
+      {/* The phone's copy, last and sticky, as the screen's is. */}
+      <Bar at="phone" />
+    </PageMain>
+  );
+}
 
-          FUEL-72 is what that mechanism was for. It unpinned the bar at ≥1024px
-          — `lg:static` — and this skeleton needed the change as much as the real
-          bar did, since a skeleton still pinned to the viewport while the bar it
-          stands in for sat at the end of its column would jump by whatever the
-          two were apart. Nothing was edited here to get that: the release is in
-          the shared string, so the skeleton took it by taking the string.
-
-          `PAGE_MEASURE_FOOT` is the second half of the same idea and had to be
-          written: it is the bar's place in the page's grid rather than anything
-          about the bar, so it lives beside the columns it refers to and both
-          `/`'s bar and this one wear the pair. */}
-      <div aria-hidden className={cn(APP_ACTION_BAR, PAGE_MEASURE_FOOT)}>
-        {/*
-         * The controls, in the shape the bar takes — `action-bar.ts`: one row
-         * at every width since FUEL-109, the primary taking the spare width
-         * below the frame's cap and its own at it.
-         *
-         * ## The widths are measured rather than derived
-         *
-         * A real button's width is its label plus the size variant's padding.
-         * A `Block` has no label, so the same utilities would draw it at zero
-         * and the row would swap in from nothing. The three numbers below are
-         * the rendered widths of `Log eaten`, `Swap` and `Skip` at 1272, read
-         * out of the browser rather than computed from the padding — the
-         * label's own width is a font metric and § Desktop's mock is drawn at a
-         * different type scale from the app's, which `kv-grid`'s 86-versus-100
-         * already cost one ticket.
-         *
-         * The secondaries' two are unprefixed since FUEL-109, because a
-         * secondary is its content's width at every width now and measured the
-         * same 76 and 66 at 375 as at 1272. The primary's 121 is stated twice:
-         * as its width at the cap, and below it as a FLOOR under `flex-1`. The
-         * real primary's floor is its label — `Button` is `whitespace-nowrap`
-         * and a flex item does not shrink under its min-content width — and
-         * that floor is what wraps the pair onto a second line on a 320
-         * screen. A label-less block has no floor, so without the `min-w` it
-         * would shrink to fit, stay on one line, and swap in 58px short of the
-         * bar that replaces it.
-         *
-         * They are approximate by nature: a workout card's primary says `Mark
-         * done` and has no Swap beside it, so one skeleton cannot be exact for
-         * both cards. It is exact for the meal card, which is what `/` shows for
-         * most of a day, and the error on the other is horizontal — the bar's
-         * height and its distance from the content above are identical either
-         * way, so nothing moves vertically on swap-in at any width.
-         */}
-        <div className={ACTION_BAR_CONTROLS}>
-          <Block
-            className={cn("h-13 min-w-[121px] rounded-md", ACTION_BAR_LEAD, "xl:w-[121px]")}
-          />
-          <div className={ACTION_BAR_SPLIT}>
-            <Block className={cn("h-[2.875rem] rounded-md", ACTION_BAR_SECONDARY, "w-[76px]")} />
-            <Block className={cn("h-[2.875rem] rounded-md", ACTION_BAR_SECONDARY, "w-[66px]")} />
-          </div>
+/**
+ * The action bar, at the same 52px / 46px heights, the same 30px off the
+ * content above it and pinned the same way, so the primary does not move on
+ * swap-in. "Pinned the same way" used to be a claim about two class strings that
+ * happened to match — a skeleton pinned to 0 while the real bar cleared
+ * `--nav-shell-h` would put its primary 86px lower and the swap-in would jump.
+ * FUEL-83 made it the same string, which both take, so the two cannot disagree
+ * about the pinning or about the fade over the bar's top.
+ *
+ * FUEL-72 is what that mechanism was for. It unpinned the bar at ≥1024px —
+ * `lg:static` — and this skeleton needed the change as much as the real bar
+ * did, since a skeleton still pinned to the viewport while the bar it stands in
+ * for sat in flow would jump by whatever the two were apart. Nothing was edited
+ * here to get that: the release is in the shared string, so the skeleton took
+ * it by taking the string.
+ *
+ * FUEL-114 is the same again. The screen draws its bar twice, a sticky copy last
+ * below 1024 and a released one under the subject from 1024 (`ACTION_BAR_AT`).
+ * A skeleton with one bar would swap in at the foot of the column while the
+ * screen draws it under the figures, which is the distance the ticket moved it.
+ * So this takes both copies from the same object and puts them in the same two
+ * places.
+ *
+ * `PAGE_MEASURE_FOOT` is the second half of the idea that had to be written: it
+ * is the bar's place in the page's grid rather than anything about the bar, so
+ * it lives beside the columns it refers to. The desktop copy wears it on both
+ * sides. The phone copy is not drawn at the cap, so it has no place to be given.
+ */
+function Bar({ at }: { at: keyof typeof ACTION_BAR_AT }) {
+  return (
+    <div
+      aria-hidden
+      className={at === "phone" ? ACTION_BAR_AT.phone : cn(ACTION_BAR_AT.desktop, PAGE_MEASURE_FOOT)}
+      data-bar={at}
+    >
+      {/*
+       * The controls, in the shape the bar takes — `action-bar.ts`: one row
+       * at every width since FUEL-109, the primary taking the spare width
+       * below the frame's cap and its own at it.
+       *
+       * ## The widths are measured rather than derived
+       *
+       * A real button's width is its label plus the size variant's padding.
+       * A `Block` has no label, so the same utilities would draw it at zero
+       * and the row would swap in from nothing. The three numbers below are
+       * the rendered widths of `Log eaten`, `Swap` and `Skip` at 1272, read
+       * out of the browser rather than computed from the padding — the
+       * label's own width is a font metric and § Desktop's mock is drawn at a
+       * different type scale from the app's, which `kv-grid`'s 86-versus-100
+       * already cost one ticket.
+       *
+       * The secondaries' two are unprefixed since FUEL-109, because a
+       * secondary is its content's width at every width now and measured the
+       * same 76 and 66 at 375 as at 1272. The primary's 121 is stated twice:
+       * as its width at the cap, and below it as a FLOOR under `flex-1`. The
+       * real primary's floor is its label — `Button` is `whitespace-nowrap`
+       * and a flex item does not shrink under its min-content width — and
+       * that floor is what wraps the pair onto a second line on a 320
+       * screen. A label-less block has no floor, so without the `min-w` it
+       * would shrink to fit, stay on one line, and swap in 58px short of the
+       * bar that replaces it.
+       *
+       * They are approximate by nature: a workout card's primary says `Mark
+       * done` and has no Swap beside it, so one skeleton cannot be exact for
+       * both cards. It is exact for the meal card, which is what `/` shows for
+       * most of a day, and the error on the other is horizontal — the bar's
+       * height and its distance from the content above are identical either
+       * way, so nothing moves vertically on swap-in at any width.
+       */}
+      <div className={ACTION_BAR_CONTROLS}>
+        <Block
+          className={cn("h-13 min-w-[121px] rounded-md", ACTION_BAR_LEAD, "xl:w-[121px]")}
+        />
+        <div className={ACTION_BAR_SPLIT}>
+          <Block className={cn("h-[2.875rem] rounded-md", ACTION_BAR_SECONDARY, "w-[76px]")} />
+          <Block className={cn("h-[2.875rem] rounded-md", ACTION_BAR_SECONDARY, "w-[66px]")} />
         </div>
       </div>
-    </PageMain>
+    </div>
   );
 }

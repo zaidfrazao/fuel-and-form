@@ -116,7 +116,17 @@ const SPECIMENS: readonly Specimen[] = [
   {
     name: "button-secondary",
     path: "/",
-    locate: (page) => variant(page, "secondary"),
+    /*
+     * Named, since FUEL-114. This was `variant(page, "secondary")`, and the
+     * first secondary on `/` happened to be the walk row's `Log walk`, which is
+     * what the baseline photographs. FUEL-114 wrote the action bar's desktop
+     * copy between the measure and the aside, so its `Swap` came first in the
+     * DOM and the same locator photographed a different, 1px wider control.
+     * The specimen is the variant's hover, not the button, so it keeps the
+     * control it was drawn against.
+     */
+    locate: (page) =>
+      page.locator('[data-variant="secondary"]', { hasText: "Log walk" }).first(),
   },
   {
     name: "button-text",

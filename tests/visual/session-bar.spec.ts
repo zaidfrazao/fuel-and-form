@@ -349,7 +349,15 @@ test("leaves the plan state and `/` released, which is FUEL-72's ruling", async 
 
   await page.goto("/");
   await expect(page.getByRole("main")).toBeVisible();
-  await expect(page.locator(BAR)).toBeVisible();
 
-  expect(await positionOf(page.locator(BAR)), "`/`'s bar at 1440").toBe("static");
+  // `/` renders its bar twice since FUEL-114 (a sticky copy below 1024 and a
+  // released one under the subject from 1024) and CSS draws one, so the
+  // selector resolves to both and strict mode throws without `:visible`. It is
+  // added here and not to `BAR`, because `:visible` is Playwright's and this
+  // file also hands `BAR` to `document.querySelector`.
+  const drawn = page.locator(`${BAR}:visible`);
+
+  await expect(drawn).toBeVisible();
+
+  expect(await positionOf(drawn), "`/`'s bar at 1440").toBe("static");
 });
