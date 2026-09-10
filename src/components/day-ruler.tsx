@@ -267,7 +267,12 @@ const ANCHOR_CLASS: Record<LabelAnchor, string> = {
  * at 100% — a zero-width region, which paints nothing. The label goes from open
  * to closed across a millionth of a pixel of overlap, so there is no width at
  * which it is visibly part-clipped. `min`, `max`, `clamp` and `cqw` only: no
- * `abs()`, and no dividing one length by another.
+ * `abs()`, and no dividing one length by another. Their arguments take
+ * arithmetic without a `calc()` in every browser that has `cqw` at all
+ * (Safari 16, Chrome 105, Firefox 110), and Chromium and Firefox were both
+ * checked by hit-testing. A browser without container units drops the whole
+ * declaration, and the pill covers the label as it did before, which is a
+ * fallback to the old look rather than to anything worse.
  *
  * Exported so the test evaluates the string that ships rather than a twin of it.
  */
