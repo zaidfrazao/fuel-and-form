@@ -199,8 +199,9 @@ for (const path of ["/", "/training"]) {
 
         // `:not([aria-hidden])` excludes the `/` skeleton's bar, which carries
         // the same class string by design — see `action-bar.spec.ts`, where the
-        // race this avoids has been re-run away more than once.
-        const bar = page.locator("main .action-bar-fade:not([aria-hidden])");
+        // race this avoids has been re-run away more than once. `:visible`
+        // picks the one of `/`'s two copies that is drawn here — FUEL-114.
+        const bar = page.locator("main .action-bar-fade:not([aria-hidden]):visible");
 
         // `/training`'s bar is conditional on a session; `/`'s on there being
         // something to do. Both are true at the frozen instant, and it is
@@ -211,8 +212,8 @@ for (const path of ["/", "/training"]) {
         const { measure } = await columns(page);
         const box = await boxOf(bar);
 
-        // § Desktop: "the primary action sits at the end of its column." The
-        // column is the measure, so a bar spanning both — which is what it does
+        // § Desktop: "the primary action sits at the end of its subject." The
+        // subject is the measure, so a bar spanning both — which is what it does
         // if `PAGE_MEASURE_FOOT` is dropped and the grid auto-places it — is
         // 384px too wide and sits under the aside as well.
         expect(box.x, "the bar's left edge").toBeCloseTo(measure.x, 0);
@@ -242,7 +243,7 @@ for (const path of ["/", "/training"]) {
       await page.setViewportSize({ width: 1440, height: 2000 });
 
       const bar = await boxOf(
-        page.locator("main .action-bar-fade:not([aria-hidden])"),
+        page.locator("main .action-bar-fade:not([aria-hidden]):visible"),
       );
       const measure = await boxOf(page.locator('[data-column="measure"]'));
 
@@ -787,3 +788,155 @@ for (const { path, name } of [
     });
   });
 }
+
+/**
+ * `/`'s primary action in the 1024–1271 band — FUEL-114.
+ *
+ * § Desktop: "the primary action sits at the end of its subject". It read
+ * "column" until this ticket, and between 1024 and 1271 the column was the
+ * whole screen. The bars are released at `lg` and the aside only arrives at
+ * `xl`, so the bar came after the day's figures, Up next and both walk rows.
+ * In the frozen demo `Log eaten` was at y 903 on a 768px window, off-screen on
+ * arrival, while the same button sat at 368 at 1272.
+ *
+ * No baseline photographs this band (375, 820, 1272, 1920), so this file is
+ * the only thing that can see it. Every assertion is a rendered box or a
+ * computed style, because the fix is two copies of the bar that CSS chooses
+ * between, and jsdom, which applies no stylesheet, has both.
+ *
+ * The heights are the ticket's own: 1024×768 and 1271×800 for the band's two
+ * edges, and 1180×820, an iPad in landscape, which is the reason the band is
+ * not only about pointers.
+ */
+test.describe("/ in the band — FUEL-114", () => {
+  const BAND = [
+    { width: 1024, height: 768 },
+    { width: 1180, height: 820 },
+    { width: 1271, height: 800 },
+  ];
+
+  /** The bar a user has at this width: not the skeleton's, and drawn. */
+  const drawnBar = (page: import("@playwright/test").Page) =>
+    page.locator("main .action-bar-fade:not([aria-hidden]):visible");
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("main")).toBeVisible();
+    // One `main` means the skeleton has gone — see `scrollbar-gutter.spec.ts`.
+    await expect(page.locator("main")).toHaveCount(1);
+  });
+
+  for (const size of BAND) {
+    test(`Log eaten is on screen on arrival at ${size.width}x${size.height}`, async ({ page }) => {
+      await page.setViewportSize(size);
+      await page.evaluate(() => window.scrollTo(0, 0));
+
+      const primary = page.getByRole("button", { name: "Log eaten" });
+
+      // Exactly one, and the role query is what a screen reader is given — a
+      // copy that was drawn and hidden from the tree, or the reverse, fails here.
+      await expect(primary).toHaveCount(1);
+
+      const box = await boxOf(primary);
+
+      expect(box.y + box.height, "the primary's foot, against the window").toBeLessThanOrEqual(
+        size.height,
+      );
+    });
+
+    test(`the bar is the subject's last thing at ${size.width}`, async ({ page }) => {
+      await page.setViewportSize(size);
+
+      const bar = drawnBar(page);
+
+      await expect(bar).toHaveCount(1);
+      await expect(bar).toHaveAttribute("data-bar", "desktop");
+      expect(await bar.evaluate((node) => getComputedStyle(node).position)).toBe("static");
+
+      // The measure group is `display: contents` below the cap and has no box,
+      // so the subject's end is its last section's. The column's own 30px gap
+      // is the whole distance: the bar's padding is zeroed in the band, so a
+      // 60 here is the shared `pt-[30px]` leaking back.
+      const lastOfSubject = await boxOf(page.locator('[data-column="measure"] > *:visible').last());
+      const box = await boxOf(bar);
+
+      expect(box.y - (lastOfSubject.y + lastOfSubject.height), "subject to bar").toBeCloseTo(30, 0);
+
+      // And the context comes after it, drawn below it and read after it —
+      // "Screen-reader order matches the drawn order", as the ticket asks,
+      // measured rather than inferred from where the copy is written.
+      const planned = page.getByRole("heading", { name: "Planned" });
+      const plannedBox = await boxOf(planned);
+
+      expect(plannedBox.y, "Planned is drawn below the bar").toBeGreaterThan(box.y + box.height);
+      expect(
+        await bar.evaluate(
+          (node, heading) =>
+            Boolean(node.compareDocumentPosition(heading!) & Node.DOCUMENT_POSITION_FOLLOWING),
+          await planned.elementHandle(),
+        ),
+        "Planned follows the bar in document order",
+      ).toBe(true);
+    });
+  }
+
+  test("the sticky copy is the phone's, and it hands over at 1024", async ({ page }) => {
+    // The control for the band: the phone's arrangement is untouched at 1023,
+    // and 1024 is the one pixel where the copies swap.
+    await page.setViewportSize({ width: 1023, height: 768 });
+
+    const bar = drawnBar(page);
+
+    await expect(bar).toHaveAttribute("data-bar", "phone");
+    expect(await bar.evaluate((node) => getComputedStyle(node).position)).toBe("sticky");
+
+    await page.setViewportSize({ width: 1024, height: 768 });
+
+    await expect(bar).toHaveAttribute("data-bar", "desktop");
+  });
+
+  test("draws exactly one bar at every width", async ({ page }) => {
+    // The assertion that was missing when FUEL-77 drew two rulers, made for the
+    // bar before it can be missed. The handover is `lg:hidden` on one copy and
+    // `max-lg:hidden` on the other, so a gap or an overlap would show up at one
+    // of the two pixels either side of 1024, or at the cap.
+    for (const width of [375, 820, 1023, 1024, 1271, 1272, 1920]) {
+      await page.setViewportSize({ width, height: 900 });
+
+      await expect(drawnBar(page), `bars drawn at ${width}px`).toHaveCount(1);
+      await expect(
+        page.getByRole("button", { name: "Log eaten" }),
+        `primaries announced at ${width}px`,
+      ).toHaveCount(1);
+    }
+  });
+
+  test("Mark done is on screen on arrival on a workout card", async ({ page }) => {
+    /*
+     * The frozen demo is on a meal at this instant, and the server's clock is
+     * frozen for the whole run, so the workout card is reached through
+     * `/dev/right-now`'s session case: the same `RightNow`, in the same frame,
+     * with its full exercise list. It carries no notice bands, which the real
+     * `/` has above the header. The meal case is the calibration: its subject
+     * ends at the same y as the real screen's at these widths (328, measured
+     * for this ticket).
+     */
+    await page.goto("/dev/right-now?case=workout");
+
+    for (const size of BAND) {
+      await page.setViewportSize(size);
+      await page.evaluate(() => window.scrollTo(0, 0));
+
+      const primary = page.getByRole("button", { name: "Mark done" });
+
+      await expect(primary).toHaveCount(1);
+
+      const box = await boxOf(primary);
+
+      expect(
+        box.y + box.height,
+        `Mark done's foot at ${size.width}x${size.height}`,
+      ).toBeLessThanOrEqual(size.height);
+    }
+  });
+});
