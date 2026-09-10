@@ -747,9 +747,15 @@ document whose whole purpose is to be copied around. A lost trace is a missing
 picture of one walk; a leaked one is where somebody lives. The walk's
 `distanceM`, `durationMin`, `steps` and `stepsSource` are exported in full —
 how far, without where. The step figure carries its origin because the two are
-different claims: `estimated` is `distanceM` divided by a stride derived from
-the stored height, and a reader that treated it as a measurement would be
+different claims: `estimated` is `distanceM` divided by a STEP length derived
+from the stored height, and a reader that treated it as a measurement would be
 reading a division as a count.
+
+Step length, not stride: a stride is two steps, the words are used
+interchangeably in casual writing, and dividing by a stride would halve every
+count in the app while leaving a figure that still looked plausible.
+`src/lib/steps.ts` carries the coefficient and a steps-per-kilometre test is
+what holds it there.
 
 **Ids are kept.** `/weight` strips ids from the payload it sends the browser and
 argues why; that argument is about a screen's payload. This is a backup, and
@@ -816,9 +822,10 @@ date,weight_kg,note
 2026-08-19,80.1,"lighter, after a long walk"
 
 training
-date,session,type,scheduled,status,duration_min,est_burn_kcal_low,est_burn_kcal_high,note
-2026-08-17,Full body circuit,circuit,yes,done,34,190,310,
-2026-08-17,Daily walk,walk,yes,,,,,
+date,session,type,scheduled,status,duration_min,distance_m,steps,steps_source,est_burn_kcal_low,est_burn_kcal_high,note
+2026-08-17,Full body circuit,circuit,yes,done,34,,,,190,310,
+2026-08-17,Morning walk,walk,yes,done,40,2880,3800,estimated,160,200,
+2026-08-17,Afternoon walk,walk,yes,,,,,,,,
 
 sets
 date,session,exercise,section,set_index,reps,load_kg
@@ -867,10 +874,35 @@ working volume rather than inflating it. Today the app only offers set entry on
 working rows, so in practice every set row reads `work`; the column is what lets
 you rely on that instead of assuming it.
 
+**`distance_m`, `steps` and `steps_source`** are the walk's own figures and are
+blank on every other kind of session. Metres rather than kilometres, because it
+is the stored integer and a file that will be pivoted and summed is better off
+without a decimal introduced here. All three are blank — never `0` — on a walk
+logged with one tap and on any walk logged before route recording existed: PRD
+§ P11 asks for those "absent rather than zeroed", and a zero would read as a
+walk where somebody stood still.
+
+`steps` looks like it breaks the `est_` rule below and does not. It carries
+`steps_source` beside it, which says of each row whether the count came from a
+device or was derived from the distance — so the provenance is stated per row
+rather than guessed once in a column name. `est_steps` would claim an estimate
+for a device count too, which is the distinction the source column exists to
+preserve.
+
+**Two walks on one date are two rows.** The app schedules a morning and an
+afternoon walk as separate sessions, so they carry separate names and join to
+the sets section separately. Nothing in this file sums them, and there is no
+daily step total anywhere in the app.
+
 **`est_burn_kcal_low` and `est_burn_kcal_high`** are the modelled cost of the
 session, and the `est_` prefix is the whole labelling rule: the only bare `kcal`
 column in this file is the meals section's, which is a stored figure. Anything
 carrying `est_` was computed from a MET band, a bodyweight and a duration.
+
+A walk is priced from its PACE where it has a distance — distance over duration
+maps to a walking MET far better than a single guess for "walking" would — and
+from a wider band covering ordinary walking speeds where it does not. A walk
+with no logged duration is not priced at all.
 
 **Do not subtract one from the other.** PRD § P10: the estimate is never
 combined with `target_kcal` or any macro total. The two live in different
