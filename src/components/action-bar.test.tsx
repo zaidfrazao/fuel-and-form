@@ -77,7 +77,7 @@ describe("the controls are one row — FUEL-109", () => {
    * is the spelling — jsdom lays nothing out — and the geometry it produces was
    * measured in a browser and is recorded on the ticket.
    */
-  const classes = (value: string) => value.split(/\s+/);
+  const classes = (value: string) => value.split(/\s+/).filter(Boolean);
 
   test("the controls are a flex row at every width, not `contents` below the cap", () => {
     // `contents` is what made the phone's controls the bar's own flex items,
