@@ -434,14 +434,22 @@ const dayRuler = (which: "wide" | "phone" | "aside" = "wide"): HTMLElement => {
  * has only one position. And a query that expects no bar at all has to be able
  * to look.
  *
+ * Only the default call falls back. A test that names a copy is asking about
+ * that copy, and a screen-wide query would pass it on the other copy's
+ * controls. So a named copy that is missing throws rather than being answered
+ * by the phone's. That was raised by the FUEL-114 precommit review.
+ *
  * Resolved at each call rather than held: a tap that finishes the day swaps
  * the timeline state for day-complete, and a held copy would be a detached
  * element that every later `findBy` waits on until it times out.
  */
-const bar = (which: "phone" | "desktop" = "phone") => {
-  const scoped = document.querySelector<HTMLElement>(`[data-bar="${which}"]`);
+const bar = (which?: "phone" | "desktop") => {
+  const scoped = document.querySelector<HTMLElement>(`[data-bar="${which ?? "phone"}"]`);
 
-  return scoped ? within(scoped) : screen;
+  if (scoped) return within(scoped);
+  if (which) throw new Error(`no [data-bar="${which}"] copy of the action bar is rendered`);
+
+  return screen;
 };
 
 /** A day's log of `count` lines, for the cases that only care that there is one. */
