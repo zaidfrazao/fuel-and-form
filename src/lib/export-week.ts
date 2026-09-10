@@ -140,6 +140,36 @@ const WEIGHT_HEADER = ["date", "weight_kg", "note"] as const;
  * who learns that one rule can tell measured from modelled without a legend,
  * and `est_burn_is` in the preamble says it in the file for the reader who does
  * not.
+ *
+ * ## The walk's three columns — § P11, FUEL-104
+ *
+ * `distance_m`, `steps` and `steps_source` sit with `duration_min` because they
+ * are the same kind of thing: what the walk was, as opposed to what it is
+ * modelled to have cost. Blank on every session row, which is what this file
+ * already does with `est_burn_*` for a session it cannot price, and blank on a
+ * walk logged before P11 — § P11 asks for those "absent rather than zeroed",
+ * and a zero here would be a walk where somebody stood still.
+ *
+ * ## Why `steps` is bare when it is usually an estimate
+ *
+ * It looks like it breaks the `est_` rule and it does not, because it carries
+ * something stronger: `steps_source` says of each row whether the count was
+ * measured by a device or derived from the distance. A blanket `est_steps`
+ * would assert the second of every row including the first, which is exactly
+ * the distinction FUEL-103 added the source column to preserve — and it would
+ * still need the source column beside it, at which point the prefix is a
+ * worse-informed copy of its neighbour.
+ *
+ * The rule that survives is the one the prefix was standing in for: a reader
+ * must be able to tell measured from modelled without a legend. A column that
+ * names its own provenance per row does that better than a column name that
+ * guesses once for all of them.
+ *
+ * ## `distance_m` in metres, not kilometres
+ *
+ * The stored unit, unconverted. The screens divide to render "3.2 km", but a
+ * file that is going to be pivoted and summed is better off with the integer
+ * the database holds than with a decimal this file introduced rounding into.
  */
 const TRAINING_HEADER = [
   "date",
@@ -148,6 +178,9 @@ const TRAINING_HEADER = [
   "scheduled",
   "status",
   "duration_min",
+  "distance_m",
+  "steps",
+  "steps_source",
   "est_burn_kcal_low",
   "est_burn_kcal_high",
   "note",
@@ -507,6 +540,9 @@ function trainingRows(
       session.scheduled ? "yes" : "no",
       session.log?.status ?? "",
       cell(session.log?.durationMin),
+      cell(session.log?.distanceM),
+      cell(session.log?.steps),
+      session.log?.stepsSource ?? "",
       cell(range?.lowKcal),
       cell(range?.highKcal),
       session.log?.note ?? "",

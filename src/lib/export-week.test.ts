@@ -103,13 +103,36 @@ const WALK: Workout = {
 };
 
 /**
+ * The day's second walk — FUEL-98, and what makes "two walks a day" testable
+ * here.
+ *
+ * A separate `workouts` row rather than the same one logged twice, which is not
+ * a fixture convenience: `workout_logs` is unique on `(user_id, date,
+ * workout_id)`, so one workout cannot hold two logs on one date and the app
+ * models the pair as two rows for exactly that reason. The distinct NAME is
+ * what the training and sets sections join on, so two walks a day stay
+ * distinguishable to a reader as well as to the index.
+ */
+const WALK_PM: Workout = {
+  ...WALK,
+  id: "bbbbbbbb-0000-4000-8000-000000000004",
+  name: "Afternoon walk",
+};
+
+/**
  * The one workout type in these fixtures that can be COSTED — FUEL-95/97.
  *
- * `MET_BANDS` holds bands for `circuit` and `intervals` and for nothing else,
- * so `PUSH` and `WALK` above produce two blank `est_burn` cells however they
- * are logged. That is not an oversight in the fixtures, it is what makes them
+ * `MET_BANDS` holds bands for `circuit`, `intervals` and — since FUEL-104 —
+ * `walk`, so `PUSH` above produces two blank `est_burn` cells however it is
+ * logged. That is not an oversight in the fixtures, it is what makes them
  * useful: most of the file below asserts whole documents, and a session that
  * silently acquired an estimate would change every one of them.
+ *
+ * `WALK` is no longer one of those. It was until FUEL-104 gave the walk its own
+ * estimate, and a walk with a logged duration is now costed like anything else
+ * — on its pace where it has a distance, and on the unknown-pace band where it
+ * does not. A walk logged with no duration still costs nothing, which is what
+ * most of the cases below use it for.
  *
  * The estimate also needs a LOGGED duration. A session with sets and no
  * duration models its minutes from reps, and that band compounds to 3.2× wide,
@@ -391,13 +414,13 @@ describe("the whole document", () => {
         '2026-08-19,80.1,"lighter, after a long walk"',
         "",
         "training",
-        "date,session,type,scheduled,status,duration_min,est_burn_kcal_low,est_burn_kcal_high,note",
+        "date,session,type,scheduled,status,duration_min,distance_m,steps,steps_source,est_burn_kcal_low,est_burn_kcal_high,note",
         // Blank burn on both rows: neither `strength` nor `walk` has a MET
         // band, so neither can be costed however it is logged. See `CIRCUIT`.
-        "2026-08-17,Push A,strength,yes,done,52,,,",
+        "2026-08-17,Push A,strength,yes,done,52,,,,,,",
         // Scheduled and never logged: the row is still here, with a blank
         // status. Absent would say the walk was not on the plan.
-        "2026-08-17,Daily walk,walk,yes,,,,,",
+        "2026-08-17,Daily walk,walk,yes,,,,,,,,",
         "",
         // The sets section, between training and meals — it is the training
         // section at a finer grain, and the two join on (date, session).
@@ -431,7 +454,7 @@ describe("the whole document", () => {
       "date,weight_kg,note",
       "",
       "training",
-      "date,session,type,scheduled,status,duration_min,est_burn_kcal_low,est_burn_kcal_high,note",
+      "date,session,type,scheduled,status,duration_min,distance_m,steps,steps_source,est_burn_kcal_low,est_burn_kcal_high,note",
       "",
       "sets",
       "date,session,exercise,section,set_index,reps,load_kg",
@@ -678,9 +701,13 @@ describe("the training section", () => {
       }),
     );
 
+    // The walk carries a burn from FUEL-104 onward: no distance, so it is
+    // priced on its thirty minutes at the unknown-pace band. Incidental to what
+    // this test is about — `scheduled` — but a walk row with blank burn columns
+    // would now be the wrong picture of the file.
     expect(section(csv, "training")).toEqual([
-      "2026-08-17,Daily walk,walk,yes,done,30,,,",
-      "2026-08-17,Push A,strength,no,partial,,,,squeezed it in",
+      "2026-08-17,Daily walk,walk,yes,done,30,,,,120,200,",
+      "2026-08-17,Push A,strength,no,partial,,,,,,,squeezed it in",
     ]);
   });
 
@@ -695,7 +722,7 @@ describe("the training section", () => {
       }),
     );
 
-    expect(section(csv, "training")).toEqual(["2026-08-17,,,no,done,,,,"]);
+    expect(section(csv, "training")).toEqual(["2026-08-17,,,no,done,,,,,,,"]);
   });
 
   test("orders unscheduled sessions by name", () => {
@@ -739,8 +766,8 @@ describe("the training section", () => {
     );
 
     expect(section(csv, "training")).toEqual([
-      "2026-08-17,,,no,done,,,,",
-      "2026-08-17,Push A,strength,no,done,,,,",
+      "2026-08-17,,,no,done,,,,,,,",
+      "2026-08-17,Push A,strength,no,done,,,,,,,",
     ]);
   });
 
@@ -771,8 +798,8 @@ describe("the training section", () => {
     // Ordered by id in byte order, where a digit sorts before a letter — so
     // `...0001` comes first and the 40-minute row leads.
     expect(section(csv, "training")).toEqual([
-      "2026-08-17,Push A,strength,no,done,40,,,",
-      "2026-08-17,Push A,strength,no,done,55,,,",
+      "2026-08-17,Push A,strength,no,done,40,,,,,,",
+      "2026-08-17,Push A,strength,no,done,55,,,,,,",
     ]);
   });
 
@@ -1180,7 +1207,7 @@ describe("the sets section", () => {
     );
 
     expect(section(csv, "training")).toEqual([
-      "2026-08-17,Full body circuit,circuit,no,done,30,170,280,",
+      "2026-08-17,Full body circuit,circuit,no,done,30,,,,170,280,",
     ]);
     expect(section(csv, "sets")).toEqual([
       "2026-08-17,Full body circuit,Goblet squat,work,1,12,",
@@ -1237,7 +1264,7 @@ describe("the burn estimate", () => {
      * carries it at all: § P6's reader never opens the app.
      */
     expect(costed()).toEqual([
-      "2026-08-17,Full body circuit,circuit,yes,done,30,170,280,",
+      "2026-08-17,Full body circuit,circuit,yes,done,30,,,,170,280,",
     ]);
   });
 
@@ -1253,7 +1280,7 @@ describe("the burn estimate", () => {
      */
     expect(
       costed({ weighIns: [{ date: "2026-08-14", weightKg: 88.2 }] }),
-    ).toEqual(["2026-08-17,Full body circuit,circuit,yes,done,30,180,300,"]);
+    ).toEqual(["2026-08-17,Full body circuit,circuit,yes,done,30,,,,180,300,"]);
   });
 
   test("costs a session logged before per-set tracking existed", () => {
@@ -1290,7 +1317,7 @@ describe("the burn estimate", () => {
     );
 
     expect(section(csv, "training")).toEqual([
-      "2026-08-17,Full body circuit,circuit,yes,done,30,170,280,",
+      "2026-08-17,Full body circuit,circuit,yes,done,30,,,,170,280,",
     ]);
     expect(section(csv, "sets")).toEqual([]);
   });
@@ -1327,7 +1354,7 @@ describe("the burn estimate", () => {
         ),
         "training",
       ),
-    ).toEqual(["2026-08-17,Push A,strength,yes,done,30,,,"]);
+    ).toEqual(["2026-08-17,Push A,strength,yes,done,30,,,,,,"]);
 
     // Sets, but no measured duration to apportion.
     expect(
@@ -1364,11 +1391,161 @@ describe("the burn estimate", () => {
           }),
         ],
       }),
-    ).toEqual(["2026-08-17,Full body circuit,circuit,yes,done,,,,"]);
+    ).toEqual(["2026-08-17,Full body circuit,circuit,yes,done,,,,,,,"]);
 
     // Scheduled and never logged: nothing happened, so nothing is costed.
     expect(costed({ workoutLogs: [] })).toEqual([
-      "2026-08-17,Full body circuit,circuit,yes,,,,,",
+      "2026-08-17,Full body circuit,circuit,yes,,,,,,,,",
     ]);
+  });
+});
+
+describe("the walk's figures", () => {
+  /**
+   * § P11's numbers in the weekly file — FUEL-104.
+   *
+   * The assistant § P6 was written for never opens the app, so a walk that
+   * reaches this file as a duration and nothing else is a walk it cannot see
+   * the shape of. Distance, steps and the step count's SOURCE travel with it.
+   *
+   * Asserted on parsed ROWS throughout rather than on `toContain`. The fixture
+   * week's dates are the week's own days and the plan recurs, so a substring
+   * can match a row other than the one a case is about.
+   */
+  const walked = (over: Partial<WorkoutLog> = {}) =>
+    workoutLog({
+      date: MONDAY,
+      workoutId: WALK.id,
+      durationMin: 45,
+      distanceM: 3200,
+      steps: 4500,
+      stepsSource: "estimated",
+      ...over,
+    });
+
+  test("carries distance, steps and the step count's source", () => {
+    const csv = buildWeekCsv(
+      input({
+        trainingDays: [{ date: MONDAY, sessions: [session(WALK)] }],
+        workoutLogs: [walked()],
+      }),
+    );
+
+    /*
+     * 3.2 km in 45 minutes is about 4.27 km/h, inside the 4.0-4.8 km/h bracket,
+     * whose METs are 3.0 and 3.5 — so the burn columns are the PACED estimate
+     * rather than the wide unknown-pace one.
+     *
+     * At the fixture's 84.2 kg that is 3.0 x 3.5 x 84.2 / 200 = 4.42 kcal/min,
+     * over 45 minutes, rounded outward to the nearest ten: 190 and 240.
+     */
+    expect(section(csv, "training")).toEqual([
+      "2026-08-17,Daily walk,walk,yes,done,45,3200,4500,estimated,190,240,",
+    ]);
+  });
+
+  test("says when a step count came from a device rather than a stride", () => {
+    // The whole reason `steps` is a bare column and not `est_steps`: the source
+    // column distinguishes the two claims per row, which a prefix cannot.
+    const csv = buildWeekCsv(
+      input({
+        trainingDays: [{ date: MONDAY, sessions: [session(WALK)] }],
+        workoutLogs: [walked({ steps: 5210, stepsSource: "device" })],
+      }),
+    );
+
+    expect(section(csv, "training")).toEqual([
+      "2026-08-17,Daily walk,walk,yes,done,45,3200,5210,device,190,240,",
+    ]);
+  });
+
+  test("exports two walks on one date as two rows", () => {
+    // § P11's twice-daily walk, FUEL-98. Two rows and not one summed row: the
+    // file is long-form everywhere else for the same reason, and a day's total
+    // would be a step total, which § P11 rules out outright.
+    const csv = buildWeekCsv(
+      input({
+        trainingDays: [
+          { date: MONDAY, sessions: [session(WALK), session(WALK_PM)] },
+        ],
+        workoutLogs: [
+          walked(),
+          walked({
+            id: "dddddddd-0000-4000-8000-000000000009",
+            workoutId: WALK_PM.id,
+            // 1.8 km in 25 minutes — 4.32 km/h, comfortably inside a bracket.
+            // Not 1600m/20min, which is 4.8 km/h and lands ON a table point,
+            // where binary rounding decides which side of it the walk falls.
+            durationMin: 25,
+            distanceM: 1800,
+            steps: 2200,
+          }),
+        ],
+      }),
+    );
+
+    const rows = section(csv, "training");
+
+    expect(rows).toHaveLength(2);
+    expect(rows).toEqual([
+      "2026-08-17,Daily walk,walk,yes,done,45,3200,4500,estimated,190,240,",
+      "2026-08-17,Afternoon walk,walk,yes,done,25,1800,2200,estimated,110,130,",
+    ]);
+
+    // Neither row is the sum of the pair, which is the failure a "two walks"
+    // case exists to catch — 4500 and 2200 appear, 6700 does not.
+    expect(rows.join("\n")).not.toContain("6700");
+  });
+
+  test("leaves a walk logged before P11 blank rather than zeroed", () => {
+    /*
+     * § P11: such a walk "renders and exports cleanly, its fields absent rather
+     * than zeroed". A zero is a measurement — it would read as a walk where
+     * somebody stood still, and it would be summed by anything reading the
+     * column.
+     *
+     * Constructed deliberately, because it cannot occur naturally any more: the
+     * demo is regenerated with figures on every walk, so nothing in the fixture
+     * data produces this row unless a test asks for it.
+     */
+    const csv = buildWeekCsv(
+      input({
+        trainingDays: [{ date: MONDAY, sessions: [session(WALK)] }],
+        workoutLogs: [
+          workoutLog({
+            date: MONDAY,
+            workoutId: WALK.id,
+            durationMin: 30,
+            distanceM: null,
+            steps: null,
+            stepsSource: null,
+          }),
+        ],
+      }),
+    );
+
+    const [row] = section(csv, "training");
+
+    // Blank cells, and specifically not "0". The burn is still there and is the
+    // unknown-pace band: a walk with no distance is a complete walk with fewer
+    // figures, never a partial one.
+    expect(row).toBe("2026-08-17,Daily walk,walk,yes,done,30,,,,120,200,");
+    expect(row!.split(",").slice(6, 9)).toEqual(["", "", ""]);
+    expect(row!.split(",")).not.toContain("0");
+  });
+
+  test("leaves every walk column blank for a session that is not a walk", () => {
+    const csv = buildWeekCsv(
+      input({
+        trainingDays: [{ date: MONDAY, sessions: [session(PUSH)] }],
+        workoutLogs: [
+          workoutLog({ date: MONDAY, workoutId: PUSH.id, durationMin: 40 }),
+        ],
+      }),
+    );
+
+    const [row] = section(csv, "training");
+
+    expect(row!.split(",").slice(6, 9)).toEqual(["", "", ""]);
   });
 });

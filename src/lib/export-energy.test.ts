@@ -113,6 +113,41 @@ const DURATION_MIN = 34;
  */
 const BURN = { lowKcal: 190, highKcal: 310 };
 
+/**
+ * The walk beside the circuit — § P11's estimate, FUEL-104.
+ *
+ * ## Why this fixture grew a second session
+ *
+ * FUEL-104 gave the walk its own estimate, priced off a measured distance. The
+ * ticket notes what that means for this file: two walks a day makes it the most
+ * frequently shown estimate in the app, so the artefact-level guarantee this
+ * whole file exists to provide has to cover it. A fixture with only a circuit
+ * in it would keep passing while the figure a user actually sees twice a day
+ * went unchecked.
+ *
+ * ## The numbers
+ *
+ * 2.88 km in 40 minutes is 4.32 km/h, inside the 4.0-4.8 km/h bracket whose
+ * METs are 3.0 and 3.5. Deliberately not a pace landing ON a table point, where
+ * binary rounding decides which bracket it falls in.
+ *
+ * At `BODYWEIGHT_KG` that is 3.0 x 3.5 x 80 / 200 = 4.2 kcal/min and 4.9 at the
+ * top, over 40 minutes: 168 and 196 raw, rounded outward to 160 and 200.
+ *
+ * These are as load-bearing as `DURATION_MIN` above, and for the same reason —
+ * they have to avoid `NETTED`, which now carries the walk's combinations too.
+ * The first attempt was a 50-minute walk, whose 210-250 put `250 - 78` — the
+ * high bound less the two meals' protein total — exactly on `heightCm`, 172.
+ * That is the same trap `DURATION_MIN` records falling into, and it is worth
+ * two notes rather than one: these fixtures are numerically tuned, and a walk
+ * casually relengthened here will fail this file for a reason that looks
+ * nothing like the change that caused it.
+ */
+const WALK_DURATION_MIN = 40;
+const WALK_DISTANCE_M = 2880;
+const WALK_STEPS = 3800;
+const WALK_BURN = { lowKcal: 160, highKcal: 200 };
+
 const profile: Profile = {
   userId: USER_ID,
   heightCm: 172,
@@ -221,6 +256,34 @@ const WORKOUT_LOG: WorkoutLog = {
   loggedAt: new Date("2026-08-17T18:00:00.000Z"),
 };
 
+const WALK_ID = "bbbbbbbb-0000-4000-8000-000000000002";
+const WALK_LOG_ID = "dddddddd-0000-4000-8000-000000000002";
+
+const WALK: Workout = {
+  id: WALK_ID,
+  userId: USER_ID,
+  name: "Daily walk",
+  type: "walk",
+  description: null,
+  rotationGroup: null,
+  rotationIndex: null,
+};
+
+/** The walk as it is recorded: a duration, a distance, and a step estimate. */
+const WALK_LOG: WorkoutLog = {
+  id: WALK_LOG_ID,
+  userId: USER_ID,
+  date: MONDAY,
+  workoutId: WALK_ID,
+  status: "done",
+  note: null,
+  durationMin: WALK_DURATION_MIN,
+  distanceM: WALK_DISTANCE_M,
+  steps: WALK_STEPS,
+  stepsSource: "estimated",
+  loggedAt: new Date("2026-08-17T19:00:00.000Z"),
+};
+
 const WEIGHT_LOG: WeightLog = {
   id: "eeeeeeee-0000-4000-8000-000000000001",
   userId: USER_ID,
@@ -270,10 +333,10 @@ const TABLES: ExportTables = {
   planTemplateEntries: [],
   dayPlanOverrides: [],
   mealLogs: MEAL_LOGS,
-  workouts: [CIRCUIT],
+  workouts: [CIRCUIT, WALK],
   workoutExercises: EXERCISES,
   trainingTemplateEntries: [],
-  workoutLogs: [WORKOUT_LOG],
+  workoutLogs: [WORKOUT_LOG, WALK_LOG],
   exerciseSets: SETS,
   weightLogs: [WEIGHT_LOG],
   shoppingChecks: [],
@@ -297,14 +360,21 @@ const WEEK: WeekExportInput = {
               kind: "session" as const,
               exercises: EXERCISES,
             },
+            {
+              workout: WALK,
+              source: "fixed" as const,
+              entryId: "entry-walk",
+              kind: "walk" as const,
+              exercises: [],
+            },
           ]
         : [],
   })),
   mealLogs: MEAL_LOGS,
-  workoutLogs: [WORKOUT_LOG],
+  workoutLogs: [WORKOUT_LOG, WALK_LOG],
   weightLogs: [WEIGHT_LOG],
   meals: [OATS, BEEF],
-  workouts: [CIRCUIT],
+  workouts: [CIRCUIT, WALK],
   exercises: EXERCISES,
   sets: SETS,
   weighIns: [WEIGHT_LOG],
@@ -423,7 +493,8 @@ const INTAKE = [
  */
 const NETTED = new Set(
   INTAKE.flatMap((intake) =>
-    [BURN.lowKcal, BURN.highKcal].flatMap((burn) => [
+    // Both estimates in the file, not just the circuit's — FUEL-104.
+    [BURN.lowKcal, BURN.highKcal, WALK_BURN.lowKcal, WALK_BURN.highKcal].flatMap((burn) => [
       intake - burn,
       intake + burn,
       burn - intake,
@@ -438,17 +509,46 @@ describe("the estimate is present in both artefacts", () => {
    */
 
   test("the weekly CSV carries the range as two labelled columns", () => {
-    expect(csv).toContain(`${DURATION_MIN},${BURN.lowKcal},${BURN.highKcal},`);
+    // The three blanks are FUEL-104's `distance_m`, `steps` and `steps_source`,
+    // which a circuit has none of. Spelled out rather than skipped over: they
+    // sit between the duration and the burn, so a change to the column order
+    // fails here rather than moving what this assertion happens to match.
+    expect(csv).toContain(`${DURATION_MIN},,,,${BURN.lowKcal},${BURN.highKcal},`);
     expect(csv).toContain("est_burn_kcal_low,est_burn_kcal_high");
     // The caveat travels in the file, not only in the README.
     expect(csv).toContain("est_burn_is,estimated-not-measured");
   });
 
   test("the JSON carries the range under `derived`", () => {
+    // Both sessions, the walk included — FUEL-104. Ordered as `buildExport`
+    // orders them, which is by date then by log id.
     expect(document.derived.sessionEnergy).toEqual([
       { date: MONDAY, workoutId: WORKOUT_ID, ...BURN },
+      { date: MONDAY, workoutId: WALK_ID, ...WALK_BURN },
     ]);
     expect(document.derived.burnIs).toBe("estimated-not-measured");
+  });
+
+  test("the walk's own estimate is in both artefacts too", () => {
+    /*
+     * The non-vacuity half, for the figure FUEL-104 added. Everything below
+     * asserts that no COMBINATION of the burn and intake appears; a build that
+     * priced the walk at nothing would satisfy that perfectly while quietly
+     * dropping § P11's estimate from the file the assistant reads.
+     *
+     * The walk is priced off its pace, so this also pins the distance and
+     * duration reaching the estimate at all: a build that ignored `distance_m`
+     * would fall back to the unknown-pace band and produce a different range.
+     */
+    expect(csvNumbers(csv)).toContain(WALK_BURN.lowKcal);
+    expect(csvNumbers(csv)).toContain(WALK_BURN.highKcal);
+    expect(jsonNumbers(document)).toContain(WALK_BURN.lowKcal);
+    expect(jsonNumbers(document)).toContain(WALK_BURN.highKcal);
+
+    // And the walk's measured figures travel with it, which is the other half
+    // of the ticket — a burn with no distance beside it cannot be checked.
+    expect(csvNumbers(csv)).toContain(WALK_DISTANCE_M);
+    expect(csvNumbers(csv)).toContain(WALK_STEPS);
   });
 
   test("both files carry the intake figures the estimate must not touch", () => {
