@@ -168,7 +168,7 @@ export const SESSION_ACTION_BAR = `${ACTION_BAR} lg:bottom-0 action-bar-fade-pin
  *
  * And a column too narrow for the row. `Log eaten`, `Swap`, `Skip` and two gaps
  * come to 287px; a 320 screen's column is 276. There the pair wraps to a second
- * line — the shape the bar had before — instead of the row running past the
+ * line at its own width — a 140px bar again — instead of the row running past the
  * gutter, which `whitespace-nowrap` on `Button` would otherwise make it do. It
  * happens where the labels stop fitting rather than at a width somebody
  * measured once, so a longer label moves the point with it.
