@@ -452,6 +452,31 @@
      */
     overflow-y: scroll;
   }
+
+  /* Headings balance their lines — FUEL-117, and Brand Guide § Typography.
+   *
+   * The mock has declared exactly this since it was written
+   * (`BRAND_GUIDE.html`: `h1,h2,h3,h4 { text-wrap: balance }`); the app never
+   * carried it, so a greedy wrap left `/`'s Title reading "Overnight Oats —
+   * Cinnamon / Apple" at 1024 and 1440, one word on a 40px line of its own.
+   * The Title has no smaller step to fall back to, and a library name runs to
+   * four lines on a phone, so the break is the only thing left to get right.
+   *
+   * It costs no height, and that was measured rather than assumed: balancing
+   * keeps the line count a greedy wrap would use and only evens the lengths.
+   * All seventeen library meals, the nine workouts and every screen's own
+   * heading, at 375, 820, 1024, 1272, 1440 and 1920 on `/` and `/training` —
+   * 258 cases, 27 of them re-broken, none taller. The fullPage baselines'
+   * heights are the standing check.
+   *
+   * On every heading rather than the Title alone, because that is the mock's
+   * rule. The `h2`s are one-line eyebrows, where balancing has nothing to do. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
 }
 
 /* The scroll lock has nothing left to compensate for — FUEL-87.

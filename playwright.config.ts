@@ -264,6 +264,17 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
     },
     /**
+     * Where a Title breaks — FUEL-117, and a project for the reason the others
+     * are: a line break has no theme, and it sets its own viewport at six
+     * widths rather than learning one width each from eight projects.
+     */
+    {
+      name: "title-wrap",
+      testMatch: /title-wrap\.spec\.ts/,
+      dependencies: ["setup"],
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+    },
+    /**
      * The pointer states — FUEL-75. Two projects rather than eight, and rather
      * than one.
      *

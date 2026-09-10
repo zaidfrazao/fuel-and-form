@@ -225,6 +225,28 @@ describe("the session", () => {
     expect(screen.getByText("circuit")).toBeTruthy();
   });
 
+  test("keeps a dash in either Title's name with the words before it — FUEL-117", async () => {
+    // Both of this screen's Titles carry a name from the library, the session's
+    // in the plan state and the exercise's in the session state. Headings
+    // balance, and balancing would otherwise be free to open line 2 with the
+    // dash; `title-wrap.spec.ts` measures the break, this holds the text.
+    const user = userEvent.setup();
+    const [first, ...rest] = CIRCUIT.exercises;
+    const dashed = {
+      ...CIRCUIT,
+      name: "Circuit B — Lower",
+      exercises: [{ ...first!, name: "Squats — paused" }, ...rest],
+    };
+
+    render(view({ sessions: [dashed] }));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Circuit B\u00A0— Lower");
+
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Squats\u00A0— paused");
+  });
+
   test("renders a type the app has never seen, because the column is open", () => {
     // schema.ts keeps `workouts.type` as text so the gym restart is new rows
     // rather than a migration, and says the UI "must handle a value it does not

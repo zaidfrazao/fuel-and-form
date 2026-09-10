@@ -442,6 +442,20 @@ describe("the active meal", () => {
     expect(within(subject!).getByText("07:00")).toBeDefined();
   });
 
+  test("keeps a dash in the name with the words before it — FUEL-117", () => {
+    // Headings balance, and balancing would otherwise open line 2 with the
+    // dash: "Overnight Oats / — PB Cocoa" at 375. Where the break lands is the
+    // visual suite's to measure (`title-wrap.spec.ts`); this holds the half it
+    // cannot see from there — that the heading is given `titleText`'s text.
+    const named = at(mealItem({ name: "Overnight Oats — PB Cocoa" }), "meal:e1", "07:00", 420);
+
+    renderNow(active(0, { active: named, timeline: [named, ...TIMELINE.slice(1)] }));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Overnight Oats\u00A0— PB Cocoa",
+    );
+  });
+
   test("shows kcal and P/F/C", () => {
     const { container } = renderNow(active(0));
 
