@@ -63,9 +63,11 @@ A horizontal timeline spanning 06:00–22:00, roughly 40px tall including its sc
 | Skipped slot | 5px bar, 45° hatch pattern, 1px `text-tertiary` outline |
 | Upcoming slot | 1px hairline tick, 9px tall, `text-tertiary` |
 | Now | 2px `accent` rule, plus a NOW pill in `accent` beneath the baseline |
-| Scale | 06 · 12 · 18 · 22 in 10px caps, `text-tertiary` |
+| Scale | 06 · 12 · 18 · 22 in 10px caps, `text-tertiary`. A label the NOW pill would touch is not drawn |
 
 It answers "where am I in the day?" before a single word is read. Lives on `/` only.
+
+**The pill wins the overlap by removing the label, not by covering it — FUEL-113.** The pill and the scale share a row, so near a six-hour mark they meet. The pill used to sit on top and cover only part of the label: at 18:54 at 375 it hid all of `18` except the `1`, and the scale read "1 NOW". A scale label is either drawn whole or not drawn, and the one the pill would touch, with a hairline of air to spare, is not drawn. The scale can be read off the ruler without it, and the ruler's `aria-label` never depended on it. How near counts as touching depends on the ruler's width and the text size, and the ruler knows neither. So the test is made in CSS, against the width as laid out, rather than as a number of minutes that would be right at one width and wrong at the next. A canvas-coloured ring around the pill would also have separated the two, and was not chosen, because it is a shadow in all but name (§ Materials).
 
 ### The Dot Grid — multi-week
 
