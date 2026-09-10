@@ -843,10 +843,14 @@ describe("up next", () => {
     // padding either side of a 23px body line, and the hairline.
     expect(first.className).toContain("min-h-[46px]");
     expect(first.className).toContain("py-[11px]");
-    // A long name truncates; the time is `shrink-0` so it is never the part cut.
+    // A long name wraps — FUEL-111, which reversed the `truncate` this line
+    // used to require. The time is `shrink-0`, so the name is the half that
+    // gives, and the row aligns on the baseline so the time sits on the name's
+    // first line rather than between two.
+    expect(first.className).toContain("items-baseline");
     expect(first.firstElementChild!.className).toContain("shrink-0");
     expect(first.firstElementChild!.className).toContain("tabular-nums");
-    expect(first.lastElementChild!.className).toContain("truncate");
+    expect(first.lastElementChild!.className).toContain("break-words");
   });
 });
 
@@ -2755,5 +2759,127 @@ describe("the second column", () => {
     expect(document.querySelector('[data-column="aside"]')!.className).toBe(
       PAGE_ASIDE_COLUMN,
     );
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* A name too long for one line — FUEL-111                                    */
+/* -------------------------------------------------------------------------- */
+
+describe("a name too long for one line", () => {
+  /*
+   * `/` truncated meal names that `/plan` and `/shopping` both refuse to cut —
+   * "a half-read meal name is not a meal you can recognise". Five rows on this
+   * screen carry a name, and every one of them now wraps.
+   *
+   * The spelling only: jsdom lays nothing out, so what a wrap costs was measured
+   * in a browser and is recorded in § Lists. What this file can hold is the
+   * absence, the way `shopping-list-view.test.tsx` holds it for FUEL-80 — and
+   * for the same reason every clipping class is asserted absent rather than the
+   * one shorthand that was in use: `truncate` is `overflow-hidden text-ellipsis
+   * whitespace-nowrap`, any one of the three brings the ellipsis back, and a
+   * `line-clamp` is the same cut made a line later.
+   */
+
+  /** The library's longest name — `src/lib/seed/meals.ts`, fifty characters. */
+  const LONG = "Steak with Garlic Butter, Chips & Peppercorn Sauce";
+
+  const CLIPS = [
+    /\btruncate\b/,
+    /\boverflow-hidden\b/,
+    /\btext-ellipsis\b/,
+    /\bwhitespace-nowrap\b/,
+    /\bline-clamp-/,
+  ];
+
+  /**
+   * The long name in the list under `heading`, asserted whole.
+   *
+   * `getByText` matches the element whose own text is the name, which is the
+   * span the classes are on. Both the name and its neighbour are checked: the
+   * name must wrap rather than clip, and must be the half that gives, so the
+   * word or control beside it is `shrink-0`.
+   */
+  const expectWhole = (heading: string) => {
+    const list = screen.getByRole("heading", { name: heading }).nextElementSibling as HTMLElement;
+    const name = within(list).getByText(LONG);
+
+    for (const clip of CLIPS) expect(name.className).not.toMatch(clip);
+    // `min-w-0` so a flex item can shrink below its longest word, and
+    // `break-words` so that word breaks rather than pushing the row wide —
+    // the shopping list's pair.
+    expect(name.className).toContain("min-w-0");
+    expect(name.className).toContain("break-words");
+
+    return name;
+  };
+
+  const LONG_LUNCH = at(
+    mealItem({ id: "meal-2", name: LONG }, "lunch"),
+    "meal:e2",
+    "13:00",
+    780,
+  );
+
+  /** A morning with the long lunch next — the state the ticket photographed. */
+  const morning = () =>
+    active(0, {
+      timeline: [BREAKFAST, LONG_LUNCH, SESSION, DINNER],
+      upcoming: [LONG_LUNCH, SESSION, DINNER],
+    });
+
+  test("Up next wraps it, and its time is the half that does not give", () => {
+    renderNow(morning());
+
+    const name = expectWhole("Up next");
+
+    expect(name.previousElementSibling!.className).toContain("shrink-0");
+  });
+
+  test("the day wraps it, and its time is the half that does not give", () => {
+    renderNow(morning());
+
+    expect(expectWhole("The day").nextElementSibling!.className).toContain("shrink-0");
+  });
+
+  test("Anytime wraps a meal with no window, and keeps its slot word whole", () => {
+    const snack: AnytimeItem = { ...mealItem({ id: "meal-7", name: LONG }, "snack"), key: "meal:e7" };
+
+    renderNow(active(0, { anytime: [WALK, snack] }));
+
+    expect(expectWhole("Anytime").nextElementSibling!.className).toContain("shrink-0");
+  });
+
+  test("the walk's row wraps it, and its controls keep their width", () => {
+    const walk: AnytimeItem = {
+      ...workoutItem({ id: "workout-2", name: LONG, type: "walk" }),
+      key: "workout:e5",
+    };
+
+    renderNow(active(0, { anytime: [walk] }));
+
+    expect(expectWhole("Anytime").nextElementSibling!.className).toContain("shrink-0");
+  });
+
+  test("the walk's Done keeps its width beside it", () => {
+    const walk: AnytimeItem = {
+      ...workoutItem({ id: "workout-2", name: LONG, type: "walk" }),
+      key: "workout:e5",
+    };
+
+    renderNow(active(0, { anytime: [walk] }), EXERCISES, [], walked(30));
+
+    const name = expectWhole("Anytime");
+
+    expect(name.nextElementSibling!.textContent).toBe("Done");
+    expect(name.nextElementSibling!.className).toContain("shrink-0");
+  });
+
+  test("day-complete's log wraps it, and its status word is the half that does not give", () => {
+    renderNow({ ...BASE, state: "day-complete" }, EXERCISES, [
+      entry({ id: "l1", name: LONG }),
+    ]);
+
+    expect(expectWhole("Logged").nextElementSibling!.className).toContain("shrink-0");
   });
 });

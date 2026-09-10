@@ -109,10 +109,16 @@ function Logged({ entries }: { entries: readonly LoggedEntry[] }) {
               key={entry.id}
               className="flex min-h-[44px] items-center justify-between gap-4 border-b border-border py-[10px] last:border-b-0"
             >
-              <span className="truncate text-body text-text-primary">{entry.name}</span>
+              {/* Wraps rather than truncates — FUEL-111. A record of the day
+                  that cuts off the name of what was eaten is not a record of
+                  it, and `/plan` and `/shopping` already refuse the ellipsis.
+                  The word on the right is `shrink-0`, so the name gives. */}
+              <span className="min-w-0 break-words text-body text-text-primary">
+                {entry.name}
+              </span>
               <span
                 className={cn(
-                  "text-micro text-text-secondary uppercase",
+                  "shrink-0 text-micro text-text-secondary uppercase",
                   // § Type tokens set Micro at 600; a skip steps down to 400 and
                   // keeps everything else — size, caps, tracking, colour.
                   entry.status === "skipped" && "font-normal",
