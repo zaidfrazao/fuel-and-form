@@ -171,12 +171,16 @@ export type CaloriesFigure = "actual" | "target";
  * mattered. § Terminology's word is Plan.
  *
  * `planned` was the clearer word and did not fit. Measured at 375 against the
- * demo fixture, it wrapped at least one line on every day of the week and cost
- * the grid 17–34px; `plan` wrapped none, so the grid stays 144px. The margin is
- * thin — the frozen demo's protein line, `plan 113.5 g of 148 · −34.5`, is
- * 155.8px in a 157.5px cell — which is why the day figure keeps its unit: the
- * widest line is the calorie one, which has no unit to drop. The heading over
- * the ≥768 grid has no such limit and says `Planned` in full (`right-now.tsx`).
+ * demo fixture, it wrapped at least one line on each day measured — the longest
+ * weekday, the weekend and the frozen demo day — and cost the grid 17–34px;
+ * `plan` wrapped none, so the grid stays 144px.
+ *
+ * The margin is thin: the frozen demo's protein line, `plan 113.5 g of 148 ·
+ * −34.5`, is 155.8px in a 157.5px cell. Dropping the day figure's unit was
+ * weighed and buys only 2.5px, because the calorie line — which has no unit —
+ * then becomes the widest at 153.3. Not worth a figure that no longer says what
+ * it counts. The heading over the ≥768 grid has no width limit and says
+ * `Planned` in full (`right-now.tsx`).
  */
 export function MealDayGrid({
   meal,
