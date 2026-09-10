@@ -6,10 +6,13 @@ import {
   MET_BANDS,
   modelledMinutes,
   nearestWeight,
+  paceBand,
   REST_SECONDS,
   SECONDS_PER_REP,
   sessionEnergy,
   SUPPORT_BAND,
+  WALK_PACE_POINTS,
+  WALK_UNKNOWN_PACE_BAND,
   type WeighIn,
 } from "./energy";
 
@@ -69,6 +72,7 @@ describe("the formula", () => {
       exercises: rows(6, "work"),
       sets: [],
       durationMin: 30,
+      distanceM: null,
       weightKg: WEIGHT,
     });
 
@@ -88,6 +92,7 @@ describe("the formula", () => {
         // a test written there would be asserting `Math.floor` rather than the
         // formula.
         durationMin: 40,
+        distanceM: null,
         weightKg,
       });
 
@@ -106,6 +111,7 @@ describe("the formula", () => {
       exercises: SESSION_ROWS,
       sets: [],
       durationMin: 30,
+      distanceM: null,
       weightKg: WEIGHT,
     });
 
@@ -125,6 +131,7 @@ describe("the formula", () => {
         exercises: [],
         sets: [],
         durationMin: 30,
+        distanceM: null,
         weightKg: WEIGHT,
       }),
     ).toEqual(
@@ -133,6 +140,7 @@ describe("the formula", () => {
         exercises: rows(3, "work"),
         sets: [],
         durationMin: 30,
+        distanceM: null,
         weightKg: WEIGHT,
       }),
     );
@@ -144,6 +152,7 @@ describe("the formula", () => {
       exercises: [...rows(6, "work"), ...rows(4, "finisher")],
       sets: [],
       durationMin: 30,
+      distanceM: null,
       weightKg: WEIGHT,
     });
 
@@ -157,6 +166,7 @@ describe("the formula", () => {
       exercises: rows(4, "work"),
       sets: [],
       durationMin: 25,
+      distanceM: null,
       weightKg: WEIGHT,
     };
 
@@ -179,6 +189,7 @@ describe("where the duration comes from", () => {
       exercises: rows(6, "work"),
       sets: sets(15, 12),
       durationMin: 30,
+      distanceM: null,
       weightKg: WEIGHT,
     });
     const withoutSets = sessionEnergy({
@@ -186,6 +197,7 @@ describe("where the duration comes from", () => {
       exercises: rows(6, "work"),
       sets: [],
       durationMin: 30,
+      distanceM: null,
       weightKg: WEIGHT,
     });
 
@@ -235,6 +247,7 @@ describe("where the duration comes from", () => {
         exercises: rows(1, "work"),
         sets: sets(3, 10),
         durationMin: null,
+        distanceM: null,
         weightKg: WEIGHT,
       }),
     ).toBeNull();
@@ -251,6 +264,7 @@ describe("where the duration comes from", () => {
           exercises: rows(6, "work"),
           sets: [],
           durationMin,
+          distanceM: null,
           weightKg: WEIGHT,
         }),
       ).toBeNull();
@@ -265,6 +279,7 @@ describe("what yields no estimate", () => {
       exercises: rows(6, "work"),
       sets: sets(9, 8),
       durationMin: 45,
+      distanceM: null,
       weightKg: WEIGHT,
     });
 
@@ -274,17 +289,21 @@ describe("what yields no estimate", () => {
     expect(MET_BANDS.strength).toBeUndefined();
   });
 
-  test("the walk yields nothing — it is P11's, not this method's", () => {
+  test("a walk with no duration yields nothing, even carrying a distance", () => {
+    // The one gap FUEL-104's ladder deliberately does not fill. A walk has no
+    // sets, so with no duration there are no minutes to price and nothing to
+    // model them from — and a distance alone cannot supply them without
+    // inventing how long the walk took. Null rather than zero, as everywhere.
     expect(
       sessionEnergy({
         type: "walk",
         exercises: [],
         sets: [],
-        durationMin: 45,
+        durationMin: null,
+        distanceM: 3200,
         weightKg: WEIGHT,
       }),
     ).toBeNull();
-    expect(MET_BANDS.walk).toBeUndefined();
   });
 
   test("a session with no duration and no sets yields nothing", () => {
@@ -294,6 +313,7 @@ describe("what yields no estimate", () => {
         exercises: SESSION_ROWS,
         sets: [],
         durationMin: null,
+        distanceM: null,
         weightKg: WEIGHT,
       }),
     ).toBeNull();
@@ -306,6 +326,7 @@ describe("what yields no estimate", () => {
         exercises: rows(6, "work"),
         sets: [],
         durationMin: 30,
+        distanceM: null,
         weightKg: 0,
       }),
     ).toBeNull();
@@ -319,6 +340,7 @@ describe("what yields no estimate", () => {
       exercises: SESSION_ROWS,
       sets: sets(15, 12),
       durationMin: null,
+      distanceM: null,
       weightKg: WEIGHT,
     });
 
@@ -332,6 +354,7 @@ describe("what yields no estimate", () => {
         exercises: SESSION_ROWS,
         sets: sets(15, 12),
         durationMin: 30,
+        distanceM: null,
         weightKg: WEIGHT,
       }),
     ).not.toBeNull();
@@ -354,6 +377,7 @@ describe("how the figures are printed", () => {
       exercises: rows(6, "work"),
       sets: [],
       durationMin: 30,
+      distanceM: null,
       weightKg: WEIGHT,
     });
 
@@ -372,6 +396,7 @@ describe("how the figures are printed", () => {
       exercises: rows(1, "work"),
       sets: [],
       durationMin: 1,
+      distanceM: null,
       weightKg: WEIGHT,
     });
 
@@ -388,6 +413,7 @@ describe("how the figures are printed", () => {
       exercises: rows(1, "warmup"),
       sets: [],
       durationMin: 1,
+      distanceM: null,
       weightKg: WEIGHT,
     });
 
@@ -440,6 +466,7 @@ describe("the bodyweight a session is costed at", () => {
         exercises: rows(6, "work"),
         sets: [],
         durationMin: 30,
+        distanceM: null,
         weightKg: nearestWeight(weighIns, "2026-03-08", 99),
       });
 
@@ -475,6 +502,181 @@ describe("the bodyweight a session is costed at", () => {
   test("a weigh-in on the session's own date is used", () => {
     expect(nearestWeight([...MARCH, { date: "2026-03-08", weightKg: 87 }], "2026-03-08", 99)).toBe(
       87,
+    );
+  });
+});
+
+describe("the walk's estimate", () => {
+  /**
+   * § P11's figure, FUEL-104 — and the one FUEL-95 deferred.
+   *
+   * A walk has a MEASURED DISTANCE, which no other session type has, and
+   * distance over duration is a pace. The whole of this describe is the
+   * consequence: where a pace can be believed the walk is costed at it, and
+   * where it cannot the walk is still costed, on its duration alone, at a band
+   * wide enough to say the pace was not known.
+   *
+   * The fixture walk is 3.2 km, which is the distance `export.test.ts` already
+   * carries for one, at the durations each case needs.
+   */
+  const walk = (durationMin: number | null, distanceM: number | null) =>
+    sessionEnergy({
+      type: "walk",
+      exercises: [],
+      sets: [],
+      durationMin,
+      distanceM,
+      weightKg: WEIGHT,
+    });
+
+  test("costs a walk at the band its pace falls in", () => {
+    // 3.2 km in 45 minutes is about 4.27 km/h, inside the 4.0-4.8 km/h bracket
+    // whose METs are 3.0 and 3.5. Deliberately not a pace that lands ON a table
+    // point: a distance in metres over a duration in minutes almost never does,
+    // and a worked example sitting exactly on a boundary would be demonstrating
+    // the tie rule rather than the lookup. The tie rule is pinned on its own,
+    // against exact values, in "the walking pace table" below.
+    expect(rate(3.0, WEIGHT) * 45).toBeCloseTo(179.55);
+    expect(rate(3.5, WEIGHT) * 45).toBeCloseTo(209.475);
+    expect(walk(45, 3200)).toEqual({ lowKcal: 170, highKcal: 210 });
+  });
+
+  test("costs a faster walk more than a slower one over the same minutes", () => {
+    // The property the whole pace table exists for, asserted as a comparison
+    // rather than on two literals: the same forty minutes, twice the ground.
+    const strolled = walk(40, 2000);
+    const marched = walk(40, 4000);
+
+    expect(strolled).not.toBeNull();
+    expect(marched!.lowKcal).toBeGreaterThan(strolled!.lowKcal);
+    expect(marched!.highKcal).toBeGreaterThan(strolled!.highKcal);
+  });
+
+  test("falls back to the unknown-pace band when there is no distance", () => {
+    // A one-tap walk, and every walk logged before P11. Still costed — the
+    // ticket's "falls back cleanly where it does not, and never yields zero".
+    expect(rate(WALK_UNKNOWN_PACE_BAND.low, WEIGHT) * 45).toBeCloseTo(167.58);
+    expect(rate(WALK_UNKNOWN_PACE_BAND.high, WEIGHT) * 45).toBeCloseTo(257.355);
+    expect(walk(45, null)).toEqual({ lowKcal: 160, highKcal: 260 });
+  });
+
+  test("gives a measured walk a tighter range than an unmeasured one", () => {
+    // Why the pace table is worth having at all. Same walk, same minutes; the
+    // one carrying a distance is priced inside the one that does not.
+    const measured = walk(45, 3200)!;
+    const guessed = walk(45, null)!;
+
+    expect(measured.highKcal - measured.lowKcal).toBeLessThan(
+      guessed.highKcal - guessed.lowKcal,
+    );
+    expect(measured.lowKcal).toBeGreaterThanOrEqual(guessed.lowKcal);
+    expect(measured.highKcal).toBeLessThanOrEqual(guessed.highKcal);
+  });
+
+  test("refuses a pace it cannot believe and prices the duration instead", () => {
+    // 3.2 km in five minutes is 38 km/h, which is a mistyped figure, a forged
+    // write or a recording that kept running in a car — not a fast walk. The
+    // distance is dropped and the duration is still priced, at the wide band.
+    // NOT clamped to the top of the table, which would answer a broken row
+    // with a confident brisk-walk price.
+    expect(walk(5, 3200)).toEqual(walk(5, null));
+    expect(walk(5, 3200)).not.toBeNull();
+
+    // And the same at the other end: 200 m in forty minutes is 0.3 km/h, a row
+    // with more standing in it than walking.
+    expect(walk(40, 200)).toEqual(walk(40, null));
+  });
+
+  test("never yields zero, however short the walk", () => {
+    // 100 m in a minute is 6 km/h — a real pace, on a walk too short for the
+    // rounding to have anything left. `KCAL_STEP`'s floor is what stops this
+    // printing as a walk that cost nothing.
+    const brief = walk(1, 100);
+
+    expect(brief).not.toBeNull();
+    expect(brief!.lowKcal).toBeGreaterThanOrEqual(KCAL_STEP);
+    expect(brief!.highKcal).toBeGreaterThan(brief!.lowKcal);
+  });
+
+  test("scales with bodyweight, because the formula still does", () => {
+    const lighter = sessionEnergy({
+      type: "walk",
+      exercises: [],
+      sets: [],
+      durationMin: 45,
+      distanceM: 3200,
+      weightKg: WEIGHT / 2,
+    });
+
+    expect(lighter!.lowKcal).toBeLessThan(walk(45, 3200)!.lowKcal);
+  });
+});
+
+describe("the walking pace table", () => {
+  test("hands back the bracket a pace falls in, at every boundary", () => {
+    // Each adjacent pair pinned on its own, at BOTH its edges. A table whose
+    // brackets were off by one would still execute every line of the lookup,
+    // so the boundaries are the only thing that can catch it.
+    for (let i = 0; i < WALK_PACE_POINTS.length - 1; i++) {
+      const slower = WALK_PACE_POINTS[i]!;
+      const faster = WALK_PACE_POINTS[i + 1]!;
+      const band = { low: slower.met, high: faster.met };
+
+      // A pace at the slow edge, at the fast edge, and in the middle. The
+      // duration is one hour so the distance in metres IS the pace in km/h
+      // times a thousand, which keeps the arithmetic out of the assertion.
+      expect(paceBand(slower.kmh * 1000, 60)).toEqual(
+        // The slow edge of a bracket is the fast edge of the one below it, and
+        // a closed-at-both-ends bracket gives the lower one. Only the first
+        // point has no bracket below to lose to.
+        i === 0 ? band : { low: WALK_PACE_POINTS[i - 1]!.met, high: slower.met },
+      );
+      expect(paceBand(faster.kmh * 1000, 60)).toEqual(band);
+      expect(paceBand(((slower.kmh + faster.kmh) / 2) * 1000, 60)).toEqual(band);
+    }
+  });
+
+  test("has nothing to say off either end of the table", () => {
+    const slowest = WALK_PACE_POINTS[0]!;
+    const fastest = WALK_PACE_POINTS[WALK_PACE_POINTS.length - 1]!;
+
+    expect(paceBand(slowest.kmh * 1000 - 1, 60)).toBeUndefined();
+    expect(paceBand(fastest.kmh * 1000 + 1, 60)).toBeUndefined();
+  });
+
+  test("has nothing to say without both numbers", () => {
+    // Each of the four ways in, so none can be removed without a failure.
+    expect(paceBand(null, 40)).toBeUndefined();
+    expect(paceBand(3200, null)).toBeUndefined();
+    expect(paceBand(0, 40)).toBeUndefined();
+    expect(paceBand(-100, 40)).toBeUndefined();
+    expect(paceBand(3200, 0)).toBeUndefined();
+    expect(paceBand(3200, -5)).toBeUndefined();
+  });
+
+  test("rises with pace, and never faster than the printer can render", () => {
+    // Two structural invariants. Ascending on both axes, or the lookup's
+    // adjacent-pair walk would return an inverted band. And every bracket
+    // inside MAX_WIDTH_RATIO, or a walk landing in it would silently render
+    // NOTHING — the width guard is downstream of this table and does not know
+    // it is looking at a walk.
+    for (let i = 0; i < WALK_PACE_POINTS.length - 1; i++) {
+      const slower = WALK_PACE_POINTS[i]!;
+      const faster = WALK_PACE_POINTS[i + 1]!;
+
+      expect(faster.kmh).toBeGreaterThan(slower.kmh);
+      expect(faster.met).toBeGreaterThan(slower.met);
+      expect(faster.met / slower.met).toBeLessThanOrEqual(MAX_WIDTH_RATIO);
+    }
+  });
+
+  test("is the same band the type table hands out for a walk", () => {
+    // One definition. `MET_BANDS` is what `sessionEnergy` reaches for by type
+    // and `WALK_UNKNOWN_PACE_BAND` is what `walkBand` falls back to; two
+    // spellings of the fallback would be free to drift apart.
+    expect(MET_BANDS.walk).toBe(WALK_UNKNOWN_PACE_BAND);
+    expect(WALK_UNKNOWN_PACE_BAND.high / WALK_UNKNOWN_PACE_BAND.low).toBeLessThanOrEqual(
+      MAX_WIDTH_RATIO,
     );
   });
 });

@@ -403,13 +403,38 @@ describe("the estimate is never netted against intake", () => {
   test("the estimate does not reach for a target from its own side", () => {
     const energy = SOURCES.find(({ rel }) => rel === "lib/energy.ts");
 
-    // Two imports, both pure, and neither of them touches a macro. Asserted as
-    // the whole list rather than as an absence, so a third import is a decision
-    // somebody has to make here rather than one that lands unnoticed.
+    /*
+     * Three imports, all pure, and none of them touches a macro. Asserted as
+     * the whole list rather than as an absence, so a fourth import is a
+     * decision somebody has to make here rather than one that lands unnoticed.
+     *
+     * `./resolve-training` is the third and it arrived with FUEL-104, which is
+     * the ticket that gave the walk its own estimate. It is here for exactly
+     * one export, `WALK_TYPE`, and the alternative was spelling `"walk"` in
+     * `energy.ts` as a literal — which is the second spelling that constant
+     * exists to prevent, in a file that now branches on it.
+     *
+     * Two things make it safe rather than merely convenient. It carries no
+     * macro, no target and no intake figure of any kind, so the property this
+     * whole file guards — that the estimate never reaches for something to net
+     * itself against — is untouched by it. And it does not cost `energy.ts` its
+     * purity: `lib/walk.ts` already takes `WALK_TYPE` from the same module for
+     * the same reason, and its module comment records that this is what lets a
+     * CLIENT component import it "without dragging pg-core into the browser
+     * bundle". `components/training.tsx` imports both, so that property was
+     * already load-bearing before this import existed.
+     *
+     * What would NOT be acceptable is this growing into a general dependency
+     * on the resolver. One constant, named here.
+     */
     const specifiers = [
       ...(energy?.code.matchAll(/from\s+"([^"]+)"/g) ?? []),
     ].map((match) => match[1]);
 
-    expect(specifiers.sort()).toEqual(["./date", "./section"]);
+    expect(specifiers.sort()).toEqual([
+      "./date",
+      "./resolve-training",
+      "./section",
+    ]);
   });
 });
