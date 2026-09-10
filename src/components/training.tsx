@@ -995,12 +995,33 @@ export function Training({
         exercises: session.exercises,
         sets,
         durationMin: entry?.durationMin ?? null,
-        // The walk's measured distance, and null for every session — FUEL-104.
-        // Off `figures` rather than `entry` because that is where the walk's
-        // own numbers live; see `TrainingItem.figures` for why the two are
-        // separate. A session reaching this with a distance is not possible,
-        // and `sessionEnergy` would ignore it if it were.
-        distanceM: session.figures?.distanceM ?? null,
+        /*
+         * Always null here, and the reason is a ruling rather than an
+         * oversight — FUEL-104.
+         *
+         * `session` above is `sessions.find((item) => item.kind === "session")`,
+         * so a walk never reaches this call at all. A distance is the walk's
+         * alone, which makes `session.figures?.distanceM` a lookup that cannot
+         * return anything: `figures` is documented on `TrainingItem` as absent
+         * for a session precisely so nothing has to check `kind` first.
+         *
+         * The walk DOES have an estimate since FUEL-104 — `lib/energy.ts`
+         * prices it from its pace — and it reaches the export, both scopes.
+         * What it has no placement for is a screen. Brand Guide § The Route
+         * Trace settles what the walk's own figures are: "distance, duration,
+         * pace, the step estimate and its source, and the route's name when it
+         * has one — the key/value grid § Component Patterns already carries,
+         * with nothing invented for it", beside a list of what was decided
+         * against "so it is not re-litigated". A burn range is not on either
+         * list, and adding one here would be this component inventing a rule
+         * that section exists to have already made.
+         *
+         * So: written as the constant it is, rather than as a lookup that
+         * reads like it might one day return something. If the walk is ever
+         * given a place to show this, the ruling comes first and this line
+         * changes with it.
+         */
+        distanceM: null,
         weightKg: bodyweightKg,
       })
     : null;
