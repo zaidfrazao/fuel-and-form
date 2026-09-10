@@ -32,7 +32,7 @@ import { PageMain } from "@/components/page-main";
 import { RecentSessions } from "@/components/recent-sessions";
 import { RestTimer } from "@/components/rest-timer";
 import { Button } from "@/components/ui/button";
-import { WalkRow } from "@/components/walk-row";
+import { WalkList, WalkRow } from "@/components/walk-row";
 import { recentSessions, weekStanding } from "@/lib/adherence";
 import { addDays, type CalendarDate } from "@/lib/date";
 import type { WorkoutLogStatus } from "@/lib/db/schema";
@@ -1751,7 +1751,7 @@ export function Training({
              * way `/`'s logs are — a walk missed on Tuesday is recorded on
              * Tuesday, from the screen that shows Tuesday.
              */}
-            <ul className="flex flex-col">
+            <WalkList>
               {walks.map((walk) => (
                 <WalkRow
                   key={walk.entryId}
@@ -1761,7 +1761,7 @@ export function Training({
                   entry={walk.figures ?? null}
                 />
               ))}
-            </ul>
+            </WalkList>
           </section>
         )}
         </div>

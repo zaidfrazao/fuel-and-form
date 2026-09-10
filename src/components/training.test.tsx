@@ -275,6 +275,26 @@ describe("the session", () => {
     expect(screen.getAllByRole("button", { name: "Log walk" })).toHaveLength(2);
   });
 
+  test("states the recording caveat once for the pair, not once a row — FUEL-112", () => {
+    // jsdom has no `geolocation`, so a browser that can record is stubbed in;
+    // without it no row offers Record and there is no caveat to count.
+    vi.stubGlobal(
+      "navigator",
+      Object.assign(Object.create(navigator), {
+        geolocation: { watchPosition: vi.fn(), clearWatch: vi.fn() },
+      }),
+    );
+
+    try {
+      render(view({ sessions: [CIRCUIT, WALK, AFTERNOON_WALK] }));
+
+      expect(screen.getAllByRole("button", { name: "Record" })).toHaveLength(2);
+      expect(screen.getAllByText("/ Screen on, app open · uses battery")).toHaveLength(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   test("logs each walk against its own entry, in one tap each", async () => {
     // "Loggable in one tap" is the criterion, and two walks must not become a
     // picker followed by a tap. Each row is addressed by its own entry, which

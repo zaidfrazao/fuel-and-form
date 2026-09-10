@@ -19,6 +19,21 @@ import { WORKING_SECTION } from "@/lib/section";
 import type { WalkEntryView } from "@/lib/walk";
 
 /**
+ * A browser that can record — jsdom has no `geolocation`, so without this no
+ * walk row offers Record and the caveat is never drawn. Undone by the caller.
+ */
+const withGeolocation = () =>
+  vi.stubGlobal(
+    "navigator",
+    Object.assign(Object.create(navigator), {
+      geolocation: { watchPosition: vi.fn(), clearWatch: vi.fn() },
+    }),
+  );
+
+/** Every copy of the recording caveat on screen — FUEL-112. */
+const caveats = () => screen.queryAllByText("/ Screen on, app open · uses battery");
+
+/**
  * The server actions are mocked, for the reason `login/page.test.tsx` gives
  * about its own: `@/app/actions/log` is a "use server" module that imports the
  * database, `server-only` and a session, none of which resolve under the
@@ -882,6 +897,19 @@ describe("anytime items", () => {
     expect(within(list).getAllByRole("button", { name: "Log walk" })).toHaveLength(2);
   });
 
+  test("states the recording caveat once for the pair, not once a row — FUEL-112", () => {
+    withGeolocation();
+
+    try {
+      renderNow(active(0, { anytime: [WALK, WALK_2] }));
+
+      expect(screen.getAllByRole("button", { name: "Record" })).toHaveLength(2);
+      expect(caveats()).toHaveLength(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   test("logs each walk against its own entry, in one tap each", async () => {
     // "Loggable in one tap" per walk. Two walks must not become a picker and a
     // tap, and a tap on one must never write the other — which is the ticket's
@@ -1282,6 +1310,19 @@ describe("day-complete", () => {
     );
 
     expect(screen.getAllByRole("button", { name: "Log walk" })).toHaveLength(2);
+  });
+
+  test("states the recording caveat once for the outstanding pair — FUEL-112", () => {
+    withGeolocation();
+
+    try {
+      renderNow({ ...BASE, state: "day-complete", anytime: [WALK, WALK_2] }, EXERCISES, LOGGED);
+
+      expect(screen.getAllByRole("button", { name: "Record" })).toHaveLength(2);
+      expect(caveats()).toHaveLength(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   test("narrows to the walk still outstanding, and not the pair", () => {
