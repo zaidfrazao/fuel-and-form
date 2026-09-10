@@ -408,7 +408,26 @@ function DayTotals({
  * The 46px is the dense row as `training.tsx` draws it: `py-[11px]` around a
  * 23px body line and a 1px hairline. `tabular-nums` on the time so the two
  * names start on one x; `shrink-0` so a long name gives way and the time never
- * does. The name still truncates — whether it should wrap is FUEL-111's.
+ * does.
+ *
+ * ## The name wraps — FUEL-111
+ *
+ * It truncated, and `/` was the one screen still cutting a meal's name that
+ * `/plan` and `/shopping` both refuse to cut: "a half-read meal name is not a
+ * meal you can recognise". So it wraps, with the shopping list's spelling —
+ * `min-w-0 break-words`, which also breaks a single unbroken token rather than
+ * pushing the row wide.
+ *
+ * Measured at 375×667 in the morning state FUEL-109 measured (eyebrow at y
+ * 412, the bar's top at 499): a wrapped first row runs 442–511, and its second
+ * line ends at 499 — the whole name is on the screen. The second row was behind
+ * the bar before the wrap and is behind it after, so the wrap hides nothing that
+ * was visible. A two-line clamp was the alternative and draws the same pixels:
+ * the library's longest name, fifty characters, is two lines at 320 and at 375.
+ *
+ * `items-baseline` rather than `items-center`, so the time sits on the name's
+ * first line, the way a timetable prints it, instead of floating between two.
+ * Both halves are one body line, so a row that does not wrap is unmoved.
  */
 function UpNext({ items }: { items: readonly ScheduledItem[] }) {
   const next = items.slice(0, 2);
@@ -422,10 +441,10 @@ function UpNext({ items }: { items: readonly ScheduledItem[] }) {
         {next.map((item) => (
           <li
             key={item.key}
-            className="flex min-h-[46px] items-center gap-3 border-b border-border py-[11px] last:border-b-0"
+            className="flex min-h-[46px] items-baseline gap-3 border-b border-border py-[11px] last:border-b-0"
           >
             <span className="shrink-0 text-body tabular-nums text-text-secondary">{item.at}</span>
-            <span className="min-w-0 flex-1 truncate text-body text-text-primary">
+            <span className="min-w-0 flex-1 break-words text-body text-text-primary">
               {itemName(item)}
             </span>
           </li>
@@ -466,6 +485,13 @@ function UpNext({ items }: { items: readonly ScheduledItem[] }) {
  * the height that row already has everywhere it appears, and the mock draws
  * these two lists at the same 44.
  *
+ * The name wraps, and the word or time on the right is `shrink-0` so the name is
+ * the half that gives — FUEL-111, on the same ground as Up next above. The
+ * column is 298px at ≥1272, and "Roasted Red Pepper & Provolone Ciabatta Roll"
+ * was cut off in it; wrapped, its row is 67px and the page is no taller. The
+ * word stays centred on the row, which is how the mock's `.row` places a
+ * trailing word beside a title that wraps.
+ *
  * An item the cursor has walked past without logging keeps its time rather than
  * inventing a word for it. That is the manual advance's own state — "I'm done"
  * without a tap on anything — and § Tone of Voice would rather say nothing than
@@ -485,7 +511,7 @@ function TheDay({ rows }: { rows: readonly DayRow[] }) {
           >
             <span
               className={cn(
-                "truncate text-body",
+                "min-w-0 break-words text-body",
                 row.place === "past" ? "text-text-secondary" : "text-text-primary",
               )}
             >
@@ -493,11 +519,11 @@ function TheDay({ rows }: { rows: readonly DayRow[] }) {
             </span>
 
             {row.place === "now" ? (
-              <span className="text-micro uppercase text-text-primary">Now</span>
+              <span className="shrink-0 text-micro uppercase text-text-primary">Now</span>
             ) : row.status ? (
               <span
                 className={cn(
-                  "text-micro uppercase text-text-secondary",
+                  "shrink-0 text-micro uppercase text-text-secondary",
                   // The same step down day-complete makes, and for the reason
                   // it gives: "a skip is a neutral fact about the day, and
                   // greying it out is the closest this screen could come to a
@@ -508,7 +534,7 @@ function TheDay({ rows }: { rows: readonly DayRow[] }) {
                 {STATUS_LABEL[row.status]}
               </span>
             ) : (
-              <span className="text-body text-text-secondary">{row.at}</span>
+              <span className="shrink-0 text-body text-text-secondary">{row.at}</span>
             )}
           </li>
         ))}
@@ -565,8 +591,11 @@ function Anytime({
               key={item.key}
               className="flex min-h-[54px] items-center justify-between gap-4 border-b border-border py-3 last:border-b-0"
             >
-              <span className="truncate text-body text-text-primary">{itemName(item)}</span>
-              <span className="text-micro uppercase text-text-tertiary">
+              {/* Wraps rather than truncates, as every name on `/` does — FUEL-111. */}
+              <span className="min-w-0 break-words text-body text-text-primary">
+                {itemName(item)}
+              </span>
+              <span className="shrink-0 text-micro uppercase text-text-tertiary">
                 {itemLabel(item)}
               </span>
             </li>

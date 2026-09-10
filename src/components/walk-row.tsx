@@ -715,7 +715,14 @@ export function WalkRow({
   return (
     <li className="flex flex-col border-b border-border last:border-b-0">
       <div className="flex min-h-[54px] items-center justify-between gap-4 py-3">
-        <span className="truncate text-body text-text-primary">{name}</span>
+        {/*
+         * Wraps rather than truncates — FUEL-111, which found this the one
+         * name on `/` the ticket had not listed. At 320 the controls beside it
+         * left "Afternoon Walk" 110px and it was cut; wrapped, the row is 99px
+         * and every control keeps its width, because they are `shrink-0` and
+         * the name is the half that gives.
+         */}
+        <span className="min-w-0 break-words text-body text-text-primary">{name}</span>
 
         {recording ? (
           <Button variant="secondary" size="xs" className="shrink-0" onClick={stop}>
@@ -743,7 +750,7 @@ export function WalkRow({
            * `Done` stays because it is the STATUS, and status is what this
            * corner of the row has always carried.
            */
-          <span role="status" className="text-micro uppercase text-text-secondary">
+          <span role="status" className="shrink-0 text-micro uppercase text-text-secondary">
             Done
           </span>
         ) : (
