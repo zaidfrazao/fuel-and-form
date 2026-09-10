@@ -291,9 +291,10 @@ describe("the scale beside the NOW pill", () => {
   const TEXT_SCALES = [1, 1.5, 2];
 
   /**
-   * The phone's copy runs from ~265px (a 320 screen at 200%) to ~723 (767 at
-   * 100%), sampled every 3px because the expression is piecewise linear in the
-   * width; then the band's 720, its 776 ceiling, and the header's widths.
+   * The phone's copy is the screen less its 22px gutters — 331px at 375, so
+   * ~275 to ~723 — swept from 240 with room to spare and sampled every 3px,
+   * because the expression is piecewise linear in the width; then the band's
+   * 720, its 776 ceiling, and the header's widths.
    */
   const RULER_WIDTHS = [
     ...Array.from({ length: 177 }, (_, i) => 240 + i * 3),

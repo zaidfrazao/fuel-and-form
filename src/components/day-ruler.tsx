@@ -254,7 +254,7 @@ const ANCHOR_CLASS: Record<LabelAnchor, string> = {
  *
  * Computed in CSS because nothing else knows the two unknowns. This is a server
  * component that never learns its width — three copies are rendered and CSS
- * picks one, the phone's alone spanning ~290–735px — and `em` grows with
+ * picks one, the phone's alone spanning ~275–723px — and `em` grows with
  * Dynamic Type while the percentages do not. A threshold in minutes chosen here
  * would be wrong at one end of that range or the other; `cqw` is the ruler's
  * width as the browser laid it out (the box is an inline-size container for
@@ -368,8 +368,9 @@ export function DayRuler({
     <div className={cn("flex flex-col", className)}>
       {/* 41px: the NOW pill's baseline at 26 plus its 10.5px cap height and 2px
           of padding either side. "Roughly 40px including its scale", as the
-          guide has it. */}
-      {/* `@container` so a scale label can measure itself against the pill in
+          guide has it.
+
+          `@container` so a scale label can measure itself against the pill in
           `cqw` — see `scaleLabelClip`. Every child is absolutely positioned, so
           the box's intrinsic width was already nothing and inline-size
           containment changes no layout. */}
