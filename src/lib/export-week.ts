@@ -482,6 +482,7 @@ function burnResolver(
           exercises: exercisesByWorkout.get(session.workoutId) ?? [],
           sets: setsByLog.get(session.log.id) ?? [],
           durationMin: session.log.durationMin,
+          distanceM: session.log.distanceM,
           weightKg: nearestWeight(
             input.weighIns,
             session.date,

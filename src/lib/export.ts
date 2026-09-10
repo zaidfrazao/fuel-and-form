@@ -588,6 +588,7 @@ function sessionEnergies(tables: ExportTables): SessionEnergyRow[] {
         exercises: exercisesByWorkout.get(log.workoutId) ?? [],
         sets: setsByLog.get(log.id) ?? [],
         durationMin: log.durationMin,
+        distanceM: log.distanceM,
         weightKg: nearestWeight(
           tables.weightLogs,
           log.date,

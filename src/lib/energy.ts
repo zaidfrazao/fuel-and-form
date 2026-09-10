@@ -1,4 +1,5 @@
 import { type CalendarDate, daysBetween } from "./date";
+import { WALK_TYPE } from "./resolve-training";
 import { WORKING_SECTION } from "./section";
 
 /**
@@ -113,20 +114,151 @@ export type Band = { low: number; high: number };
  * A missing MET renders no estimate; it does not render a zero, because a zero
  * is a claim that the session cost nothing.
  *
- * There is no entry for `walk`, and that absence is load-bearing rather than an
- * oversight. FUEL-95 defers the walk to P11, "where a measured distance and
- * duration make a much better estimate than a MET guess" — so the deferral is
- * expressed by the mechanism that already exists for an unrecognised type,
- * rather than by a second rule this file would then have to keep in step.
+ * The `walk` entry arrived with FUEL-104 and is the FALLBACK half of the walk's
+ * estimate, not the whole of it. FUEL-95 deferred the walk to P11 "where a
+ * measured distance and duration make a much better estimate than a MET guess",
+ * and `WALK_PACE_POINTS` below is that better estimate; this entry is what a
+ * walk is costed at when it has no distance to derive a pace from. Until
+ * FUEL-104 there was no entry at all and the deferral was expressed by the
+ * lookup missing — that is no longer true, and the reason it changed is that a
+ * walk with a duration and no distance is a real case (a one-tap walk, and
+ * every walk logged before P11) which was rendering no estimate rather than the
+ * honest wide one.
  *
- * Values are the Compendium of Physical Activities' bands for the two things
+ * Values are the Compendium of Physical Activities' bands for the three things
  * this program actually schedules: general circuit training and calisthenics
- * (5.0–8.0), and rope-skipping intervals (8.0–12.0).
+ * (5.0–8.0), rope-skipping intervals (8.0–12.0), and walking at an unknown pace
+ * (2.8–4.3, the compendium's 3.2 km/h and 5.6 km/h figures — see
+ * `WALK_PACE_POINTS` for why those two bound "an ordinary walk").
  */
+/**
+ * What a walk is costed at when its pace is not known — the fallback rung of
+ * `walkBand`'s ladder, and `MET_BANDS[WALK_TYPE]`'s value.
+ *
+ * A named constant rather than a literal inside the table because `walkBand`
+ * returns it directly. Reaching it back out of `MET_BANDS` would be an index
+ * into a `Record<string, Band>`, which is `Band | undefined` — so the one
+ * function guaranteeing a walk always has a band would need a non-null
+ * assertion to say so. Naming the value moves that guarantee into the types.
+ *
+ * The bounds are the compendium's figures for 3.2 km/h and 5.6 km/h, which is
+ * the span `WALK_PACE_POINTS` covers between "slow" and "brisk" — an ordinary
+ * walk, in other words, with neither end of the table's stroll or its charge
+ * included. A walk whose pace is unknown is far likelier to be an ordinary one
+ * than either extreme, and widening this to the table's full 2.0–7.0 would
+ * trip `MAX_WIDTH_RATIO` and render nothing at all.
+ */
+export const WALK_UNKNOWN_PACE_BAND: Band = { low: 2.8, high: 4.3 };
+
 export const MET_BANDS: Record<string, Band> = {
   circuit: { low: 5.0, high: 8.0 },
   intervals: { low: 8.0, high: 12.0 },
+  [WALK_TYPE]: WALK_UNKNOWN_PACE_BAND,
 };
+
+/**
+ * What walking costs at the paces the Compendium of Physical Activities quotes
+ * it at — § P11's estimate, FUEL-104.
+ *
+ * ## Why a walk gets its own table when no other type does
+ *
+ * A walk has something a circuit does not: a MEASURED DISTANCE. Distance over
+ * duration is a pace, and pace is most of what determines what walking costs —
+ * a 6 km/h walk and a 3 km/h stroll are genuinely different rates and the app
+ * can tell them apart, which is exactly the reason FUEL-95 refused to guess a
+ * single walking MET and deferred to here.
+ *
+ * ## The band between two points, rather than a point with an invented spread
+ *
+ * A pace lands between two of these entries and takes the METs of the two it
+ * falls between. So every bound this file prints for a walk is a compendium
+ * figure rather than one of ours, and the WIDTH of the range is the width of
+ * the bracket the walk's pace fell in — which is the honest statement of what a
+ * pace can and cannot pin down. The alternative, a central MET ± some
+ * percentage, would have required inventing the percentage.
+ *
+ * The bands come out narrower than `MET_BANDS[WALK_TYPE]`, and that is the
+ * point: a measurement replaced a guess, so the estimate got tighter. It does
+ * not get tighter than `KCAL_STEP`, which still rounds both bounds outward to
+ * ten kcal and still refuses a range narrower than one step.
+ *
+ * ## What is NOT modelled, said out loud
+ *
+ * Individual variation. The compendium's figures are population averages and
+ * two people walking at 5 km/h do not burn identically. Nothing in this app
+ * measures what would be needed to model that, so it is not modelled and the
+ * range should not be read as covering it. § P11's requirement that the figure
+ * present as an estimate is what carries this to the reader; the alternative —
+ * padding the band by a made-up factor to look suitably humble — would put a
+ * number in the file that no source could be given for.
+ *
+ * ## The ends
+ *
+ * Below 2.4 km/h and above 7.2 km/h a walk is off this table, and
+ * `paceBand` treats that as a distance it cannot believe rather than as a very
+ * slow or very fast walk. See there.
+ */
+export const WALK_PACE_POINTS: readonly { kmh: number; met: number }[] = [
+  { kmh: 2.4, met: 2.0 },
+  { kmh: 3.2, met: 2.8 },
+  { kmh: 4.0, met: 3.0 },
+  { kmh: 4.8, met: 3.5 },
+  { kmh: 5.6, met: 4.3 },
+  { kmh: 6.4, met: 5.0 },
+  { kmh: 7.2, met: 7.0 },
+];
+
+/**
+ * The MET band for a walk that covered `distanceM` metres in `durationMin`
+ * minutes, or `undefined` where no pace can be believed.
+ *
+ * Four ways to get nothing, and each is a real row rather than a defensive one:
+ *
+ *   - No distance. A one-tap walk, and every walk logged before P11.
+ *   - No duration, or a non-positive one. `sessionEnergy` has already reduced
+ *     the latter to `null`; this repeats the `> 0` test because the function is
+ *     exported and a caller could hand it anything.
+ *   - A non-positive distance, for the same reason — zero metres over twenty
+ *     minutes is not a stationary walk, it is a row nobody wrote.
+ *   - A pace off the ends of `WALK_PACE_POINTS`.
+ *
+ * That last one is a judgement and it is worth stating. A walk averaging 12
+ * km/h is not a fast walk, it is a distance or a duration that is wrong — a
+ * mistyped figure, a forged write, or a recording that kept running in a car.
+ * Clamping to the top of the table would answer it with a confident 7-MET
+ * brisk-walk price. Returning `undefined` instead hands it back to
+ * `MET_BANDS[WALK_TYPE]`, so the walk is still costed, but on its duration
+ * alone and at the wide band that says the pace was not known. The same
+ * applies under 2.4 km/h, which is a walk with more standing in it than
+ * walking, and where the duration is the more trustworthy of the two numbers.
+ */
+export function paceBand(
+  distanceM: number | null,
+  durationMin: number | null,
+): Band | undefined {
+  if (distanceM === null || distanceM <= 0) return undefined;
+  if (durationMin === null || durationMin <= 0) return undefined;
+
+  const kmh = (distanceM / 1000) * (60 / durationMin);
+
+  // Walked as adjacent pairs rather than by index, which keeps the bounds check
+  // out of it entirely — there is no `i + 1` to run off the end of.
+  let slower: { kmh: number; met: number } | undefined;
+
+  for (const faster of WALK_PACE_POINTS) {
+    // The bracket is closed at BOTH ends, so a pace landing exactly on an
+    // interior point takes the band below it rather than falling through to
+    // the one above. Either is defensible; what is not is having no rule and
+    // letting the loop's direction decide.
+    if (slower && kmh >= slower.kmh && kmh <= faster.kmh) {
+      return { low: slower.met, high: faster.met };
+    }
+
+    slower = faster;
+  }
+
+  return undefined;
+}
 
 /**
  * The band a warm-up or a cool-down is costed at — stretching and light
@@ -219,6 +351,16 @@ export type EnergyInput = {
   sets: readonly { reps: number }[];
   /** `workout_logs.duration_min`. Wins outright over the modelled duration. */
   durationMin: number | null;
+  /**
+   * `workout_logs.distance_m` — the walk's measured distance, and null for
+   * everything else in the table.
+   *
+   * Read only for a walk (see `sessionEnergy`), because it is the only type
+   * with a pace table to look a distance up in. A distance on a circuit would
+   * be ignored rather than rejected: the column is nullable for every session
+   * and a value there would be data this file has no model for, not an error.
+   */
+  distanceM: number | null;
   /** From `nearestWeight`, never from "the latest weigh-in". */
   weightKg: number;
 };
@@ -327,16 +469,49 @@ export function modelledMinutes(sets: readonly { reps: number }[]): Band {
 }
 
 /**
+ * The band a walk is costed at — the two-step ladder § P11 asks for.
+ *
+ * Pace where a distance exists, the wide unknown-pace band where it does not.
+ * Never nothing: `MET_BANDS[WALK_TYPE]` is a constant of this module, so this
+ * function cannot return `undefined` and a walk therefore never falls out of
+ * `sessionEnergy` for want of a band. The ticket's "falls back cleanly where it
+ * does not, and never yields zero" is kept HERE, by the fallback existing,
+ * rather than by a zero being filtered out somewhere downstream.
+ *
+ * A walk with no duration still yields no estimate, and that happens below
+ * rather than here — it has no minutes for any band to be applied to. That is
+ * the one gap the ladder deliberately does not fill, because filling it would
+ * mean inventing how long the walk was.
+ */
+function walkBand(input: EnergyInput, loggedMin: number | null): Band {
+  return paceBand(input.distanceM, loggedMin) ?? WALK_UNKNOWN_PACE_BAND;
+}
+
+/**
  * What a session cost, or `null` for a session this method has nothing to say
  * about.
  *
  * `null` in four cases, and every one of them is "no number" rather than a zero:
- * a `workouts.type` with no MET band (which includes the walk), a session with
- * no logged duration and no logged sets, a bodyweight of nothing, and a range
- * too wide to mean anything. See `MAX_WIDTH_RATIO` for the last.
+ * a `workouts.type` with no MET band, a session with no logged duration and no
+ * logged sets, a bodyweight of nothing, and a range too wide to mean anything.
+ * See `MAX_WIDTH_RATIO` for the last.
+ *
+ * The walk is no longer among the first of those — FUEL-104 gave it a band, and
+ * `walkBand` below is the two-step ladder it resolves through. What a walk can
+ * still return `null` for is the second case: a walk with no duration at all
+ * has no minutes to price and no sets to model them from, which is a walk
+ * nobody recorded rather than a walk that cost nothing.
  */
 export function sessionEnergy(input: EnergyInput): EnergyRange | null {
-  const band = MET_BANDS[input.type];
+  // A non-positive duration is treated as no duration. `session-entry.ts`
+  // refuses one at the edge, so this is only ever a forged write — and the
+  // honest reading of "this session lasted −5 minutes" is that nobody said.
+  const logged =
+    input.durationMin !== null && input.durationMin > 0 ? input.durationMin : null;
+
+  // Resolved before the row shares below because a walk's band depends on its
+  // DURATION as well as its type — everything else here is keyed by type alone.
+  const band = input.type === WALK_TYPE ? walkBand(input, logged) : MET_BANDS[input.type];
 
   if (!band) return null;
 
@@ -344,12 +519,6 @@ export function sessionEnergy(input: EnergyInput): EnergyRange | null {
   const workRows = input.exercises.filter(
     (exercise) => exercise.section === WORKING_SECTION,
   ).length;
-
-  // A non-positive duration is treated as no duration. `session-entry.ts`
-  // refuses one at the edge, so this is only ever a forged write — and the
-  // honest reading of "this session lasted −5 minutes" is that nobody said.
-  const logged =
-    input.durationMin !== null && input.durationMin > 0 ? input.durationMin : null;
 
   // Where the two bands apply. With a logged duration the session's minutes are
   // split by row share; with a modelled one the sets ARE the working minutes and

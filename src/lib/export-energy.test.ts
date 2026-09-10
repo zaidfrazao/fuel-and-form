@@ -585,6 +585,7 @@ describe("the check itself", () => {
         exercises: EXERCISES,
         sets: SETS,
         durationMin: DURATION_MIN,
+        distanceM: null,
         weightKg: BODYWEIGHT_KG,
       }),
     ).toEqual(BURN);

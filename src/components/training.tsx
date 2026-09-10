@@ -995,6 +995,12 @@ export function Training({
         exercises: session.exercises,
         sets,
         durationMin: entry?.durationMin ?? null,
+        // The walk's measured distance, and null for every session — FUEL-104.
+        // Off `figures` rather than `entry` because that is where the walk's
+        // own numbers live; see `TrainingItem.figures` for why the two are
+        // separate. A session reaching this with a distance is not possible,
+        // and `sessionEnergy` would ignore it if it were.
+        distanceM: session.figures?.distanceM ?? null,
         weightKg: bodyweightKg,
       })
     : null;
