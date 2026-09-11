@@ -299,7 +299,7 @@ function MealMacros({
        * This grid is the measure's, so it takes the four. `DayTotals` is drawn
        * twice, and each copy takes its column's count: the aside's keeps the
        * two, and the copy below the cap, which is in this column, takes the
-       * four with it so that Calories sits over Calories (FUEL-116). Same
+       * four with it so that each label sits over its own (FUEL-116). Same
        * component, same rule about content, two column counts because the two
        * columns are different widths — which is why the count is a prop rather
        * than something the grid works out.
@@ -352,10 +352,10 @@ function MealMacros({
  * in different columns. The cap's opens the 356px aside and is 2×2, the density
  * the phone proves. The other is drawn below the cap, where the aside group is
  * `display: contents`, so it is in the 584px measure directly under `This
- * meal`. It was 2×2 there too, under a grid drawn four across, so Calories did
- * not sit over Calories. It takes `This meal`'s four, which is the same
- * `KV_GRID_COLUMNS` entry, so the two share their tracks. That also makes it
- * 2×2 on a phone, where a workout card still draws it.
+ * meal`. It was 2×2 there too, under a grid drawn four across, so its Protein
+ * sat under Fat and its Fat under Calories. It takes `This meal`'s four, which
+ * is the same `KV_GRID_COLUMNS` entry, so the two share their tracks. That also
+ * makes it 2×2 on a phone, where a workout card still draws it.
  */
 function DayTotals({
   planned,

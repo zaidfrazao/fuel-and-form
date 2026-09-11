@@ -1093,8 +1093,8 @@ test.describe("/ at the cap — FUEL-115", () => {
  *
  * From 768 to 1271 the aside group is `display: contents`, so the copy of
  * `Planned` drawn there is in the measure, directly under `This meal`. It drew
- * 2×2 under a grid drawn four across, so Calories did not sit over Calories,
- * and Fat sat under Protein. Both now read `KV_GRID_COLUMNS[4]`, which
+ * 2×2 under a grid drawn four across, so its Protein sat under Fat and its Fat
+ * under Calories. Both now read `KV_GRID_COLUMNS[4]`, which
  * `right-now.test.tsx` holds. Whether that puts them on the same tracks is a
  * question about rendered boxes, and jsdom has none.
  *

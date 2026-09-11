@@ -3018,9 +3018,9 @@ describe("the second column", () => {
      * "In different columns" is true at the cap and nowhere else. Below it the
      * aside group is `display: contents`, so the copy of `Planned` drawn from
      * 768 to 1271 sits in the same 584px column as `This meal`, directly under
-     * it. It drew 2×2 there under a grid drawn four across, so Calories did not
-     * sit over Calories, and this test checked only the aside's copy, so it
-     * passed.
+     * it. It drew 2×2 there under a grid drawn four across, so its Protein sat
+     * under Fat and its Fat under Calories, and this test checked only the
+     * aside's copy, so it passed.
      *
      * Asserted as the same shape as the meal's, read from `KV_GRID_COLUMNS`,
      * because the property is that the two share their tracks, and the same
