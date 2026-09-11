@@ -36,6 +36,9 @@ const skeleton = () => {
   return container;
 };
 
+/** A class string as its utilities, so `hidden` is not found inside `xl:hidden`. */
+const tokens = (node: Element) => node.className.split(" ").filter(Boolean);
+
 describe("the skeleton stands in the same frame as the screen", () => {
   test("takes the page grid from the same constants", () => {
     const main = skeleton().querySelector("main")!;
@@ -123,7 +126,7 @@ describe("the skeleton stands in the same frame as the screen", () => {
 
     const merged = container.querySelector('[data-shape="merged"]')!;
     const split = container.querySelector('[data-shape="split"]')!;
-    const day = container.querySelector('[data-shape="day"]')!;
+    const day = container.querySelector('[data-shape="day"][data-at="cap"]')!;
 
     expect(merged.className).toBe("md:hidden");
     expect(merged.querySelector(".grid")!.className).toContain("gap-y-[14px]");
@@ -158,6 +161,38 @@ describe("the skeleton stands in the same frame as the screen", () => {
     // figures and neither of these is drawn.
     expect(day.className).toContain("hidden");
     expect(day.querySelector(".grid")!.className).toContain("gap-y-[22px]");
+  });
+
+  test("draws the day's figures in the shape each side of the cap draws them — FUEL-116", () => {
+    // Two blocks where FUEL-115 wrote one, because the two copies on the screen
+    // stopped being the same shape. Below the cap `Planned` is on the measure
+    // and goes four across under `This meal`; at the cap it opens the aside and
+    // stays 2×2. One block could draw only one of those, and the other width
+    // would shift on swap-in, by a whole row, since four across is one row of
+    // three-line cells where 2×2 is two.
+    const container = skeleton();
+
+    const blocks = container.querySelectorAll('[data-shape="day"]');
+    const band = container.querySelector('[data-shape="day"][data-at="band"]')!;
+    const cap = container.querySelector('[data-shape="day"][data-at="cap"]')!;
+
+    expect(blocks).toHaveLength(2);
+
+    // Each drawn in its own band and nowhere else. The band's is bound with
+    // `md:max-xl:` for the reason the screen's copy is: the redefined `xl` is
+    // emitted before `md`, so an `xl:hidden` would never outrank a `md:flex`.
+    expect(tokens(band)).toEqual(expect.arrayContaining(["hidden", "md:max-xl:flex"]));
+    expect(tokens(cap)).toEqual(expect.arrayContaining(["hidden", "xl:flex"]));
+
+    // Read from the declaration the screen reads, so the skeleton cannot be
+    // given a different count by an edit to one of the two.
+    for (const utility of KV_GRID_COLUMNS[4].split(" ")) {
+      expect(tokens(band.querySelector(".grid")!)).toContain(utility);
+    }
+    expect(cap.querySelector(".grid")!.className).not.toMatch(/(md|lg|xl):grid-cols/);
+
+    // The band's cells are the screen's: label, value and slash line.
+    expect(band.querySelector(".grid")!.className).toContain("gap-y-[22px]");
   });
 
   test("draws the list each width shows, at that list's row height", () => {

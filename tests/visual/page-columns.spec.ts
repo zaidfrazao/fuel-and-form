@@ -1087,3 +1087,114 @@ test.describe("/ at the cap — FUEL-115", () => {
     }
   });
 });
+
+/**
+ * `/`'s two macro grids in the band — FUEL-116.
+ *
+ * From 768 to 1271 the aside group is `display: contents`, so the copy of
+ * `Planned` drawn there is in the measure, directly under `This meal`. It drew
+ * 2×2 under a grid drawn four across, so its Protein sat under Fat and its Fat
+ * under Calories. Both now read `KV_GRID_COLUMNS[4]`, which
+ * `right-now.test.tsx` holds. Whether that puts them on the same tracks is a
+ * question about rendered boxes, and jsdom has none.
+ *
+ * 768 is the band's narrowest measure and 1271 its last pixel. 820 is the
+ * width the baselines photograph and 1024 the width the fault was seen live at.
+ * The measure is 584 at all four, so this is one layout asked four times, and
+ * the widths are the ones where a leak would land first.
+ */
+test.describe("/'s macro grids in the band — FUEL-116", () => {
+  const BAND = [768, 820, 1024, 1271];
+
+  /** The labels of `This meal`'s grid, the one drawn at every band width. */
+  const mealLabels = (page: import("@playwright/test").Page) =>
+    page.locator('[data-shape="split"] dt');
+
+  /** The drawn copy of `Planned`: a role query skips the copy that is `display: none`. */
+  const planned = (page: import("@playwright/test").Page) =>
+    page
+      .locator("main section")
+      .filter({ has: page.getByRole("heading", { name: "Planned", exact: true }) });
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("main")).toBeVisible();
+    // One `main` means the skeleton has gone — see `scrollbar-gutter.spec.ts`.
+    // The skeleton's grids carry the same shapes, so measuring one by mistake
+    // would pass.
+    await expect(page.locator("main")).toHaveCount(1);
+  });
+
+  for (const width of BAND) {
+    test(`Planned's columns are This meal's at ${width}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+
+      await expect(planned(page), "one drawn copy of the day's totals").toHaveCount(1);
+
+      const meal = await mealLabels(page).all();
+      const day = await planned(page).locator("dt").all();
+
+      expect(meal, "This meal's four").toHaveLength(4);
+      expect(day, "Planned's four").toHaveLength(4);
+
+      // Pairwise, and by label as well as by position: a grid that drew four
+      // across in a different order would line up its columns and still put Fat
+      // under Protein.
+      for (const [index, label] of meal.entries()) {
+        const above = await boxOf(label);
+        const below = await boxOf(day[index]!);
+
+        expect(await day[index]!.textContent()).toBe(await label.textContent());
+        expect(below.x, `${await label.textContent()}'s left edge`).toBeCloseTo(above.x, 0);
+        expect(below.y, "and on the row beneath").toBeGreaterThan(above.y);
+      }
+
+      // One row, which is what four across is. 2×2 puts Fat 60-odd px under
+      // Calories, and the x assertions above would already have failed on it,
+      // but a row count says the shape in the ticket's own terms.
+      const tops = await Promise.all(day.map(async (label) => (await boxOf(label)).y));
+
+      expect(new Set(tops.map(Math.round)).size, "rows of Planned").toBe(1);
+    });
+  }
+
+  test("no value or slash line wraps at the band's narrowest measure", async ({ page }) => {
+    /*
+     * The ticket's fit check, measured rather than computed. At 768 a cell is
+     * (584 − 3 × 16) / 4 = 134px, and `Planned`'s cells are the widest of the
+     * two grids: a value above `/ of 1,780 · −170`. A line that wrapped would
+     * be one of the grid's cells a line taller than its neighbours, and a
+     * figure broken across two lines.
+     *
+     * A line box is asked for by height against the line's own computed
+     * `line-height`, since both spans are flex items (blockified) and report
+     * one rect however many lines they hold.
+     *
+     * The frozen demo's day, in Liberation Sans, the face the baselines render.
+     * The fixture's other days and SF Pro are recorded on FUEL-116.
+     */
+    await page.setViewportSize({ width: 768, height: 900 });
+
+    const lines = await planned(page)
+      .locator("dd > span")
+      .evaluateAll((spans) =>
+        spans.map((span) => ({
+          text: span.textContent,
+          height: span.getBoundingClientRect().height,
+          line: parseFloat(getComputedStyle(span).lineHeight),
+        })),
+      );
+
+    // Four values and four slash lines — asserted, so an empty locator cannot
+    // pass the loop below by never entering it.
+    expect(lines).toHaveLength(8);
+
+    for (const { text, height, line } of lines) {
+      // A `line-height` of `normal` parses to NaN, and the failure would then
+      // read as a wrap. The type tokens set it in rem, so this names the other
+      // regression if it ever happens. Raised by the FUEL-116 precommit review.
+      expect(Number.isFinite(line), `"${text}" has a resolved line-height`).toBe(true);
+      expect(height, `"${text}" on one line`).toBeCloseTo(line, 0);
+    }
+  });
+});

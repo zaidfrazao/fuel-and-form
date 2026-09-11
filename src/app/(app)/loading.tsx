@@ -265,12 +265,25 @@ export default function Loading() {
               unchanged. Gated at `md` like the screen's, because below 768 the
               merged grid above is already carrying these four figures.
 
-              One block where the screen has two copies — FUEL-115. The screen
-              writes a copy before its walks so the phone reads the totals
-              first, and the walks have no block here. So with them gone the
-              two sequences are the same, and this block is drawn in the same
-              place as whichever copy is drawn, at every width. */}
-          <div className="hidden md:flex md:flex-col" data-shape="day">
+              The screen writes a copy before its walks so the phone reads the
+              totals first, and the walks have no block here. So with them gone
+              the two sequences are the same, and both blocks sit where the
+              screen's copies are drawn.
+
+              Two blocks, as the screen has two copies — FUEL-116. FUEL-115
+              wrote one, which was right while both copies were 2×2. Below the
+              cap the screen's copy is on the measure and goes four across
+              under `This meal`, which is one row of cells where 2×2 is two, so
+              one block would be a row out at one side of the cap. Each block is
+              bound to its own band, the first with `md:max-xl:` for the reason
+              the screen's is. */}
+          <div className="hidden md:max-xl:flex md:max-xl:flex-col" data-shape="day" data-at="band">
+            <Section>
+              <Grid lines={3} gap="gap-y-[22px]" columns={4} />
+            </Section>
+          </div>
+
+          <div className="hidden xl:flex xl:flex-col" data-shape="day" data-at="cap">
             <Section>
               <Grid lines={3} gap="gap-y-[22px]" />
             </Section>
