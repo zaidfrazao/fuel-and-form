@@ -395,6 +395,46 @@ export const PAGE_ASIDE_COLUMN = `${PAGE_COLUMN_BASE} xl:col-start-2 xl:row-star
 export const PAGE_MEASURE_FOOT = "xl:col-start-1 xl:row-start-3 xl:mt-0 xl:self-start";
 
 /**
+ * A fourth row, for what the measure holds after its bar — FUEL-115.
+ *
+ * `/`'s walks are things done from this screen today, and since FUEL-115 they
+ * sit in the measure under the action row rather than at the foot of the
+ * aside. The bar is its own grid item in row three (above), so the walks cannot
+ * join the measure's column group without being read before the bar, and
+ * FUEL-114's reading order is subject, actions, then everything else. They take
+ * a row of their own under it instead.
+ *
+ * Three strings, the same shape as the three they extend, and each differs in
+ * one thing only:
+ *
+ *   - **The grid** gains a row, and the `1fr` moves to it. The reason the last
+ *     row is flexible is `PAGE_ASIDE_GRID`'s: a spanning aside's surplus goes
+ *     to the flexible track and nowhere else. The flexible track is now the one
+ *     BELOW the walks, so the bar still sits on the measure's last figure and
+ *     the walks sit on the bar.
+ *   - **The aside** spans three rows rather than two, so it still runs from the
+ *     measure's first row to the page's last.
+ *   - **The placement** is the walks' own: row four, the top of it, and the
+ *     30px the column's gap would have drawn. That gap is the column's
+ *     `xl:gap-[30px]`, and a grid item outside the column has none of it, so
+ *     the margin is declared here. It is `xl:` only because below the cap the
+ *     walks are a flex item in the page's one column and take its gap like
+ *     every other section.
+ *
+ * Not written into the shared three, because `/training` has nothing after its
+ * bar and the extra row would cost it the fix it relies on. Its aside spans
+ * rows two and three, and in this grid both are `auto`. A taller aside would
+ * have its surplus split between them, which is FUEL-86's 183px between the
+ * last figure and the primary, drawn again. The skeleton wears these three,
+ * since it stands in for `/`.
+ */
+export const PAGE_ASIDE_GRID_AFTER_FOOT = `${PAGE_FRAME_GRID} xl:grid-rows-[auto_auto_auto_1fr]`;
+
+export const PAGE_ASIDE_COLUMN_AFTER_FOOT = `${PAGE_COLUMN_BASE} xl:col-start-2 xl:row-start-2 xl:row-span-3 xl:gap-[30px]`;
+
+export const PAGE_AFTER_FOOT = "xl:col-start-1 xl:row-start-4 xl:mt-[30px] xl:self-start";
+
+/**
  * The same bar, in the one state that stays pinned — `/training`'s session
  * state, FUEL-106.
  *

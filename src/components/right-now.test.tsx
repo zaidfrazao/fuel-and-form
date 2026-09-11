@@ -8,7 +8,10 @@ import type { LoggedEntry } from "@/lib/day-summary";
 import { RULER_AT } from "@/components/day-ruler";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
 import {
+  PAGE_AFTER_FOOT,
   PAGE_ASIDE_COLUMN,
+  PAGE_ASIDE_COLUMN_AFTER_FOOT,
+  PAGE_ASIDE_GRID_AFTER_FOOT,
   PAGE_BAND_GRAPHIC,
   PAGE_MEASURE_COLUMN,
   PAGE_MEASURE_FOOT,
@@ -531,6 +534,26 @@ describe("the active meal", () => {
 /* The two shapes of the day's numbers — FUEL-82                              */
 /* -------------------------------------------------------------------------- */
 
+/** A class string as its utilities, so `hidden` is not found inside `xl:hidden`. */
+const tokens = (node: Element) => node.className.split(" ").filter(Boolean);
+
+/**
+ * The day's totals, both copies, in DOM order — FUEL-115.
+ *
+ * The first comes before the walks and is drawn below the cap. The second opens
+ * the aside and is drawn at it. jsdom applies no stylesheet, so both are in its
+ * tree. In a browser exactly one is, which `page-columns.spec.ts` counts.
+ */
+const plannedCopies = () => {
+  const copies = screen
+    .getAllByRole("heading", { name: "Planned" })
+    .map((heading) => heading.closest("section")!);
+
+  expect(copies).toHaveLength(2);
+
+  return copies as [HTMLElement, HTMLElement];
+};
+
 describe("the day's numbers, in two shapes", () => {
   test("draws both, and lets CSS choose between them", () => {
     // The page is server-rendered into one HTML for every viewport, so the
@@ -553,9 +576,13 @@ describe("the day's numbers, in two shapes", () => {
     // would be the same numbers twice.
     renderNow(active(0));
 
-    const today = screen.getByRole("heading", { name: "Planned" }).closest("section")!;
+    const [belowCap] = plannedCopies();
 
-    expect(today.className).toContain("hidden md:flex");
+    // Hidden below 768, drawn from 768 to the cap. Bound to its band rather
+    // than written `md:flex xl:hidden`, which is a stand-down that never lands:
+    // Tailwind emits the redefined `xl` first, so `md:flex` outranks it — see
+    // "the day's totals are drawn once at every width" below.
+    expect(tokens(belowCap)).toEqual(expect.arrayContaining(["hidden", "md:max-xl:flex"]));
   });
 
   test("a workout card keeps `Planned` at every width", () => {
@@ -563,11 +590,17 @@ describe("the day's numbers, in two shapes", () => {
     // only place they appear and it may not be hidden on a phone. `DayTotals`
     // makes the point itself: the totals belong to the day, not to the item in
     // the middle of the screen.
+    //
+    // Two copies since FUEL-115, one each side of the cap, and between them
+    // they cover every width: the first is drawn until the cap and the second
+    // from it.
     renderNow(active(2));
 
-    const today = screen.getByRole("heading", { name: "Planned" }).closest("section")!;
+    const [belowCap, atCap] = plannedCopies();
 
-    expect(today.className).not.toContain("hidden");
+    expect(tokens(belowCap)).not.toContain("hidden");
+    expect(tokens(belowCap)).toContain("xl:hidden");
+    expect(tokens(atCap)).toEqual(expect.arrayContaining(["hidden", "xl:flex"]));
   });
 
   test("the ruler follows the figures on a phone and precedes them elsewhere", () => {
@@ -742,7 +775,8 @@ describe("the active session", () => {
     // so that query answered null whether or not a grid was there, and the test
     // passed for the whole of the time it was checking nothing.
     expect(screen.queryByText("This meal")).toBeNull();
-    expect(screen.getByText("Planned")).toBeDefined();
+    // Two in the DOM, one drawn at any width — FUEL-115, `plannedCopies`.
+    expect(screen.getAllByText("Planned")).toHaveLength(2);
   });
 });
 
@@ -780,7 +814,8 @@ describe("the day's totals", () => {
     renderNow(active(0));
 
     expect(screen.getByText("This meal")).toBeDefined();
-    expect(screen.getByText("Planned")).toBeDefined();
+    // Two in the DOM, one drawn at any width — FUEL-115, `plannedCopies`.
+    expect(screen.getAllByText("Planned")).toHaveLength(2);
   });
 
   test("moves on a swap, before the server has answered", async () => {
@@ -1729,8 +1764,9 @@ describe("the actions", () => {
   });
 
   test("the two copies of the bar are one sequence in two places — FUEL-114", () => {
-    // The desktop copy is written between the measure and the aside, which is
-    // the reading order at every width it is drawn: subject, actions, context.
+    // The desktop copy is written directly after the measure, which is the
+    // reading order at every width it is drawn: subject, actions, then the
+    // rest. Since FUEL-115 the rest is the walks and then the aside.
     // The phone's is last, because a sticky box pins only from where it rests.
     // Asserted on document order, which is the order a screen reader walks,
     // rather than on anything a stylesheet decides.
@@ -1738,13 +1774,17 @@ describe("the actions", () => {
 
     const measure = document.querySelector('[data-column="measure"]')!;
     const aside = document.querySelector('[data-column="aside"]')!;
+    const anytime = screen.getByRole("heading", { name: "Anytime" }).closest("section")!;
     const desktop = document.querySelector('[data-bar="desktop"]')!;
     const phone = document.querySelector('[data-bar="phone"]')!;
     const follows = (a: Element, b: Element) =>
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
     expect(desktop.previousElementSibling).toBe(measure);
-    expect(desktop.nextElementSibling).toBe(aside);
+    // FUEL-115's criterion on FUEL-114's order: the action row before the
+    // walks, at every width the desktop copy is drawn.
+    expect(follows(desktop, anytime)).toBe(true);
+    expect(follows(anytime, aside)).toBe(true);
     expect(follows(aside, phone)).toBe(true);
     // A child of `<main>` itself, outside the content column: the foot of the
     // page, where `mt-auto` and `sticky` have always put it.
@@ -2742,15 +2782,61 @@ describe("the second column", () => {
   test("the aside takes the day around it", () => {
     renderNow(active(0));
 
-    // § Desktop, redrawn: the aside takes "the day's totals, the day's own
-    // items with their status, and the Anytime list" — the record, the day
-    // around it, and what can still be done.
+    // § Desktop, as FUEL-115 amended it: the aside takes "the day's totals and
+    // the day's own items with their status" — the record and the day around
+    // it. The Anytime list left for the measure.
     //
     // The ruler left for the header band, whose question is the ruler's. Up
-    // next stays in the DOM and stands down at the cap, because `The day`
-    // contains its two items; both are here because both are the aside's, at
-    // the width each is drawn at.
-    expect(sectionsIn("aside")).toEqual(["Planned", "The day", "Up next", "Anytime"]);
+    // next is not here any more. It was the aside's only at the width it is
+    // never drawn at, and the phone reads it before the walks, so it is written
+    // with them — see "the walks are placed under the bar".
+    expect(sectionsIn("aside")).toEqual(["Planned", "The day"]);
+  });
+
+  test("the walks are placed under the bar, in neither group — FUEL-115", () => {
+    renderNow(active(0, { anytime: [WALK, WALK_2] }));
+
+    const sections = screen.getAllByRole("heading", { name: "Anytime" });
+    const anytime = sections[0]!.closest("section")!;
+
+    // One list, and so one of each walk row. The row holds a running recording
+    // in its own state, so a second, hidden copy would be a second recorder.
+    // Every other section that changes place on this screen is rendered twice,
+    // and this one is not.
+    expect(sections).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Log walk" })).toHaveLength(2);
+    expect(within(anytime).getAllByRole("button", { name: "Log walk" })).toHaveLength(2);
+
+    // Outside both groups, for the reason the desktop bar is: inside the
+    // measure's it would be read before the bar. The grid puts it in the
+    // measure's column at the cap, in a row of its own under the bar's.
+    expect(anytime.closest("[data-column]")).toBeNull();
+    expect(anytime.className).toContain(PAGE_AFTER_FOOT);
+    expect(document.querySelector("main")!.className).toContain(PAGE_ASIDE_GRID_AFTER_FOOT);
+  });
+
+  test("the day's totals are drawn once at every width — FUEL-115", () => {
+    /*
+     * The copy below the cap and the copy in the aside hand over at 1272, and
+     * the classes are the whole of how. jsdom cannot draw either, so this holds
+     * the one mistake a class string can make on its own: the emission-order
+     * trap FUEL-77 shipped as two rulers. Tailwind emits the redefined `xl`
+     * before `md`, so `md:flex xl:hidden` never stands down, and both copies
+     * would be drawn at the cap. Bound to the band, the first copy has no
+     * `md:` rule for an `xl:` one to have to outrank.
+     *
+     * `page-columns.spec.ts` counts the drawn copies in a browser.
+     */
+    renderNow(active(0));
+
+    const [belowCap, atCap] = plannedCopies();
+
+    expect(tokens(belowCap)).not.toContain("md:flex");
+    expect(tokens(belowCap)).toContain("md:max-xl:flex");
+    expect(belowCap.closest("[data-column]")).toBeNull();
+
+    expect(tokens(atCap)).toEqual(expect.arrayContaining(["hidden", "xl:flex"]));
+    expect(atCap.closest('[data-column="aside"]')).not.toBeNull();
   });
 
   test("the header band takes the folio and the ruler, and nothing else", () => {
@@ -2803,6 +2889,12 @@ describe("the second column", () => {
      * adjacent, so the flat column is the same list in the same order. The
      * header band contributes nothing here because everything in it is drawn
      * only above the cap.
+     *
+     * FUEL-115 moved the walks to the measure, and the phone's sequence is
+     * still the one it was. The list below is the DOM, so it names every copy,
+     * and the ones marked `cap only` are `hidden` below 1272. Take them out and
+     * what is left is the phone's column, element for element as before:
+     * subject, figures, `Planned`, ruler, Up next, Anytime, Settings.
      */
     renderNow(active(0));
 
@@ -2814,28 +2906,34 @@ describe("the second column", () => {
       );
 
     expect(order).toEqual([
-      "ruler:header",
+      "ruler:header", // cap only
       "Overnight oats",
       "ruler:wide",
       "This meal",
       "Planned",
       "ruler:phone",
-      "The day",
       "Up next",
       "Anytime",
+      "Planned", // cap only
+      "The day", // cap only
       "Settings",
     ]);
   });
 
   test("nothing-planned takes the same two columns", () => {
-    // It is `/` with an empty subject rather than a screen of its own, so the
-    // aside holds what it holds next door. The alternative — one column here
-    // and two on a day with a plan — is a page that rearranges itself on the
-    // data rather than on the width.
+    // It is `/` with an empty subject rather than a screen of its own, so each
+    // section is in the column it takes next door. The alternative — one
+    // column here and two on a day with a plan — is a page that rearranges
+    // itself on the data rather than on the width.
+    //
+    // The walks are in the measure, as they are next door since FUEL-115,
+    // which leaves the aside with nothing but the foot link. That link stands
+    // down at 1024, so at the cap the aside is empty.
     renderNow({ ...BASE, state: "nothing-planned", timeline: [] });
 
-    expect(sectionsIn("measure")).toEqual(["Nothing planned"]);
-    expect(sectionsIn("aside")).toEqual(["Anytime"]);
+    expect(sectionsIn("measure")).toEqual(["Nothing planned", "Anytime"]);
+    expect(sectionsIn("aside")).toEqual([]);
+    expect(screen.getAllByRole("heading", { name: "Anytime" })).toHaveLength(1);
 
     // The band is drawn on this state too — § Desktop's header rule "applies to
     // every screen" — and holds only the folio, since there is no timeline for
@@ -2924,8 +3022,9 @@ describe("the second column", () => {
     expect(document.querySelector('[data-column="measure"]')!.className).toBe(
       PAGE_MEASURE_COLUMN,
     );
+    // The aside spans the extra row the walks take — FUEL-115.
     expect(document.querySelector('[data-column="aside"]')!.className).toBe(
-      PAGE_ASIDE_COLUMN,
+      PAGE_ASIDE_COLUMN_AFTER_FOOT,
     );
   });
 });
