@@ -247,11 +247,25 @@ for (const path of ["/", "/training"]) {
       );
       const measure = await boxOf(page.locator('[data-column="measure"]'));
 
-      // `action-bar.ts` carries `pt-[30px]`, and the grid adds no row gap — so
-      // the gap between the column's last block and the primary is that 30 and
-      // nothing else. Measured against the bar's box, whose top IS where its own
-      // padding starts.
-      expect(bar.y - (measure.y + measure.height), "content to bar").toBeCloseTo(0, 0);
+      if (path === "/") {
+        // `action-bar.ts` carries `pt-[30px]`, and the grid adds no row gap — so
+        // the gap between the column's last block and the primary is that 30 and
+        // nothing else. Measured against the bar's box, whose top IS where its
+        // own padding starts.
+        expect(bar.y - (measure.y + measure.height), "content to bar").toBeCloseTo(0, 0);
+      } else {
+        // `/training`'s plan-state bar has been inside the measure since
+        // FUEL-118, under `This session` and above the exercise list, with the
+        // column's 28px gap as its head. "/training from 1024 — FUEL-118" below
+        // measures the rest of that order.
+        const record = await boxOf(
+          page
+            .locator('[data-column="measure"] > section')
+            .filter({ has: page.getByRole("heading", { name: "This session" }) }),
+        );
+
+        expect(bar.y - (record.y + record.height), "record to bar").toBeCloseTo(28, 0);
+      }
 
       // And the control: there is real space left under the bar, which is where
       // `mt-auto` would still have put it. Measured against the viewport rather
@@ -928,6 +942,199 @@ test.describe("/ in the band — FUEL-114", () => {
     await page.goto("/dev/right-now?case=workout");
 
     for (const size of BAND) {
+      await page.setViewportSize(size);
+      await page.evaluate(() => window.scrollTo(0, 0));
+
+      const primary = page.getByRole("button", { name: "Mark done" });
+
+      await expect(primary).toHaveCount(1);
+
+      const box = await boxOf(primary);
+
+      expect(
+        box.y + box.height,
+        `Mark done's foot at ${size.width}x${size.height}`,
+      ).toBeLessThanOrEqual(size.height);
+    }
+  });
+});
+
+/**
+ * `/training`'s plan-state primary from 1024 — FUEL-118.
+ *
+ * FUEL-114 fixed the band's order on `/` and left this screen, because moving
+ * its bar would not have put the action on screen. The plan state's measure is
+ * 98px of heading, 877px of exercise list and 214px of record. With the bar
+ * after all three, `Start session` was at y 1407 on a 1272×800 window, and at
+ * 2342 in the band, where the bar also followed the aside. § The two states of
+ * `/training` now puts the record and the bar before the list from 1024, and
+ * the primary is at 481 in the band and 500 at the cap.
+ *
+ * The sizes are the ticket's, plus 1366×768, the laptop FUEL-115 measured `/`
+ * on and the shortest window here. As in FUEL-114's block, every assertion is a
+ * rendered box, a computed style or a count of what is drawn, because the fix
+ * is two copies of the list and of the bar, and jsdom has both.
+ *
+ * Nothing here enters the session state: leaving it records the session, and
+ * the demo is shared by every project in the run (`session-bar.spec.ts`
+ * carries that story).
+ */
+test.describe("/training from 1024 — FUEL-118", () => {
+  const ARRIVAL = [
+    { width: 1024, height: 768 },
+    { width: 1180, height: 820 },
+    { width: 1271, height: 800 },
+    { width: 1272, height: 800 },
+    { width: 1366, height: 768 },
+  ];
+
+  /** The bar a user has at this width: drawn, and not a skeleton's. */
+  const drawnBar = (page: import("@playwright/test").Page) =>
+    page.locator("main .action-bar-fade:not([aria-hidden]):visible");
+
+  /** The exercise list a user has at this width. */
+  const drawnList = (page: import("@playwright/test").Page) =>
+    page.locator("main [data-list]:visible");
+
+  /** `This session`, the record the bar submits. There is one, at every width. */
+  const record = (page: import("@playwright/test").Page) =>
+    page
+      .locator('[data-column="measure"] > section')
+      .filter({ has: page.getByRole("heading", { name: "This session" }) });
+
+  /** Whether `a` comes before `b` in the document, which is what a screen reader walks. */
+  const precedes = async (a: Locator, b: Locator) =>
+    a.evaluate(
+      (node, other) =>
+        Boolean(node.compareDocumentPosition(other!) & Node.DOCUMENT_POSITION_FOLLOWING),
+      await b.elementHandle(),
+    );
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/training");
+    await expect(page.getByRole("main")).toBeVisible();
+    await expect(page.locator("main")).toHaveCount(1);
+  });
+
+  for (const size of ARRIVAL) {
+    test(`Start session is on screen on arrival at ${size.width}x${size.height}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(size);
+      await page.evaluate(() => window.scrollTo(0, 0));
+
+      // The frozen instant is today, so the plan state's primary is Start
+      // session. Exactly one is announced: a copy drawn but out of the tree, or
+      // the reverse, fails here.
+      const primary = page.getByRole("button", { name: "Start session" });
+
+      await expect(primary).toHaveCount(1);
+
+      const box = await boxOf(primary);
+
+      expect(box.y + box.height, "the primary's foot, against the window").toBeLessThanOrEqual(
+        size.height,
+      );
+    });
+  }
+
+  for (const width of [1024, 1271, 1272, 1920]) {
+    test(`the record, the bar, then the list, drawn and read, at ${width}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+
+      const bar = drawnBar(page);
+      const exercises = drawnList(page);
+
+      await expect(bar).toHaveCount(1);
+      await expect(bar).toHaveAttribute("data-bar", "desktop");
+      await expect(exercises).toHaveCount(1);
+      await expect(exercises).toHaveAttribute("data-list", "desktop");
+      expect(await bar.evaluate((node) => getComputedStyle(node).position)).toBe("static");
+
+      const recordBox = await boxOf(record(page));
+      const barBox = await boxOf(bar);
+      const listBox = await boxOf(exercises);
+
+      // Drawn: the column's 28px gap above the bar and below it, and nothing
+      // else. The bar's own `pt-[30px]` is zeroed from 1024, so a 58 here is
+      // that padding leaking back.
+      expect(barBox.y - (recordBox.y + recordBox.height), "record to bar").toBeCloseTo(28, 0);
+      expect(listBox.y - (barBox.y + barBox.height), "bar to list").toBeCloseTo(28, 0);
+
+      // In the measure, at the measure's width, which is the record's: the
+      // measure group has no box of its own below the cap. A copy that fell
+      // out of the column would be as wide as the frame at the cap.
+      expect(barBox.x, "the bar's left edge").toBeCloseTo(recordBox.x, 0);
+      expect(barBox.width, "the bar's width").toBeCloseTo(recordBox.width, 0);
+
+      // Read in the same order: "Screen-reader order matches the drawn order,
+      // with no CSS `order`", as the ticket asks, taken from the document.
+      expect(await precedes(record(page), bar), "the record precedes the bar").toBe(true);
+      expect(await precedes(bar, exercises), "the bar precedes the list").toBe(true);
+      expect(
+        await precedes(exercises, page.getByRole("heading", { name: "Adherence" })),
+        "the list precedes the aside",
+      ).toBe(true);
+    });
+  }
+
+  test("the phone's order is untouched, and the copies hand over at 1024", async ({ page }) => {
+    // The control. Below 1024 the list is directly under the session, where
+    // § Lists' window is measured, and the bar is sticky and last. 1024 is the
+    // one pixel where both copies swap, together.
+    for (const width of [375, 1023]) {
+      await page.setViewportSize({ width, height: 800 });
+
+      await expect(drawnBar(page)).toHaveAttribute("data-bar", "phone");
+      await expect(drawnList(page)).toHaveAttribute("data-list", "phone");
+      expect(
+        await drawnBar(page).evaluate((node) => getComputedStyle(node).position),
+        `the bar at ${width}`,
+      ).toBe("sticky");
+
+      const listBox = await boxOf(drawnList(page));
+      const recordBox = await boxOf(record(page));
+
+      expect(recordBox.y, `the record is under the list at ${width}`).toBeGreaterThan(
+        listBox.y + listBox.height,
+      );
+    }
+
+    await page.setViewportSize({ width: 1024, height: 800 });
+
+    await expect(drawnBar(page)).toHaveAttribute("data-bar", "desktop");
+    await expect(drawnList(page)).toHaveAttribute("data-list", "desktop");
+  });
+
+  test("draws exactly one bar and one list at every width", async ({ page }) => {
+    // The handover is `lg:hidden` on one copy and `max-lg:hidden` on the other,
+    // for the list and for the bar. A gap or an overlap would show at one of the
+    // two pixels either side of 1024, or at the cap, where `xl` sorts first.
+    for (const width of [375, 820, 1023, 1024, 1271, 1272, 1920]) {
+      await page.setViewportSize({ width, height: 900 });
+
+      await expect(drawnBar(page), `bars drawn at ${width}px`).toHaveCount(1);
+      await expect(drawnList(page), `lists drawn at ${width}px`).toHaveCount(1);
+      await expect(
+        page.getByRole("button", { name: "Start session" }),
+        `primaries announced at ${width}px`,
+      ).toHaveCount(1);
+      await expect(
+        page.getByRole("heading", { name: "Exercises" }),
+        `lists announced at ${width}px`,
+      ).toHaveCount(1);
+    }
+  });
+
+  test("Mark done is on screen on arrival on a past date", async ({ page }) => {
+    // The other primary the plan state has. A past date cannot be trained, so
+    // the bar offers Mark done, and a past date is when this state is used to
+    // record a session. It is why the record moved up with the bar and not
+    // below it: the note and the control that saves it stay together.
+    await page.goto("/training?date=2026-06-16");
+    await expect(page.locator("main")).toHaveCount(1);
+
+    for (const size of ARRIVAL) {
       await page.setViewportSize(size);
       await page.evaluate(() => window.scrollTo(0, 0));
 

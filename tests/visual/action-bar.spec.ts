@@ -58,6 +58,17 @@ import { FROZEN_NOW_MS } from "./constants";
  */
 const BAR = "main .action-bar-fade:not([aria-hidden])";
 
+/**
+ * The copy of the bar that is drawn at this width — FUEL-118.
+ *
+ * `/training`'s plan state renders its bar twice since FUEL-118: a sticky copy
+ * last in the column below 1024, and a released one in the measure from 1024.
+ * CSS draws one, so `BAR` matches two and strict mode throws. `:visible` is
+ * Playwright's own pseudo-class, which is safe here because this file never
+ * hands a selector to `document.querySelector`.
+ */
+const DRAWN = `${BAR}:visible`;
+
 /** The last row of the Recent list — the content the pinned bar used to cover. */
 const LAST_RECENT_ROW = 'ul[aria-label="Recent sessions"] > li:last-child';
 
@@ -85,35 +96,48 @@ test.beforeEach(async ({ page }) => {
   // The bar is conditional — `/training` renders it only when there is a session
   // — so without this every assertion below would be made against nothing and
   // the spec would pass by describing an empty page.
-  await expect(page.locator(BAR)).toBeVisible();
+  await expect(page.locator(DRAWN)).toBeVisible();
 });
 
 test("is released at 1024 and pinned at 1023", async ({ page }) => {
   await page.setViewportSize({ width: 1023, height: 900 });
-  expect(await positionOf(page.locator(BAR)), "at 1023px").toBe("sticky");
+  expect(await positionOf(page.locator(DRAWN)), "at 1023px").toBe("sticky");
 
   await page.setViewportSize({ width: 1024, height: 900 });
-  expect(await positionOf(page.locator(BAR)), "at 1024px").toBe("static");
+  expect(await positionOf(page.locator(DRAWN)), "at 1024px").toBe("static");
 });
 
-test("does not cover the Recent list at 1440x900", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+for (const size of [
+  { width: 1440, height: 900 },
+  { width: 1100, height: 900 },
+]) {
+  test(`does not cover the Recent list at ${size.width}x${size.height}`, async ({ page }) => {
+    await page.setViewportSize(size);
 
-  const bar = await boxOf(page.locator(BAR));
-  const row = await boxOf(page.locator(LAST_RECENT_ROW));
+    const bar = await boxOf(page.locator(DRAWN));
+    const row = await boxOf(page.locator(LAST_RECENT_ROW));
 
-  // The defect, stated as the ticket states it. A pinned bar sits over the list,
-  // so the row's bottom edge falls below the bar's top; released, the bar is
-  // after the list in the column and the row ends above it.
-  expect(row.y + row.height, "last Recent row's bottom vs the bar's top").toBeLessThanOrEqual(
-    bar.y,
-  );
-});
+    // The defect, stated as the ticket states it: a bar over the list. This
+    // read "the row ends above the bar's top" until FUEL-118, which was true
+    // only while the released bar came after the list. Since FUEL-118 the bar
+    // is in the measure, above its exercises. At 1440 it stands beside Recent,
+    // and in the band it is far above it. So what is asserted is the defect
+    // itself: the two boxes do not overlap. 1100 is the band, where the two
+    // share one column and a pinned bar would sit on the list again.
+    const overlaps =
+      bar.x < row.x + row.width &&
+      row.x < bar.x + bar.width &&
+      bar.y < row.y + row.height &&
+      row.y < bar.y + bar.height;
+
+    expect(overlaps, "the bar and the last Recent row share pixels").toBe(false);
+  });
+}
 
 test("still clears the navigation shell at 375, which FUEL-65 fixed", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 });
 
-  const bar = await boxOf(page.locator(BAR));
+  const bar = await boxOf(page.locator(DRAWN));
   // By name: `/training` has three `<nav>`s — the § Navigation shell, the date
   // paginator and the week nav — and an unnamed lookup would resolve to whichever
   // came first, then measure the bar against a paginator.
@@ -124,41 +148,43 @@ test("still clears the navigation shell at 375, which FUEL-65 fixed", async ({ p
   // it by `--nav-shell-h`; a release that leaked below the breakpoint would put
   // the shell back on top of the primary, which is the state FUEL-65 existed to
   // end.
-  expect(await positionOf(page.locator(BAR)), "at 375px").toBe("sticky");
+  expect(await positionOf(page.locator(DRAWN)), "at 375px").toBe("sticky");
   expect(bar.y + bar.height, "bar's bottom vs the shell's top").toBeLessThanOrEqual(shell.y + 0.5);
 });
 
-test("sits at the foot of a tall viewport rather than mid-screen", async ({ page }) => {
+test("sits under its record in the band, not at the foot of a tall viewport", async ({ page }) => {
   /*
-   * AC #4, and the failure mode that releasing the pinning could plausibly have
-   * introduced. `mt-auto` inside a `flex-1` `<main>` is what puts the bar at the
-   * bottom of the screen when the content does not reach it; drop either and a
-   * static bar lands directly under the content with a gap beneath, which at
-   * 1920 is the phone's old mid-screen failure with no thumb left to explain it.
+   * FUEL-72's AC #4 put this bar at the foot of a tall viewport by `mt-auto`,
+   * and FUEL-77 narrowed that to the 1024–1271 band. FUEL-118 replaces it.
+   * § The two states of `/training` puts the plan state's bar in the measure
+   * from 1024, under `This session` and above the exercise list, so in the band
+   * it is under its subject and nowhere near the foot.
    *
-   * **1200 and no longer 1920 — FUEL-77.** This is now a claim about one band
-   * rather than about every desktop width. At the frame's cap the screen becomes
-   * two columns and the bar takes a place in that grid, which packs its rows to
-   * the top: § Desktop's "the primary action sits at the end of its column" is
-   * drawn by the mock as 30px under the last figure, and `mt-auto` goes inert
-   * there because the bar's grid area is its own height. That is the same shape
-   * as this ticket's own `bottom-[…]` going inert under `lg:static`, and it is
-   * recorded on FUEL-72 as a change to what this ticket shipped.
+   * **The old assertion had been vacuous for a while, and that is recorded
+   * here.** It read "the gap between the bar's bottom and the viewport's foot
+   * is under 2", at 1200×1600. After FUEL-92's groups the page was 2394px tall,
+   * so on arrival the bar was at y 2312, off-screen. The gap came out at −794,
+   * which is under 2 whatever the layout does.
    *
-   * What survives is the 1024–1271 band, where the frame is fluid, there is no
-   * second column, and `mt-auto` is still the only thing between the bar and the
-   * middle of the screen. `page-columns.spec.ts` holds the other side of the
-   * seam, so both behaviours are asserted rather than one being assumed from the
-   * other.
+   * 1200×1600 is kept because it is the size at which the two answers differ,
+   * and that is asserted too. The window is taller than the bar's foot by far
+   * more than a rounding error, so a bar pushed to the foot by an auto margin
+   * fails here.
    */
   await page.setViewportSize({ width: 1200, height: 1600 });
 
-  const bar = await boxOf(page.locator(BAR));
+  const bar = await boxOf(page.locator(DRAWN));
+  const record = await boxOf(
+    page
+      .locator('[data-column="measure"] > section')
+      .filter({ has: page.getByRole("heading", { name: "This session" }) }),
+  );
   const viewport = page.viewportSize();
 
-  expect(await positionOf(page.locator(BAR))).toBe("static");
+  expect(await positionOf(page.locator(DRAWN))).toBe("static");
+  expect(bar.y - (record.y + record.height), "record to bar").toBeCloseTo(28, 0);
   expect(
     (viewport?.height ?? 0) - (bar.y + bar.height),
     "gap between the bar's bottom and the foot of the viewport",
-  ).toBeLessThan(2);
+  ).toBeGreaterThan(300);
 });
