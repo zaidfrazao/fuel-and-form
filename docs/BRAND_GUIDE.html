@@ -1980,7 +1980,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
       <div class="dcell">
         <!-- ===== D4 · TRAINING ===== -->
         <div class="dstage">
-          <div class="ui dframe" data-mode="dark" role="img" aria-label="Training at 1272: the date paginator across the frame, Circuit B and its exercise list in the measure, and the six-week adherence dot grid with the recent sessions beside it">
+          <div class="ui dframe" data-mode="dark" role="img" aria-label="Training at 1272: the date paginator across the frame; in the measure, Circuit B, its record and note, the actions, then its exercise list; and the six-week adherence dot grid with the recent sessions beside it">
 <div class="dbody spanning">
             <nav class="rail" aria-label="Primary">
             <span class="railitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#n-now"/></svg>Now</span>
@@ -2010,6 +2010,33 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                 <span class="u-micro" style="color:var(--text-3);">Training · 17:30</span>
                 <div class="u-title">Circuit B</div>
                 <span class="u-slash">Bodyweight · 3 rounds · ~28 min</span>
+              </div>
+
+              <!-- The record, then the actions, then the list — FUEL-118.
+                   The bar submits what this block holds: the note travels
+                   with whichever status is tapped. The list is 877px in the
+                   app, so a bar under it sat at y 1407 on a 1272×800 window;
+                   here it sits under the thing it saves, and the list is read
+                   after it. The phone keeps list, record, sticky bar. -->
+              <div class="blk">
+                <span class="u-micro">This session</span>
+                <span style="font-size:17px;color:var(--text-2);">Not recorded.</span>
+                <div>
+                  <div class="frow" style="align-items:flex-start;">
+                    <div class="frow-main"><span class="row-title">Note</span></div>
+                    <span class="control" style="height:64px;width:300px;align-items:flex-start;padding-top:11px;color:var(--text-3);font-size:13px;">Reps achieved, how it felt</span>
+                  </div>
+                  <div class="frow">
+                    <div class="frow-main"><span class="row-title">Duration</span></div>
+                    <span class="control" style="color:var(--text-3);">min</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="act-row">
+                <button class="btn btn-primary auto" type="button">Mark done</button>
+                <button class="btn btn-secondary auto" type="button">Partial</button>
+                <button class="btn btn-secondary auto" type="button">Skip</button>
               </div>
 
               <!-- Grouped — § Lists, FUEL-90. The heading is the Slash
@@ -2050,11 +2077,6 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                 </div>
               </div>
 
-              <div class="act-row">
-                <button class="btn btn-primary auto" type="button">Mark done</button>
-                <button class="btn btn-secondary auto" type="button">Partial</button>
-                <button class="btn btn-secondary auto" type="button">Skip</button>
-              </div>
             </div>
 
             <!-- The pattern, which is what this screen is about, at the top of
@@ -2094,6 +2116,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
           <span class="tagline">P3 · /training · dark</span>
           <h3>Training — the plan state</h3>
           <p><b>Grouped since FUEL-90</b>, which is the one thing that changed here: warm-up, work and cool-down are the group heading &sect; Lists now names, drawn once so that four P10 tickets do not each invent one. The three headings cost real height, and that cost is the argument for the state drawn below rather than an objection to it. Redrawn before that (FUEL-85), and <b>changed least of the three</b> &mdash; this screen&rsquo;s columns were already full, which is why it read better than <code>/</code> before any of this. It takes the header rule and the content-width controls, and keeps everything else. The measure keeps the session and the exercise list; the aside keeps the adherence grid and the recent sessions. An earlier draft moved adherence into the header on the grounds that it was below the fold; that was the phone&rsquo;s fold, and at desktop the aside starts at the top of the content. <b>A redesign that churns a working screen to look busy is the same mistake in the other direction.</b> The rail is drawn active on Training here, which is the first time this file has drawn that destination at all.</p>
+          <p><b>The actions come before the list since FUEL-118</b>, and the record comes with them. The bar was drawn after the list, and in the app that list is 877px: nine rows and three headings. Under it, the primary sat at <b>y 1407 on a 1272&times;800 window</b>, even though it was already at the end of its subject. The bar submits the record (the note travels with whichever status is tapped), so the record moves up with it, and the list is read after both. The phone frame above keeps list, record and sticky bar, because the list is where &sect; Lists&rsquo; window is measured. <b>Keeping this bar sticky was the alternative, and it was rejected</b>, because the session state&rsquo;s exception rests on a live value and this state has none.</p>
           <p><b>The rows are the form affordance since FUEL-108</b>, and the <b>underline on the title</b> is what says so. FUEL-90 gave &ldquo;Show form&rdquo; to the session state alone on two grounds: the accordion ban, which <b>stands</b> and is why the row <i>opens the sheet</i> rather than expanding, and the height budget, which is <b>spent</b> &mdash; that objection is to a control drawn beside a row, and this one <b>is</b> the row. <b>The mark was drawn as a trailing chevron first, and measured, and it cost 17px.</b> A dense row&rsquo;s name column is <code>flex-1</code> and holds all the slack, so a glyph and its gap come out of the text: Plank&rsquo;s note re-wrapped and that row grew 101px to 118. The underline is the link treatment this file already draws, at the same decoration and offset; it occupies no box, so nothing narrows and nothing re-wraps. <b>Row 03 is unmarked deliberately</b> &mdash; a reference exists for thirteen of fourteen exercises, and a row without one stays an inert row rather than becoming a disabled control. <code>/</code> marks no row on the same list: &sect; Materials admits imagery inside a sheet, and media is never loaded there.</p>
         </div>
       </div>
