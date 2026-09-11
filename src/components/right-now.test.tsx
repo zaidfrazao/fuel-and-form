@@ -9,7 +9,6 @@ import { RULER_AT } from "@/components/day-ruler";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
 import {
   PAGE_AFTER_FOOT,
-  PAGE_ASIDE_COLUMN,
   PAGE_ASIDE_COLUMN_AFTER_FOOT,
   PAGE_ASIDE_GRID_AFTER_FOOT,
   PAGE_BAND_GRAPHIC,
