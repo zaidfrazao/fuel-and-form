@@ -106,7 +106,10 @@ async function enterSession(page: Page) {
 
   // The bar is conditional on there being a session at all, so without this a
   // failure to find it would arrive later as a confusing box-less error.
-  await expect(page.locator(BAR)).toBeVisible();
+  // `:visible` because this is still the plan state, which renders its bar
+  // twice since FUEL-118. Once the session is entered there is one bar again,
+  // and `BAR` needs nothing added.
+  await expect(page.locator(`${BAR}:visible`)).toBeVisible();
 
   await page.getByRole("button", { name: "Start session" }).click();
   await expect(page.locator(BAR).getByText("Rest", { exact: true }), TIMER_ROW).toBeVisible();
@@ -338,14 +341,19 @@ test("leaves the plan state and `/` released, which is FUEL-72's ruling", async 
   await page.clock.setFixedTime(FROZEN_NOW_MS);
   await page.goto("/training");
   await expect(page.getByRole("main")).toBeVisible();
-  await expect(page.locator(BAR)).toBeVisible();
+
+  // The plan state renders its bar twice since FUEL-118, like `/`'s below, so
+  // `:visible` is added here for the same reason and in the same place.
+  const plan = page.locator(`${BAR}:visible`);
+
+  await expect(plan).toBeVisible();
 
   await page.setViewportSize({ width: 1440, height: 900 });
 
   // The state a reader lands in — the timer row belongs to the other one.
-  await expect(page.locator(BAR).getByText("Rest", { exact: true }), TIMER_ROW).toBeHidden();
+  await expect(plan.getByText("Rest", { exact: true }), TIMER_ROW).toBeHidden();
 
-  expect(await positionOf(page.locator(BAR)), "`/training`'s plan state at 1440").toBe("static");
+  expect(await positionOf(plan), "`/training`'s plan state at 1440").toBe("static");
 
   await page.goto("/");
   await expect(page.getByRole("main")).toBeVisible();

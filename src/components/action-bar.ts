@@ -69,10 +69,12 @@ export const ACTION_BAR =
  * It does separate work at every width: it puts the bar at the foot of a short
  * page. A released bar without it would sit directly beneath whatever content
  * there was and end mid-screen with a gap under it, which is the state
- * `app/(app)/layout.tsx` bought `flex-1` to prevent. So `/training`'s plan-state
- * bar is at the end of its column in both senses — after the content in the
+ * `app/(app)/layout.tsx` bought `flex-1` to prevent. So `/`'s two quiet states
+ * keep a bar at the end of the column in both senses: after the content in the
  * DOM, and at the bottom of `<main>` when the content does not reach it. `/`'s
- * is not, since FUEL-114: see `ACTION_BAR_AT` below.
+ * timeline state has not done this since FUEL-114, and `/training`'s plan
+ * state has not since FUEL-118. See `ACTION_BAR_AT` and `TRAINING_BAR_AT`
+ * below.
  *
  * ## The specimen
  *
@@ -137,8 +139,45 @@ export const ACTION_BAR_AT = {
    * no free space to take there today. It is declared anyway, for the reason
    * `PAGE_MEASURE_FOOT` gives for `xl:mt-0`: the inertness that was only true
    * by luck is the one that broke.
+   *
+   * `TRAINING_BAR_AT.desktop` below zeroes the same two from `lg` rather than
+   * only in the band. That difference is deliberate, so do not harmonise
+   * them. `/training`'s copy sits in a gapped flex column at every width from
+   * 1024, while this one becomes a grid item with no row gap at the cap and
+   * needs its 30px back there.
    */
   desktop: `${APP_ACTION_BAR} max-lg:hidden lg:max-xl:mt-0 lg:max-xl:pt-0`,
+} as const;
+
+/**
+ * `/training`'s plan-state bar, at the two places it is drawn — FUEL-118.
+ *
+ * The same device as `ACTION_BAR_AT`, with the desktop copy somewhere else.
+ * The plan state's measure is 877px of exercise list, so a bar at the end of
+ * its subject was still at y 1407 on a 1272×800 window. § The two states of
+ * `/training` puts the record and the bar before the list from 1024: session,
+ * `This session`, bar, exercises. `training.tsx` renders the list twice for
+ * the same reason this renders the bar twice.
+ *
+ * So the desktop copy sits INSIDE the measure's column, between two of its
+ * sections, rather than in a grid row of its own under it. That makes both of
+ * `/`'s band-bound fixes true at the cap as well:
+ *
+ * `lg:pt-0`: below the cap the copy is a flex item of the screen's `gap-7`
+ * column, and at the cap of the measure's `xl:gap-7` column. Either way the
+ * column's 28px is already above it, so the shared `pt-[30px]` would make 58.
+ *
+ * `lg:mt-0`: the measure is content-sized at both widths, so today there is no
+ * free space for `mt-auto` to take. It is declared anyway, for the reason
+ * `PAGE_MEASURE_FOOT` gives for `xl:mt-0`.
+ *
+ * No `PAGE_MEASURE_FOOT`, and no grid row: the plan state leaves row three
+ * empty. The session state keeps `SESSION_ACTION_BAR` in `PAGE_SESSION_FOOT`,
+ * a single bar that is not handed over.
+ */
+export const TRAINING_BAR_AT = {
+  phone: ACTION_BAR_AT.phone,
+  desktop: `${APP_ACTION_BAR} max-lg:hidden lg:mt-0 lg:pt-0`,
 } as const;
 
 /**

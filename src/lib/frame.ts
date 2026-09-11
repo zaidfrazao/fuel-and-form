@@ -421,8 +421,11 @@ export const PAGE_MEASURE_FOOT = "xl:col-start-1 xl:row-start-3 xl:mt-0 xl:self-
  *     walks are a flex item in the page's one column and take its gap like
  *     every other section.
  *
- * Not written into the shared three, because `/training` has nothing after its
- * bar and the extra row would cost it the fix it relies on. Its aside spans
+ * Not written into the shared three, because `/training` needs no grid row
+ * after its bar, and the extra row would cost it the fix it relies on. Since
+ * FUEL-118 its plan state does have something after the bar, the exercise
+ * list, but both sit inside the measure's own column, so neither is a grid
+ * item. Its aside spans
  * rows two and three, and in this grid both are `auto`. A taller aside would
  * have its surplus split between them, which is FUEL-86's 183px between the
  * last figure and the primary, drawn again. The skeleton wears these three,
@@ -492,10 +495,12 @@ export const PAGE_AFTER_FOOT = "xl:col-start-1 xl:row-start-4 xl:mt-[30px] xl:se
  * draw over the foot of the measure. `session-bar.spec.ts` asserts the bar
  * clears the measure's last section rather than leaving that to be noticed.
  *
- * `PAGE_MEASURE_FOOT` above is untouched and still carries the other three
- * bars: `/`'s, this screen's plan state, and the skeleton. § Desktop's release
- * is the rule and this is the exception to it, so the exception is the string
- * that says something different.
+ * `PAGE_MEASURE_FOOT` above is untouched and still carries `/`'s bars and the
+ * skeleton's. This screen's plan state stopped wearing it in FUEL-118, when
+ * its desktop bar moved inside the measure's column, above the exercise list,
+ * and row three was left empty in that state. § Desktop's release is the rule
+ * and this is the exception to it, so the exception is the string that says
+ * something different.
  */
 export const PAGE_SESSION_FOOT =
   "xl:col-start-1 xl:row-start-2 xl:row-end-4 xl:mt-0 xl:self-end";
