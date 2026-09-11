@@ -357,9 +357,13 @@ for (const path of ["/", "/training"]) {
       // the first thing in the DOM: `/` renders three copies of the ruler and
       // two of them are `display: none` here. A box is what this measures, and
       // a copy that is not drawn does not have one.
+      //
+      // The link is in the list since FUEL-115. At this width `/`'s aside
+      // draws only its foot link: its two sections are the cap's, and the
+      // walks, the phone's ruler and Up next are written outside it.
       const inAside = await boxOf(
         page
-          .locator('[data-column="aside"] :is(h2, [data-ruler]):visible')
+          .locator('[data-column="aside"] :is(h2, [data-ruler], a):visible')
           .first(),
       );
 
@@ -937,6 +941,149 @@ test.describe("/ in the band — FUEL-114", () => {
         box.y + box.height,
         `Mark done's foot at ${size.width}x${size.height}`,
       ).toBeLessThanOrEqual(size.height);
+    }
+  });
+});
+
+/**
+ * `/`'s walks at the cap — FUEL-115.
+ *
+ * § Desktop moved the Anytime list from the foot of the aside to the measure,
+ * under the action row. In the frozen demo the aside ran `Planned`, `The day`'s
+ * six rows, then the walks, so the walk rows' controls sat at y 752 and 821,
+ * and on a 1366×768 laptop neither was on screen on arrival. Meanwhile the
+ * measure ended at 420. Measured after the move, the controls are at 492 and
+ * 561, and the list ends at 647 against `The day`'s last row at 680.
+ *
+ * Every assertion is a rendered box or a count of what is drawn. The move is a
+ * grid placement plus one section rendered twice, and jsdom, which applies no
+ * stylesheet, can see neither.
+ */
+test.describe("/ at the cap — FUEL-115", () => {
+  /** The Anytime list — one section, whatever the width. */
+  const anytime = (page: import("@playwright/test").Page) =>
+    page
+      .locator("main section")
+      .filter({ has: page.getByRole("heading", { name: "Anytime", exact: true }) });
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("main")).toBeVisible();
+    // One `main` means the skeleton has gone — see `scrollbar-gutter.spec.ts`.
+    await expect(page.locator("main")).toHaveCount(1);
+  });
+
+  for (const size of [
+    { width: 1272, height: 800 },
+    { width: 1366, height: 768 },
+  ]) {
+    test(`both walk rows are on screen on arrival at ${size.width}x${size.height}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(size);
+      await page.evaluate(() => window.scrollTo(0, 0));
+
+      // The rows rather than their buttons. `Record` and the caveat beneath the
+      // list arrive with hydration (`canRecord` has a server snapshot of
+      // `false`), but a row's box is the server's and holds every control the
+      // row will ever draw. So nothing here depends on how late the check runs.
+      const rows = anytime(page).locator("li");
+
+      await expect(rows, "the demo's two walks").toHaveCount(2);
+
+      for (const [index, row] of (await rows.all()).entries()) {
+        const box = await boxOf(row);
+
+        expect(box.y + box.height, `walk ${index + 1}'s foot, against the window`).toBeLessThanOrEqual(
+          size.height,
+        );
+      }
+    });
+  }
+
+  for (const width of [1272, 1920]) {
+    test(`the walks sit in the measure, under the bar, at ${width}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+
+      const { measure, aside } = await columns(page);
+      const bar = await boxOf(page.locator("main .action-bar-fade:not([aria-hidden]):visible"));
+      const walks = await boxOf(anytime(page));
+
+      // The measure's x and width, so a list auto-placed into the aside's
+      // column, or spanning both, fails on its edge rather than on its y.
+      expect(walks.x, "the walks' left edge").toBeCloseTo(measure.x, 0);
+      expect(walks.width, "the walks' width").toBeCloseTo(584, 0);
+
+      // 30px under the bar, the column's own rhythm, declared on the placement
+      // because a grid item outside the column has none of the column's gap.
+      // Measured against the bar's box, whose bottom is its primary's.
+      expect(walks.y - (bar.y + bar.height), "bar to walks").toBeCloseTo(30, 0);
+
+      // And the aside holds the record and the day around it, nothing else.
+      const inAside = await page
+        .locator('[data-column="aside"] h2:visible')
+        .allTextContents();
+
+      expect(inAside).toEqual(["Planned", "The day"]);
+      expect(aside.y, "the aside still starts beside the measure").toBeCloseTo(measure.y, 0);
+    });
+  }
+
+  test("draws one walk list and one set of the day's totals at every width", async ({ page }) => {
+    /*
+     * The walks are never rendered twice. The row holds a running recording in
+     * its own state, and a hidden second copy would keep recording when a
+     * tablet turned across a breakpoint. So there is one list at every width,
+     * and this counts what a screen reader is given.
+     *
+     * The day's totals ARE rendered twice, one copy each side of the cap, and
+     * this is the count FUEL-77's two rulers taught this file to make.
+     * `md:flex xl:hidden` never stands down, because Tailwind emits the
+     * redefined `xl` first, so both copies would draw at 1272. The totals are
+     * hidden below 768 on a meal card, where the merged grid carries them,
+     * which is the frozen demo's card.
+     */
+    for (const width of [375, 820, 1023, 1024, 1271, 1272, 1920]) {
+      await page.setViewportSize({ width, height: 900 });
+
+      await expect(
+        page.getByRole("heading", { name: "Anytime", exact: true }),
+        `walk lists announced at ${width}px`,
+      ).toHaveCount(1);
+      await expect(
+        page.getByRole("button", { name: "Log walk" }),
+        `walk rows announced at ${width}px`,
+      ).toHaveCount(2);
+      await expect(
+        page.getByRole("heading", { name: "Planned", exact: true }),
+        `day totals announced at ${width}px`,
+      ).toHaveCount(width < 768 ? 0 : 1);
+    }
+  });
+
+  test("the walks follow the bar, and precede the aside, at every width from 1024", async ({
+    page,
+  }) => {
+    // FUEL-114's reading order with FUEL-115's section in it: subject, actions,
+    // then the walks. Read off the document rather than off the boxes, because
+    // the document is what a screen reader walks, and asserted at the widths
+    // where the desktop bar is the one drawn.
+    for (const width of [1024, 1271, 1272, 1920]) {
+      await page.setViewportSize({ width, height: 900 });
+
+      const order = await page.evaluate(() => {
+        const bar = document.querySelector('main [data-bar="desktop"]')!;
+        const heading = [...document.querySelectorAll("main h2")].find(
+          (node) => node.textContent === "Anytime",
+        )!;
+        const aside = document.querySelector('main [data-column="aside"]')!;
+        const follows = (a: Node, b: Node) =>
+          Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+        return { afterBar: follows(bar, heading), beforeAside: follows(heading, aside) };
+      });
+
+      expect(order, `at ${width}px`).toEqual({ afterBar: true, beforeAside: true });
     }
   });
 });
