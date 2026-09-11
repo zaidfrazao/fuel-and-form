@@ -1,8 +1,11 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  PAGE_AFTER_FOOT,
   PAGE_ASIDE_COLUMN,
+  PAGE_ASIDE_COLUMN_AFTER_FOOT,
   PAGE_ASIDE_GRID,
+  PAGE_ASIDE_GRID_AFTER_FOOT,
   PAGE_BAND_GRAPHIC,
   PAGE_BAND_SPAN,
   PAGE_MEASURE_COLUMN,
@@ -220,6 +223,54 @@ describe("the page's own columns emit what they claim", () => {
     // and the bar goes down with it — measured at 183px on `/` before this.
     // A flexible last track confines the surplus to the bar's row, below it.
     expect(css).toContain("grid-template-rows: auto auto 1fr");
+  });
+});
+
+describe("`/`'s fourth row, for the walks under the bar — FUEL-115", () => {
+  test.each(
+    [PAGE_ASIDE_GRID_AFTER_FOOT, PAGE_ASIDE_COLUMN_AFTER_FOOT, PAGE_AFTER_FOOT].flatMap(
+      (group) => utilities(group).filter((utility) => utility.startsWith("xl:")),
+    ),
+  )("%s is scoped to 1272px", async (utility) => {
+    // Below the cap the walks are a flex item in the page's one column, so
+    // every placement here has to stand down there. The margin in particular:
+    // unscoped, it would add 30px to the column's own gap on the phone.
+    const atRules = enclosingAtRules(await build([utility]), utility).join(" ");
+
+    expect(atRules).toMatch(/1272px/);
+  });
+
+  test("the flexible track moves to the last row, below the walks", async () => {
+    const css = await build(utilities(PAGE_ASIDE_GRID_AFTER_FOOT));
+
+    // The same rule as the shared grid's, one row further down. With the `1fr`
+    // on the bar's row, as it is in `PAGE_ASIDE_GRID`, the walks would sit
+    // wherever the aside's surplus left them. On the bar's row as an `auto`
+    // track and the walks' as the flexible one, the bar stays on the figures
+    // and the walks stay on the bar.
+    expect(css).toContain("grid-template-rows: auto auto auto 1fr");
+    expect(css).not.toContain("row-gap:");
+  });
+
+  test("the aside spans the three rows under the band", async () => {
+    const css = await build(utilities(PAGE_ASIDE_COLUMN_AFTER_FOOT));
+
+    // Two would confine it to the measure and the bar, and the walks' row would
+    // then grow to the aside's height, which is FUEL-86's drift one row down.
+    expect(css).toContain("grid-row-start: 2");
+    expect(css).toContain("grid-row: span 3 / span 3");
+  });
+
+  test("the walks are placed in the first column's fourth row, at its top", async () => {
+    const css = await build(utilities(PAGE_AFTER_FOOT));
+
+    expect(css).toContain("grid-column-start: 1");
+    expect(css).toContain("grid-row-start: 4");
+    // Its top, and its own height, for the reason `PAGE_MEASURE_FOOT` gives:
+    // the row is flexible and a grid item stretches to its area by default.
+    expect(css).toContain("align-self: flex-start");
+    // The column's 30px, which a grid item outside the column does not get.
+    expect(css).toContain("margin-top: 30px");
   });
 });
 

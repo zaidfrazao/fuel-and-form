@@ -451,8 +451,8 @@ table.week thead th.now { color: var(--accent); border-bottom-color: var(--accen
 /* § Desktop: above 1024px the action bar is not sticky — there is no thumb, so
    there is no posture to serve — and the primary action sits at the end of its
    subject: directly under what it acts on, from 1024 and not only here at the
-   cap (FUEL-114). Drawn as the last thing in the measure, in flow, covering
-   nothing. */
+   cap (FUEL-114). Drawn in flow, covering nothing, and the last thing in the
+   measure except on Right Now, whose walks follow it (FUEL-115). */
 .dactions { display: flex; flex-direction: column; gap: 10px; }
 
 /* The notice bands keep their full-bleed hairline and lose their own centre:
@@ -1706,7 +1706,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
       <div class="dcell">
         <!-- ===== D1 · RIGHT NOW ===== -->
         <div class="dstage">
-          <div class="ui dframe" data-mode="light" role="img" aria-label="Right Now at 1272: the two notice bands full-bleed with their text at the measure&#39;s edge, the navigation as a left rail, a folio line and the day ruler across the frame, Greek Yogurt and Berries with its four figures in the measure, and the day&#39;s totals, the day&#39;s items and the Anytime list in the second column">
+          <div class="ui dframe" data-mode="light" role="img" aria-label="Right Now at 1272: the two notice bands full-bleed with their text at the measure&#39;s edge, the navigation as a left rail, a folio line and the day ruler across the frame, Greek Yogurt and Berries with its four figures, its actions and the Anytime list in the measure, and the day&#39;s totals and the day&#39;s items in the second column">
 <div class="dband">
             <div>
               <p>Demo session — your changes are temporary. <a href="#">View the source.</a></p>
@@ -1783,6 +1783,18 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                     <button class="btn btn-secondary auto" type="button">Swap</button>
                     <button class="btn btn-secondary auto" type="button">Skip</button>
                   </div>
+
+                  <!-- The things done from this screen today, under the action
+                       row rather than at the foot of the aside — FUEL-115. The
+                       aside is the record and the day around it, and at 1366×768
+                       its foot was below the fold with the walks in it. -->
+                  <div class="blk">
+                    <span class="u-micro">Anytime</span>
+                    <div class="list">
+                      <div class="row" style="min-height:46px;padding:11px 0;"><div class="row-main"><span class="row-title">Greek Yoghurt &amp; Honey</span></div><span class="row-trail">180 kcal</span></div>
+                      <div class="row" style="min-height:46px;padding:11px 0;"><div class="row-main"><span class="row-title">Walk</span></div><button class="btn btn-secondary auto" type="button" style="font-size:13px;min-height:36px;">Log walk</button></div>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- The aside answers the desktop's question. PRD § Target
@@ -1816,14 +1828,6 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                       <div class="row" style="min-height:44px;padding:10px 0;"><div class="row-main"><span class="row-title">Lemon-Garlic Baked Fish</span></div><span class="row-trail">19:00</span></div>
                     </div>
                   </div>
-
-                  <div class="blk">
-                    <span class="u-micro">Anytime</span>
-                    <div class="list">
-                      <div class="row" style="min-height:46px;padding:11px 0;"><div class="row-main"><span class="row-title">Greek Yoghurt &amp; Honey</span></div><span class="row-trail">180 kcal</span></div>
-                      <div class="row" style="min-height:46px;padding:11px 0;"><div class="row-main"><span class="row-title">Walk</span></div><button class="btn btn-secondary auto" type="button" style="font-size:13px;min-height:36px;">Log walk</button></div>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -1833,7 +1837,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
         <div class="cap">
           <span class="tagline">P1 · / · light</span>
           <h3>Right Now</h3>
-          <p>Redrawn (FUEL-85). <b>One job per zone.</b> The header says where we are in the day &mdash; a folio line and the ruler at the day&rsquo;s width, closed by the ruler&rsquo;s own hairline. The measure keeps the subject and nothing arrives before it. The aside answers the question the desktop reader actually came with: the day against target, every item with its status, and what can still be logged. The first version of this frame put four figures with progress bars across the top; a progress bar is not in this system, and it buried the subject under three things that all wanted reading first.</p>
+          <p>Redrawn (FUEL-85). <b>One job per zone.</b> The header says where we are in the day &mdash; a folio line and the ruler at the day&rsquo;s width, closed by the ruler&rsquo;s own hairline. The measure keeps the subject and nothing arrives before it. The aside answers the question the desktop reader actually came with: the day against target and every item with its status. <b>Amended (FUEL-115):</b> the Anytime list moved from the foot of the aside to the measure, under the actions. The walks are things done from this screen today, and at the aside&rsquo;s foot the second one was below a 768 fold. The first version of this frame put four figures with progress bars across the top; a progress bar is not in this system, and it buried the subject under three things that all wanted reading first.</p>
         </div>
       </div>
 

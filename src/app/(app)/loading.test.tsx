@@ -5,8 +5,8 @@ import { ACTION_BAR_AT } from "@/components/action-bar";
 import { RULER_AT } from "@/components/day-ruler";
 import { KV_GRID_COLUMNS } from "@/components/kv-grid";
 import {
-  PAGE_ASIDE_COLUMN,
-  PAGE_ASIDE_GRID,
+  PAGE_ASIDE_COLUMN_AFTER_FOOT,
+  PAGE_ASIDE_GRID_AFTER_FOOT,
   PAGE_ASIDE_UNWRAP,
   PAGE_HEADER_BAND,
   PAGE_MEASURE_COLUMN,
@@ -46,7 +46,7 @@ describe("the skeleton stands in the same frame as the screen", () => {
     // double space yields `""` and `toContain("")` is true of everything — the
     // one assertion meant to stop the screen and the skeleton drifting would
     // then pass on any element at all.
-    for (const utility of PAGE_ASIDE_GRID.split(" ").filter(Boolean)) {
+    for (const utility of PAGE_ASIDE_GRID_AFTER_FOOT.split(" ").filter(Boolean)) {
       expect(main.className).toContain(utility);
     }
   });
@@ -64,7 +64,7 @@ describe("the skeleton stands in the same frame as the screen", () => {
       PAGE_MEASURE_COLUMN,
     );
     expect(container.querySelector('[data-column="aside"]')!.className).toBe(
-      PAGE_ASIDE_COLUMN,
+      PAGE_ASIDE_COLUMN_AFTER_FOOT,
     );
     // The wrapper that dissolves at the cap, so the two groups become `<main>`'s
     // own grid items rather than a box inside it.

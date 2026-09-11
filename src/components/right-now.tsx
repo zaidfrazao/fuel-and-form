@@ -34,8 +34,11 @@ import {
 } from "@/lib/day-summary";
 import type { WorkoutExercise } from "@/lib/db/schema";
 import {
+  PAGE_AFTER_FOOT,
   PAGE_ASIDE_COLUMN,
+  PAGE_ASIDE_COLUMN_AFTER_FOOT,
   PAGE_ASIDE_GRID,
+  PAGE_ASIDE_GRID_AFTER_FOOT,
   PAGE_ASIDE_UNWRAP,
   PAGE_BAND_GRAPHIC,
   PAGE_HEADER_BAND,
@@ -571,16 +574,19 @@ function Anytime({
   items,
   date,
   walks,
+  className,
 }: {
   items: readonly AnytimeItem[];
   date: CalendarDate;
   /** What is recorded against each walk, by entry id. See `RightNow`. */
   walks: ReadonlyMap<string, WalkEntryView>;
+  /** Its place in the page's grid at the cap, where it has one — FUEL-115. */
+  className?: string;
 }) {
   if (items.length === 0) return null;
 
   return (
-    <section className="flex flex-col gap-[14px]">
+    <section className={cn("flex flex-col gap-[14px]", className)}>
       <Eyebrow>Anytime</Eyebrow>
       <WalkList>
         {items.map((item) =>
@@ -1688,10 +1694,13 @@ export function RightNow({
        *
        * The mock draws no frame for this state, so the ruling is written down
        * rather than transcribed: it is `/` with an empty subject, not a screen
-       * of its own, and the aside's contents are exactly what they are next
-       * door. Giving it one column instead would mean the reader's page
-       * rearranged itself on a day the plan happens not to cover — the aside
-       * appearing and disappearing with the data rather than with the width.
+       * of its own, and every section is in the column it takes next door.
+       * Since FUEL-115 that leaves the aside empty at the cap: next door it
+       * holds the day's totals and the day's items, and a day the plan does not
+       * cover has neither. Giving it one column instead would mean the
+       * reader's page rearranged itself on a day the plan happens not to cover
+       * — the aside appearing and disappearing with the data rather than with
+       * the width.
        *
        * Day-complete is the one that genuinely differs, and § Desktop says why
        * in a sentence this state cannot borrow: "a second column would set
@@ -1727,17 +1736,31 @@ export function RightNow({
                 Meals and sessions appear here once the week&rsquo;s plan covers today.
               </p>
             </header>
-          </div>
 
-          <div className={PAGE_ASIDE_COLUMN} data-column="aside">
             {/* Two copies, not three: there is no macro grid here for the ruler
                 to move around, so the phone and the wide band share this one
-                and the band above takes the cap. `xl:pt-0` in the shared string
-                is what lands it level with the heading beside it. */}
+                and the band above takes the cap. It moved into this group with
+                the walks (FUEL-115), because the phone reads it before them. It
+                is never drawn at the cap, so it has no column there to be
+                wrong in. */}
             {base.timeline.length > 0 && rulerBelowCap}
 
+            {/* The walks in the measure, as they are next door — FUEL-115. A
+                row that changed column between two states of one screen is
+                the thing § Desktop refused for `/training`'s session timer.
+                Inside the group rather than under the bar, because this state
+                has no primary to come first: its bar only appears to offer an
+                Undo, and it is last in the source on every width. */}
             <Anytime items={base.anytime} date={base.date} walks={walks} />
+          </div>
 
+          {/* Empty at the cap — FUEL-115. The foot link is all it holds, and that
+              stands down at 1024 for the rail's. An empty aside is the frame's
+              margin, which is what § Desktop says a screen with no aside
+              leaves. The group stays so that the aside does not appear and
+              disappear with the data rather than with the width, which is the
+              reason this state took two columns at all. */}
+          <div className={PAGE_ASIDE_COLUMN} data-column="aside">
             {settingsFootLink}
           </div>
         </div>
@@ -1748,7 +1771,9 @@ export function RightNow({
   }
 
   return (
-    <Screen className={PAGE_ASIDE_GRID}>
+    // Four rows rather than the shared three — FUEL-115, `PAGE_AFTER_FOOT`. The
+    // walks take a row under the bar.
+    <Screen className={PAGE_ASIDE_GRID_AFTER_FOOT}>
       {/*
        * § Spacing & Layout's section rhythm is 30px between blocks, and that is
        * what this screen uses from 768px up. Below it the rhythm steps to 22 —
@@ -1866,59 +1891,95 @@ export function RightNow({
         {actions("desktop")}
 
         {/*
-         * The aside — § Desktop, as FUEL-85 redrew it: "the aside takes the
-         * day's totals, the day's own items with their status, and the Anytime
-         * list". The zone's question is "what is the context?", and each of the
-         * three answers a part of it — the day against target, the day itself,
-         * and what can still be logged.
+         * Below the cap, the rest of the page's one column — FUEL-115.
+         *
+         * Everything from here to the aside is written outside both column
+         * groups, and that is what lets the walks change column without the
+         * phone's sequence changing. § Desktop gives the walks to the measure,
+         * under the action row: they are the things done from this screen
+         * today, where the aside is the record and the day around it. The bar
+         * is its own grid item, so the walks cannot sit inside the measure's
+         * group and still be read after it. They come after the bar in the
+         * source, and `PAGE_AFTER_FOOT` puts them in a row of their own
+         * beneath it.
+         *
+         * Writing them there is the easy half. The phone reads the figures, the
+         * ruler, Up next, Anytime, and the foot link, in that order, and `The
+         * day`'s totals come before all of it. So everything the phone reads
+         * before the walks has to be written before them too. The ruler's phone
+         * copy and Up next are never drawn at the cap, so they can simply move
+         * here. The totals are drawn in both places, since the aside at the cap
+         * opens with them, so they are the one section rendered twice. They are
+         * the stateless half of the pair. The walk row holds a running
+         * recording in its own state, and a second, hidden copy of it would
+         * strand that recording when a tablet turned across a breakpoint.
+         *
+         * Below 1024 the sequence is unchanged: the figures, `Planned`, the
+         * ruler's phone copy, Up next, Anytime, the foot link. From 1024 the
+         * action bar's desktop copy sits between the figures and `Planned`,
+         * which is FUEL-114's one change to it. At the cap the reading order is
+         * subject, actions, walks, context. It had been subject, actions,
+         * context, walks.
+         */}
+
+        {/* After the swap note, and that order is the argument: the note says
+            what the swap cost, and these are the figures it cost it from.
+
+            Hidden below 768px when there is a meal, because `MealDayGrid` in the
+            measure is already carrying these four figures — FUEL-82. On a
+            workout card there is no meal to merge into, so the section renders
+            at every width below the cap and the day's numbers are still on the
+            screen, which is the point `DayTotals` makes about being present on a
+            session too.
+
+            Stood down at the cap, where the aside's copy takes over. For a
+            meal that is `md:max-xl:flex` and not `md:flex xl:hidden`: Tailwind
+            emits the redefined `xl` before `md`, so an `xl:hidden` never
+            outranks a `md:flex` and the two copies would both be drawn at 1272.
+            That is FUEL-77's two rulers, and `RULER_AT` sets it out. A workout's
+            copy has no `md:` rule, so `xl:hidden` alone stands it down. */}
+        <DayTotals
+          planned={plannedToday}
+          target={target}
+          className={activeMeal ? "hidden md:max-xl:flex" : "xl:hidden"}
+        />
+
+        {/* The phone's position for the ruler — see `rulerBelow`. Below the
+            figures, because on the longest meal names one of the two has to go
+            under the action bar and it should not be the numbers. */}
+        {rulerBelow}
+
+        <UpNext items={now.upcoming} />
+
+        <Anytime
+          items={base.anytime}
+          date={base.date}
+          walks={walks}
+          className={PAGE_AFTER_FOOT}
+        />
+
+        {/*
+         * The aside — § Desktop, as FUEL-115 amended it: the aside takes "the
+         * day's totals and the day's own items with their status". The zone's
+         * question is "what is the context?", and the two answer it as the day
+         * against target and the day itself.
          *
          * The ruler left this column for the header band, where its question is
-         * the band's. Up next stayed and stood down: `The day` contains its two
-         * items and § Desktop's "say a thing once" decides between them.
+         * the band's. Up next stands down at the cap: `The day` contains its two
+         * items, and § Desktop's "say a thing once" decides between them. The
+         * Anytime list left for the measure in FUEL-115.
          *
-         * ## Nothing moves below the cap, and the order is why
-         *
-         * `DayTotals` is first, which is the position it already occupied: it
-         * was the last section of the measure group and this group follows
-         * immediately, so in the flat column below `xl` the sequence is
-         * unchanged to the element. That is the whole trick of moving a section
-         * between columns without moving it on a phone — the two groups are
-         * `display: contents` there, so a section's column is decided by which
-         * side of the boundary it is written on and its POSITION is decided by
-         * the order of the whole list.
-         *
-         * Below 1024 the sequence reads: the figures, the ruler's phone copy,
-         * Up next, Anytime, the foot link. Exactly as it did. From 1024 the
-         * action bar's desktop copy sits between the figures and this group,
-         * which is FUEL-114's one change to the sequence.
+         * Below the cap the group is `display: contents`, and both of its
+         * sections are `hidden` there, so all it adds to the phone's column is
+         * the foot link, which is last, where it always was.
          */}
-        <div className={PAGE_ASIDE_COLUMN} data-column="aside">
-          {/* After the swap note, and that order is the argument: the note says
-              what the swap cost, and these are the figures it cost it from.
-
-              Hidden below 768px when there is a meal, because `MealDayGrid` in
-              the measure is already carrying these four figures — FUEL-82. On a
-              workout card there is no meal to merge into, so the section renders
-              at every width and the day's numbers are still on the screen, which
-              is the point `DayTotals` makes about being present on a session
-              too. In the aside at the cap both cases are already visible, so
-              FUEL-86 needed no third rule: `md:flex` is true at 1272. */}
-          <DayTotals
-            planned={plannedToday}
-            target={target}
-            className={activeMeal ? "hidden md:flex" : undefined}
-          />
-
-          {/* The phone's position for the ruler — see `rulerBelow`. Below the
-              figures, because on the longest meal names one of the two has to go
-              under the action bar and it should not be the numbers. */}
-          {rulerBelow}
+        <div className={PAGE_ASIDE_COLUMN_AFTER_FOOT} data-column="aside">
+          {/* The cap's copy of the totals, first in the aside as they always
+              were. `hidden xl:flex` is one rule true in one band, so there is
+              nothing for the emission order to get backwards. */}
+          <DayTotals planned={plannedToday} target={target} className="hidden xl:flex" />
 
           <TheDay rows={theDay(base.timeline, progress.position, progress.entries)} />
-
-          <UpNext items={now.upcoming} />
-
-          <Anytime items={base.anytime} date={base.date} walks={walks} />
 
           {settingsFootLink}
         </div>

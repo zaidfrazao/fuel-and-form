@@ -1655,11 +1655,17 @@ export function Training({
          * which are below the fold at every width today — on the one screen
          * whose argument is the pattern rather than the day."
          *
-         * The walk row goes with them, which the mock does not draw and this
-         * ticket rules: it is the same Anytime list `/` renders, `/` puts it in
-         * the aside, and a row that appeared in a different column depending on
-         * which screen you reached it from would be two rows as far as a reader
-         * is concerned.
+         * The walk row goes with them, which the mock does not draw. FUEL-77
+         * ruled it here because `/` put the same row in its aside, and a row
+         * that changed column between screens would read as two rows.
+         *
+         * FUEL-115 moved `/`'s walks to its measure and reversed that ruling
+         * rather than extending it. A row now takes the column of its job on the
+         * screen it is on. On `/`, whose subject is what to do today, a walk is
+         * one of the things to do. Here the subject is the session, and the
+         * walk is the day around it. The measure is also already past the fold
+         * at 1272 (FUEL-118), and a walk under `Mark done` would only be further
+         * below it.
          */}
         {/* Hidden below the cap while a session is being operated, and only
             there. § Desktop: "At ≥1272 the two states are one composition — the

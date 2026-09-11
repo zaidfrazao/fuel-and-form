@@ -49,8 +49,8 @@ import { RULER_AT } from "@/components/day-ruler";
 import { KV_GRID_COLUMNS } from "@/components/kv-grid";
 import { PageMain } from "@/components/page-main";
 import {
-  PAGE_ASIDE_COLUMN,
-  PAGE_ASIDE_GRID,
+  PAGE_ASIDE_COLUMN_AFTER_FOOT,
+  PAGE_ASIDE_GRID_AFTER_FOOT,
   PAGE_ASIDE_UNWRAP,
   PAGE_HEADER_BAND,
   PAGE_MEASURE_COLUMN,
@@ -195,7 +195,7 @@ function Section({
 
 export default function Loading() {
   return (
-    <PageMain className={`pt-3 md:pt-[22px] ${PAGE_ASIDE_GRID}`}>
+    <PageMain className={`pt-3 md:pt-[22px] ${PAGE_ASIDE_GRID_AFTER_FOOT}`}>
       <p className="sr-only" role="status">
         Loading today&rsquo;s plan.
       </p>
@@ -258,12 +258,18 @@ export default function Loading() {
             the same place as the screen's. See `Bar` below. */}
         <Bar at="desktop" />
 
-        <div aria-hidden className={PAGE_ASIDE_COLUMN} data-column="aside">
+        <div aria-hidden className={PAGE_ASIDE_COLUMN_AFTER_FOOT} data-column="aside">
           {/* `Planned` — first in this column, and first for the reason the screen
               gives: it was the last section of the measure before FUEL-86 and
               this group follows immediately, so the flat column below the cap is
               unchanged. Gated at `md` like the screen's, because below 768 the
-              merged grid above is already carrying these four figures. */}
+              merged grid above is already carrying these four figures.
+
+              One block where the screen has two copies — FUEL-115. The screen
+              writes a copy before its walks so the phone reads the totals
+              first, and the walks have no block here. So with them gone the
+              two sequences are the same, and this block is drawn in the same
+              place as whichever copy is drawn, at every width. */}
           <div className="hidden md:flex md:flex-col" data-shape="day">
             <Section>
               <Grid lines={3} gap="gap-y-[22px]" />
