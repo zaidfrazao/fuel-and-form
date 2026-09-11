@@ -296,10 +296,13 @@ function MealMacros({
        * 1272, which drew those four islands for the whole of the tablet band on
        * a column that was already the width the rule was written about.
        *
-       * This grid is the measure's, so it takes the four. `DayTotals` below is
-       * the aside's and keeps the two. Same component, same rule about content,
-       * two column counts because the two columns are different widths — which
-       * is why the count is a prop rather than something the grid works out.
+       * This grid is the measure's, so it takes the four. `DayTotals` is drawn
+       * twice, and each copy takes its column's count: the aside's keeps the
+       * two, and the copy below the cap, which is in this column, takes the
+       * four with it so that Calories sits over Calories (FUEL-116). Same
+       * component, same rule about content, two column counts because the two
+       * columns are different widths — which is why the count is a prop rather
+       * than something the grid works out.
        *
        * `columns={4}` is the whole shape and not just the desktop half — see
        * `kv-grid.tsx`, which owns the breakpoint. Four across a 375px phone is
@@ -342,14 +345,28 @@ function MealMacros({
  * The totals belong to the DAY, not to the item in the middle of the screen. A
  * grid that appeared at breakfast and vanished at the afternoon session would be
  * hiding the day's numbers exactly when the next meal is the one being decided.
+ *
+ * ## Its shape is its column's — FUEL-116
+ *
+ * Drawn twice since FUEL-115, once each side of the cap, and the two copies are
+ * in different columns. The cap's opens the 356px aside and is 2×2, the density
+ * the phone proves. The other is drawn below the cap, where the aside group is
+ * `display: contents`, so it is in the 584px measure directly under `This
+ * meal`. It was 2×2 there too, under a grid drawn four across, so Calories did
+ * not sit over Calories. It takes `This meal`'s four, which is the same
+ * `KV_GRID_COLUMNS` entry, so the two share their tracks. That also makes it
+ * 2×2 on a phone, where a workout card still draws it.
  */
 function DayTotals({
   planned,
   target,
+  columns,
   className,
 }: {
   planned: readonly PlannedMeal[];
   target: MacroTarget;
+  /** Four on the measure, two in the aside. See above. */
+  columns: 2 | 4;
   className?: string;
 }) {
   return (
@@ -365,7 +382,7 @@ function DayTotals({
           line says `plan` for width — see `MealDayGrid`. */}
       <Eyebrow>Planned</Eyebrow>
 
-      <MacroGrid totals={summariseDay(planned)} target={target} />
+      <MacroGrid totals={summariseDay(planned)} target={target} columns={columns} />
     </section>
   );
 }
@@ -1937,10 +1954,13 @@ export function RightNow({
             emits the redefined `xl` before `md`, so an `xl:hidden` never
             outranks a `md:flex` and the two copies would both be drawn at 1272.
             That is FUEL-77's two rulers, and `RULER_AT` sets it out. A workout's
-            copy has no `md:` rule, so `xl:hidden` alone stands it down. */}
+            copy has no `md:` rule, so `xl:hidden` alone stands it down.
+
+            Four across, because below the cap this is the measure — FUEL-116. */}
         <DayTotals
           planned={plannedToday}
           target={target}
+          columns={4}
           className={activeMeal ? "hidden md:max-xl:flex" : "xl:hidden"}
         />
 
@@ -1977,7 +1997,12 @@ export function RightNow({
           {/* The cap's copy of the totals, first in the aside as they always
               were. `hidden xl:flex` is one rule true in one band, so there is
               nothing for the emission order to get backwards. */}
-          <DayTotals planned={plannedToday} target={target} className="hidden xl:flex" />
+          <DayTotals
+            planned={plannedToday}
+            target={target}
+            columns={2}
+            className="hidden xl:flex"
+          />
 
           <TheDay rows={theDay(base.timeline, progress.position, progress.entries)} />
 

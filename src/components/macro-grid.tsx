@@ -270,8 +270,14 @@ export function MacroGrid({
   /** The four figures from `profiles`, and nothing else off that row. */
   target: MacroTarget;
   calories?: CaloriesFigure;
-  /** Passed through to the grid. Three only when the figures are short. */
-  columns?: 2 | 3;
+  /**
+   * Passed through to the grid. Three only when the figures are short.
+   *
+   * Four on a measure and nowhere else — `KV_GRID_COLUMNS` owns what that
+   * means at each width. `/`'s copy of the day's totals below the cap takes it,
+   * since it sits in the same column as `This meal` there (FUEL-116).
+   */
+  columns?: 2 | 3 | 4;
   /**
    * Passed through to the grid — this one sits on `accent-subtle`.
    *

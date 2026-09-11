@@ -6,6 +6,7 @@ import { ACTION_BAR_AT, APP_ACTION_BAR } from "@/components/action-bar";
 import { RightNow } from "@/components/right-now";
 import type { LoggedEntry } from "@/lib/day-summary";
 import { RULER_AT } from "@/components/day-ruler";
+import { KV_GRID_COLUMNS } from "@/components/kv-grid";
 import type { Meal, Workout, WorkoutExercise } from "@/lib/db/schema";
 import {
   PAGE_AFTER_FOOT,
@@ -2954,7 +2955,7 @@ describe("the second column", () => {
     expect(document.querySelector("[data-column]")).toBeNull();
   });
 
-  test("the meal's figures go four across on the measure, the day's stay 2×2", () => {
+  test("the figures go four across on the measure, and the aside's copy stays 2×2", () => {
     /*
      * § Desktop's density rule and FUEL-85's amendment to it, asserted where a
      * later reader would otherwise re-open the question.
@@ -3010,6 +3011,45 @@ describe("the second column", () => {
     // The aside's takes no variant at all — 356px is the width the phone's own
     // 2×2 was measured at.
     expect(day).not.toMatch(/(md|lg|xl):grid-cols/);
+
+    /*
+     * ## Below the cap the day's copy is on the measure too — FUEL-116
+     *
+     * "In different columns" is true at the cap and nowhere else. Below it the
+     * aside group is `display: contents`, so the copy of `Planned` drawn from
+     * 768 to 1271 sits in the same 584px column as `This meal`, directly under
+     * it. It drew 2×2 there under a grid drawn four across, so Calories did not
+     * sit over Calories, and this test checked only the aside's copy, so it
+     * passed.
+     *
+     * Asserted as the same shape as the meal's, read from `KV_GRID_COLUMNS`,
+     * because the property is that the two share their tracks, and the same
+     * count in the same column is what makes them the same tracks. A band-bound
+     * utility spelled here would be a third copy of the rule. Whether they line
+     * up in pixels is `page-columns.spec.ts`'s to measure.
+     */
+    const [belowCap] = plannedCopies();
+    const band = belowCap.querySelector<HTMLElement>("dl")!;
+
+    for (const utility of KV_GRID_COLUMNS[4].split(" ")) {
+      expect(tokens(band)).toContain(utility);
+      expect(meal.split(" ")).toContain(utility);
+    }
+  });
+
+  test("a workout card's day figures go four across below the cap as well — FUEL-116", () => {
+    // No `This meal` to line up with, but the rule is about the column rather
+    // than the neighbour: four across on a measure. Below 768 the same shape is
+    // `grid-cols-2`, so the phone's copy, the only place the figures appear on
+    // a session, is the 2×2 it was.
+    renderNow(active(2));
+
+    const [belowCap, atCap] = plannedCopies();
+
+    for (const utility of KV_GRID_COLUMNS[4].split(" ")) {
+      expect(tokens(belowCap.querySelector("dl")!)).toContain(utility);
+    }
+    expect(atCap.querySelector("dl")!.className).not.toMatch(/(md|lg|xl):grid-cols/);
   });
 
   test("the groups are the frame's, not this screen's", () => {
