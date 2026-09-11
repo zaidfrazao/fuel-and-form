@@ -139,6 +139,12 @@ export const ACTION_BAR_AT = {
    * no free space to take there today. It is declared anyway, for the reason
    * `PAGE_MEASURE_FOOT` gives for `xl:mt-0`: the inertness that was only true
    * by luck is the one that broke.
+   *
+   * `TRAINING_BAR_AT.desktop` below zeroes the same two from `lg` rather than
+   * only in the band. That difference is deliberate, so do not harmonise
+   * them. `/training`'s copy sits in a gapped flex column at every width from
+   * 1024, while this one becomes a grid item with no row gap at the cap and
+   * needs its 30px back there.
    */
   desktop: `${APP_ACTION_BAR} max-lg:hidden lg:max-xl:mt-0 lg:max-xl:pt-0`,
 } as const;
