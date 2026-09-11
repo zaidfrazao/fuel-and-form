@@ -1190,6 +1190,10 @@ test.describe("/'s macro grids in the band — FUEL-116", () => {
     expect(lines).toHaveLength(8);
 
     for (const { text, height, line } of lines) {
+      // A `line-height` of `normal` parses to NaN, and the failure would then
+      // read as a wrap. The type tokens set it in rem, so this names the other
+      // regression if it ever happens. Raised by the FUEL-116 precommit review.
+      expect(Number.isFinite(line), `"${text}" has a resolved line-height`).toBe(true);
       expect(height, `"${text}" on one line`).toBeCloseTo(line, 0);
     }
   });
