@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { Training as TrainingView } from "@/lib/db/queries/training";
@@ -198,7 +198,11 @@ describe("what crosses to the browser", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
       "Bodyweight Circuit A",
     );
-    expect(screen.getByText("Press-ups")).toBeTruthy();
+    // The phone's copy of the list: the plan state renders one per position
+    // (FUEL-118), and jsdom has no stylesheet to hide the other.
+    expect(
+      within(document.querySelector<HTMLElement>('[data-list="phone"]')!).getByText("Press-ups"),
+    ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toBe("Partial · 18 min");
     expect(screen.getByLabelText<HTMLTextAreaElement>("Note").value).toBe("cut it short");
   });

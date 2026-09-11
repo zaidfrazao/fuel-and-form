@@ -3,7 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { Week } from "@/components/dot-grid";
-import { APP_ACTION_BAR, SESSION_ACTION_BAR } from "@/components/action-bar";
+import {
+  ACTION_BAR_AT,
+  APP_ACTION_BAR,
+  SESSION_ACTION_BAR,
+  TRAINING_BAR_AT,
+} from "@/components/action-bar";
 import type { TrainingItem } from "@/components/training";
 import {
   PAGE_ASIDE_COLUMN,
@@ -63,6 +68,44 @@ vi.mock("@/app/actions/walk-route", () => ({
 }));
 
 const { Training } = await import("./training");
+
+/**
+ * One copy of the plan state's action bar, or the session state's only bar —
+ * FUEL-118.
+ *
+ * The plan state renders the bar twice, as `/` does (FUEL-114). Below 1024 it
+ * is sticky and last. From 1024 it sits in the measure under `This session`.
+ * CSS draws one copy, but jsdom has no stylesheet, so both are in the tree
+ * here and an unscoped `getByRole("button", { name: "Mark done" })` finds two.
+ *
+ * `"phone"` is the default because it is the copy these tests were written
+ * against, and both copies are the same children with the same props. The
+ * session state draws one bar with no attribute, so the default falls back to
+ * the whole screen, and so does a query that expects no bar at all. A named
+ * copy that is missing throws rather than being answered by the other copy.
+ * That is the rule `right-now.test.tsx`'s `bar()` settled in FUEL-114.
+ *
+ * Resolved at each call, because a tap can swap states, and with them which
+ * copies exist.
+ */
+const bar = (which?: "phone" | "desktop") => copy("bar", which);
+
+/**
+ * One copy of the plan state's exercise list — FUEL-118, `LIST_AT`. The same
+ * rules as `bar()`: the phone's copy by default, the whole screen when no copy
+ * is rendered (the session state, a walks-only day), and a throw when a named
+ * copy is missing.
+ */
+const list = (which?: "phone" | "desktop") => copy("list", which);
+
+function copy(of: "bar" | "list", which?: "phone" | "desktop") {
+  const scoped = document.querySelector<HTMLElement>(`[data-${of}="${which ?? "phone"}"]`);
+
+  if (scoped) return within(scoped);
+  if (which) throw new Error(`no ${which} copy of the ${of} is rendered`);
+
+  return within(document.body);
+}
 
 const TODAY = "2026-08-20"; // a Thursday
 const YESTERDAY = "2026-08-19";
@@ -204,8 +247,8 @@ describe("the session", () => {
 
     // The exercise list, named by the heading above it. The walk's row is a
     // list of its own on this page now (FUEL-29), which is why this is scoped.
-    const list = screen.getByRole("heading", { name: "Exercises" }).nextElementSibling!;
-    const rows = within(list as HTMLElement).getAllByRole("listitem");
+    const exercises = list().getByRole("heading", { name: "Exercises" }).nextElementSibling!;
+    const rows = within(exercises as HTMLElement).getAllByRole("listitem");
 
     expect(rows).toHaveLength(3);
     expect(rows.map((row) => row.textContent)).toEqual([
@@ -242,7 +285,7 @@ describe("the session", () => {
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Circuit B\u00A0— Lower");
 
-    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Squats\u00A0— paused");
   });
@@ -451,7 +494,7 @@ describe("the session", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Walks only");
     // § Tone of Voice: describe what will appear; never nudge.
     expect(screen.getByText(/The daily walks still count/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Mark done" })).toBeNull();
+    expect(bar().queryByRole("button", { name: "Mark done" })).toBeNull();
   });
 
   test("says nothing is scheduled on a date the plan does not cover", () => {
@@ -470,7 +513,7 @@ describe("setting a status", () => {
 
     await user.type(screen.getByLabelText("Note"), "8, 8, 6");
     await user.type(screen.getByLabelText("Duration"), "26");
-    await user.click(screen.getByRole("button", { name: "Partial" }));
+    await user.click(bar().getByRole("button", { name: "Partial" }));
 
     expect(setSessionStatus).toHaveBeenCalledWith({
       date: TODAY,
@@ -491,7 +534,7 @@ describe("setting a status", () => {
     // gives Start session to today, which is where the session state is
     // reachable. What crosses the wire is the same either way.
     render(view({ date: YESTERDAY }));
-    await user.click(screen.getByRole("button", { name: "Mark done" }));
+    await user.click(bar().getByRole("button", { name: "Mark done" }));
 
     expect(setSessionStatus).toHaveBeenCalledWith(
       expect.not.objectContaining({ workoutId: expect.anything() }),
@@ -508,7 +551,7 @@ describe("setting a status", () => {
     setSessionStatus.mockReturnValue(pending.promise);
 
     render(view());
-    await user.click(screen.getByRole("button", { name: "Skip" }));
+    await user.click(bar().getByRole("button", { name: "Skip" }));
 
     // Nothing has answered, so anything on the screen can only have come from
     // the optimistic layer.
@@ -526,10 +569,10 @@ describe("setting a status", () => {
       }),
     );
 
-    expect(screen.getByRole("button", { name: "Partial" }).getAttribute("aria-pressed")).toBe(
+    expect(bar().getByRole("button", { name: "Partial" }).getAttribute("aria-pressed")).toBe(
       "true",
     );
-    expect(screen.getByRole("button", { name: "Mark done" }).getAttribute("aria-pressed")).toBe(
+    expect(bar().getByRole("button", { name: "Mark done" }).getAttribute("aria-pressed")).toBe(
       "false",
     );
     // And in words, so it is not carried by a pressed state alone. Read off
@@ -562,7 +605,7 @@ describe("setting a status", () => {
 
     expect(duration.value).toBe("28");
 
-    await user.click(screen.getByRole("button", { name: "Mark done" }));
+    await user.click(bar().getByRole("button", { name: "Mark done" }));
 
     // What reaches the action is the stripped value, so nothing downstream
     // ever sees the `NaN` this test is about. The optimistic render of a
@@ -587,11 +630,11 @@ describe("editing what was recorded", () => {
 
     render(view({ sessions: recorded({ status: "done", note: "felt strong", durationMin: 28 }) }));
 
-    expect(screen.queryByRole("button", { name: "Save note" })).toBeNull();
+    expect(bar().queryByRole("button", { name: "Save note" })).toBeNull();
 
     await user.type(screen.getByLabelText("Note"), " — second time this week");
 
-    const save = await screen.findByRole("button", { name: "Save note" });
+    const save = await bar().findByRole("button", { name: "Save note" });
 
     await user.click(save);
 
@@ -611,7 +654,7 @@ describe("editing what was recorded", () => {
     render(view());
     await user.type(screen.getByLabelText("Note"), "not saved on its own");
 
-    expect(screen.queryByRole("button", { name: "Save note" })).toBeNull();
+    expect(bar().queryByRole("button", { name: "Save note" })).toBeNull();
   });
 
   test("clears the record, and offers no clear when there is nothing to clear", async () => {
@@ -619,11 +662,18 @@ describe("editing what was recorded", () => {
 
     render(view());
 
-    expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
+    expect(bar().queryByRole("button", { name: "Clear" })).toBeNull();
 
-    render(view({ sessions: recorded({ status: "skipped", note: null, durationMin: null }) }));
+    // The first render is still mounted, so the bar is found inside the second.
+    const { container } = render(
+      view({ sessions: recorded({ status: "skipped", note: null, durationMin: null }) }),
+    );
 
-    await user.click(screen.getAllByRole("button", { name: "Clear" })[0]!);
+    await user.click(
+      within(container.querySelector<HTMLElement>('[data-bar="phone"]')!).getByRole("button", {
+        name: "Clear",
+      }),
+    );
 
     expect(clearSessionStatus).toHaveBeenCalledWith({
       date: TODAY,
@@ -716,12 +766,12 @@ describe("when the write is refused", () => {
 
     render(view());
     await user.type(screen.getByLabelText("Note"), "felt heavy");
-    await user.click(screen.getByRole("button", { name: "Partial" }));
+    await user.click(bar().getByRole("button", { name: "Partial" }));
 
     // § Feedback: an inline banner at the point of action, the value reverted,
     // a "Try again". Never a modal, and § Tone of Voice forbids "Something
     // went wrong".
-    const alert = await screen.findByRole("alert");
+    const alert = await bar().findByRole("alert");
 
     expect(alert.textContent).toContain("Couldn’t save that.");
     // § Feedback: "the value reverted". `findBy`, because the optimistic value
@@ -746,9 +796,9 @@ describe("when the write is refused", () => {
     clearSessionStatus.mockResolvedValue({ ok: false });
 
     render(view({ sessions: recorded({ status: "done", note: null, durationMin: null }) }));
-    await user.click(screen.getByRole("button", { name: "Clear" }));
+    await user.click(bar().getByRole("button", { name: "Clear" }));
 
-    expect((await screen.findByRole("alert")).textContent).toContain("Couldn’t clear that.");
+    expect((await bar().findByRole("alert")).textContent).toContain("Couldn’t clear that.");
   });
 });
 
@@ -765,12 +815,48 @@ describe("the action bar", () => {
     // FUEL-86 put a controls row between the two — the bar is a column holding
     // a banner and a row of controls now — and a test that counts `parentElement`
     // hops is asserting the nesting rather than the string it says it is about.
-    const bar = screen.getByRole("button", { name: "Mark done" }).closest(".action-bar-fade");
+    //
+    // Two copies since FUEL-118, and each is exactly its `TRAINING_BAR_AT`
+    // string, so this screen cannot quietly add or drop anything on either.
+    // Neither takes `PAGE_MEASURE_FOOT`: the phone's is not drawn at the cap,
+    // and the desktop's is a flex item of the measure's own column.
+    for (const which of ["phone", "desktop"] as const) {
+      const copy = bar(which)
+        .getByRole("button", { name: "Mark done" })
+        .closest(".action-bar-fade");
 
-    // The shared string plus where the bar stands in the page's own grid —
-    // FUEL-77, and `/`'s bar carries exactly the same pair. Identity still, so
-    // this screen cannot quietly add or drop anything else.
-    expect(bar?.className).toBe(`${APP_ACTION_BAR} ${PAGE_MEASURE_FOOT}`);
+      expect(copy?.className).toBe(TRAINING_BAR_AT[which]);
+    }
+
+    // And both are the shared string: the desktop copy is the released bar,
+    // and the phone's is the sticky one `/` shows below 1024.
+    expect(TRAINING_BAR_AT.desktop.startsWith(`${APP_ACTION_BAR} `)).toBe(true);
+    expect(TRAINING_BAR_AT.phone).toBe(ACTION_BAR_AT.phone);
+  });
+
+  test("draws the plan state's two copies with the same controls — FUEL-118", () => {
+    // The copies are one function's output with the same props, which is the
+    // whole of why two of them are safe. Asserted on a recorded past date, where
+    // the bar is at its fullest: three answers, then Save note and Clear.
+    render(
+      view({
+        date: YESTERDAY,
+        sessions: recorded({ status: "partial", note: "cut it short", durationMin: 18 }),
+      }),
+    );
+
+    const controls = (which: "phone" | "desktop") =>
+      bar(which)
+        .getAllByRole("button")
+        .map((button) => [button.textContent, button.getAttribute("aria-pressed")]);
+
+    expect(controls("desktop")).toEqual(controls("phone"));
+    expect(controls("phone").map(([name]) => name)).toEqual([
+      "Mark done",
+      "Partial",
+      "Skip",
+      "Clear",
+    ]);
   });
 
   test.each([
@@ -790,7 +876,7 @@ describe("the action bar", () => {
     // takes the spare width, Partial and Skip take their own, in that order.
     draw();
 
-    const lead = screen.getByRole("button", { name: primary });
+    const lead = bar().getByRole("button", { name: primary });
     const row = lead.closest(".action-bar-fade > div")!;
     const inRow = [...row.querySelectorAll("button")];
 
@@ -816,9 +902,9 @@ describe("the rules the guide states as absolutes", () => {
       }),
     );
 
-    const done = screen.getByRole("button", { name: "Mark done" });
-    const skip = screen.getByRole("button", { name: "Skip" });
-    const partial = screen.getByRole("button", { name: "Partial" });
+    const done = bar().getByRole("button", { name: "Mark done" });
+    const skip = bar().getByRole("button", { name: "Skip" });
+    const partial = bar().getByRole("button", { name: "Partial" });
 
     for (const control of [done, skip, partial]) {
       // `aria-invalid:border-destructive` is on every Button in the app, so the
@@ -986,7 +1072,7 @@ describe("reaching a past date", () => {
     // on screen, not to the day it is being made on.
     await user.type(screen.getByLabelText("Note"), "Felt heavier than it looked.");
     await user.type(screen.getByLabelText("Duration"), "38");
-    await user.click(screen.getByRole("button", { name: "Partial" }));
+    await user.click(bar().getByRole("button", { name: "Partial" }));
 
     await waitFor(() =>
       expect(setSessionStatus).toHaveBeenCalledWith({
@@ -1009,7 +1095,7 @@ describe("reaching a past date", () => {
       }),
     );
 
-    await user.click(screen.getByRole("button", { name: "Clear" }));
+    await user.click(bar().getByRole("button", { name: "Clear" }));
 
     await waitFor(() =>
       expect(clearSessionStatus).toHaveBeenCalledWith({
@@ -1029,15 +1115,35 @@ describe("the second column", () => {
    * order, which is the half a refactor breaks without anything going red.
    */
 
-  /** The sections a column holds, by heading, in DOM order. */
-  const sectionsIn = (column: "measure" | "aside") =>
+  /**
+   * Whether a node is in the copy a width draws, or in no copy at all —
+   * FUEL-118. The plan state renders its list and its bar once per position,
+   * and jsdom has no stylesheet to hide the other, so each width's reading
+   * order is read through its own copies.
+   */
+  const drawnAt = (node: Element, at: "phone" | "desktop") => {
+    const copy = node.closest("[data-list], [data-bar]");
+
+    return !copy || [copy.getAttribute("data-list"), copy.getAttribute("data-bar")].includes(at);
+  };
+
+  /** The sections a column holds, by heading, in DOM order, as a width reads them. */
+  const sectionsIn = (column: "measure" | "aside", at: "phone" | "desktop" = "phone") =>
     [
       ...document
         .querySelector<HTMLElement>(`[data-column="${column}"]`)!
         .querySelectorAll("h1, h2"),
-    ].map((node) => node.textContent);
+    ]
+      .filter((node) => drawnAt(node, at))
+      .map((node) => node.textContent);
 
-  test("the measure keeps the session and its exercise list", () => {
+  /** The whole screen's headings and its bar, in DOM order, as a width reads them. */
+  const readingOrder = (at: "phone" | "desktop") =>
+    [...document.querySelectorAll("h1, h2, .action-bar-fade")]
+      .filter((node) => drawnAt(node, at))
+      .map((node) => (node.matches(".action-bar-fade") ? "[bar]" : node.textContent));
+
+  test("the measure keeps the session, its record and its exercise list", () => {
     render(view());
 
     // § Desktop, and the note travels with them: the bar acts on this session,
@@ -1048,6 +1154,15 @@ describe("the second column", () => {
       "Exercises",
       "This session",
     ]);
+
+    // From 1024 the record comes before the list, because the bar that submits
+    // it sits between them — § The two states of `/training`, FUEL-118.
+    expect(sectionsIn("measure", "desktop")).toEqual([
+      "Training",
+      "Bodyweight Circuit B",
+      "This session",
+      "Exercises",
+    ]);
   });
 
   test("the aside takes the pattern rather than the day", () => {
@@ -1057,19 +1172,24 @@ describe("the second column", () => {
     // screen whose argument is the pattern rather than the day." Anytime joins
     // them because it is the same row `/` renders, in the column `/` puts it in.
     expect(sectionsIn("aside")).toEqual(["Adherence", "Recent", "Anytime"]);
+    expect(sectionsIn("aside", "desktop")).toEqual(["Adherence", "Recent", "Anytime"]);
   });
 
-  test("the division needed no section moved", () => {
+  test("the phone reads the order it always has, and 1024 up reads subject, actions, list", () => {
     /*
-     * The evidence that this composition is § Desktop's rather than the
-     * ticket's: the sections were already in the order the two columns want, so
-     * the groups could be wrapped around them without a resequence. This
-     * asserts the sequence a screen reader walks, which is unchanged from
-     * before FUEL-77 and identical at every width.
+     * FUEL-77 wrapped the column groups around sections that were already in
+     * the order both columns wanted, so the phone's sequence is the one it had
+     * before any of this, and it still is.
+     *
+     * FUEL-118 gives the width from 1024 its own sequence: the session, its
+     * record, the bar that submits the record, then the 877px list, then the
+     * context. Read off the document rather than off boxes, because the
+     * document is what a screen reader walks. It is the same order the boxes
+     * are drawn in, and `page-columns.spec.ts` measures those in a browser.
      */
     render(view());
 
-    expect([...document.querySelectorAll("h1, h2")].map((n) => n.textContent)).toEqual([
+    expect(readingOrder("phone")).toEqual([
       "Training",
       "Bodyweight Circuit B",
       "Exercises",
@@ -1077,7 +1197,41 @@ describe("the second column", () => {
       "Adherence",
       "Recent",
       "Anytime",
+      "[bar]",
     ]);
+    expect(readingOrder("desktop")).toEqual([
+      "Training",
+      "Bodyweight Circuit B",
+      "This session",
+      "[bar]",
+      "Exercises",
+      "Adherence",
+      "Recent",
+      "Anytime",
+    ]);
+  });
+
+  test("the two lists are one list — FUEL-118", () => {
+    // Same function, same props: the rows, their order, their progress and
+    // which of them open the form sheet cannot differ between the copies.
+    render(view({ sessions: withSets([set("e1", 1), set("e1", 2)]) }));
+
+    const rows = (which: "phone" | "desktop") =>
+      list(which)
+        .getAllByRole("listitem")
+        .map((row) => row.textContent);
+
+    expect(rows("desktop")).toEqual(rows("phone"));
+    expect(rows("phone")).toHaveLength(3);
+  });
+
+  test("a date with no session renders no copy of either", () => {
+    // The walks-only and nothing-scheduled days have no list and no bar, and
+    // the copies must not bring an empty one.
+    render(view({ sessions: [WALK] }));
+
+    expect(document.querySelector("[data-list]")).toBeNull();
+    expect(document.querySelector("[data-bar]")).toBeNull();
   });
 
   test("the dot grid and the recent list keep what makes them reachable", () => {
@@ -1151,21 +1305,21 @@ describe("entering and leaving the session state", () => {
     // session is not offered where it would mean nothing.
     const { unmount } = render(view());
 
-    expect(screen.getByRole("button", { name: "Start session" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Mark done" })).toBeNull();
+    expect(bar().getByRole("button", { name: "Start session" })).toBeTruthy();
+    expect(bar().queryByRole("button", { name: "Mark done" })).toBeNull();
 
     unmount();
     render(view({ date: YESTERDAY }));
 
-    expect(screen.getByRole("button", { name: "Mark done" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
+    expect(bar().getByRole("button", { name: "Mark done" })).toBeTruthy();
+    expect(bar().queryByRole("button", { name: "Start session" })).toBeNull();
   });
 
   test("swaps the whole list for the exercise being worked", async () => {
     const user = userEvent.setup();
 
     render(view());
-    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
 
     // § P3's re-aimed criterion: "the active exercise is what is visible when
     // you are working". The subject is the exercise; the session's name moves
@@ -1201,14 +1355,14 @@ describe("entering and leaving the session state", () => {
 
     render(view({ date: YESTERDAY }));
 
-    expect(screen.getByRole("heading", { name: "Exercises" })).toBeTruthy();
+    expect(list().getByRole("heading", { name: "Exercises" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Sets" })).toBeNull();
   });
 
   test("is not offered on a date with no session to work through", () => {
     render(view({ sessions: [WALK] }));
 
-    expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
+    expect(bar().queryByRole("button", { name: "Start session" })).toBeNull();
   });
 
   test("records the session and leaves when the primary is tapped", async () => {
@@ -1217,13 +1371,13 @@ describe("entering and leaving the session state", () => {
     const user = userEvent.setup();
 
     render(view());
-    await user.click(screen.getByRole("button", { name: "Start session" }));
-    await user.click(screen.getByRole("button", { name: "Mark done" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Mark done" }));
 
     expect(setSessionStatus).toHaveBeenCalledWith(
       expect.objectContaining({ status: "done", entryId: "entry-circuit" }),
     );
-    expect(await screen.findByRole("heading", { name: "Exercises" })).toBeTruthy();
+    expect(await list().findByRole("heading", { name: "Exercises" })).toBeTruthy();
   });
 
   test("leaves on Partial and on Skip too", async () => {
@@ -1233,10 +1387,10 @@ describe("entering and leaving the session state", () => {
     const user = userEvent.setup();
 
     render(view());
-    await user.click(screen.getByRole("button", { name: "Start session" }));
-    await user.click(screen.getByRole("button", { name: "Partial" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Partial" }));
 
-    expect(await screen.findByRole("heading", { name: "Exercises" })).toBeTruthy();
+    expect(await list().findByRole("heading", { name: "Exercises" })).toBeTruthy();
   });
 
   test("keeps the bar pinned at every width, unlike every other bar", () => {
@@ -1255,11 +1409,16 @@ describe("entering and leaving the session state", () => {
     resumed();
     render(view());
 
-    const bar = screen.getByRole("button", { name: "Mark done" }).closest(".action-bar-fade");
+    const pinned = bar().getByRole("button", { name: "Mark done" }).closest(".action-bar-fade");
 
-    expect(bar?.className).toBe(`${SESSION_ACTION_BAR} ${PAGE_SESSION_FOOT}`);
-    expect(bar?.className).not.toContain("lg:static");
-    expect(bar?.className).not.toContain(PAGE_MEASURE_FOOT);
+    expect(pinned?.className).toBe(`${SESSION_ACTION_BAR} ${PAGE_SESSION_FOOT}`);
+    expect(pinned?.className).not.toContain("lg:static");
+    expect(pinned?.className).not.toContain(PAGE_MEASURE_FOOT);
+
+    // One bar, not handed over. FUEL-118's two copies are the plan state's, and
+    // a copy of THIS bar would be a second running timer.
+    expect(document.querySelectorAll(".action-bar-fade")).toHaveLength(1);
+    expect(pinned?.hasAttribute("data-bar")).toBe(false);
   });
 
   test("does not offer Clear from inside a session", () => {
@@ -1269,7 +1428,7 @@ describe("entering and leaving the session state", () => {
     resumed();
     render(view({ sessions: [{ ...CIRCUIT, entry: { status: "partial", note: null, durationMin: null } }, WALK] }));
 
-    expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
+    expect(bar().queryByRole("button", { name: "Clear" })).toBeNull();
   });
 });
 
@@ -1441,7 +1600,7 @@ describe("the sets sub-list", () => {
     // Not an empty screen: the reader is still standing in the gym, and the
     // primary they came for is in the bar below.
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Plank");
-    expect(screen.getByRole("button", { name: "Mark done" })).toBeTruthy();
+    expect(bar().getByRole("button", { name: "Mark done" })).toBeTruthy();
   });
 
   test("offers an exercise with no rep target a row and no target to meet", () => {
@@ -1506,7 +1665,7 @@ describe("the sets sub-list", () => {
 
     // § Tone of Voice: name what happened, and name it apart from the session's
     // own record — this is a set the reader just performed.
-    expect(await screen.findByRole("alert")).toHaveProperty(
+    expect(await bar().findByRole("alert")).toHaveProperty(
       "textContent",
       expect.stringContaining("Couldn’t save that set."),
     );
@@ -1518,7 +1677,7 @@ describe("the sets sub-list", () => {
 
     // "Try again" re-runs the same thing that failed.
     logExerciseSet.mockResolvedValue({ ok: true });
-    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await user.click(bar().getByRole("button", { name: "Try again" }));
 
     expect(logExerciseSet).toHaveBeenCalledTimes(2);
     expect(logExerciseSet).toHaveBeenLastCalledWith(
@@ -1549,12 +1708,12 @@ describe("what the plan state says about sets", () => {
 
     // The exercise list itself, found through a row of it — the screen holds
     // three lists and the other two are the aside's.
-    const list = screen.getByText("Press-ups").closest("ol")!;
+    const exercises = list().getByText("Press-ups").closest("ol")!;
 
-    expect(screen.getByText("2 of 3 sets")).toBeTruthy();
+    expect(list().getByText("2 of 3 sets")).toBeTruthy();
     // Three exercises, three rows. The progress is metadata on a row rather
     // than a row of its own.
-    expect(within(list).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(exercises).getAllByRole("listitem")).toHaveLength(3);
   });
 
   test("says nothing at all about an exercise with no sets", () => {
@@ -1570,11 +1729,11 @@ describe("what the plan state says about sets", () => {
 
     resumed();
     render(view({ sessions: withSets([set("e1", 1)]) }));
-    await user.click(screen.getByRole("button", { name: "Mark done" }));
+    await user.click(bar().getByRole("button", { name: "Mark done" }));
 
     // The plan state is the list, and the list still says what was performed.
     // Leaving the session state is a change of composition, not of record.
-    expect(await screen.findByText("1 of 3 sets")).toBeTruthy();
+    expect(await list().findByText("1 of 3 sets")).toBeTruthy();
   });
 });
 
@@ -1631,26 +1790,26 @@ describe("the plan state, when a session has sections", () => {
     // § Lists names as the group heading's second case. A screen showing a
     // session "may not draw its own", so this screen draws that one.
     for (const label of ["Warm-up", "Work", "Cool-down"]) {
-      expect(screen.getByRole("heading", { level: 2, name: label })).toBeTruthy();
+      expect(list().getByRole("heading", { level: 2, name: label })).toBeTruthy();
     }
   });
 
   test("still lists every row of the session, bookends included", () => {
     render(view({ sessions: sectioned() }));
 
-    expect(screen.getByText("Joint prep")).toBeTruthy();
-    expect(screen.getByText("Lower-body stretches")).toBeTruthy();
-    expect(screen.getByText("Press-ups")).toBeTruthy();
+    expect(list().getByText("Joint prep")).toBeTruthy();
+    expect(list().getByText("Lower-body stretches")).toBeTruthy();
+    expect(list().getByText("Press-ups")).toBeTruthy();
   });
 
   test("reports set progress on working rows and says nothing about a warm-up", () => {
     render(view({ sessions: sectioned([set("e1", 1), set("e1", 2)]) }));
 
-    expect(screen.getByText("2 of 3 sets")).toBeTruthy();
+    expect(list().getByText("2 of 3 sets")).toBeTruthy();
     // The warm-up logs no sets, so it has nothing to report — and a row that
     // said "0 of" anything would be reporting an absence about a row that was
     // never going to have a figure.
-    const warmUp = screen.getByText("Joint prep").closest("li")!;
+    const warmUp = list().getByText("Joint prep").closest("li")!;
 
     expect(warmUp.textContent).toBe("01Joint prep~2 min");
   });
@@ -1694,7 +1853,7 @@ describe("a session with rows but no work", () => {
     // back but recording a status.
     render(view({ sessions: mobilityOnly() }));
 
-    expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
+    expect(bar().queryByRole("button", { name: "Start session" })).toBeNull();
   });
 
   test("still records a status, because the session still happened", () => {
@@ -1702,9 +1861,9 @@ describe("a session with rows but no work", () => {
     // outcomes stay exactly where they were.
     render(view({ sessions: mobilityOnly() }));
 
-    expect(screen.getByRole("button", { name: "Mark done" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Partial" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Skip" })).toBeTruthy();
+    expect(bar().getByRole("button", { name: "Mark done" })).toBeTruthy();
+    expect(bar().getByRole("button", { name: "Partial" })).toBeTruthy();
+    expect(bar().getByRole("button", { name: "Skip" })).toBeTruthy();
   });
 
   test("still draws the rows it does have", () => {
@@ -1712,7 +1871,7 @@ describe("a session with rows but no work", () => {
     // an exercise. One section, so no heading — the flat list, as always.
     render(view({ sessions: mobilityOnly() }));
 
-    expect(screen.getByText("Joint prep")).toBeTruthy();
+    expect(list().getByText("Joint prep")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Warm-up" })).toBeNull();
   });
 });
@@ -1722,7 +1881,7 @@ describe("the session state, when a session has sections", () => {
     const user = userEvent.setup();
 
     render(view({ sessions: sectioned() }));
-    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
 
     // The whole point of the column. A mobility drill offered per-set rep entry
     // is the fault § P10 describes, and the state stepping through it first is
@@ -1734,7 +1893,7 @@ describe("the session state, when a session has sections", () => {
     const user = userEvent.setup();
 
     render(view({ sessions: sectioned() }));
-    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
 
     // Three working rows out of five. "Exercise 1 of 5" would be a session
     // reporting itself as longer than the work it is asking for, and the count
@@ -1746,7 +1905,7 @@ describe("the session state, when a session has sections", () => {
     const user = userEvent.setup();
 
     render(view({ sessions: sectioned() }));
-    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
 
     expect(
       screen.getByRole("heading", { level: 2, name: "Bodyweight Circuit B · Work" }),
@@ -1757,7 +1916,7 @@ describe("the session state, when a session has sections", () => {
     const user = userEvent.setup();
 
     render(view());
-    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
 
     // A session whose rows are all one section has no divisions to name, so
     // there is no distinction for "· Work" to draw. Every session stored before
@@ -1771,7 +1930,7 @@ describe("the session state, when a session has sections", () => {
     const user = userEvent.setup();
 
     render(view({ sessions: sectioned() }));
-    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
 
     // The aside holds the WHOLE session — § Desktop's "the rest of the list" —
     // while the measure steps through the working rows only. So the current
@@ -1812,7 +1971,7 @@ describe("the session state, when a session has sections", () => {
         ]),
       }),
     );
-    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Plank");
   });
@@ -1842,10 +2001,10 @@ describe("the rest timer", () => {
     const user = userEvent.setup();
 
     render(view());
-    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
 
     const timer = screen.getByRole("button", { name: "1:30" });
-    const primary = screen.getByRole("button", { name: "Mark done" });
+    const primary = bar().getByRole("button", { name: "Mark done" });
 
     expect(timer).toBeTruthy();
 
@@ -1864,7 +2023,7 @@ describe("the rest timer", () => {
     const user = userEvent.setup();
 
     render(view());
-    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
     await user.click(screen.getByRole("button", { name: "1:30" }));
 
     // "Zero database writes and zero Server Actions." Starting a rest is a
@@ -1879,9 +2038,9 @@ describe("the rest timer", () => {
     const user = userEvent.setup();
 
     render(view());
-    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
     await user.click(screen.getByRole("button", { name: "1:30" }));
-    await user.click(screen.getByRole("button", { name: "Mark done" }));
+    await user.click(bar().getByRole("button", { name: "Mark done" }));
 
     // The bar goes back to the plan state's, and the timer's row goes with it.
     // The rest itself is not cancelled — nothing here writes to its key — but
@@ -1942,7 +2101,7 @@ describe("form reference media", () => {
   const start = async () => {
     const user = userEvent.setup();
     render(view({ sessions: withMedia() }));
-    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
 
     return user;
   };
@@ -1957,7 +2116,7 @@ describe("form reference media", () => {
     const user = userEvent.setup();
 
     render(view({ sessions: withMedia(null) }));
-    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
 
     // Not a disabled control — absent. A disabled button would promise a
     // reference that does not exist, which § Desktop refuses by name.
@@ -1986,7 +2145,7 @@ describe("form reference media", () => {
       render(view({ sessions: withMedia() }));
 
       await user.click(
-        await screen.findByRole("button", { name: /Show form for.*Press-ups/ }),
+        await list().findByRole("button", { name: /Show form for.*Press-ups/ }),
       );
 
       expect(await screen.findByRole("dialog")).toBeTruthy();
@@ -1998,9 +2157,9 @@ describe("form reference media", () => {
       // disabled — the same refusal the session state's button makes.
       render(view({ sessions: withMedia() }));
 
-      expect(await screen.findByRole("button", { name: /Show form for.*Press-ups/ })).toBeTruthy();
-      expect(screen.queryByRole("button", { name: /Show form for.*Reverse lunges/ })).toBeNull();
-      expect(screen.queryByRole("button", { name: /Show form for.*Plank/ })).toBeNull();
+      expect(await list().findByRole("button", { name: /Show form for.*Press-ups/ })).toBeTruthy();
+      expect(list().queryByRole("button", { name: /Show form for.*Reverse lunges/ })).toBeNull();
+      expect(list().queryByRole("button", { name: /Show form for.*Plank/ })).toBeNull();
     });
 
     test("opens the exercise that was pressed, not the one the session is on", async () => {
@@ -2025,7 +2184,7 @@ describe("form reference media", () => {
       );
 
       await user.click(
-        await screen.findByRole("button", { name: /Show form for.*Reverse lunges/ }),
+        await list().findByRole("button", { name: /Show form for.*Reverse lunges/ }),
       );
 
       expect(await screen.findByText("Form · Reverse lunges")).toBeTruthy();
@@ -2073,9 +2232,9 @@ describe("form reference media", () => {
       // the reference is not gated with it.
       render(view({ sessions: withMedia(), date: "2026-08-31", today: "2026-09-07" }));
 
-      expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
+      expect(bar().queryByRole("button", { name: "Start session" })).toBeNull();
       expect(
-        await screen.findByRole("button", { name: /Show form for.*Press-ups/ }),
+        await list().findByRole("button", { name: /Show form for.*Press-ups/ }),
       ).toBeTruthy();
     });
   });
@@ -2165,7 +2324,7 @@ describe("form reference media", () => {
         ],
       }),
     );
-    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
     await user.click(screen.getByRole("button", { name: "Show form" }));
 
     const sheet = await screen.findByRole("dialog");

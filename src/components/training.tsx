@@ -22,8 +22,8 @@ import {
   ACTION_BAR_PRIMARY,
   ACTION_BAR_SECONDARY,
   ACTION_BAR_SPLIT,
-  APP_ACTION_BAR,
   SESSION_ACTION_BAR,
+  TRAINING_BAR_AT,
 } from "@/components/action-bar";
 import { DotGrid, type Week } from "@/components/dot-grid";
 import { ExerciseList, type ListedExercise } from "@/components/exercise-list";
@@ -45,7 +45,6 @@ import {
   PAGE_ASIDE_UNWRAP,
   PAGE_HEADER_BAND,
   PAGE_MEASURE_COLUMN,
-  PAGE_MEASURE_FOOT,
   PAGE_SESSION_FOOT,
 } from "@/lib/frame";
 import type { WalkEntryView } from "@/lib/walk";
@@ -821,6 +820,28 @@ function rememberEntered(date: CalendarDate, entered: boolean): void {
 const NO_SETS: readonly LoggedSetView[] = [];
 
 /**
+ * The plan state's exercise list, at the two places it is drawn — FUEL-118.
+ *
+ * § The two states of `/training`: from 1024 the measure reads session, `This
+ * session`, bar, exercises. Below it, the list stays directly under the
+ * session, where § Lists' window is measured, and the bar stays last and
+ * sticky. One DOM cannot hold both orders, and CSS `order` would draw one and
+ * read out the other, so this is the ruler's device: one copy per position,
+ * with the other `display: none` and out of the accessibility tree. The split
+ * is at `lg`, where `TRAINING_BAR_AT` hands the bar over too.
+ *
+ * The list is the section copied, not `This session`, because it holds no
+ * state: `ExerciseList` is props and a callback, while the record holds two
+ * controlled inputs with ids. That is the walk row's rule from FUEL-115:
+ * copy the neighbour, never the part that holds state.
+ *
+ * Neither is an `xl:` variant, which is emitted before the others
+ * (§ The breakpoints), so each one outranks the section's own `flex` in the
+ * band it names.
+ */
+const LIST_AT = { phone: "lg:hidden", desktop: "max-lg:hidden" } as const;
+
+/**
  * The screen for one date.
  *
  * @param sessions the date's items in template order — the session first, then
@@ -1315,6 +1336,194 @@ export function Training({
    */
   const standing = weekStanding(adherence, date);
 
+  /*
+   * The exercise list, as a function since FUEL-118 — see `LIST_AT`.
+   */
+  const exerciseList = (of: TrainingItem, at: keyof typeof LIST_AT) => (
+    <section className={cn("flex flex-col gap-[14px]", LIST_AT[at])} data-list={at}>
+      <Eyebrow>Exercises</Eyebrow>
+      {/* § Desktop gives the plan state set progress "on the exercise's
+          own row, no rows added" — which is what keeps the list's window
+          spendable, and what § P3's criterion is re-aimed against. */}
+      {/*
+       * The rows are the form affordance — § P10, FUEL-108.
+       *
+       * FUEL-90 put "Show form" with the subject rather than on each row
+       * of this list, and the reader who is PLANNING never reaches a
+       * subject: the session state is today-only and shows one exercise
+       * at a time, so a reference was three gates away from the state you
+       * are in when you want to check a movement before starting.
+       *
+       * The row opens the same sheet rather than expanding, so
+       * § Progressive Disclosure's accordion ban is untouched — it is
+       * what rules out the alternative. And the row IS the control, so
+       * § Lists' window is untouched too: no row added, none made taller.
+       *
+       * Offered on every date, not only today. `canEnter` gates STARTING
+       * a session, which is a claim about what can be performed now; how
+       * a movement is done is not a claim about today at all.
+       */}
+      <ExerciseList
+        exercises={of.exercises}
+        progress={progress}
+        form={{
+          available: formAvailable,
+          onShow: (id) => setFormFor({ id, from: "plan" }),
+        }}
+      />
+    </section>
+  );
+
+  /*
+   * The bar, as a function since FUEL-118: the plan state draws it twice, once
+   * per position (`TRAINING_BAR_AT`), and the session state once. The two
+   * copies are the same children with the same props, so they cannot offer
+   * different controls at different widths.
+   */
+  const actionBar = (at?: keyof typeof TRAINING_BAR_AT) => (
+    // The session state's bar is the same bar minus the desktop release —
+    // § Desktop's one named exception to FUEL-72, argued in `action-bar.ts`:
+    // that release is a claim about thumb targets, and a rest timer (FUEL-93)
+    // rides in this slot at every width. It spans the content rows at ≥1272 and
+    // aligns to their foot, which is the only place a `bottom` offset can reach
+    // it from — FUEL-106, and `frame.ts` carries the argument.
+    //
+    // The plan state's copies take no grid placement. The phone's is not drawn
+    // from 1024, and the desktop's is a flex item of the measure's own column.
+    <div
+      className={
+        at ? TRAINING_BAR_AT[at] : cn(SESSION_ACTION_BAR, PAGE_SESSION_FOOT)
+      }
+      data-bar={at}
+    >
+      {failure && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 border-b border-border pb-3"
+        >
+          <p className="text-slash text-error">{banner(failure)}</p>
+          <Button variant="link" size="xs" onClick={() => act(failure)}>
+            Try again
+          </Button>
+        </div>
+      )}
+
+      {/*
+       * The bar's second row, and only in the session state — FUEL-93.
+       *
+       * § Desktop, FUEL-90: "the timer is a row of the action bar, above
+       * the controls, in the slot § Feedback gives the failure banner. So
+       * the bar is a flex column of at most three things — banner, timer,
+       * controls — rather than growing a fourth button." Written after the
+       * banner because a refusal outranks a readout, and both can be on
+       * screen at once.
+       *
+       * Not in the plan state, which is a list you read before and after: a
+       * rest is something you take BETWEEN exercises, so the control for it
+       * belongs to the surface you operate during. It is also why the timer
+       * needs no props — the session it belongs to is the one this bar is
+       * already the bar for, and it stores nothing about which.
+       */}
+      {inSession && <RestTimer />}
+
+      {/*
+       * The mock's own arrangement: one primary, two secondaries beneath.
+       * The recorded status is NOT shown by promoting its button — § Buttons
+       * allows one primary per screen, and moving which button that is would
+       * shift the bar under the reader's thumb between renders. It is said
+       * in words instead, by `Recorded` above, which is also what makes it
+       * survive greyscale.
+       *
+       * `aria-pressed` is how the same fact reaches a screen reader, and it
+       * is the reason these are three buttons rather than a primary and two
+       * alternatives: they are one choice with three answers.
+       */}
+      {/* One row at every width — § Buttons: FUEL-85 at the frame's cap,
+          FUEL-109 below it, which took this bar with `/`'s rather than
+          leaving a slab over a pair here. Three answers to one question
+          read as one choice side by side. `action-bar.ts` carries the
+          argument and the strings; the banner and the timer above stay
+          outside the row because each is a block that spans the column. */}
+      <div className={ACTION_BAR_CONTROLS}>
+        {/*
+         * The primary changes because the screen's question does — § Desktop.
+         *
+         * § Buttons allows one primary and calls it "the one action the
+         * screen exists for". Before you train that is starting; while you
+         * are training it is finishing. Neither state has two, and Mark done
+         * never appears as a secondary — a demotion of the action the whole
+         * adherence record depends on.
+         *
+         * A date that is not today keeps Mark done, because Start session is
+         * not offered where it would mean nothing: § Desktop gives the
+         * session state to today alone, and PRD § P3 has always had past
+         * sessions "viewable and editable by date". So the plan state's
+         * primary is Start session exactly where the state is reachable.
+         */}
+        {canEnter && !inSession ? (
+          <Button className={ACTION_BAR_LEAD} onClick={enter}>
+            Start session
+          </Button>
+        ) : (
+          <Button
+            className={ACTION_BAR_LEAD}
+            aria-pressed={entry?.status === "done"}
+            onClick={() => (inSession ? finish("done") : record("done"))}
+          >
+            Mark done
+          </Button>
+        )}
+        <div className={ACTION_BAR_SPLIT}>
+          <Button
+            variant="secondary"
+            className={ACTION_BAR_SECONDARY}
+            aria-pressed={entry?.status === "partial"}
+            onClick={() => (inSession ? finish("partial") : record("partial"))}
+          >
+            Partial
+          </Button>
+          <Button
+            variant="secondary"
+            className={ACTION_BAR_SECONDARY}
+            aria-pressed={entry?.status === "skipped"}
+            onClick={() => (inSession ? finish("skipped") : record("skipped"))}
+          >
+            Skip
+          </Button>
+        </div>
+
+      {/* Tertiary, so the Text variant — § Buttons gives it to Revert, and
+          these are the same kind of thing: the way back from a tap that was
+          made, for the uncommon case where it was the wrong one.
+
+          Not offered in the session state, which the mock draws with three
+          controls and no fourth. Clear takes the whole record away and its
+          cascade takes the sets with it — a control the reader has no use
+          for mid-session and every reason not to reach by accident while
+          looking at a phone between sets. It is a tap away in the plan
+          state, where taking a record back is what the screen is for. */}
+      {entry && !inSession && (
+        <div className={cn("flex items-center gap-4", ACTION_BAR_PRIMARY)}>
+          {/* Offered only when the boxes hold something the server has
+              not been told. Before a status exists the note has a control
+              already — it travels with whichever status is tapped — and
+              after one exists, an edited note would otherwise have no way
+              to be saved short of re-tapping a status, which looks like it
+              would change something else. */}
+          {dirty && (
+            <Button variant="link" onClick={() => record(entry.status)}>
+              Save note
+            </Button>
+          )}
+          <Button variant="link" onClick={() => act({ kind: "clear" })}>
+            Clear
+          </Button>
+        </div>
+      )}
+      </div>
+    </div>
+  );
+
   return (
     // 12px of head clearance below 768px — FUEL-82, the same reduction `/` takes
     // and for the same reason: this screen carries the identical action bar —
@@ -1507,40 +1716,9 @@ export function Training({
           </div>
         )}
 
-        {session && (
-          <section className="flex flex-col gap-[14px]">
-            <Eyebrow>Exercises</Eyebrow>
-            {/* § Desktop gives the plan state set progress "on the exercise's
-                own row, no rows added" — which is what keeps the list's window
-                spendable, and what § P3's criterion is re-aimed against. */}
-            {/*
-             * The rows are the form affordance — § P10, FUEL-108.
-             *
-             * FUEL-90 put "Show form" with the subject rather than on each row
-             * of this list, and the reader who is PLANNING never reaches a
-             * subject: the session state is today-only and shows one exercise
-             * at a time, so a reference was three gates away from the state you
-             * are in when you want to check a movement before starting.
-             *
-             * The row opens the same sheet rather than expanding, so
-             * § Progressive Disclosure's accordion ban is untouched — it is
-             * what rules out the alternative. And the row IS the control, so
-             * § Lists' window is untouched too: no row added, none made taller.
-             *
-             * Offered on every date, not only today. `canEnter` gates STARTING
-             * a session, which is a claim about what can be performed now; how
-             * a movement is done is not a claim about today at all.
-             */}
-            <ExerciseList
-              exercises={session.exercises}
-              progress={progress}
-              form={{
-                available: formAvailable,
-                onShow: (id) => setFormFor({ id, from: "plan" }),
-              }}
-            />
-          </section>
-        )}
+        {/* The phone's copy of the list, and the band's and the cap's is
+            after the bar below — FUEL-118, `LIST_AT`. */}
+        {session && exerciseList(session, "phone")}
 
         {session && (
           <section className="flex flex-col gap-[14px]">
@@ -1615,6 +1793,17 @@ export function Training({
             </div>
           </section>
         )}
+
+        {/*
+         * From 1024: the bar, then the list — § The two states of `/training`,
+         * FUEL-118. The bar submits what `This session` holds, so it comes
+         * straight after it, and the 877px of exercises comes after both
+         * rather than between the session and its primary. Below 1024 neither
+         * is drawn: the list is the copy above and the bar is the sticky one at
+         * the foot of `<main>`.
+         */}
+        {session && !inSession && actionBar("desktop")}
+        {session && exerciseList(session, "desktop")}
           </>
         )}
 
@@ -1663,9 +1852,9 @@ export function Training({
          * rather than extending it. A row now takes the column of its job on the
          * screen it is on. On `/`, whose subject is what to do today, a walk is
          * one of the things to do. Here the subject is the session, and the
-         * walk is the day around it. The measure is also already past the fold
-         * at 1272 (FUEL-118), and a walk under `Mark done` would only be further
-         * below it.
+         * walk is the day around it. And since FUEL-118 the measure ends with
+         * the 877px exercise list, under the bar, so a walk in the measure would
+         * be below all of it.
          */}
         {/* Hidden below the cap while a session is being operated, and only
             there. § Desktop: "At ≥1272 the two states are one composition — the
@@ -1797,8 +1986,11 @@ export function Training({
        * the screen that argument was measured on: at 1440×900 the pinned bar
        * held the bottom ~130px of the viewport in opaque `bg-background`, and
        * what it covered was the Recent list a dozen lines above, permanently and
-       * mid-row. Released, the bar falls where the DOM already puts it — after
-       * Recent — so the list ends above it rather than behind it.
+       * mid-row. Released, the bar fell where the DOM put it, after Recent, so
+       * the list ended above it rather than behind it. FUEL-118 found that
+       * position too low: at y 2342 in the band and 1407 at the cap. Since
+       * then this copy is not drawn from 1024 at all. The plan state's desktop
+       * copy is in the measure, under `This session`.
        *
        * This screen is where the edge that string's `action-bar-fade` exists to
        * fix was measured too: at 375×667 the bar's top landed through the
@@ -1806,154 +1998,12 @@ export function Training({
        * note that the rule is scoped below `lg` for the reason above, since a
        * bar with nothing passing under it has no edge to soften.
        */}
-      {session ? (
-        // Under the measure at ≥1272 — FUEL-77, and inert below it. The bar acts
-        // on the session in the first column, so it is never in the second.
-        //
-        // The session state's bar is the same bar minus the desktop release —
-        // § Desktop's one named exception to FUEL-72, argued in `action-bar.ts`:
-        // that release is a claim about thumb targets, and a rest timer
-        // (FUEL-93) rides in this slot at every width.
-        <div
-          className={cn(
-            inSession ? SESSION_ACTION_BAR : APP_ACTION_BAR,
-            /*
-             * Placed differently in the two states, and only at `xl` —
-             * FUEL-106. The plan state's bar sits in the frame's third row and
-             * is released there; the session state's spans the content rows and
-             * aligns to their foot, which is the only place a `bottom` offset
-             * can reach it from. `frame.ts` carries the argument.
-             */
-            inSession ? PAGE_SESSION_FOOT : PAGE_MEASURE_FOOT,
-          )}
-        >
-          {failure && (
-            <div
-              role="alert"
-              className="flex items-center justify-between gap-3 border-b border-border pb-3"
-            >
-              <p className="text-slash text-error">{banner(failure)}</p>
-              <Button variant="link" size="xs" onClick={() => act(failure)}>
-                Try again
-              </Button>
-            </div>
-          )}
-
-          {/*
-           * The bar's second row, and only in the session state — FUEL-93.
-           *
-           * § Desktop, FUEL-90: "the timer is a row of the action bar, above
-           * the controls, in the slot § Feedback gives the failure banner. So
-           * the bar is a flex column of at most three things — banner, timer,
-           * controls — rather than growing a fourth button." Written after the
-           * banner because a refusal outranks a readout, and both can be on
-           * screen at once.
-           *
-           * Not in the plan state, which is a list you read before and after: a
-           * rest is something you take BETWEEN exercises, so the control for it
-           * belongs to the surface you operate during. It is also why the timer
-           * needs no props — the session it belongs to is the one this bar is
-           * already the bar for, and it stores nothing about which.
-           */}
-          {inSession && <RestTimer />}
-
-          {/*
-           * The mock's own arrangement: one primary, two secondaries beneath.
-           * The recorded status is NOT shown by promoting its button — § Buttons
-           * allows one primary per screen, and moving which button that is would
-           * shift the bar under the reader's thumb between renders. It is said
-           * in words instead, by `Recorded` above, which is also what makes it
-           * survive greyscale.
-           *
-           * `aria-pressed` is how the same fact reaches a screen reader, and it
-           * is the reason these are three buttons rather than a primary and two
-           * alternatives: they are one choice with three answers.
-           */}
-          {/* One row at every width — § Buttons: FUEL-85 at the frame's cap,
-              FUEL-109 below it, which took this bar with `/`'s rather than
-              leaving a slab over a pair here. Three answers to one question
-              read as one choice side by side. `action-bar.ts` carries the
-              argument and the strings; the banner and the timer above stay
-              outside the row because each is a block that spans the column. */}
-          <div className={ACTION_BAR_CONTROLS}>
-            {/*
-             * The primary changes because the screen's question does — § Desktop.
-             *
-             * § Buttons allows one primary and calls it "the one action the
-             * screen exists for". Before you train that is starting; while you
-             * are training it is finishing. Neither state has two, and Mark done
-             * never appears as a secondary — a demotion of the action the whole
-             * adherence record depends on.
-             *
-             * A date that is not today keeps Mark done, because Start session is
-             * not offered where it would mean nothing: § Desktop gives the
-             * session state to today alone, and PRD § P3 has always had past
-             * sessions "viewable and editable by date". So the plan state's
-             * primary is Start session exactly where the state is reachable.
-             */}
-            {canEnter && !inSession ? (
-              <Button className={ACTION_BAR_LEAD} onClick={enter}>
-                Start session
-              </Button>
-            ) : (
-              <Button
-                className={ACTION_BAR_LEAD}
-                aria-pressed={entry?.status === "done"}
-                onClick={() => (inSession ? finish("done") : record("done"))}
-              >
-                Mark done
-              </Button>
-            )}
-            <div className={ACTION_BAR_SPLIT}>
-              <Button
-                variant="secondary"
-                className={ACTION_BAR_SECONDARY}
-                aria-pressed={entry?.status === "partial"}
-                onClick={() => (inSession ? finish("partial") : record("partial"))}
-              >
-                Partial
-              </Button>
-              <Button
-                variant="secondary"
-                className={ACTION_BAR_SECONDARY}
-                aria-pressed={entry?.status === "skipped"}
-                onClick={() => (inSession ? finish("skipped") : record("skipped"))}
-              >
-                Skip
-              </Button>
-            </div>
-
-          {/* Tertiary, so the Text variant — § Buttons gives it to Revert, and
-              these are the same kind of thing: the way back from a tap that was
-              made, for the uncommon case where it was the wrong one.
-
-              Not offered in the session state, which the mock draws with three
-              controls and no fourth. Clear takes the whole record away and its
-              cascade takes the sets with it — a control the reader has no use
-              for mid-session and every reason not to reach by accident while
-              looking at a phone between sets. It is a tap away in the plan
-              state, where taking a record back is what the screen is for. */}
-          {entry && !inSession && (
-            <div className={cn("flex items-center gap-4", ACTION_BAR_PRIMARY)}>
-              {/* Offered only when the boxes hold something the server has
-                  not been told. Before a status exists the note has a control
-                  already — it travels with whichever status is tapped — and
-                  after one exists, an edited note would otherwise have no way
-                  to be saved short of re-tapping a status, which looks like it
-                  would change something else. */}
-              {dirty && (
-                <Button variant="link" onClick={() => record(entry.status)}>
-                  Save note
-                </Button>
-              )}
-              <Button variant="link" onClick={() => act({ kind: "clear" })}>
-                Clear
-              </Button>
-            </div>
-          )}
-          </div>
-        </div>
-      ) : null}
+      {/*
+       * The session state's one bar, or the plan state's phone copy — FUEL-118.
+       * The plan state's desktop copy is written in the measure, after `This
+       * session`; `TRAINING_BAR_AT` carries why there are two.
+       */}
+      {session ? (inSession ? actionBar() : actionBar("phone")) : null}
     </PageMain>
   );
 }
