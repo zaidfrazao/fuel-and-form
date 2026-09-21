@@ -668,6 +668,12 @@ export const mealLogs = pgTable(
  * 'circuit', 'intervals' and 'walk'; the column is a rendering discriminator,
  * not a contract, and the UI must handle a value it does not recognise.
  *
+ * One behaviour does read it: 'circuit' is stepped round by round in the
+ * session state (FUEL-119, `stepsByRound` in `exercise-set.ts`). That is
+ * instead of a `rounds` column, which would store the exercises' own
+ * `target_sets` a second time. An unrecognised value steps exercise by
+ * exercise, as every session did before.
+ *
  * ## Rotation
  *
  * `rotation_group` names a set of workouts that alternate ('bodyweight-circuit'),

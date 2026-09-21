@@ -49,11 +49,12 @@ import {
 } from "@/lib/frame";
 import type { WalkEntryView } from "@/lib/walk";
 import {
-  currentExercise,
   type LoggedSet,
   type SetTarget,
   setProgress,
+  sessionPosition,
   setRows,
+  stepsByRound,
   setsFor,
   targetLabel,
 } from "@/lib/exercise-set";
@@ -1173,13 +1174,17 @@ export function Training({
   };
 
   /**
-   * Which exercise the session state is showing, and the rows under it.
+   * Which exercise the session state is showing, and in a circuit which round.
    *
-   * Derived from the optimistic sets, so it moves on the frame the last set of
-   * an exercise is ticked. `currentExercise` carries the rule and the reason it
+   * Derived from the optimistic sets, so it moves on the frame a set is ticked:
+   * in a circuit to the next exercise's set, otherwise once an exercise's last
+   * set lands (FUEL-119). `sessionPosition` carries the rule and the reason it
    * is a derivation rather than a stored cursor.
    */
-  const current = session ? currentExercise(workingExercises, sets) : -1;
+  const position = session
+    ? sessionPosition(workingExercises, sets, stepsByRound(session.type))
+    : null;
+  const current = position?.index ?? -1;
   const currentEx = workingExercises[current];
 
   /*
@@ -1624,9 +1629,21 @@ export function Training({
                   invented here — and it counts the WORKING rows, which are the
                   rows this state steps through. A warm-up in the denominator
                   would be a session reporting itself as longer than the work it
-                  is asking for. */}
+                  is asking for.
+
+                  A circuit names its round before the exercise, in words —
+                  FUEL-119. The round is the larger unit and the one the reader
+                  loses count of, and the rows under it are drawn unchanged: the
+                  round's row is always the first open one, so nothing on the
+                  sub-list needs to say it again. */}
               <SlashMeta>
-                {`${currentEx.prescription} · Exercise ${current + 1} of ${workingExercises.length}`}
+                {[
+                  currentEx.prescription,
+                  position?.round ? `Round ${position.round} of ${position.rounds}` : null,
+                  `Exercise ${current + 1} of ${workingExercises.length}`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </SlashMeta>
               {/*
                * "Show form" — § P10, FUEL-94, and the mock draws it exactly
