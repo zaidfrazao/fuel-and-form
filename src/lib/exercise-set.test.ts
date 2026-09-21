@@ -8,10 +8,12 @@ import {
   MAX_SET_INDEX,
   parseReps,
   parseSetIndex,
+  sessionPosition,
   type SetTarget,
   setProgress,
   setRows,
   setsFor,
+  stepsByRound,
   targetLabel,
 } from "./exercise-set";
 
@@ -273,6 +275,140 @@ describe("currentExercise", () => {
 
   it("is -1 for a session with no exercises", () => {
     expect(currentExercise([], [])).toBe(-1);
+  });
+});
+
+describe("stepsByRound", () => {
+  it("is a circuit, and nothing else", () => {
+    expect(stepsByRound("circuit")).toBe(true);
+    // Skipping Intervals + Core keeps its exercise-by-exercise step, and so
+    // does a type the app has never seen: `workouts.type` is open text.
+    expect(stepsByRound("intervals")).toBe(false);
+    expect(stepsByRound("strength")).toBe(false);
+  });
+});
+
+describe("sessionPosition", () => {
+  // Three working exercises of three sets, the circuits' own shape.
+  const CIRCUIT = [
+    { id: "a", ...FIXED },
+    { id: "b", ...RANGE },
+    { id: "c", ...HELD },
+  ];
+
+  const at = (exerciseId: string, ...indexes: number[]) =>
+    indexes.map((setIndex) => ({ exerciseId, setIndex, reps: 10 }));
+
+  const where = (sets: ReturnType<typeof at>, exercises = CIRCUIT) =>
+    sessionPosition(exercises, sets, true);
+
+  it("starts on the first exercise in round 1 of 3", () => {
+    expect(where([])).toEqual({ index: 0, round: 1, rounds: 3 });
+  });
+
+  it("moves to the next exercise's set 1 after the first set", () => {
+    // The ticket's own case: after squats' set 1, push-ups, not squats' set 2.
+    expect(where(at("a", 1))).toEqual({ index: 1, round: 1, rounds: 3 });
+  });
+
+  it("begins round 2 at the first exercise after the last one", () => {
+    expect(where([...at("a", 1), ...at("b", 1), ...at("c", 1)])).toEqual({
+      index: 0,
+      round: 2,
+      rounds: 3,
+    });
+  });
+
+  it("walks the middle of a later round", () => {
+    expect(where([...at("a", 1, 2), ...at("b", 1, 2), ...at("c", 1)])).toEqual({
+      index: 2,
+      round: 2,
+      rounds: 3,
+    });
+  });
+
+  it("returns to the gap a removed set leaves", () => {
+    // Round 2 under way, then b's set 1 is removed. The position goes back to
+    // exactly that gap — and forward again when it is re-logged.
+    const midRound2 = [...at("a", 1, 2), ...at("c", 1), ...at("b", 2)];
+
+    expect(where(midRound2)).toEqual({ index: 1, round: 1, rounds: 3 });
+    expect(where([...midRound2, ...at("b", 1)])).toEqual({ index: 2, round: 2, rounds: 3 });
+  });
+
+  it("is moved by nothing when a set is logged ahead of its round", () => {
+    // a's set 3 in round 1 fills no gap. A count would read three sets on a as
+    // "a is done", which is the straight-sets reading this replaces.
+    expect(where(at("a", 3))).toEqual({ index: 0, round: 1, rounds: 3 });
+    expect(where(at("a", 1, 3))).toEqual({ index: 1, round: 1, rounds: 3 });
+  });
+
+  it("ignores a set beyond an exercise's target", () => {
+    const everything = [...at("a", 1, 2, 3, 4), ...at("b", 1, 2, 3), ...at("c", 1, 2)];
+
+    expect(where(everything)).toEqual({ index: 2, round: 3, rounds: 3 });
+  });
+
+  it("drops an exercise with a shorter target out of the later rounds", () => {
+    const mixed = [
+      { id: "a", ...FIXED },
+      { id: "short", ...target({ targetSets: 2 }) },
+      { id: "c", ...HELD },
+    ];
+
+    // Round 3 goes straight from a to c: "short" had its two rounds.
+    expect(where([...at("a", 1, 2, 3), ...at("short", 1, 2), ...at("c", 1, 2)], mixed)).toEqual({
+      index: 2,
+      round: 3,
+      rounds: 3,
+    });
+  });
+
+  it("gives an untargeted exercise round 1 only", () => {
+    const mixed = [{ id: "a", ...FIXED }, { id: "free", ...target() }];
+
+    expect(where(at("a", 1), mixed)).toEqual({ index: 1, round: 1, rounds: 3 });
+    expect(where([...at("a", 1), ...at("free", 1)], mixed)).toEqual({
+      index: 0,
+      round: 2,
+      rounds: 3,
+    });
+    // Not offered again in round 2, even with no set 2.
+    expect(where([...at("a", 1, 2), ...at("free", 1)], mixed)).toEqual({
+      index: 0,
+      round: 3,
+      rounds: 3,
+    });
+  });
+
+  it("holds on the last exercise in the last round once everything is logged", () => {
+    const everything = [...at("a", 1, 2, 3), ...at("b", 1, 2, 3), ...at("c", 1, 2, 3)];
+
+    expect(where(everything)).toEqual({ index: 2, round: 3, rounds: 3 });
+  });
+
+  it("names no round for a circuit whose exercises have one set each", () => {
+    // "Round 1 of 1" would count nothing.
+    const once = [{ id: "a", ...target({ targetSets: 1 }) }, { id: "b", ...target() }];
+
+    expect(where(at("a", 1), once)).toEqual({ index: 1, round: null, rounds: null });
+  });
+
+  it("is -1 with no round for a session with no exercises", () => {
+    expect(where([], [])).toEqual({ index: -1, round: null, rounds: null });
+  });
+
+  it("steps exercise by exercise when the session is not a circuit", () => {
+    // The same sets, read both ways. Not by round: a stays current until its
+    // three sets are in, exactly as `currentExercise` has it.
+    const sets = [...at("a", 1), ...at("b", 1)];
+
+    expect(sessionPosition(CIRCUIT, sets, false)).toEqual({
+      index: 0,
+      round: null,
+      rounds: null,
+    });
+    expect(sessionPosition(CIRCUIT, sets, true)).toEqual({ index: 2, round: 1, rounds: 3 });
   });
 });
 

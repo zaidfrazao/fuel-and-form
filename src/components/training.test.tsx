@@ -1294,6 +1294,20 @@ const set = (exerciseId: string, setIndex: number, reps = 12) => ({
 /** The session with sets already against it. */
 const withSets = (sets: ReturnType<typeof set>[]) => [{ ...CIRCUIT, sets }, WALK];
 
+/**
+ * The same session stepped exercise by exercise — FUEL-119.
+ *
+ * `CIRCUIT` is a circuit, so it steps round by round: ticking press-ups' set 1
+ * moves the measure to reverse lunges. The sub-list tests below are about ONE
+ * exercise's rows across several sets, and they are not about stepping, so they
+ * run on a type that holds the subject until its sets are in. That is also
+ * what Skipping Intervals + Core does, which the ticket requires unchanged.
+ */
+const straight = (sets: ReturnType<typeof set>[] = []) => [
+  { ...CIRCUIT, type: "intervals", sets },
+  WALK,
+];
+
 /** In the session state on the first render, the way a reload arrives in it. */
 const resumed = () => window.localStorage.setItem(`fuel:training-session:${TODAY}`, "1");
 
@@ -1330,7 +1344,7 @@ describe("entering and leaving the session state", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "Bodyweight Circuit B" }),
     ).toBeTruthy();
-    expect(screen.getByText(/3 x 12 · Exercise 1 of 3/)).toBeTruthy();
+    expect(screen.getByText(/3 x 12 · Round 1 of 3 · Exercise 1 of 3/)).toBeTruthy();
 
     // The plan state's list is gone rather than merely scrolled past.
     expect(screen.queryByRole("heading", { name: "Exercises" })).toBeNull();
@@ -1446,7 +1460,7 @@ describe("the sets sub-list", () => {
 
   test("shows a logged set as its own number, and offers the next", () => {
     resumed();
-    render(view({ sessions: withSets([set("e1", 1, 12), set("e1", 2, 9)]) }));
+    render(view({ sessions: straight([set("e1", 1, 12), set("e1", 2, 9)]) }));
 
     expect(screen.getByLabelText<HTMLInputElement>("Set 1 reps").value).toBe("12");
     expect(screen.getByLabelText<HTMLInputElement>("Set 2 reps").value).toBe("9");
@@ -1496,7 +1510,7 @@ describe("the sets sub-list", () => {
     logExerciseSet.mockReturnValue(pending.promise);
 
     resumed();
-    render(view());
+    render(view({ sessions: straight() }));
     await user.click(screen.getByRole("button", { name: "Log set 1" }));
 
     expect(await screen.findByRole("button", { name: "Remove set 1" })).toBeTruthy();
@@ -1509,7 +1523,7 @@ describe("the sets sub-list", () => {
     const user = userEvent.setup();
 
     resumed();
-    render(view({ sessions: withSets([set("e1", 1)]) }));
+    render(view({ sessions: straight([set("e1", 1)]) }));
     await user.click(screen.getByRole("button", { name: "Remove set 1" }));
 
     expect(removeExerciseSet).toHaveBeenCalledWith({
@@ -1526,7 +1540,7 @@ describe("the sets sub-list", () => {
     const user = userEvent.setup();
 
     resumed();
-    render(view({ sessions: withSets([set("e1", 1, 12)]) }));
+    render(view({ sessions: straight([set("e1", 1, 12)]) }));
 
     const input = screen.getByLabelText("Set 1 reps");
 
@@ -1553,7 +1567,7 @@ describe("the sets sub-list", () => {
     expect(logExerciseSet).not.toHaveBeenCalled();
   });
 
-  test("moves to the next exercise when an exercise's sets are complete", async () => {
+  test("outside a circuit, moves to the next exercise when an exercise's sets are complete", async () => {
     // The current exercise is DERIVED, so it advances on the frame the last set
     // lands rather than on the render after the server agrees.
     const user = userEvent.setup();
@@ -1565,7 +1579,7 @@ describe("the sets sub-list", () => {
     logExerciseSet.mockReturnValue(pending.promise);
 
     resumed();
-    render(view({ sessions: withSets([set("e1", 1), set("e1", 2)]) }));
+    render(view({ sessions: straight([set("e1", 1), set("e1", 2)]) }));
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Press-ups");
 
@@ -1898,7 +1912,7 @@ describe("the session state, when a session has sections", () => {
     // Three working rows out of five. "Exercise 1 of 5" would be a session
     // reporting itself as longer than the work it is asking for, and the count
     // would never reach its own last exercise.
-    expect(screen.getByText(/3 x 12 · Exercise 1 of 3/)).toBeTruthy();
+    expect(screen.getByText(/3 x 12 · Round 1 of 3 · Exercise 1 of 3/)).toBeTruthy();
   });
 
   test("names the part being worked in the eyebrow", async () => {
@@ -2062,6 +2076,146 @@ describe("the rest timer", () => {
  * the resolved shape rather than a `media_key`. That is the type doing its job:
  * there is no way to hand this component a raw string.
  */
+/**
+ * A circuit walked round by round — FUEL-119.
+ *
+ * Both circuits are "3 rounds, each exercise back to back", so `CIRCUIT` (a
+ * `circuit`) takes press-ups' set 1, then reverse lunges' set 1, then plank's,
+ * and round 2 starts over at press-ups. Reverse lunges has a target of TWO,
+ * which is what drops it out of round 3.
+ */
+describe("a circuit, round by round", () => {
+  /**
+   * The measure's slash line: prescription · round · exercise. Without the
+   * leading "/", which is `SlashMeta`'s own aria-hidden mark.
+   */
+  const position = () =>
+    screen.getByText(/ · Exercise \d of \d$/).textContent?.replace(/^\/\s*/, "");
+  const subject = () => screen.getByRole("heading", { level: 1 }).textContent;
+
+  test("moves to the next exercise's set 1 on the frame set 1 is ticked", async () => {
+    // Held, so the move is shown to come from the optimistic set rather than
+    // from the server's answer.
+    const user = userEvent.setup();
+    const pending = deferred<{ ok: boolean }>();
+
+    logExerciseSet.mockReturnValue(pending.promise);
+
+    resumed();
+    render(view());
+    expect(position()).toBe("3 x 12 · Round 1 of 3 · Exercise 1 of 3");
+
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Reverse lunges" })).toBeTruthy();
+    expect(position()).toBe("3 x 10 ea · Round 1 of 3 · Exercise 2 of 3");
+    // Its own set 1 is the row on offer, not a set 2.
+    expect(screen.getByRole("button", { name: "Log set 1" })).toBeTruthy();
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(logExerciseSet).toHaveBeenCalledOnce());
+  });
+
+  test("begins round 2 at the first exercise once round 1 reaches the last", () => {
+    resumed();
+    render(view({ sessions: withSets([set("e1", 1), set("e2", 1), set("e3", 1)]) }));
+
+    expect(subject()).toBe("Press-ups");
+    expect(position()).toBe("3 x 12 · Round 2 of 3 · Exercise 1 of 3");
+    // Every row is still drawn: set 1 done, and set 2 the first open one.
+    expect(screen.getByRole("button", { name: "Remove set 1" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Log set 2" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Log set 3" })).toBeTruthy();
+  });
+
+  test("resumes mid-round after a reload, with nothing new stored", () => {
+    resumed();
+    render(
+      view({
+        sessions: withSets([set("e1", 1), set("e1", 2), set("e2", 1), set("e3", 1)]),
+      }),
+    );
+
+    expect(subject()).toBe("Reverse lunges");
+    expect(position()).toBe("3 x 10 ea · Round 2 of 3 · Exercise 2 of 3");
+    // The one boolean § Desktop allows, and nothing about the round.
+    expect(Object.keys(window.localStorage)).toEqual([`fuel:training-session:${TODAY}`]);
+  });
+
+  test("goes back to the round a removed set leaves open", async () => {
+    const user = userEvent.setup();
+    const pending = deferred<{ ok: boolean }>();
+
+    removeExerciseSet.mockReturnValue(pending.promise);
+
+    resumed();
+    render(view({ sessions: withSets([set("e1", 1), set("e2", 1), set("e3", 1)]) }));
+    expect(position()).toBe("3 x 12 · Round 2 of 3 · Exercise 1 of 3");
+
+    await user.click(screen.getByRole("button", { name: "Remove set 1" }));
+
+    await waitFor(() => expect(position()).toBe("3 x 12 · Round 1 of 3 · Exercise 1 of 3"));
+    expect(subject()).toBe("Press-ups");
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(removeExerciseSet).toHaveBeenCalledOnce());
+  });
+
+  test("leaves an exercise with a shorter target out of the last round", async () => {
+    const user = userEvent.setup();
+    const pending = deferred<{ ok: boolean }>();
+
+    logExerciseSet.mockReturnValue(pending.promise);
+
+    resumed();
+    render(
+      view({
+        sessions: withSets([
+          set("e1", 1),
+          set("e1", 2),
+          set("e2", 1),
+          set("e2", 2),
+          set("e3", 1),
+          set("e3", 2),
+        ]),
+      }),
+    );
+    expect(position()).toBe("3 x 12 · Round 3 of 3 · Exercise 1 of 3");
+
+    await user.click(screen.getByRole("button", { name: "Log set 3" }));
+
+    // Reverse lunges had its two rounds, so press-ups hands straight to plank.
+    expect(await screen.findByRole("heading", { level: 1, name: "Plank" })).toBeTruthy();
+    expect(position()).toBe("3 x 45s · Round 3 of 3 · Exercise 3 of 3");
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(logExerciseSet).toHaveBeenCalledOnce());
+  });
+
+  test("marks the round's exercise in the aside", () => {
+    // The aside's `aria-current="step"` reads the same position as the measure.
+    resumed();
+    render(view({ sessions: sectioned([set("e1", 1)]) }));
+
+    const marked = document.querySelectorAll('[aria-current="step"]');
+
+    expect(subject()).toBe("Reverse lunges");
+    expect(marked).toHaveLength(1);
+    expect(marked[0]!.textContent).toContain("Reverse lunges");
+  });
+
+  test("names no round outside a circuit", () => {
+    // Skipping Intervals + Core steps exactly as it did: no round, and press-ups
+    // held until its sets are in.
+    resumed();
+    render(view({ sessions: straight([set("e1", 1)]) }));
+
+    expect(subject()).toBe("Press-ups");
+    expect(position()).toBe("3 x 12 · Exercise 1 of 3");
+    expect(screen.queryByText(/Round \d of/)).toBeNull();
+  });
+});
+
 describe("form reference media", () => {
   const MEDIA = {
     key: "side-plank",
@@ -2380,17 +2534,17 @@ describe("form reference media", () => {
     ];
 
     resumed();
-    const { rerender } = render(view({ sessions: sessions([set("e1", 1), set("e1", 2)]) }));
+    const { rerender } = render(view({ sessions: sessions([]) }));
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Press-ups");
 
     await user.click(screen.getByRole("button", { name: "Show form" }));
     expect(await screen.findByRole("dialog")).toBeTruthy();
 
-    // Press-ups completes underneath the open sheet, and the subject becomes
-    // Reverse lunges — which HAS media of its own. The sheet must still close:
+    // Press-ups' set 1 lands underneath the open sheet, and in a circuit that
+    // is enough (FUEL-119): the subject becomes Reverse lunges — which HAS media of its own. The sheet must still close:
     // it was opened about a movement that is no longer the one on screen.
-    rerender(view({ sessions: sessions([set("e1", 1), set("e1", 2), set("e1", 3)]) }));
+    rerender(view({ sessions: sessions([set("e1", 1)]) }));
 
     expect(await screen.findByRole("heading", { level: 1 })).toHaveProperty(
       "textContent",

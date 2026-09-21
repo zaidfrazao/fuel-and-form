@@ -225,6 +225,83 @@ export function currentExercise<T extends SetTarget & { id: string }>(
 }
 
 /**
+ * Whether a workout of this type is stepped round by round — FUEL-119.
+ *
+ * Keyed on `workouts.type` and nothing else. The format is written in the
+ * workout's description — "3 rounds. Each exercise back to back" — and § P10
+ * forbids parsing prose, so the type is the only structured thing that says it.
+ * A `rounds` column would store the exercises' own `target_sets` a second
+ * time. Every other type, including one the app has never seen, steps exercise
+ * by exercise, which is what it did before this existed.
+ */
+export function stepsByRound(type: string): boolean {
+  return type === "circuit";
+}
+
+/**
+ * Where the session state is: which exercise, and in a circuit which round.
+ *
+ * `round` and `rounds` are `null` where there are no rounds to name, which is
+ * every session not stepped by round, and a circuit whose exercises have one
+ * set each, where "Round 1 of 1" would count nothing.
+ */
+export type SessionPosition = {
+  index: number;
+  round: number | null;
+  rounds: number | null;
+};
+
+/**
+ * Which exercise the session state is showing, and which round — Brand Guide
+ * § The two states of `/training`, FUEL-119.
+ *
+ * Not a round-by-round session: `currentExercise`, unchanged.
+ *
+ * A round-by-round session: the round is the lowest set number some exercise
+ * still lacks, among the exercises whose target reaches it, and the exercise is
+ * the first one lacking it. So squats' set 1 is followed by push-ups' set 1,
+ * and round 2 begins at the first exercise once round 1 has reached the last.
+ *
+ * SET NUMBERS, not counts, and that is what makes the position move back
+ * consistently. Removing squats' set 1 in round 2 leaves squats without set 1,
+ * so the position returns to exactly that gap, and a set logged ahead of its
+ * round (squats' set 3 in round 1) fills no gap and moves nothing. A count
+ * would read that stray set 3 as round 1 done.
+ *
+ * An exercise's target decides the rounds it takes part in: a shorter target
+ * drops out of the later rounds, and no target at all is one round, which is
+ * `isComplete`'s own reading of an untargeted exercise. The number of rounds is
+ * the largest target, and never stored.
+ *
+ * When every round is done it holds on the last exercise in the last round,
+ * for the reason `currentExercise` gives.
+ */
+export function sessionPosition<T extends SetTarget & { id: string }>(
+  exercises: readonly T[],
+  sets: readonly (LoggedSet & { exerciseId: string })[],
+  byRound: boolean,
+): SessionPosition {
+  const straight = { index: currentExercise(exercises, sets), round: null, rounds: null };
+
+  const roundsOf = (exercise: T) => exercise.targetSets ?? 1;
+  const rounds = Math.max(0, ...exercises.map(roundsOf));
+
+  if (!byRound || rounds < 2) return straight;
+
+  const logged = new Set(sets.map((set) => `${set.exerciseId}#${set.setIndex}`));
+
+  for (let round = 1; round <= rounds; round += 1) {
+    const index = exercises.findIndex(
+      (exercise) => roundsOf(exercise) >= round && !logged.has(`${exercise.id}#${round}`),
+    );
+
+    if (index !== -1) return { index, round, rounds };
+  }
+
+  return { index: exercises.length - 1, round: rounds, rounds };
+}
+
+/**
  * What an unlogged row offers, as words — the mock's `Target 8`.
  *
  * `null` when there is no rep target, which is not the same as no target at
