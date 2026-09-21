@@ -5,7 +5,11 @@ import {
   isComplete,
   type LoggedSet,
   MAX_REPS,
+  MAX_PASSED,
   MAX_SET_INDEX,
+  type Moved,
+  NOT_MOVED,
+  parseMoved,
   parseReps,
   parseSetIndex,
   sessionPosition,
@@ -13,6 +17,7 @@ import {
   setProgress,
   setRows,
   setsFor,
+  stepSession,
   stepsByRound,
   targetLabel,
 } from "./exercise-set";
@@ -409,6 +414,263 @@ describe("sessionPosition", () => {
       rounds: null,
     });
     expect(sessionPosition(CIRCUIT, sets, true)).toEqual({ index: 2, round: 1, rounds: 3 });
+  });
+});
+
+describe("sessionPosition — the last step", () => {
+  it("holds on the last exercise that takes part in the last round", () => {
+    // An untargeted exercise last takes part in round 1 only, so "Round 3 of 3"
+    // is drawn over the exercise that HAS a round 3, not over one without it.
+    const mixed = [{ id: "a", ...FIXED }, { id: "free", ...target() }];
+    const sets = [1, 2, 3].map((setIndex) => ({ exerciseId: "a", setIndex, reps: 10 }));
+
+    expect(
+      sessionPosition(mixed, [...sets, { exerciseId: "free", setIndex: 1, reps: 10 }], true),
+    ).toEqual({ index: 0, round: 3, rounds: 3 });
+  });
+});
+
+describe("parseMoved", () => {
+  it("reads nothing stored as nothing moved", () => {
+    expect(parseMoved(null)).toBe(NOT_MOVED);
+  });
+
+  it("reads back what the screen stores", () => {
+    const moved: Moved = { passed: ["a#1", "b"], at: "a#1" };
+
+    expect(parseMoved(JSON.stringify(moved))).toEqual(moved);
+    expect(parseMoved(JSON.stringify({ passed: [], at: null }))).toEqual(NOT_MOVED);
+  });
+
+  it.each([
+    ["not JSON", "{"],
+    ["a bare value", "3"],
+    ["null", "null"],
+    ["no passed", JSON.stringify({ at: null })],
+    ["passed not an array", JSON.stringify({ passed: "a", at: null })],
+    ["a passed key not a string", JSON.stringify({ passed: ["a", 1], at: null })],
+    ["at a number", JSON.stringify({ passed: [], at: 2 })],
+    ["no at", JSON.stringify({ passed: [] })],
+  ])("reads %s as nothing moved", (_case, raw) => {
+    expect(parseMoved(raw)).toBe(NOT_MOVED);
+  });
+
+  it("reads at most MAX_PASSED passed steps", () => {
+    const passed = Array.from({ length: MAX_PASSED + 5 }, (_unused, i) => `x${i}`);
+    const read = parseMoved(JSON.stringify({ passed, at: null }));
+
+    expect(read.passed).toHaveLength(MAX_PASSED);
+    expect(read.passed[0]).toBe("x0");
+  });
+});
+
+describe("stepSession — FUEL-120", () => {
+  /** Push-ups 3 × 8–15 between squats and lunges: the ticket's own session. */
+  const STRAIGHT = [
+    { id: "squats", ...FIXED },
+    { id: "pushups", ...RANGE },
+    { id: "lunges", ...FIXED },
+  ];
+
+  const at = (exerciseId: string, ...indexes: number[]) =>
+    indexes.map((setIndex) => ({ exerciseId, setIndex, reps: 10 }));
+
+  /** Squats done, push-ups two sets of three: the state that had no way on. */
+  const SHORT = [...at("squats", 1, 2, 3), ...at("pushups", 1, 2)];
+
+  describe("not by round", () => {
+    const step = (sets: ReturnType<typeof at>, moved: Moved, direction: "next" | "previous") =>
+      stepSession(STRAIGHT, sets, false, moved, direction);
+
+    it("moves on from an exercise short of its target without a set", () => {
+      expect(sessionPosition(STRAIGHT, SHORT, false).index).toBe(1);
+
+      const next = step(SHORT, NOT_MOVED, "next");
+
+      expect(next).toEqual({
+        position: { index: 2, round: null, rounds: null },
+        moved: { passed: ["pushups"], at: null },
+      });
+      expect(sessionPosition(STRAIGHT, SHORT, false, next!.moved).index).toBe(2);
+    });
+
+    it("stays past the passed exercise once the next one is finished", () => {
+      // The derived position must not fall back to push-ups when lunges' last
+      // set lands: it holds on lunges, the last step.
+      const moved = { passed: ["pushups"], at: null };
+
+      expect(
+        sessionPosition(STRAIGHT, [...SHORT, ...at("lunges", 1, 2, 3)], false, moved).index,
+      ).toBe(2);
+    });
+
+    it("goes back to the passed exercise, where its third set can still be logged", () => {
+      const moved = { passed: ["pushups"], at: null };
+      const back = step(SHORT, moved, "previous");
+
+      expect(back).toEqual({
+        position: { index: 1, round: null, rounds: null },
+        moved: { passed: ["pushups"], at: "pushups" },
+      });
+      expect(sessionPosition(STRAIGHT, SHORT, false, back!.moved).index).toBe(1);
+      // Logged there, the reader stays there until they move on.
+      expect(
+        sessionPosition(STRAIGHT, [...SHORT, ...at("pushups", 3)], false, back!.moved).index,
+      ).toBe(1);
+    });
+
+    it("goes back to a finished exercise, and Next from it returns to the derived one", () => {
+      const back = step(SHORT, NOT_MOVED, "previous");
+
+      expect(back).toEqual({
+        position: { index: 0, round: null, rounds: null },
+        moved: { passed: [], at: "squats" },
+      });
+
+      // Squats is logged, so moving on from it passes nothing, and lands on
+      // push-ups, the derived step, by clearing `at`.
+      expect(step(SHORT, back!.moved, "next")).toEqual({
+        position: { index: 1, round: null, rounds: null },
+        moved: { passed: [], at: null },
+      });
+    });
+
+    it("steps back through every step one at a time, and forward again", () => {
+      const moved = { passed: ["pushups"], at: null };
+      const once = step(SHORT, moved, "previous")!;
+      const twice = step(SHORT, once.moved, "previous")!;
+
+      expect(twice.position.index).toBe(0);
+      expect(twice.moved).toEqual({ passed: ["pushups"], at: "squats" });
+
+      // Forward from squats lands on push-ups — still behind the derived
+      // lunges, so by going back to it rather than by clearing.
+      const forward = step(SHORT, twice.moved, "next")!;
+
+      expect(forward).toEqual({
+        position: { index: 1, round: null, rounds: null },
+        moved: { passed: ["pushups"], at: "pushups" },
+      });
+      // A passed step is not passed twice.
+      expect(step(SHORT, forward.moved, "next")!.moved).toEqual({
+        passed: ["pushups"],
+        at: null,
+      });
+    });
+
+    it("offers no step before the first exercise or after the last", () => {
+      expect(step([], NOT_MOVED, "previous")).toBeNull();
+      expect(step(SHORT, { passed: ["pushups"], at: null }, "next")).toBeNull();
+    });
+
+    it("offers nothing either way for a session with no exercises", () => {
+      expect(stepSession([], [], false, NOT_MOVED, "next")).toBeNull();
+      expect(stepSession([], [], false, NOT_MOVED, "previous")).toBeNull();
+    });
+
+    it("lets the data win over a step gone back to", () => {
+      // Back on squats, then a squats set is removed: the derived position is
+      // squats itself, so `at` is not BEHIND it and is inert.
+      const moved = { passed: [], at: "squats" };
+
+      expect(sessionPosition(STRAIGHT, SHORT, false, moved).index).toBe(0);
+      expect(sessionPosition(STRAIGHT, at("squats", 1, 2), false, moved).index).toBe(0);
+      // Back on push-ups, then a squats set is removed: the derived position is
+      // now squats, BEHIND the step gone back to, and the data wins.
+      const onPushups = { passed: ["pushups"], at: "pushups" };
+      const squatsShort = [...at("squats", 1, 2), ...at("pushups", 1, 2)];
+
+      expect(sessionPosition(STRAIGHT, squatsShort, false, onPushups).index).toBe(0);
+      expect(step(at("squats", 1, 2), moved, "next")).toEqual({
+        position: { index: 1, round: null, rounds: null },
+        moved: { passed: ["squats"], at: null },
+      });
+    });
+
+    it("ignores keys for exercises the session no longer has", () => {
+      const moved = { passed: ["gone"], at: "also-gone" };
+
+      expect(sessionPosition(STRAIGHT, SHORT, false, moved)).toEqual(
+        sessionPosition(STRAIGHT, SHORT, false),
+      );
+    });
+
+    it("holds on the last step when everything is passed", () => {
+      const moved = { passed: ["squats", "pushups", "lunges"], at: null };
+
+      expect(sessionPosition(STRAIGHT, [], false, moved).index).toBe(2);
+    });
+  });
+
+  describe("by round", () => {
+    const CIRCUIT = [
+      { id: "a", ...FIXED },
+      { id: "b", ...RANGE },
+      { id: "c", ...HELD },
+    ];
+
+    const step = (sets: ReturnType<typeof at>, moved: Moved, direction: "next" | "previous") =>
+      stepSession(CIRCUIT, sets, true, moved, direction);
+
+    it("moves past one exercise's set in a round, not the whole exercise", () => {
+      const next = step(at("a", 1), NOT_MOVED, "next")!;
+
+      expect(next).toEqual({
+        position: { index: 2, round: 1, rounds: 3 },
+        moved: { passed: ["b#1"], at: null },
+      });
+
+      // After c's set 1, round 2 starts at a — b's round 1 stays passed, and
+      // b is offered again in round 2.
+      const later = [...at("a", 1), ...at("c", 1)];
+
+      expect(sessionPosition(CIRCUIT, later, true, next.moved)).toEqual({
+        index: 0,
+        round: 2,
+        rounds: 3,
+      });
+      expect(sessionPosition(CIRCUIT, [...later, ...at("a", 2)], true, next.moved)).toEqual({
+        index: 1,
+        round: 2,
+        rounds: 3,
+      });
+    });
+
+    it("goes back across a round boundary", () => {
+      const round2 = [...at("a", 1), ...at("b", 1), ...at("c", 1)];
+
+      expect(step(round2, NOT_MOVED, "previous")).toEqual({
+        position: { index: 2, round: 1, rounds: 3 },
+        moved: { passed: [], at: "c#1" },
+      });
+    });
+
+    it("steps exactly once past a set logged ahead of its round", () => {
+      // b's set 1 is already in. Back on a#1, Next lands on b#1 by going back
+      // to it — the derived position is c#1, a step further.
+      const sets = [...at("a", 1), ...at("b", 1)];
+      const moved = { passed: [], at: "a#1" };
+
+      expect(sessionPosition(CIRCUIT, sets, true, moved)).toEqual({
+        index: 0,
+        round: 1,
+        rounds: 3,
+      });
+      expect(step(sets, moved, "next")).toEqual({
+        position: { index: 1, round: 1, rounds: 3 },
+        moved: { passed: [], at: "b#1" },
+      });
+    });
+
+    it("does not read a straight-sets key in a circuit", () => {
+      // The two key spellings never collide, so a key left from one reading
+      // names nothing in the other.
+      expect(sessionPosition(CIRCUIT, [], true, { passed: ["a"], at: null })).toEqual({
+        index: 0,
+        round: 1,
+        rounds: 3,
+      });
+    });
   });
 });
 
