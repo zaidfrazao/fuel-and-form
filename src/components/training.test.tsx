@@ -1484,7 +1484,7 @@ describe("Skip session, once a set is logged", () => {
     await user.click(bar().getByRole("button", { name: "Skip session" }));
 
     expect(dialog()).toBeTruthy();
-    expect(within(dialog()).getByText(/2 sets are logged\./)).toBeTruthy();
+    expect(within(dialog()).getByText(/2 sets are logged\. They’re kept,/)).toBeTruthy();
     expect(within(dialog()).getByText(/Partial says so/)).toBeTruthy();
     expect(setSessionStatus).not.toHaveBeenCalled();
   });
@@ -1496,7 +1496,7 @@ describe("Skip session, once a set is logged", () => {
     render(view({ sessions: withSets([set("e1", 1)]) }));
     await user.click(bar().getByRole("button", { name: "Skip session" }));
 
-    expect(within(dialog()).getByText(/1 set is logged\./)).toBeTruthy();
+    expect(within(dialog()).getByText(/1 set is logged\. It’s kept,/)).toBeTruthy();
   });
 
   test("Keep going closes it and leaves the session where it was", async () => {

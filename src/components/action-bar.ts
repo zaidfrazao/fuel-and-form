@@ -271,6 +271,13 @@ export const SESSION_ACTION_BAR = `${ACTION_BAR} lg:bottom-0 action-bar-fade-pin
  * happens where the labels stop fitting rather than at a width somebody
  * measured once, so a longer label moves the point with it.
  *
+ * FUEL-121 is that longer label. `/training`'s session state says `Skip
+ * session`, and `Mark done` (125px at its narrowest), `Partial`, `Skip session`
+ * and two gaps come to 357px. So below a ~401px window that bar is two lines,
+ * 110px of controls rather than 52. The owner chose that over a shorter label
+ * that fitted: `Skip day` left a 3px margin measured in Liberation Sans, and
+ * `Skip all` read as skipping the rest of the sets.
+ *
  * Nothing wraps at the cap: the widest row there is ~370px in a 584 measure,
  * and a wrapping container with one line lays out exactly as a non-wrapping
  * one, which the 1272 and 1920 baselines hold to the pixel.

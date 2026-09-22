@@ -1638,7 +1638,9 @@ export function Training({
           leaving a slab over a pair here. Three answers to one question
           read as one choice side by side. `action-bar.ts` carries the
           argument and the strings; the banner and the timer above stay
-          outside the row because each is a block that spans the column. */}
+          outside the row because each is a block that spans the column.
+          The session state's `Skip session` (FUEL-121) is the one label
+          that does not fit: below ~401px the pair wraps under Mark done. */}
       <div className={ACTION_BAR_CONTROLS}>
         {/*
          * The primary changes because the screen's question does — § Desktop.
@@ -2076,9 +2078,11 @@ export function Training({
               and the sentences state the consequence and the other answer. */}
           <p className="text-body text-text-primary">
             Record today as skipped?{" "}
-            {loggedSets === 1 ? "1 set is logged." : `${loggedSets} sets are logged.`}{" "}
-            They’re kept, but the session will read as skipped. If you stopped
-            partway, Partial says so.
+            {loggedSets === 1
+              ? "1 set is logged. It’s kept,"
+              : `${loggedSets} sets are logged. They’re kept,`}{" "}
+            but the session will read as skipped. If you stopped partway,
+            Partial says so.
           </p>
 
           <div className="flex flex-col gap-2">
