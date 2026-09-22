@@ -101,6 +101,7 @@ export function SessionClock({ stored }: { stored: string | null }) {
 
   return (
     <time
+      data-session-clock
       dateTime={`PT${Math.floor(Math.max(0, elapsed) / 1000)}S`}
       className="shrink-0 text-micro tabular-nums text-text-secondary"
     >
