@@ -1,6 +1,7 @@
 import { type Locator, type Page, expect, test } from "@playwright/test";
 
 import { FROZEN_NOW_MS } from "./constants";
+import { stepIntoWork } from "./session";
 
 /**
  * `/training`'s session bar, which is pinned where every other bar is released
@@ -113,6 +114,19 @@ async function enterSession(page: Page) {
 
   await page.getByRole("button", { name: "Start session" }).click();
   await expect(page.locator(BAR).getByText("Rest", { exact: true }), TIMER_ROW).toBeVisible();
+
+  /*
+   * On to the work — FUEL-125.
+   *
+   * The state opens on the first warm-up row now, and every measurement in this
+   * file was written against a working step. That is not a detail here: the
+   * scroll test's own guard refuses a page that does not scroll, and a warm-up
+   * step is short enough to trip it (65px against the 100 it asks for). The bar
+   * is what this file measures, and the bar is the same one either way, so the
+   * step is chosen to be the one the assertions were built on rather than
+   * whichever the state happens to open at.
+   */
+  await stepIntoWork(page);
 }
 
 /**

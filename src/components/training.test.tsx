@@ -2419,16 +2419,52 @@ describe("a session with rows but no work", () => {
 });
 
 describe("the session state, when a session has sections", () => {
-  test("opens on the first WORKING exercise, not on the warm-up", async () => {
+  test("opens on the first WARM-UP row — FUEL-125", async () => {
     const user = userEvent.setup();
 
     render(view({ sessions: sectioned() }));
     await user.click(bar().getByRole("button", { name: "Start session" }));
 
-    // The whole point of the column. A mobility drill offered per-set rep entry
-    // is the fault § P10 describes, and the state stepping through it first is
-    // how that fault would reach a phone.
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Press-ups");
+    // FUEL-92 made the bookends sections of the list; FUEL-125 makes them steps
+    // of the session. Until it, the reader warmed up from the plan-state list
+    // BEFORE tapping Start session, so the session did not start when the
+    // workout did. This test asserted "Press-ups" for exactly that reason and is
+    // reversed by decision, not by regression.
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Joint prep");
+  });
+
+  test("offers no set entry on a warm-up row — PRD § P10", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: sectioned() }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    // "Set logging offered on the working section only." Three sets of a hip
+    // opener is not information anybody wants recorded, and a box to type it in
+    // is the invitation to record it. The step is a movement and a way on.
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+    expect(screen.queryByRole("heading", { level: 2, name: "Sets" })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Next exercise/ })).toBeTruthy();
+
+    // And no way BACK from the first step of the session, which is the boundary
+    // an overloaded "nothing that way" would draw a button on — one that jumped
+    // the reader straight into the work.
+    expect(screen.queryByRole("button", { name: /^Previous exercise/ })).toBeNull();
+  });
+
+  test("counts a bookend in its own stage, never in the working count", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: sectioned() }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    // "Warm-up 1 of 1", not "Exercise 1 of 5" and not "Exercise 1 of 3". The
+    // working count keeps meaning the work: a warm-up in that denominator would
+    // be a session reporting itself as longer than the work it asks for. The
+    // round is the work's too — a warm-up has no rounds.
+    expect(screen.getByText(/~2 min · Warm-up 1 of 1/)).toBeTruthy();
+    expect(screen.queryByText(/Exercise 1 of/)).toBeNull();
+    expect(screen.queryByText(/Round/)).toBeNull();
   });
 
   test("counts the working rows in the position, not the whole session", async () => {
@@ -2436,6 +2472,8 @@ describe("the session state, when a session has sections", () => {
 
     render(view({ sessions: sectioned() }));
     await user.click(bar().getByRole("button", { name: "Start session" }));
+    // Past the warm-up, into the work.
+    await user.click(screen.getByRole("button", { name: /^Next exercise/ }));
 
     // Three working rows out of five. "Exercise 1 of 5" would be a session
     // reporting itself as longer than the work it is asking for, and the count
@@ -2443,11 +2481,21 @@ describe("the session state, when a session has sections", () => {
     expect(screen.getByText(/3 x 12 · Round 1 of 3 · Exercise 1 of 3/)).toBeTruthy();
   });
 
-  test("names the part being worked in the eyebrow", async () => {
+  test("names the stage the reader is in, in the eyebrow", async () => {
     const user = userEvent.setup();
 
     render(view({ sessions: sectioned() }));
     await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    // The eyebrow is the only place that says which of the three stages this is
+    // — the Title is the movement's and the slash line is the position's. It
+    // said "· Work" unconditionally before FUEL-125, which was true while the
+    // work was the only stage the state stepped through.
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Bodyweight Circuit B · Warm-up" }),
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /^Next exercise/ }));
 
     expect(
       screen.getByRole("heading", { level: 2, name: "Bodyweight Circuit B · Work" }),
@@ -2473,20 +2521,39 @@ describe("the session state, when a session has sections", () => {
 
     render(view({ sessions: sectioned() }));
     await user.click(bar().getByRole("button", { name: "Start session" }));
+    // Into the work, which is where the two lists diverge.
+    await user.click(screen.getByRole("button", { name: /^Next exercise/ }));
 
     // The aside holds the WHOLE session — § Desktop's "the rest of the list" —
-    // while the measure steps through the working rows only. So the current
-    // marker cannot be an index: index 0 of this list is the warm-up, and the
-    // measure is showing the first working exercise.
+    // while the measure's working position is an index into the working rows
+    // alone. So the current marker cannot be that index: index 0 of this list is
+    // the warm-up, and the measure is showing the first working exercise.
     //
-    // Invisible to both suites without this test: jsdom has no width and the
-    // column is `hidden` below the cap, and the screen baselines photograph the
-    // plan state rather than this one.
+    // FUEL-125 steps the bookends too, so reaching the work now takes a tap.
+    // The fault this guards is unchanged and still invisible to both suites:
+    // jsdom has no width and the column is `hidden` below the cap, and the
+    // screen baselines photograph the plan state rather than this one.
     const marked = document.querySelectorAll('[aria-current="step"]');
 
     expect(marked).toHaveLength(1);
     expect(marked[0]!.textContent).toContain("Press-ups");
     expect(marked[0]!.textContent).not.toContain("Joint prep");
+  });
+
+  test("marks the bookend row in the aside while the reader is on it", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: sectioned() }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    // The other half of the same rule, and the ticket's own ≥1272 note: the
+    // aside already lists all three sections, so the marking extends to bookend
+    // rows. It does because the mark is by id and the measure's subject is now
+    // the stage's row — nothing here translates a position.
+    const marked = document.querySelectorAll('[aria-current="step"]');
+
+    expect(marked).toHaveLength(1);
+    expect(marked[0]!.textContent).toContain("Joint prep");
   });
 
   test("marks nothing in the aside when there is no exercise to work", () => {
@@ -2504,6 +2571,11 @@ describe("the session state, when a session has sections", () => {
     // Every set of all three working exercises. `currentExercise` holds the last
     // one when a session is complete rather than emptying the screen — and the
     // last one is the last WORKING one, not the stretch after it.
+    //
+    // It also covers FUEL-125's re-entry rule from the other side: with sets
+    // already logged, entering opens in the WORK rather than at the warm-up,
+    // because the sets are the honest account of how far along the reader is.
+    // The cool-down is reached by stepping, never by landing.
     render(
       view({
         sessions: sectioned([
@@ -2516,6 +2588,235 @@ describe("the session state, when a session has sections", () => {
     await user.click(bar().getByRole("button", { name: "Start session" }));
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Plank");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* FUEL-125 — the bookends as steps of the session                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The session with cues on its bookends, which the seed has and `SECTIONED`
+ * does not.
+ *
+ * On a bookend the cues ARE the content — "10 arm circles forward, 10 backward"
+ * is the whole of what the step asks for, where a working exercise's own
+ * instruction is its sets. So they need a fixture that carries them.
+ */
+const CUED = (): TrainingItem[] => [
+  {
+    ...SECTIONED,
+    exercises: SECTIONED.exercises.map((exercise) =>
+      exercise.section === "work"
+        ? exercise
+        : { ...exercise, notes: `Cues for ${exercise.name}.` },
+    ),
+    sets: [],
+  },
+  WALK,
+];
+
+/** Every working set of the seeded circuit, so the work has no step left. */
+const ALL_WORKING_SETS = [
+  set("e1", 1), set("e1", 2), set("e1", 3),
+  set("e2", 1), set("e2", 2),
+  set("e3", 1), set("e3", 2), set("e3", 3),
+];
+
+const step = (direction: "Next" | "Previous") =>
+  screen.getByRole("button", { name: new RegExp(`^${direction} exercise`) });
+
+describe("the bookends as steps of the session — FUEL-125", () => {
+  test("a bookend step draws its cues, in the Sets section's shape", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: CUED() }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    expect(screen.getByRole("heading", { level: 2, name: "Cues" })).toBeTruthy();
+    expect(screen.getByText("Cues for Joint prep.")).toBeTruthy();
+  });
+
+  test("a bookend with no cues draws no eyebrow over an empty block", async () => {
+    const user = userEvent.setup();
+
+    // `SECTIONED`'s own bookends have `notes: null`. The refusal `Show form`
+    // makes: the section is absent rather than hidden, so the gap closes.
+    render(view({ sessions: sectioned() }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    expect(screen.queryByRole("heading", { level: 2, name: "Cues" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Joint prep");
+  });
+
+  test("steps from the warm-up into the work and back", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: sectioned() }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+    await user.click(step("Next"));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Press-ups");
+
+    await user.click(step("Previous"));
+
+    // Back onto the warm-up row, not two steps into the work. The stage owns
+    // the boundary and hands over only at its own end.
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Joint prep");
+  });
+
+  test("after the last working exercise the session steps into the cool-down", async () => {
+    const user = userEvent.setup();
+
+    // AC: "After the last working exercise, the session state steps through the
+    // cool-down." Before FUEL-125 the cool-down came after Mark done had
+    // already left the state — of the cool-down whose own cue is "don't skip it
+    // after skipping".
+    render(view({ sessions: [{ ...SECTIONED, sets: ALL_WORKING_SETS }, WALK] }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Plank");
+
+    await user.click(step("Next"));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Lower-body stretches",
+    );
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Bodyweight Circuit B · Cool-down" }),
+    ).toBeTruthy();
+    // Its own stage's count, and no set entry — the same two rules as the warm-up.
+    expect(screen.getByText(/30 sec each · Cool-down 1 of 1/)).toBeTruthy();
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+  });
+
+  test("the cool-down is the end of the session, with nothing after it", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: [{ ...SECTIONED, sets: ALL_WORKING_SETS }, WALK] }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+    await user.click(step("Next"));
+
+    expect(screen.queryByRole("button", { name: /^Next exercise/ })).toBeNull();
+    expect(step("Previous")).toBeTruthy();
+  });
+
+  test("Mark done is available on a bookend, and is never required after it", async () => {
+    const user = userEvent.setup();
+
+    // AC: "Mark done is available throughout." If the cool-down is part of the
+    // session, finishing has to be reachable DURING it and cannot be required
+    // before it. The bar is outside the measure's branch, so this pins a fact
+    // the structure already gives rather than one a change here would announce.
+    render(view({ sessions: [{ ...SECTIONED, sets: ALL_WORKING_SETS }, WALK] }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    // In the work, with every set logged.
+    expect(bar().getByRole("button", { name: "Mark done" })).toBeTruthy();
+
+    await user.click(step("Next"));
+
+    // And on the cool-down, which is the step this ticket puts AFTER the point
+    // the app used to call finished.
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Lower-body stretches",
+    );
+    expect(bar().getByRole("button", { name: "Mark done" })).toBeTruthy();
+  });
+
+  test("the accessible name says where the step goes, bookend or working row", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: sectioned() }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    // FUEL-120's rule, extended: a bookend names its row, and a working step
+    // keeps "Reverse lunges, round 1". The hand-over BACK into the work names
+    // the derived position rather than a stored one.
+    expect(
+      screen.getByRole("button", { name: "Next exercise, Press-ups, round 1" }),
+    ).toBeTruthy();
+
+    await user.click(step("Next"));
+
+    expect(
+      screen.getByRole("button", { name: "Previous exercise, Joint prep" }),
+    ).toBeTruthy();
+  });
+
+  test("the position survives a remount, with nothing new in the database", async () => {
+    const user = userEvent.setup();
+
+    // AC: "The position survives a reload, with nothing new in the database."
+    // The stage is one id in `localStorage`, beside the entered instant and
+    // `Moved` — no row, no column, no migration.
+    const { unmount } = render(view({ sessions: sectioned() }));
+
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+    await user.click(step("Next"));
+    await user.click(step("Next"));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Reverse lunges");
+
+    unmount();
+    render(view({ sessions: sectioned() }));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Reverse lunges");
+  });
+
+  test("a session entered before this ticket stays in the work", () => {
+    // The legacy case, decided by construction: the entered instant with no
+    // stage id reads as in the work. A deploy mid-session does not yank the
+    // reader back to the warm-up.
+    window.localStorage.setItem(`fuel:training-session:${TODAY}`, String(Date.now()));
+
+    render(view({ sessions: sectioned() }));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Press-ups");
+  });
+
+  test("a stored id the session no longer has falls back to the work", () => {
+    // `localStorage` is anyone's to edit, and a rotated day is the honest
+    // version of the same case.
+    window.localStorage.setItem(`fuel:training-session:${TODAY}`, String(Date.now()));
+    window.localStorage.setItem(`fuel:training-stage:${TODAY}`, "gone");
+
+    render(view({ sessions: sectioned() }));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Press-ups");
+  });
+
+  test("a session with no bookends behaves exactly as today", async () => {
+    const user = userEvent.setup();
+
+    // AC 4, and the criterion most likely to rot silently: all three seeded
+    // workouts HAVE bookends, so this is written against a working-only session
+    // rather than a seed fixture. Entering opens on the first working exercise,
+    // there is no step back from it, and nothing draws a Cues block.
+    render(view());
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Press-ups");
+    expect(screen.getByText(/3 x 12 · Round 1 of 3 · Exercise 1 of 3/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Previous exercise/ })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 2, name: "Cues" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 2, name: "Sets" })).toBeTruthy();
+  });
+
+  test("leaving the session forgets which bookend the reader was on", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: sectioned() }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Joint prep");
+
+    await user.click(bar().getByRole("button", { name: "Mark done" }));
+
+    // A session that has stopped keeps nobody's place in it. Entered again with
+    // nothing logged, it opens at the warm-up — from the key being cleared, not
+    // from it happening to still hold the first row.
+    expect(window.localStorage.getItem(`fuel:training-stage:${TODAY}`)).toBeNull();
   });
 });
 
