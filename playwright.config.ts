@@ -226,6 +226,17 @@ export default defineConfig({
       dependencies: ["setup"],
       use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
     },
+    /**
+     * The set row at 375 with last time's reps on it — FUEL-122. A project for
+     * the reason the others are: it asks whether a line wraps, which has no
+     * theme, and it needs one width, not the `screens` matrix's eight.
+     */
+    {
+      name: "set-rows",
+      testMatch: /set-rows\.spec\.ts/,
+      dependencies: ["setup"],
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+    },
     {
       name: "page-columns",
       testMatch: /page-columns\.spec\.ts/,
