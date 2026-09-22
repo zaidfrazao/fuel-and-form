@@ -123,8 +123,9 @@ import { cn } from "@/lib/utils";
  * The current exercise is DERIVED — the first whose sets are incomplete, read
  * off the rows themselves. That is the schema's own "derive from an absolute,
  * never accumulate", and it makes a phone locked mid-session and woken twenty
- * minutes later resume where the data says it is. The only thing stored on the
- * client is whether the state is entered at all: one boolean in `localStorage`.
+ * minutes later resume where the data says it is. What is stored on the client
+ * is whether the state is entered at all, one boolean in `localStorage`, and
+ * since FUEL-120 where the reader moved without logging, beside it.
  *
  * ## Why it is a screen of its own and not a branch of `/`
  *
@@ -828,9 +829,10 @@ function banner(failure: Attempt): string {
 /**
  * Where the session state remembers that it is entered — Brand Guide § Desktop.
  *
- * "The only client state is whether the session state is entered at all: one
- * boolean, in `localStorage`, keyed to the date and wrapped in try/catch like
- * every other read of it. It writes no row."
+ * "The client stores two things, both in `localStorage`, keyed to the date and
+ * wrapped in try/catch like every other read of it: whether the session state
+ * is entered at all, one boolean, and where the reader moved without logging."
+ * This is the first. The second is `MOVED_KEY` below.
  *
  * Keyed to the date so that entering Wednesday's session does not open
  * Thursday's, and read only for today — a past date has no session state at
@@ -1053,7 +1055,8 @@ export function Training({
   const [drafts, setDrafts] = useState<ReadonlyMap<string, string>>(new Map());
 
   /**
-   * Whether the session state is entered — the one thing this screen stores.
+   * Whether the session state is entered — one of the two things this screen
+   * stores, the other being `moved` below.
    *
    * Read from the browser rather than held here, so a reload mid-session comes
    * back to the same composition and nothing about it can go stale against the

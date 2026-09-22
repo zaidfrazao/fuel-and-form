@@ -2138,7 +2138,7 @@ describe("a circuit, round by round", () => {
 
     expect(subject()).toBe("Reverse lunges");
     expect(position()).toBe("3 x 10 ea · Round 2 of 3 · Exercise 2 of 3");
-    // The one boolean § Desktop allows, and nothing about the round.
+    // The entered boolean, and nothing about the round: nobody moved.
     expect(Object.keys(window.localStorage)).toEqual([`fuel:training-session:${TODAY}`]);
   });
 
