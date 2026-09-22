@@ -87,8 +87,8 @@ const positionOf = (locator: Locator) =>
  * Enter the session state through the control a reader uses.
  *
  * Seeding `localStorage` directly would be one line shorter and would also pass
- * against a build where Start session had stopped working — the state is a
- * boolean keyed to the date (`training.tsx`), and writing it by hand asserts
+ * against a build where Start session had stopped working — the state is an
+ * instant keyed to the date (`training.tsx`), and writing it by hand asserts
  * that the key is spelled right rather than that the state is reachable.
  *
  * The marker on the way in is the timer row's `Rest` label, which renders in
@@ -296,6 +296,37 @@ test.describe("the session state", () => {
     }
   });
 
+  test("draws the session clock at a fixed reading, on the eyebrow's line", async ({ page }) => {
+    /*
+     * FUEL-124. The browser clock is pinned by `setFixedTime` in
+     * `enterSession`, so Start session stores `FROZEN_NOW_MS` and the clock
+     * reads `0:00` for the whole run — a figure a baseline can hold, which is
+     * FUEL-93's testing note answered by the clock rather than by a mask. The
+     * wait is the proof it is fixed: two ticks pass and nothing moves.
+     *
+     * The line is the layout half, and only a browser has one: the eyebrow and
+     * the clock share a row, and a session name long enough to wrap it would
+     * push the Title down by a line at 375.
+     */
+    const clock = page.locator("main [data-session-clock]");
+    // The clock's own row, so no first-match can drift onto another h2.
+    const eyebrow = page.locator("main div:has(> [data-session-clock]) > h2");
+
+    await expect(clock).toHaveText("Elapsed 0:00");
+    await page.waitForTimeout(2100);
+    await expect(clock).toHaveText("Elapsed 0:00");
+
+    for (const { width, height, band } of WIDTHS) {
+      await page.setViewportSize({ width, height });
+
+      const [c, e] = await Promise.all([boxOf(clock), boxOf(eyebrow)]);
+
+      expect(Math.abs(c.y - e.y), `at ${width} (${band}), the clock's top against the eyebrow's`).toBeLessThan(2);
+      expect(Math.abs(c.height - e.height), `at ${width} (${band}), one line each`).toBeLessThan(2);
+      expect(c.x, `at ${width} (${band}), the clock sits after the eyebrow`).toBeGreaterThan(e.x + e.width);
+    }
+  });
+
   test("keeps § The Scroll Edge's mask wherever it is pinned", async ({ page }) => {
     /*
      * AC #5. The shared `action-bar-fade` rule is scoped `@media (width < 64rem)`
@@ -328,7 +359,7 @@ test("leaves the plan state and `/` released, which is FUEL-72's ruling", async 
    * This test wants the plan state, and the obvious way to reach it from the
    * session state is to press the primary — which is what the first draft did,
    * and which RECORDS THE SESSION. Entering costs nothing (the state is one
-   * boolean in `localStorage`) but leaving writes a row, and the demo is
+   * instant in `localStorage`) but leaving writes a row, and the demo is
    * provisioned once for the whole run by `demo.setup.ts`: every project after
    * this one then photographed a day with a logged session on it. Twenty
    * baselines failed, on `/` and on `/training` and in the swap sheet, none of

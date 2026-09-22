@@ -33,6 +33,7 @@ import { SlashMeta } from "@/components/kv-grid";
 import { PageMain } from "@/components/page-main";
 import { RecentSessions } from "@/components/recent-sessions";
 import { RestTimer } from "@/components/rest-timer";
+import { SessionClock } from "@/components/session-clock";
 import { Button, CONFIRM_DESTRUCTIVE } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { WalkList, WalkRow } from "@/components/walk-row";
@@ -93,6 +94,7 @@ const FormMediaSheet = dynamic(
   { ssr: false },
 );
 import { sectionLabel, WORKING_SECTION, working } from "@/lib/section";
+import { isEntered, parseEnteredAt, prefillMinutes } from "@/lib/session-clock";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { MAX_NOTE_LENGTH } from "@/lib/session-entry";
 import { titleText } from "@/lib/title";
@@ -133,8 +135,9 @@ import { cn } from "@/lib/utils";
  * off the rows themselves. That is the schema's own "derive from an absolute,
  * never accumulate", and it makes a phone locked mid-session and woken twenty
  * minutes later resume where the data says it is. What is stored on the client
- * is whether the state is entered at all, one boolean in `localStorage`, and
- * since FUEL-120 where the reader moved without logging, beside it.
+ * is when the state was entered — an instant in `localStorage` since FUEL-124,
+ * which is what the session clock reads — and since FUEL-120 where the reader
+ * moved without logging, beside it.
  *
  * ## Why it is a screen of its own and not a branch of `/`
  *
@@ -884,9 +887,11 @@ function banner(failure: Attempt): string {
  * Where the session state remembers that it is entered — Brand Guide § Desktop.
  *
  * "The client stores two things, both in `localStorage`, keyed to the date and
- * wrapped in try/catch like every other read of it: whether the session state
- * is entered at all, one boolean, and where the reader moved without logging."
- * This is the first. The second is `MOVED_KEY` below.
+ * wrapped in try/catch like every other read of it: the instant the session
+ * state was entered, and where the reader moved without logging." This is the
+ * first, and it was one boolean until FUEL-124 — `"1"`, which `isEntered`
+ * still reads as entered, so a session open when that shipped stayed open. The
+ * second is `MOVED_KEY` below.
  *
  * Keyed to the date so that entering Wednesday's session does not open
  * Thursday's, and read only for today — a past date has no session state at
@@ -896,7 +901,7 @@ function banner(failure: Attempt): string {
  *
  * Every access is wrapped: `localStorage` throws outright in a Safari private
  * window and in any browser set to block site data, and a screen that cannot
- * render because it could not remember a boolean is a worse answer than one
+ * render because it could not remember an instant is a worse answer than one
  * that opens in the plan state.
  */
 const SESSION_KEY = (date: CalendarDate) => `fuel:training-session:${date}`;
@@ -931,17 +936,36 @@ function subscribeToStorage(listener: () => void): () => void {
   };
 }
 
-function readEntered(date: CalendarDate): boolean {
+/**
+ * The stored value itself, raw — `isEntered` and `parseEnteredAt` say what it
+ * means.
+ *
+ * The raw string rather than either reading, because this is a snapshot and
+ * one of the two readings is a statement about the clock: a snapshot that
+ * changed its answer as the clock passed a bound, with nothing having told
+ * React, is the fault `rest-timer.tsx` records declining to build. A string is
+ * a primitive, so an unchanged value is an unchanged snapshot.
+ */
+function readSession(date: CalendarDate): string | null {
   try {
-    return window.localStorage.getItem(SESSION_KEY(date)) === "1";
+    return window.localStorage.getItem(SESSION_KEY(date));
   } catch {
-    return false;
+    return null;
   }
 }
 
+/**
+ * Enters the state by storing the instant it was entered — FUEL-124 — or
+ * leaves it by removing the key.
+ *
+ * The instant and not `true`, in `rest-timer.ts`' shape: an absolute, never a
+ * count, so a reload, a locked phone and a throttled tab all read the same
+ * clock. It is the whole of what the session clock and the duration pre-fill
+ * need, and it is still one key, client-only, with nothing in the database.
+ */
 function rememberEntered(date: CalendarDate, entered: boolean): void {
   try {
-    if (entered) window.localStorage.setItem(SESSION_KEY(date), "1");
+    if (entered) window.localStorage.setItem(SESSION_KEY(date), String(Date.now()));
     else window.localStorage.removeItem(SESSION_KEY(date));
   } catch {
     // Nothing to do and nothing to say: the state still works for as long as
@@ -952,10 +976,36 @@ function rememberEntered(date: CalendarDate, entered: boolean): void {
 }
 
 /**
+ * The duration a finish records — FUEL-124.
+ *
+ * The box as typed, unless it is empty, in which case the session clock's
+ * minutes. Never over a typed value, and never for a skip: a skipped session
+ * has no training time to record. `prefillMinutes` refuses a session too short
+ * or too long to be one, and `parseEnteredAt` a start it cannot believe, and
+ * each of those leaves the box empty — the state it was in before FUEL-124.
+ *
+ * Out here rather than in `finish` because it reads the clock, and the clock
+ * belongs to the tap rather than to a render.
+ */
+function durationOnFinish(
+  status: WorkoutLogStatus,
+  typed: string,
+  stored: string | null,
+): string {
+  if (typed !== "" || status === "skipped") return typed;
+
+  const now = Date.now();
+  const startedAt = parseEnteredAt(stored, now);
+  const minutes = startedAt === null ? null : prefillMinutes(startedAt, now);
+
+  return minutes === null ? typed : String(minutes);
+}
+
+/**
  * Where the session state remembers that the reader moved without logging —
  * FUEL-120, and `Moved` in `exercise-set.ts` for what it holds.
  *
- * The entered boolean's second, under the same rules and for the same reason:
+ * The entered instant's second, under the same rules and for the same reason:
  * keyed to the date, every access wrapped, nothing in the database. What the
  * data says was done is the sets; this says only where the reader chose to
  * stand, which is not a fact about the session and so is not the export's.
@@ -979,7 +1029,7 @@ function rememberMoved(date: CalendarDate, moved: Moved | null): void {
     if (moved) window.localStorage.setItem(MOVED_KEY(date), JSON.stringify(moved));
     else window.localStorage.removeItem(MOVED_KEY(date));
   } catch {
-    // As for the entered boolean: the move still works while the page is open,
+    // As for the entered instant: the move still works while the page is open,
     // and a reload puts the reader where the sets alone say.
   }
 
@@ -1117,11 +1167,12 @@ export function Training({
    * rows: everything else the state shows is derived from the sets themselves.
    * See `subscribeToStorage` for why this is not a `useState` in an effect.
    */
-  const entered = useSyncExternalStore(
+  const stored = useSyncExternalStore(
     subscribeToStorage,
-    () => readEntered(date),
-    () => false,
+    () => readSession(date),
+    () => null,
   );
+  const entered = isEntered(stored);
 
   /** Where the reader moved without logging — FUEL-120. See `MOVED_KEY`. */
   const moved = parseMoved(
@@ -1355,7 +1406,14 @@ export function Training({
    * way out but the same three buttons.
    */
   const finish = (status: WorkoutLogStatus) => {
-    record(status);
+    // FUEL-124. What is filled goes into the box as well as the record, so it
+    // reads back as the reader's own, editable and clearable through the same
+    // Save note as any other value. Passed to `act` explicitly rather than
+    // through `record`, which reads `duration` from this render — the empty one.
+    const filled = durationOnFinish(status, duration, stored);
+
+    if (filled !== duration) setDuration(filled);
+    act({ kind: "record", status, note, duration: filled });
     rememberEntered(date, false);
     // A session that has stopped keeps nobody's place in it. Entered again,
     // it opens where the sets say.
@@ -1855,11 +1913,16 @@ export function Training({
            */
           <>
             <div className="flex flex-col gap-3">
-              <Eyebrow>
-                {workingExercises.length === session.exercises.length
-                  ? session.name
-                  : `${session.name} · ${sectionLabel(WORKING_SECTION)}`}
-              </Eyebrow>
+              {/* The session clock rides the eyebrow's row, outside the heading
+                  — FUEL-124. `session-clock.tsx` carries the placement. */}
+              <div className="flex items-baseline justify-between gap-4">
+                <Eyebrow>
+                  {workingExercises.length === session.exercises.length
+                    ? session.name
+                    : `${session.name} · ${sectionLabel(WORKING_SECTION)}`}
+                </Eyebrow>
+                <SessionClock stored={stored} />
+              </div>
               <h1 className="text-title text-text-primary">{titleText(currentEx.name)}</h1>
               {/* Verbatim, and then where you are. `resolve-training.ts` keeps
                   the exercises in section order and in `sort_order` within one,

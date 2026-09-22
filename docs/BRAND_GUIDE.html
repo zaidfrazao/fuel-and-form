@@ -1403,7 +1403,14 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                    what says which session and which of its groups you are in,
                    so nothing above has to repeat it. -->
               <div style="display:flex;flex-direction:column;gap:12px;">
-                <span class="u-micro" style="color:var(--text-3);">Circuit B · Work</span>
+                <!-- FUEL-124: the session clock rides the eyebrow's row,
+                     right-aligned and outside the heading. The eyebrow names
+                     the session, which is what the clock measures; the slash
+                     line is the exercise's, and the bar is full. -->
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;">
+                  <span class="u-micro" style="color:var(--text-3);">Circuit B · Work</span>
+                  <span class="u-micro" style="color:var(--text-3);font-variant-numeric:tabular-nums;">24:18</span>
+                </div>
                 <div class="u-title">Inverted rows</div>
                 <span class="u-slash">3 × 8 · Round 3 of 3 · Exercise 3 of 5</span>
                 <!-- FUEL-94's affordance: revealed rather than inlined per
@@ -2178,7 +2185,10 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                      header and the aside's existing blocks are untouched. -->
                 <div class="dmain">
                   <div style="display:flex;flex-direction:column;gap:12px;">
-                    <span class="u-micro" style="color:var(--text-3);">Circuit B · Work</span>
+                    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;">
+                      <span class="u-micro" style="color:var(--text-3);">Circuit B · Work</span>
+                      <span class="u-micro" style="color:var(--text-3);font-variant-numeric:tabular-nums;">24:18</span>
+                    </div>
                     <div class="u-title">Inverted rows</div>
                     <span class="u-slash">3 × 8 · Round 3 of 3 · Exercise 3 of 5</span>
                     <button class="btn btn-text" type="button" style="align-self:flex-start;width:auto;min-height:0;padding:0;">Show form</button>
