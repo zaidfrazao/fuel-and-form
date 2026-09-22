@@ -125,3 +125,28 @@ export function prefillMinutes(startedAt: number, now: number): number | null {
 
   return minutes >= 1 ? minutes : null;
 }
+
+/**
+ * Whether a stored value means the session state is entered at all.
+ *
+ * Separate from `parseEnteredAt`, and asking nothing of the clock, because it
+ * is read inside a `useSyncExternalStore` snapshot — and a snapshot whose
+ * answer changed as the clock passed a bound, with nothing having told React,
+ * is the fault `rest-timer.tsx` records declining to build. So entry is a
+ * statement about the string, and the clock's refusals are the clock's: a
+ * start too old or too far ahead to believe is still a session state entered,
+ * drawn without a clock and finished without a pre-fill.
+ *
+ * Two shapes are entered. `"1"`, which is how every session entered before
+ * FUEL-124 was stored — a reader mid-session when this shipped keeps the state
+ * they were in, just without its clock. And any positive integer, which is the
+ * shape `training.tsx` now writes. Anything else is not a value this app wrote,
+ * and opens the plan state, as it always has.
+ */
+export function isEntered(raw: string | null): boolean {
+  if (raw === null || raw === "") return false;
+
+  const value = Number(raw);
+
+  return Number.isInteger(value) && value > 0;
+}

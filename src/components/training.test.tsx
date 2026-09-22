@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { Week } from "@/components/dot-grid";
 import {
@@ -1505,6 +1505,207 @@ describe("entering and leaving the session state", () => {
  * So the session state names what it acts on, and asks first once there is
  * something the answer would misdescribe.
  */
+describe("the session clock — FUEL-124", () => {
+  /**
+   * Only `Date` is faked. The interval, the transitions and user-event's own
+   * delays stay real, so nothing here depends on a tick having run — which is
+   * the point: the reading is `now − start`, and a clock that was right only
+   * because an interval fired would be wrong on a locked phone.
+   */
+  const T = Date.UTC(2026, 7, 20, 17, 30, 0);
+  const KEY = `fuel:training-session:${TODAY}`;
+  const MIN = 60_000;
+
+  /** Entered at `startedAt`, the way a reload arrives in the state. */
+  const startedAt = (instant: number) => window.localStorage.setItem(KEY, String(instant));
+
+  const clock = () => document.querySelector("time");
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(T);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("stores the instant Start session was tapped, and reads 0:00 from it", async () => {
+    const user = userEvent.setup();
+
+    render(view());
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    expect(window.localStorage.getItem(KEY)).toBe(String(T));
+    expect(clock()?.textContent).toBe("Elapsed 0:00");
+  });
+
+  test("keeps the clock out of the heading, whose name stays the session's", async () => {
+    // A heading whose accessible name changed every second would be a
+    // different heading to every query that names it.
+    startedAt(T - 5 * MIN);
+
+    render(view());
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Bodyweight Circuit B" }),
+    ).toBeTruthy();
+    expect(clock()?.closest("h2")).toBeNull();
+    // Not `role="timer"`: that is the rest timer's, and one per screen.
+    expect(screen.queryByRole("timer")).toBeNull();
+  });
+
+  test("reads the stored instant after a reload", () => {
+    startedAt(T - (12 * 60 + 34) * 1000);
+
+    render(view());
+
+    expect(clock()?.textContent).toBe("Elapsed 12:34");
+    expect(clock()?.getAttribute("dateTime")).toBe("PT754S");
+  });
+
+  test("is right on the frame a backgrounded tab comes back, with no tick in between", () => {
+    startedAt(T);
+    render(view());
+
+    // Twenty minutes pass and no interval runs — a phone locked in a pocket.
+    vi.setSystemTime(T + 20 * MIN + 5000);
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    expect(clock()?.textContent).toBe("Elapsed 20:05");
+  });
+
+  test('keeps a session entered before FUEL-124 ("1"), without a clock', () => {
+    resumed();
+
+    render(view());
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Press-ups");
+    expect(clock()).toBeNull();
+  });
+
+  test("draws no clock for a start it cannot believe, and keeps the state", () => {
+    // More than a minute ahead of the clock: not a start this app wrote.
+    startedAt(T + 2 * MIN);
+
+    render(view());
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Press-ups");
+    expect(clock()).toBeNull();
+  });
+
+  test.each(["Mark done", "Partial"])(
+    "%s with an empty duration records the elapsed minutes",
+    async (button) => {
+      const user = userEvent.setup();
+      startedAt(T - (27 * 60 + 40) * 1000);
+
+      render(view());
+      await user.click(bar().getByRole("button", { name: button }));
+
+      expect(setSessionStatus).toHaveBeenCalledWith(
+        expect.objectContaining({ durationMin: "28" }),
+      );
+      // And into the box, so it reads back as a value the reader can change.
+      expect(
+        (await screen.findByLabelText<HTMLInputElement>("Duration")).value,
+      ).toBe("28");
+    },
+  );
+
+  test("never overwrites a duration the reader typed", async () => {
+    // The session state does not draw `This session`, so a typed duration is
+    // one typed before Start session — or one already recorded, below.
+    const user = userEvent.setup();
+
+    render(view());
+    await user.type(screen.getByLabelText("Duration"), "40");
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+    vi.setSystemTime(T + 28 * MIN);
+    await user.click(bar().getByRole("button", { name: "Mark done" }));
+
+    expect(setSessionStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ durationMin: "40" }),
+    );
+  });
+
+  test("never overwrites a duration already recorded, on a session entered again", async () => {
+    const user = userEvent.setup();
+    startedAt(T - 28 * MIN);
+
+    render(view({ sessions: recorded({ status: "partial", note: null, durationMin: 15 }) }));
+    await user.click(bar().getByRole("button", { name: "Mark done" }));
+
+    expect(setSessionStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ durationMin: "15" }),
+    );
+  });
+
+  test("records no duration for a skip", async () => {
+    // Nothing logged, so Skip session records in one tap. A skipped session has
+    // no training time to put a number to.
+    const user = userEvent.setup();
+    startedAt(T - 28 * MIN);
+
+    render(view());
+    await user.click(bar().getByRole("button", { name: "Skip session" }));
+
+    expect(setSessionStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "skipped", durationMin: "" }),
+    );
+  });
+
+  test("leaves the box empty for a session forgotten past three hours", async () => {
+    // A capped figure would be one this app invented; empty is what the box
+    // held before FUEL-124. The clock still says why.
+    const user = userEvent.setup();
+    startedAt(T - 3 * 60 * MIN - 1000);
+
+    render(view());
+    expect(clock()?.textContent).toBe("Elapsed 3:00:01");
+    await user.click(bar().getByRole("button", { name: "Mark done" }));
+
+    expect(setSessionStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ durationMin: "" }),
+    );
+  });
+
+  test("leaves the box empty for a legacy session, which has no instant", async () => {
+    const user = userEvent.setup();
+    resumed();
+
+    render(view());
+    await user.click(bar().getByRole("button", { name: "Mark done" }));
+
+    expect(setSessionStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ durationMin: "" }),
+    );
+  });
+
+  test("lets the reader clear the recorded duration afterwards", async () => {
+    const user = userEvent.setup();
+    startedAt(T - 28 * MIN);
+
+    const { rerender } = render(view());
+    await user.click(bar().getByRole("button", { name: "Mark done" }));
+
+    // The server's answer, as the revalidated page hands it back.
+    rerender(view({ sessions: recorded({ status: "done", note: null, durationMin: 28 }) }));
+
+    const duration = await screen.findByLabelText<HTMLInputElement>("Duration");
+    expect(duration.value).toBe("28");
+
+    await user.clear(duration);
+    await user.click(await bar().findByRole("button", { name: "Save note" }));
+
+    expect(setSessionStatus).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "done", durationMin: "" }),
+    );
+  });
+});
+
 describe("Skip session, once a set is logged", () => {
   const dialog = () => screen.getByRole("dialog", { name: "Skip session" });
 

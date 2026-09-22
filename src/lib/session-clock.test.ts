@@ -5,6 +5,7 @@ import {
   MAX_START_AGE_MS,
   MAX_START_SKEW_MS,
   elapsedLabel,
+  isEntered,
   parseEnteredAt,
   prefillMinutes,
 } from "./session-clock";
@@ -117,5 +118,31 @@ describe("prefillMinutes", () => {
     // Left empty rather than capped: a capped figure is one this app invented.
     expect(prefillMinutes(NOW - MAX_PREFILL_MS, NOW)).toBe(180);
     expect(prefillMinutes(NOW - MAX_PREFILL_MS - 1, NOW)).toBeNull();
+  });
+});
+
+describe("isEntered", () => {
+  it('is true for the legacy "1" and for an instant', () => {
+    expect(isEntered("1")).toBe(true);
+    expect(isEntered(String(NOW))).toBe(true);
+  });
+
+  it("stays true for an instant the clock refuses — the state survives, the clock does not", () => {
+    const tooOld = String(NOW - MAX_START_AGE_MS - 1);
+
+    expect(parseEnteredAt(tooOld, NOW)).toBeNull();
+    expect(isEntered(tooOld)).toBe(true);
+  });
+
+  it.each([
+    ["absent", null],
+    ["empty", ""],
+    ["zero", "0"],
+    ["negative", "-5"],
+    ["prose", "yes"],
+    ["a float", "1.5"],
+    ["Infinity", "Infinity"],
+  ])("is false for %s", (_name, raw) => {
+    expect(isEntered(raw)).toBe(false);
   });
 });
