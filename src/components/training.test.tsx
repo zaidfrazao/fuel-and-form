@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -2138,7 +2138,7 @@ describe("a circuit, round by round", () => {
 
     expect(subject()).toBe("Reverse lunges");
     expect(position()).toBe("3 x 10 ea · Round 2 of 3 · Exercise 2 of 3");
-    // The one boolean § Desktop allows, and nothing about the round.
+    // The entered boolean, and nothing about the round: nobody moved.
     expect(Object.keys(window.localStorage)).toEqual([`fuel:training-session:${TODAY}`]);
   });
 
@@ -2213,6 +2213,161 @@ describe("a circuit, round by round", () => {
     expect(subject()).toBe("Press-ups");
     expect(position()).toBe("3 x 12 · Exercise 1 of 3");
     expect(screen.queryByText(/Round \d of/)).toBeNull();
+  });
+});
+
+/**
+ * A way past an exercise, and back — FUEL-120.
+ *
+ * Push-ups short of their third set used to hold the session state on push-ups,
+ * and the only way on was to log a set that was not done. Every move here is
+ * asserted to call NO action: the whole point is that the sets and the status
+ * say what was performed, and moving is not performing.
+ */
+describe("a way past an exercise", () => {
+  const MOVED = `fuel:training-moved:${TODAY}`;
+  const subject = () => screen.getByRole("heading", { level: 1 }).textContent;
+  const steps = () => within(screen.getByRole("navigation", { name: "Exercises" }));
+
+  const nothingWritten = () => {
+    expect(logExerciseSet).not.toHaveBeenCalled();
+    expect(removeExerciseSet).not.toHaveBeenCalled();
+    expect(setSessionStatus).not.toHaveBeenCalled();
+    expect(clearSessionStatus).not.toHaveBeenCalled();
+  };
+
+  test("moves on from an exercise short of its target without logging a set", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: straight([set("e1", 1), set("e1", 2)]) }));
+    expect(subject()).toBe("Press-ups");
+
+    await user.click(steps().getByRole("button", { name: "Next exercise, Reverse lunges" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Reverse lunges" })).toBeTruthy();
+    expect(screen.getByText(/ · Exercise 2 of 3$/)).toBeTruthy();
+    nothingWritten();
+  });
+
+  test("goes back to the exercise passed, with its sets as they were", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: straight([set("e1", 1), set("e1", 2)]) }));
+
+    await user.click(steps().getByRole("button", { name: "Next exercise, Reverse lunges" }));
+    await user.click(
+      await steps().findByRole("button", { name: "Previous exercise, Press-ups" }),
+    );
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Press-ups" })).toBeTruthy();
+    // Two sets logged and the third still open: nothing was written for it.
+    expect(screen.getByRole("button", { name: "Remove set 1" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove set 2" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Log set 3" })).toBeTruthy();
+    nothingWritten();
+  });
+
+  test("names the round in a circuit", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view());
+
+    await user.click(
+      steps().getByRole("button", { name: "Next exercise, Reverse lunges, round 1" }),
+    );
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Reverse lunges" })).toBeTruthy();
+    expect(
+      steps().getByRole("button", { name: "Previous exercise, Press-ups, round 1" }),
+    ).toBeTruthy();
+    expect(steps().getByRole("button", { name: "Next exercise, Plank, round 1" })).toBeTruthy();
+    nothingWritten();
+  });
+
+  test("offers no Previous on the first step and no Next on the last", () => {
+    resumed();
+    render(view({ sessions: straight() }));
+
+    expect(steps().queryByRole("button", { name: /^Previous exercise/ })).toBeNull();
+    expect(steps().getByRole("button", { name: /^Next exercise/ })).toBeTruthy();
+
+    cleanup();
+    window.localStorage.setItem(MOVED, JSON.stringify({ passed: ["e1", "e2"], at: null }));
+    render(view({ sessions: straight() }));
+
+    expect(subject()).toBe("Plank");
+    expect(steps().queryByRole("button", { name: /^Next exercise/ })).toBeNull();
+    expect(steps().getByRole("button", { name: "Previous exercise, Reverse lunges" })).toBeTruthy();
+  });
+
+  test("keeps keyboard focus in the row when a press removes its own button", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: straight() }));
+
+    // Two presses from the first step: the second lands on Plank, the last
+    // step, and Next is no longer drawn.
+    await user.click(steps().getByRole("button", { name: "Next exercise, Reverse lunges" }));
+    await user.click(await steps().findByRole("button", { name: "Next exercise, Plank" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Plank" })).toBeTruthy();
+    expect(steps().queryByRole("button", { name: /^Next exercise/ })).toBeNull();
+    expect(document.activeElement).toBe(
+      steps().getByRole("button", { name: "Previous exercise, Reverse lunges" }),
+    );
+  });
+
+  test("never calls itself Skip", () => {
+    // Skip finishes the whole session on this screen (FUEL-121).
+    resumed();
+    render(view({ sessions: straight([set("e1", 1)]) }));
+
+    for (const button of steps().getAllByRole("button")) {
+      expect(button.textContent).not.toMatch(/skip/i);
+      expect(button.getAttribute("aria-label")).not.toMatch(/skip/i);
+    }
+  });
+
+  test("keeps the reader where they moved to across a reload", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: straight([set("e1", 1)]) }));
+    await user.click(steps().getByRole("button", { name: "Next exercise, Reverse lunges" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Reverse lunges" })).toBeTruthy();
+
+    // A reload: the component comes back with nothing but the storage.
+    cleanup();
+    render(view({ sessions: straight([set("e1", 1)]) }));
+
+    expect(subject()).toBe("Reverse lunges");
+    expect(JSON.parse(window.localStorage.getItem(MOVED)!)).toEqual({
+      passed: ["e1"],
+      at: null,
+    });
+  });
+
+  test("forgets the move when the session is recorded", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: straight([set("e1", 1)]) }));
+    await user.click(steps().getByRole("button", { name: "Next exercise, Reverse lunges" }));
+    await user.click(bar().getByRole("button", { name: "Partial" }));
+
+    expect(window.localStorage.getItem(MOVED)).toBeNull();
+  });
+
+  test("reads a malformed stored value as the position the sets give", () => {
+    resumed();
+    window.localStorage.setItem(MOVED, "{not json");
+    render(view({ sessions: straight([set("e1", 1)]) }));
+
+    expect(subject()).toBe("Press-ups");
   });
 });
 

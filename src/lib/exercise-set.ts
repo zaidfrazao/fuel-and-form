@@ -252,8 +252,146 @@ export type SessionPosition = {
 };
 
 /**
+ * Where the reader has moved without logging — FUEL-120.
+ *
+ * The one thing the position cannot read off the sets, because it is exactly
+ * the thing the sets do not say: that a set was NOT done and the reader went on
+ * anyway. Held in `localStorage` beside the entered boolean and never in the
+ * database. A stored "skipped" set would be a new kind of set, and a step
+ * towards the completion arithmetic § P10 refuses.
+ *
+ * `passed` is the steps moved on from before they were logged. They count as
+ * behind the reader, so finishing the next exercise moves on to the one after
+ * it rather than back to the one passed. `at` is a step behind the derived
+ * position that the reader went back to. It is honoured only while it IS
+ * behind: anything that moves the derived position back to or before it (a
+ * removed set) makes it inert, and the data wins.
+ *
+ * Both hold step KEYS rather than indexes, for the reason `SessionList` holds
+ * an id: a key names an exercise, and one the plan no longer has names nothing
+ * and is ignored rather than landing on whatever now sits at its index.
+ */
+export type Moved = {
+  passed: readonly string[];
+  at: string | null;
+};
+
+/** Where every session starts: nothing moved, the position purely derived. */
+export const NOT_MOVED: Moved = { passed: [], at: null };
+
+/**
+ * The most steps `passed` is read with.
+ *
+ * `localStorage` is anyone's to edit, and this bounds what a hand-edited value
+ * can make the screen do per render. No session this program prescribes has
+ * more than a few dozen steps — five exercises by three rounds is fifteen.
+ */
+export const MAX_PASSED = 100;
+
+/**
+ * A stored `Moved`, or `NOT_MOVED` for anything that is not one.
+ *
+ * The value comes back from `localStorage` as whatever was left there, by this
+ * code, an older copy of it, or a person with devtools. Anything malformed is
+ * read as nothing moved, which is the position as the data has it: the worst a
+ * bad value can do is forget where the reader went.
+ */
+export function parseMoved(raw: string | null): Moved {
+  if (raw === null) return NOT_MOVED;
+
+  let value: unknown;
+
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return NOT_MOVED;
+  }
+
+  if (typeof value !== "object" || value === null) return NOT_MOVED;
+
+  const { passed, at } = value as Record<string, unknown>;
+
+  if (!Array.isArray(passed) || !passed.every((key) => typeof key === "string")) {
+    return NOT_MOVED;
+  }
+
+  if (at !== null && typeof at !== "string") return NOT_MOVED;
+
+  return { passed: passed.slice(0, MAX_PASSED), at };
+}
+
+/**
+ * The session as the ordered steps the state walks through — FUEL-119, FUEL-120.
+ *
+ * Not by round: one step per exercise, done when `isComplete` says so. By round:
+ * one step per exercise per round it takes part in, round-major, done when that
+ * round's set number is logged. That is `sessionPosition`'s rule written out as
+ * a list, which is what a Previous and a Next need: a derivation says where the
+ * reader IS, and only a sequence says what is either side.
+ */
+function sessionSteps<T extends SetTarget & { id: string }>(
+  exercises: readonly T[],
+  sets: readonly (LoggedSet & { exerciseId: string })[],
+  byRound: boolean,
+) {
+  const roundsOf = (exercise: T) => exercise.targetSets ?? 1;
+  const rounds = Math.max(0, ...exercises.map(roundsOf));
+
+  if (!byRound || rounds < 2) {
+    return {
+      rounds: null,
+      steps: exercises.map((exercise, index) => ({
+        index,
+        round: null,
+        key: exercise.id,
+        done: isComplete(exercise, setsFor(exercise.id, sets)),
+      })),
+    };
+  }
+
+  const logged = new Set(sets.map((set) => `${set.exerciseId}#${set.setIndex}`));
+
+  const steps = Array.from({ length: rounds }, (_unused, at) => at + 1).flatMap((round) =>
+    exercises.flatMap((exercise, index) => {
+      if (roundsOf(exercise) < round) return [];
+
+      const key = `${exercise.id}#${round}`;
+
+      return [{ index, round, key, done: logged.has(key) }];
+    }),
+  );
+
+  return { rounds, steps };
+}
+
+/**
+ * Which step the state is showing, and which step the data alone would show.
+ *
+ * The derived step is the first one neither done nor passed, or the LAST step
+ * when there is none, for the reason `currentExercise` gives. The shown step is
+ * `at` where that is behind the derived one, and the derived one otherwise.
+ */
+function locate<T extends SetTarget & { id: string }>(
+  exercises: readonly T[],
+  sets: readonly (LoggedSet & { exerciseId: string })[],
+  byRound: boolean,
+  moved: Moved,
+) {
+  const { rounds, steps } = sessionSteps(exercises, sets, byRound);
+  const passed = new Set(moved.passed);
+
+  const open = steps.findIndex((step) => !step.done && !passed.has(step.key));
+  const derived = open === -1 ? steps.length - 1 : open;
+
+  const back = moved.at === null ? -1 : steps.findIndex((step) => step.key === moved.at);
+  const current = back !== -1 && back < derived ? back : derived;
+
+  return { rounds, steps, derived, current };
+}
+
+/**
  * Which exercise the session state is showing, and which round — Brand Guide
- * § The two states of `/training`, FUEL-119.
+ * § The two states of `/training`, FUEL-119 and FUEL-120.
  *
  * Not a round-by-round session: `currentExercise`, unchanged.
  *
@@ -273,32 +411,78 @@ export type SessionPosition = {
  * `isComplete`'s own reading of an untargeted exercise. The number of rounds is
  * the largest target, and never stored.
  *
- * When every round is done it holds on the last exercise in the last round,
- * for the reason `currentExercise` gives.
+ * When every round is done it holds on the last step: the last exercise that
+ * takes part in the last round, for the reason `currentExercise` gives.
+ *
+ * `moved` is FUEL-120's way past, and with `NOT_MOVED` this is the derivation
+ * above exactly. A passed step counts as behind the reader, and a step gone back
+ * to is shown while it is behind the derived one. See `Moved`.
  */
 export function sessionPosition<T extends SetTarget & { id: string }>(
   exercises: readonly T[],
   sets: readonly (LoggedSet & { exerciseId: string })[],
   byRound: boolean,
+  moved: Moved = NOT_MOVED,
 ): SessionPosition {
-  const straight = { index: currentExercise(exercises, sets), round: null, rounds: null };
+  const { rounds, steps, current } = locate(exercises, sets, byRound, moved);
+  const step = steps[current];
 
-  const roundsOf = (exercise: T) => exercise.targetSets ?? 1;
-  const rounds = Math.max(0, ...exercises.map(roundsOf));
+  return step
+    ? { index: step.index, round: step.round, rounds }
+    : { index: -1, round: null, rounds: null };
+}
 
-  if (!byRound || rounds < 2) return straight;
+/**
+ * One step towards the end of the session or back towards its start, without
+ * logging anything — FUEL-120.
+ *
+ * `null` when there is no step that way, which is what the screen reads to draw
+ * no control at all rather than a disabled one.
+ *
+ * Otherwise where the step lands, and the `Moved` that puts it there, for the
+ * caller to store. Exactly ONE step either way, whatever the sets say about the
+ * steps beyond it:
+ *
+ *   - Next from a step not yet done passes it. Next from one that is done (one
+ *     gone back to) passes nothing, because a logged step needs no marker to be
+ *     behind the reader.
+ *   - Next lands by going back to the following step when that is still behind
+ *     the derived position, and by clearing `at` when it is the derived one.
+ *     Only the first is possible in a circuit with a set logged ahead of its
+ *     round, where the derived position can be several steps on.
+ *   - Previous goes back to the step before, logged or passed alike: the way to
+ *     correct a set or to finish an exercise passed too soon.
+ *
+ * Nothing here writes a set or reads a status. § P10 forbids deriving the
+ * session's status from set data, and a move is less than set data.
+ */
+export function stepSession<T extends SetTarget & { id: string }>(
+  exercises: readonly T[],
+  sets: readonly (LoggedSet & { exerciseId: string })[],
+  byRound: boolean,
+  moved: Moved,
+  direction: "next" | "previous",
+): { position: SessionPosition; moved: Moved } | null {
+  const { rounds, steps, current } = locate(exercises, sets, byRound, moved);
+  const target = direction === "next" ? current + 1 : current - 1;
+  const step = steps[target];
 
-  const logged = new Set(sets.map((set) => `${set.exerciseId}#${set.setIndex}`));
+  if (!step) return null;
 
-  for (let round = 1; round <= rounds; round += 1) {
-    const index = exercises.findIndex(
-      (exercise) => roundsOf(exercise) >= round && !logged.has(`${exercise.id}#${round}`),
-    );
+  const position = { index: step.index, round: step.round, rounds };
 
-    if (index !== -1) return { index, round, rounds };
-  }
+  if (direction === "previous") return { position, moved: { ...moved, at: step.key } };
 
-  return { index: exercises.length - 1, round: rounds, rounds };
+  // Defined whenever `step` is: a step either side means this one exists.
+  const leaving = steps[current]!;
+  const passed =
+    leaving.done || moved.passed.includes(leaving.key)
+      ? moved.passed
+      : [...moved.passed, leaving.key];
+
+  const { derived } = locate(exercises, sets, byRound, { passed, at: null });
+
+  return { position, moved: { passed, at: target < derived ? step.key : null } };
 }
 
 /**
