@@ -44,6 +44,15 @@
 export const MAX_REPS = 999;
 
 /**
+ * The longest a single timed set can record, in seconds — FUEL-123.
+ *
+ * An hour, on `MAX_REPS`'s terms: far above the longest hold this program
+ * prescribes (a minute of plank) and far below the point where a figure stops
+ * meaning a set. `exercise_sets_seconds_range` holds the column to the same.
+ */
+export const MAX_SECONDS = 3600;
+
+/**
  * The most sets one exercise can hold in one session.
  *
  * The screen offers rows from a target and from what is already logged, so this
@@ -59,41 +68,105 @@ export const MAX_SET_INDEX = 20;
 /**
  * An exercise's structured target, as `workout_exercises` stores it.
  *
- * All three nullable and none implying the others — see schema.ts. '3 × 45s' is
- * three sets with no rep target; an exercise with no structured target at all
- * is three nulls, and still logs sets.
+ * All nullable and none implying the others — see schema.ts. An exercise with
+ * no structured target at all is all nulls, and still logs sets. A reps target
+ * and a seconds target never coexist (`workout_exercises_one_target_unit`).
  */
 export type SetTarget = {
   targetSets: number | null;
   targetRepsLow: number | null;
   targetRepsHigh: number | null;
+  targetSecondsLow: number | null;
+  targetSecondsHigh: number | null;
 };
 
-/** A set that has been performed, narrowed to what the screen draws. */
+/**
+ * What an exercise's sets are counted in — FUEL-123.
+ *
+ * `seconds` for an exercise with a seconds target, and `reps` for everything
+ * else, including an exercise with no target at all: that is what every set
+ * was before timed sets existed, so an untargeted row keeps meaning what it
+ * meant. Decided from the TARGET and never from the prescription, which is
+ * still displayed verbatim and never parsed.
+ */
+export type SetKind = "reps" | "seconds";
+
+export function setKind(target: SetTarget): SetKind {
+  return target.targetSecondsLow === null ? "reps" : "seconds";
+}
+
+/**
+ * The low end of the target in the exercise's own unit, or `null` for none.
+ *
+ * What an empty box offers as its placeholder and what the tick logs from it —
+ * one function for both, so the box can never offer one number while the tick
+ * records another.
+ */
+export function targetLow(target: SetTarget): number | null {
+  return setKind(target) === "seconds" ? target.targetSecondsLow : target.targetRepsLow;
+}
+
+/**
+ * A set that has been performed, narrowed to what the screen draws.
+ *
+ * `value` is reps or seconds, and which is the exercise's `setKind` — the
+ * number alone, because every set of one exercise is in one unit.
+ */
 export type LoggedSet = {
   setIndex: number;
-  reps: number;
+  value: number;
 };
 
 /**
  * One row of the sub-list: its ordinal, and what was recorded against it.
  *
- * `reps: null` is a row that exists because a target asked for it or because
- * the next set has to be enterable somewhere — not a set of no reps, which is
+ * `value: null` is a row that exists because a target asked for it or because
+ * the next set has to be enterable somewhere — not a set of nothing, which is
  * refused. The row is the offer; the absence of a number is the whole state.
  */
 export type SetRow = {
   index: number;
-  reps: number | null;
+  value: number | null;
 };
 
 /**
- * The reps as they will be stored, or `undefined` for a value that will not be.
+ * A stored set's one number, whichever column holds it — FUEL-123.
+ *
+ * `exercise_sets_one_unit` makes exactly one of the two non-null, so the throw
+ * is unreachable against the schema. It is a throw rather than a `0` for the
+ * reason `parseSetValue` refuses zero: a set of nothing did not happen, and a
+ * reader handed one would draw it as performed.
+ */
+export function setValue(row: { reps: number | null; seconds: number | null }): number {
+  const value = row.seconds ?? row.reps;
+
+  if (value === null) throw new Error("A set row holds neither reps nor seconds.");
+
+  return value;
+}
+
+/**
+ * `setValue` the other way round: a number in its unit's column and null in
+ * the other, which is the row `exercise_sets_one_unit` accepts. The write and
+ * the screen's own estimate (which costs the optimistic sets, FUEL-95) both
+ * build a stored set here, so the two cannot disagree about which is which.
+ */
+export function storedSet(
+  kind: SetKind,
+  value: number,
+): { reps: number | null; seconds: number | null } {
+  return kind === "seconds" ? { reps: null, seconds: value } : { reps: value, seconds: null };
+}
+
+/**
+ * The set's number as it will be stored, or `undefined` for one that will not.
+ *
+ * Bounded by the unit: `MAX_REPS` for reps, `MAX_SECONDS` for seconds.
  *
  * Two-state rather than the three `parseNote` and `parseDuration` return, and
  * the difference is real: a note and a duration are optional columns where
- * `null` means "deliberately cleared", and `reps` is `not null`. A set with no
- * rep count is not a set with a blank field — it is a set that was not
+ * `null` means "deliberately cleared", and a set must hold a number. A set with
+ * no number is not a set with a blank field — it is a set that was not
  * performed, and the way to say that is to remove the row.
  *
  * `Number.isInteger` refuses `NaN`, `Infinity` and `8.5` in one test. The column
@@ -104,12 +177,14 @@ export type SetRow = {
  * the screen's control for "no set" is the tick that removes it, not an emptied
  * box. `logSet` is never the way a set is taken back.
  */
-export function parseReps(value: unknown): number | undefined {
-  const reps = typeof value === "string" ? Number(value) : value;
+export function parseSetValue(value: unknown, kind: SetKind): number | undefined {
+  const parsed = typeof value === "string" ? Number(value) : value;
 
-  if (typeof reps !== "number" || !Number.isInteger(reps)) return undefined;
+  if (typeof parsed !== "number" || !Number.isInteger(parsed)) return undefined;
 
-  return reps >= 1 && reps <= MAX_REPS ? reps : undefined;
+  const max = kind === "seconds" ? MAX_SECONDS : MAX_REPS;
+
+  return parsed >= 1 && parsed <= max ? parsed : undefined;
 }
 
 /**
@@ -141,7 +216,7 @@ export function setsFor(
 ): LoggedSet[] {
   return sets
     .filter((set) => set.exerciseId === exerciseId)
-    .map(({ setIndex, reps }) => ({ setIndex, reps }))
+    .map(({ setIndex, value }) => ({ setIndex, value }))
     .sort((a, b) => a.setIndex - b.setIndex);
 }
 
@@ -171,12 +246,12 @@ export function setRows(target: SetTarget, logged: readonly LoggedSet[]): SetRow
   const complete = logged.length >= wanted;
   const count = Math.min(wanted + (complete ? 1 : 0), MAX_SET_INDEX);
 
-  const byIndex = new Map(logged.map((set) => [set.setIndex, set.reps]));
+  const byIndex = new Map(logged.map((set) => [set.setIndex, set.value]));
 
   return Array.from({ length: count }, (_row, position) => {
     const index = position + 1;
 
-    return { index, reps: byIndex.get(index) ?? null };
+    return { index, value: byIndex.get(index) ?? null };
   });
 }
 
@@ -486,26 +561,52 @@ export function stepSession<T extends SetTarget & { id: string }>(
 }
 
 /**
+ * The word a set's number is counted in, as the set row prints it — FUEL-123.
+ *
+ * `sec` rather than `s` or `seconds`: it is the seed's own spelling ('3 x
+ * 30–60 sec'), so the prescription above the rows and the rows themselves
+ * name the unit the same way.
+ */
+export const UNIT_WORD: Readonly<Record<SetKind, string>> = {
+  reps: "reps",
+  seconds: "sec",
+};
+
+/**
  * What an unlogged row offers, as words — the mock's `Target 8`.
  *
- * `null` when there is no rep target, which is not the same as no target at
- * all: '3 × 45s' is three sets of something this app does not count, so the row
- * exists and has nothing to say about how many reps belong in it.
+ * `Target 8–12` for reps, and `Target 30–60 sec` for seconds (FUEL-123). The
+ * reps form names no unit because it never did, and a number beside a box is
+ * read as reps; a seconds target has to say so, or a plank reads `Target
+ * 30–60` and is logged as thirty of something.
+ *
+ * `null` when there is no target in the exercise's unit, which is not the same
+ * as no target at all: a set count alone is a row with nothing to say about
+ * what belongs in it.
  *
  * An en dash for a range, not a hyphen — the same figure-dash the seed's own
  * prescriptions use ('8–12 rounds'), so the two spellings of a range on one
  * screen are the same character.
  */
 export function targetLabel(target: SetTarget): string | null {
-  const { targetRepsLow: low, targetRepsHigh: high } = target;
+  const kind = setKind(target);
+  const [low, high] =
+    kind === "seconds"
+      ? [target.targetSecondsLow, target.targetSecondsHigh]
+      : [target.targetRepsLow, target.targetRepsHigh];
 
   if (low === null || high === null) return null;
 
-  return low === high ? `Target ${low}` : `Target ${low}–${high}`;
+  const range = low === high ? `${low}` : `${low}–${high}`;
+
+  return kind === "seconds" ? `Target ${range} ${UNIT_WORD.seconds}` : `Target ${range}`;
 }
 
 /**
  * What this set was done at last time — § P10's recall, FUEL-122 — or `null`.
+ *
+ * In the exercise's own unit, since `LoggedSet` is: last time's plank is
+ * seconds, not reps (FUEL-123).
  *
  * By SET NUMBER, not by position in the list: last time's third set is what
  * row 3 is compared against, and a last time that stopped at two sets gives
@@ -515,30 +616,33 @@ export function targetLabel(target: SetTarget): string | null {
  * not an average, not a suggestion — PRD § P10 records why each of those is
  * the progression engine § Non-Goals rules out.
  */
-export function lastTimeReps(index: number, previous: readonly LoggedSet[]): number | null {
-  return previous.find((set) => set.setIndex === index)?.reps ?? null;
+export function lastTimeValue(index: number, previous: readonly LoggedSet[]): number | null {
+  return previous.find((set) => set.setIndex === index)?.value ?? null;
 }
 
 /**
  * The words beside a set's box: the unit, and what last time was.
  *
  * `Target 8–12` for a row still on offer, `reps` once it is logged, and `reps`
- * alone for an exercise with no rep target. Last time follows as a clause —
- * `Target 8–12 · 10 last time` — in the slash lines' own middle dot, and a row
- * with no last time carries no clause at all: no dash, no zero, no "first
- * time". § Tone of Voice describes what is there.
+ * alone for an exercise with no rep target — or `Target 30–60 sec` and `sec`
+ * for a timed one (FUEL-123). Last time follows as a clause — `Target 8–12 ·
+ * 10 last time` — in the slash lines' own middle dot, and names no unit of its
+ * own: the line already has, and a second `sec` is width the 375 row does not
+ * have to spare. A row with no last time carries no clause at all: no dash, no
+ * zero, no "first time". § Tone of Voice describes what is there.
  *
  * Text, and never the box's placeholder. The placeholder is the target's low
- * rep because that is what the tick logs from an empty box (see `SetList`), and
- * a placeholder reading last time's figure would have the box offer one number
- * while the tick recorded another.
+ * end because that is what the tick logs from an empty box (see `targetLow`),
+ * and a placeholder reading last time's figure would have the box offer one
+ * number while the tick recorded another.
  */
 export function setUnitLine(
   target: SetTarget,
   logged: boolean,
   lastTime: number | null,
 ): string {
-  const unit = logged ? "reps" : (targetLabel(target) ?? "reps");
+  const word = UNIT_WORD[setKind(target)];
+  const unit = logged ? word : (targetLabel(target) ?? word);
 
   return lastTime === null ? unit : `${unit} · ${lastTime} last time`;
 }
