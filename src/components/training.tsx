@@ -50,10 +50,14 @@ import {
 import type { WalkEntryView } from "@/lib/walk";
 import {
   type LoggedSet,
+  type Moved,
+  parseMoved,
+  type SessionPosition,
   type SetTarget,
   setProgress,
   sessionPosition,
   setRows,
+  stepSession,
   stepsByRound,
   setsFor,
   targetLabel,
@@ -684,6 +688,80 @@ function SessionList({
   );
 }
 
+/**
+ * The way past an exercise, and back — FUEL-120.
+ *
+ * Without it, an exercise short of its target held the state on itself: the
+ * only way on was to log a set that was not done, which put a false row in the
+ * history and the export. § P10 exists to record the session "as it was
+ * actually performed", so the way on cannot be a set.
+ *
+ * Text buttons, the weight "Show form" has: they are tertiary to the set being
+ * worked, and Mark done keeps the screen's one primary. `xs` is 44px tall, and
+ * both labels are wider than that, so each is a full § Touch Targets area.
+ *
+ * Not "Skip", which on this screen finishes the whole session (FUEL-121), and
+ * not a bare "Next" either, which beside Mark done could read as the step after
+ * finishing. The visible words name the unit, and the accessible name adds
+ * where it goes, as the date paginator's "Previous day, Tue 16 Sep" does: the
+ * visible label leads it, so a voice user saying what they see still hits it.
+ *
+ * Drawn only where there is somewhere to go, for the reason "Show form" gives:
+ * a disabled control promises an action that does not exist. Next keeps the
+ * right edge with or without Previous beside it, so it does not jump across
+ * the row under a thumb as the reader leaves the first step.
+ *
+ * Nothing here calls an action. A move is stored in the browser beside the
+ * entered boolean, and the session's sets and status are exactly as they were.
+ */
+function ExerciseSteps({
+  exercises,
+  previous,
+  next,
+  onPrevious,
+  onNext,
+}: {
+  exercises: readonly TrainingExercise[];
+  previous: SessionPosition | null;
+  next: SessionPosition | null;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  if (!previous && !next) return null;
+
+  const where = (step: SessionPosition) =>
+    [exercises[step.index]?.name, step.round ? `round ${step.round}` : null]
+      .filter(Boolean)
+      .join(", ");
+
+  return (
+    <nav aria-label="Exercises" className="flex items-center justify-between gap-3">
+      {previous ? (
+        <Button
+          variant="link"
+          size="xs"
+          className="px-0"
+          aria-label={`Previous exercise, ${where(previous)}`}
+          onClick={onPrevious}
+        >
+          <span aria-hidden="true">&lsaquo; Previous exercise</span>
+        </Button>
+      ) : null}
+      {next ? (
+        <Button
+          variant="link"
+          size="xs"
+          className="ml-auto px-0"
+          aria-label={`Next exercise, ${where(next)}`}
+          onClick={onNext}
+        >
+          <span aria-hidden="true">Next exercise &rsaquo;</span>
+        </Button>
+      ) : null}
+    </nav>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /* The screen                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -812,6 +890,41 @@ function rememberEntered(date: CalendarDate, entered: boolean): void {
   } catch {
     // Nothing to do and nothing to say: the state still works for as long as
     // the page is open, and a reload starts it in the plan state.
+  }
+
+  for (const listener of listeners) listener();
+}
+
+/**
+ * Where the session state remembers that the reader moved without logging —
+ * FUEL-120, and `Moved` in `exercise-set.ts` for what it holds.
+ *
+ * The entered boolean's second, under the same rules and for the same reason:
+ * keyed to the date, every access wrapped, nothing in the database. What the
+ * data says was done is the sets; this says only where the reader chose to
+ * stand, which is not a fact about the session and so is not the export's.
+ *
+ * The snapshot is the stored STRING, not the parsed value. `useSyncExternalStore`
+ * compares snapshots by identity, and a parse per read would be a new object on
+ * every read and a render loop.
+ */
+const MOVED_KEY = (date: CalendarDate) => `fuel:training-moved:${date}`;
+
+function readMoved(date: CalendarDate): string | null {
+  try {
+    return window.localStorage.getItem(MOVED_KEY(date));
+  } catch {
+    return null;
+  }
+}
+
+function rememberMoved(date: CalendarDate, moved: Moved | null): void {
+  try {
+    if (moved) window.localStorage.setItem(MOVED_KEY(date), JSON.stringify(moved));
+    else window.localStorage.removeItem(MOVED_KEY(date));
+  } catch {
+    // As for the entered boolean: the move still works while the page is open,
+    // and a reload puts the reader where the sets alone say.
   }
 
   for (const listener of listeners) listener();
@@ -951,6 +1064,15 @@ export function Training({
     subscribeToStorage,
     () => readEntered(date),
     () => false,
+  );
+
+  /** Where the reader moved without logging — FUEL-120. See `MOVED_KEY`. */
+  const moved = parseMoved(
+    useSyncExternalStore(
+      subscribeToStorage,
+      () => readMoved(date),
+      () => null,
+    ),
   );
 
   // What the screen says is recorded, before the server has answered. One
@@ -1171,6 +1293,9 @@ export function Training({
   const finish = (status: WorkoutLogStatus) => {
     record(status);
     rememberEntered(date, false);
+    // A session that has stopped keeps nobody's place in it. Entered again,
+    // it opens where the sets say.
+    rememberMoved(date, null);
   };
 
   /**
@@ -1180,12 +1305,20 @@ export function Training({
    * in a circuit to the next exercise's set, otherwise once an exercise's last
    * set lands (FUEL-119). `sessionPosition` carries the rule and the reason it
    * is a derivation rather than a stored cursor.
+   *
+   * `moved` is the one thing a derivation cannot know: that a set was not done
+   * and the reader went on anyway (FUEL-120). `previous` and `next` are the
+   * steps either side, `null` where there is none, and each carries the value
+   * that puts the reader there.
    */
+  const byRound = session ? stepsByRound(session.type) : false;
   const position = session
-    ? sessionPosition(workingExercises, sets, stepsByRound(session.type))
+    ? sessionPosition(workingExercises, sets, byRound, moved)
     : null;
   const current = position?.index ?? -1;
   const currentEx = workingExercises[current];
+  const previous = stepSession(workingExercises, sets, byRound, moved, "previous");
+  const next = stepSession(workingExercises, sets, byRound, moved, "next");
 
   /*
    * Which exercise the form sheet is open FOR — § P10, FUEL-94.
@@ -1703,6 +1836,13 @@ export function Training({
                   forget(currentEx.id, setIndex);
                   act({ kind: "remove-set", exerciseId: currentEx.id, setIndex });
                 }}
+              />
+              <ExerciseSteps
+                exercises={workingExercises}
+                previous={previous?.position ?? null}
+                next={next?.position ?? null}
+                onPrevious={() => previous && rememberMoved(date, previous.moved)}
+                onNext={() => next && rememberMoved(date, next.moved)}
               />
             </section>
           </>
