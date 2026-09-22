@@ -5,7 +5,9 @@ import Link from "next/link";
 import {
   type ReactNode,
   startTransition,
+  useLayoutEffect,
   useOptimistic,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -714,6 +716,11 @@ function SessionList({
  *
  * Nothing here calls an action. A move is stored in the browser beside the
  * entered boolean, and the session's sets and status are exactly as they were.
+ *
+ * Drawing only what exists has one cost, and this pays it: Next pressed onto
+ * the last step unmounts the button that had focus, and a keyboard or
+ * screen-reader user is dropped to the top of the document mid-session. So a
+ * press that removes its own button hands focus to the one that remains.
  */
 function ExerciseSteps({
   exercises,
@@ -728,7 +735,28 @@ function ExerciseSteps({
   onPrevious: () => void;
   onNext: () => void;
 }) {
+  const nav = useRef<HTMLElement>(null);
+  const pressed = useRef(false);
+
+  // After the render a press caused, and before paint, so focus never shows
+  // on the body even for a frame.
+  useLayoutEffect(() => {
+    if (!pressed.current) return;
+    pressed.current = false;
+
+    const here = nav.current;
+
+    if (here && !here.contains(document.activeElement)) {
+      here.querySelector("button")?.focus();
+    }
+  });
+
   if (!previous && !next) return null;
+
+  const press = (move: () => void) => () => {
+    pressed.current = true;
+    move();
+  };
 
   const where = (step: SessionPosition) =>
     [exercises[step.index]?.name, step.round ? `round ${step.round}` : null]
@@ -736,14 +764,14 @@ function ExerciseSteps({
       .join(", ");
 
   return (
-    <nav aria-label="Exercises" className="flex items-center justify-between gap-3">
+    <nav ref={nav} aria-label="Exercises" className="flex items-center justify-between gap-3">
       {previous ? (
         <Button
           variant="link"
           size="xs"
           className="px-0"
           aria-label={`Previous exercise, ${where(previous)}`}
-          onClick={onPrevious}
+          onClick={press(onPrevious)}
         >
           <span aria-hidden="true">&lsaquo; Previous exercise</span>
         </Button>
@@ -754,7 +782,7 @@ function ExerciseSteps({
           size="xs"
           className="ml-auto px-0"
           aria-label={`Next exercise, ${where(next)}`}
-          onClick={onNext}
+          onClick={press(onNext)}
         >
           <span aria-hidden="true">Next exercise &rsaquo;</span>
         </Button>

@@ -2303,6 +2303,24 @@ describe("a way past an exercise", () => {
     expect(steps().getByRole("button", { name: "Previous exercise, Reverse lunges" })).toBeTruthy();
   });
 
+  test("keeps keyboard focus in the row when a press removes its own button", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: straight() }));
+
+    // Two presses from the first step: the second lands on Plank, the last
+    // step, and Next is no longer drawn.
+    await user.click(steps().getByRole("button", { name: "Next exercise, Reverse lunges" }));
+    await user.click(await steps().findByRole("button", { name: "Next exercise, Plank" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Plank" })).toBeTruthy();
+    expect(steps().queryByRole("button", { name: /^Next exercise/ })).toBeNull();
+    expect(document.activeElement).toBe(
+      steps().getByRole("button", { name: "Previous exercise, Reverse lunges" }),
+    );
+  });
+
   test("never calls itself Skip", () => {
     // Skip finishes the whole session on this screen (FUEL-121).
     resumed();
