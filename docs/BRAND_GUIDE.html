@@ -259,6 +259,8 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--pg-accent); out
 .setrow + .setrow { border-top: 1px solid var(--border); }
 @media (min-resolution: 2dppx) { .setrow + .setrow { border-top-width: .5px; } }
 .set-reps { flex: 1; font-size: 17px; letter-spacing: -.011em; }
+/* FUEL-122 — last time's reps, in the target's own tertiary. Recall, never marked. */
+.set-last { color: var(--text-3); }
 .set-tick { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--border);
   flex: none; }
 .set-tick.on { background: var(--ink); border-color: var(--ink); }
@@ -1381,7 +1383,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
       <!-- ===== 4b · TRAINING, THE SESSION STATE (FUEL-90) ===== -->
       <div class="cell">
         <div class="stage">
-          <div class="ui device" data-mode="dark" role="img" aria-label="Training, the session state: Inverted rows promoted as the current exercise with three set rows beneath it, Previous and Next exercise under those, and a rest timer reading 1 minute 12 in the action bar above Mark done, with Partial and Skip session beneath it">
+          <div class="ui device" data-mode="dark" role="img" aria-label="Training, the session state: Inverted rows promoted as the current exercise with three set rows beneath it, each carrying last time's reps, Previous and Next exercise under those, and a rest timer reading 1 minute 12 in the action bar above Mark done, with Partial and Skip session beneath it">
             <div class="statusbar"><span>17:48</span>
               <span class="glyphs" aria-hidden="true">
                 <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.7" y="5" width="3" height="6" rx="1"/><rect x="9.4" y="2.5" width="3" height="8.5" rx="1"/><rect x="14" y="0" width="3" height="11" rx="1"/></svg>
@@ -1414,9 +1416,9 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
               <div class="blk">
                 <span class="u-micro">Sets</span>
                 <div class="setlist">
-                  <div class="setrow"><span class="num-ix">01</span><span class="set-reps">8 reps</span><span class="set-tick on"></span></div>
-                  <div class="setrow"><span class="num-ix">02</span><span class="set-reps">8 reps</span><span class="set-tick on"></span></div>
-                  <div class="setrow"><span class="num-ix">03</span><span class="set-reps" style="color:var(--text-3);">Target 8</span><span class="set-tick"></span></div>
+                  <div class="setrow"><span class="num-ix">01</span><span class="set-reps">8 reps<span class="set-last"> · 8 last time</span></span><span class="set-tick on"></span></div>
+                  <div class="setrow"><span class="num-ix">02</span><span class="set-reps">8 reps<span class="set-last"> · 8 last time</span></span><span class="set-tick on"></span></div>
+                  <div class="setrow"><span class="num-ix">03</span><span class="set-reps" style="color:var(--text-3);">Target 8 · 7 last time</span><span class="set-tick"></span></div>
                 </div>
                 <!-- FUEL-120: the way past an exercise, and back. Text buttons,
                      Show form's weight, drawn only where there is a step that
@@ -2148,7 +2150,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
       <div class="dcell">
         <!-- ===== D4b · TRAINING, THE SESSION STATE (FUEL-90) ===== -->
         <div class="dstage">
-          <div class="ui dframe" data-mode="dark" role="img" aria-label="Training in the session state at 1272: the paginator across the frame, Inverted rows, its three set rows and Previous and Next exercise in the measure, with the rest timer in the action bar, and the rest of the session grouped in the aside above the adherence grid and recent sessions">
+          <div class="ui dframe" data-mode="dark" role="img" aria-label="Training in the session state at 1272: the paginator across the frame, Inverted rows, its three set rows with last time's reps, and Previous and Next exercise in the measure, with the rest timer in the action bar, and the rest of the session grouped in the aside above the adherence grid and recent sessions">
 <div class="dbody spanning">
             <nav class="rail" aria-label="Primary">
             <span class="railitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#n-now"/></svg>Now</span>
@@ -2185,9 +2187,9 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                   <div class="blk">
                     <span class="u-micro">Sets</span>
                     <div class="setlist">
-                      <div class="setrow"><span class="num-ix">01</span><span class="set-reps">8 reps</span><span class="set-tick on"></span></div>
-                      <div class="setrow"><span class="num-ix">02</span><span class="set-reps">8 reps</span><span class="set-tick on"></span></div>
-                      <div class="setrow"><span class="num-ix">03</span><span class="set-reps" style="color:var(--text-3);">Target 8</span><span class="set-tick"></span></div>
+                      <div class="setrow"><span class="num-ix">01</span><span class="set-reps">8 reps<span class="set-last"> · 8 last time</span></span><span class="set-tick on"></span></div>
+                      <div class="setrow"><span class="num-ix">02</span><span class="set-reps">8 reps<span class="set-last"> · 8 last time</span></span><span class="set-tick on"></span></div>
+                      <div class="setrow"><span class="num-ix">03</span><span class="set-reps" style="color:var(--text-3);">Target 8 · 7 last time</span><span class="set-tick"></span></div>
                     </div>
                     <div style="display:flex;justify-content:space-between;">
                       <button class="btn btn-text" type="button" style="width:auto;min-height:44px;padding:0;">&lsaquo; Previous exercise</button>
