@@ -753,9 +753,9 @@ describe("targetLabel", () => {
 
   it("names a seconds target with its unit — FUEL-123", () => {
     // A bare "Target 30–60" against a plank reads as reps, which is the bug.
-    expect(targetLabel(HELD)).toBe("Target 30–60 sec");
+    expect(targetLabel(HELD)).toBe("Target 30–60s");
     expect(targetLabel(target({ targetSecondsLow: 45, targetSecondsHigh: 45 }))).toBe(
-      "Target 45 sec",
+      "Target 45s",
     );
   });
 
@@ -825,12 +825,12 @@ describe("setUnitLine — FUEL-122", () => {
   });
 
   it("says seconds for a timed hold, and names the unit once — FUEL-123", () => {
-    // On offer, logged, and with last time. The clause carries no second
-    // `sec`: the line has already said it, and the 375 row has no width for
-    // a repeat.
-    expect(setUnitLine(HELD, false, null)).toBe("Target 30–60 sec");
+    // On offer, logged, and with last time. The target is `30–60s` and the
+    // logged unit `sec`; the clause carries no unit of its own, because the
+    // line has already said it and the 375 row has no width for a repeat.
+    expect(setUnitLine(HELD, false, null)).toBe("Target 30–60s");
     expect(setUnitLine(HELD, true, null)).toBe("sec");
-    expect(setUnitLine(HELD, false, 45)).toBe("Target 30–60 sec · 45 last time");
+    expect(setUnitLine(HELD, false, 45)).toBe("Target 30–60s · 45 last time");
     expect(setUnitLine(HELD, true, 45)).toBe("sec · 45 last time");
   });
 });

@@ -1710,7 +1710,7 @@ describe("the sets sub-list", () => {
     // placeholder is the low end the tick will log — never a reps box.
     expect(screen.queryByLabelText("Set 1 reps")).toBeNull();
     expect(screen.getByLabelText<HTMLInputElement>("Set 1 seconds").placeholder).toBe("30");
-    expect(screen.getAllByText("Target 30–60 sec")).toHaveLength(3);
+    expect(screen.getAllByText("Target 30–60s")).toHaveLength(3);
 
     await user.click(screen.getByRole("button", { name: "Log set 1" }));
 

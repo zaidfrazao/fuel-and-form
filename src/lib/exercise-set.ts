@@ -561,11 +561,13 @@ export function stepSession<T extends SetTarget & { id: string }>(
 }
 
 /**
- * The word a set's number is counted in, as the set row prints it — FUEL-123.
+ * The word a logged set's number is counted in, as the set row prints it —
+ * FUEL-123.
  *
  * `sec` rather than `s` or `seconds`: it is the seed's own spelling ('3 x
  * 30–60 sec'), so the prescription above the rows and the rows themselves
- * name the unit the same way.
+ * name the unit the same way. The TARGET is written `30–60s` instead — see
+ * `targetLabel` — because that line has no room for the word.
  */
 export const UNIT_WORD: Readonly<Record<SetKind, string>> = {
   reps: "reps",
@@ -575,10 +577,14 @@ export const UNIT_WORD: Readonly<Record<SetKind, string>> = {
 /**
  * What an unlogged row offers, as words — the mock's `Target 8`.
  *
- * `Target 8–12` for reps, and `Target 30–60 sec` for seconds (FUEL-123). The
+ * `Target 8–12` for reps, and `Target 30–60s` for seconds (FUEL-123). The
  * reps form names no unit because it never did, and a number beside a box is
  * read as reps; a seconds target has to say so, or a plank reads `Target
  * 30–60` and is logged as thirty of something.
+ *
+ * `s` against the figure, not ` sec`, and that is width: with last time's
+ * clause, `Target 30–60 sec · 60 last time` is wider than the 375 row's unit
+ * line and wraps. Brand Guide § Lists › Sub-lists records the measurement.
  *
  * `null` when there is no target in the exercise's unit, which is not the same
  * as no target at all: a set count alone is a row with nothing to say about
@@ -599,7 +605,7 @@ export function targetLabel(target: SetTarget): string | null {
 
   const range = low === high ? `${low}` : `${low}–${high}`;
 
-  return kind === "seconds" ? `Target ${range} ${UNIT_WORD.seconds}` : `Target ${range}`;
+  return kind === "seconds" ? `Target ${range}s` : `Target ${range}`;
 }
 
 /**
@@ -624,7 +630,7 @@ export function lastTimeValue(index: number, previous: readonly LoggedSet[]): nu
  * The words beside a set's box: the unit, and what last time was.
  *
  * `Target 8–12` for a row still on offer, `reps` once it is logged, and `reps`
- * alone for an exercise with no rep target — or `Target 30–60 sec` and `sec`
+ * alone for an exercise with no rep target — or `Target 30–60s` and `sec`
  * for a timed one (FUEL-123). Last time follows as a clause — `Target 8–12 ·
  * 10 last time` — in the slash lines' own middle dot, and names no unit of its
  * own: the line already has, and a second `sec` is width the 375 row does not

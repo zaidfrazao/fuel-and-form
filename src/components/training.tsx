@@ -571,7 +571,7 @@ function SetList({
               />
               {/* The mock's two states, in words: `8 reps` for a set performed
                   and `Target 8` for one still on offer — `sec` and `Target
-                  30–60 sec` for a timed one (FUEL-123). An exercise with no
+                  30–60s` for a timed one (FUEL-123). An exercise with no
                   target says neither and just names the unit. Last time's
                   figure follows as a clause where there was one — FUEL-122. */}
               <span className="text-slash text-text-tertiary">
