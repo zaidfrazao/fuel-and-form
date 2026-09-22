@@ -104,7 +104,7 @@ describe.skipIf(!configured)("the weekly export, scoped", () => {
     // so the distinguishing column is `reps`: it is the user's name length, so
     // a leaked row carries a count that could not be this user's.
     expect(section(csv, "sets")).toEqual([
-      `${fixture.bob.weighInDate},Bob's circuit,Press-ups,work,1,3,`,
+      `${fixture.bob.weighInDate},Bob's circuit,Press-ups,work,1,3,,`,
     ]);
   });
 

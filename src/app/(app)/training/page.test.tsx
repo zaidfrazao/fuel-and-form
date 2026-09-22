@@ -82,6 +82,8 @@ const EXERCISE: WorkoutExercise = {
   targetSets: 3,
   targetRepsLow: 12,
   targetRepsHigh: 12,
+  targetSecondsLow: null,
+  targetSecondsHigh: null,
   mediaKey: null,
   mediaKind: null,
   mediaAlt: null,
@@ -248,6 +250,7 @@ describe("last time's sets — FUEL-122", () => {
     exerciseId: EXERCISE.id,
     setIndex: 1,
     reps: 10,
+    seconds: null,
     loadKg: null,
     createdAt: new Date("2026-03-05T18:00:00Z"),
   };

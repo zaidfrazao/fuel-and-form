@@ -89,6 +89,8 @@ const EXERCISES = new Map<string, WorkoutExercise[]>(
       targetSets: exercise.targetSets ?? null,
       targetRepsLow: exercise.targetRepsLow ?? null,
       targetRepsHigh: exercise.targetRepsHigh ?? null,
+      targetSecondsLow: null,
+      targetSecondsHigh: null,
       mediaKey: exercise.mediaKey ?? null,
       mediaKind: exercise.mediaKind ?? null,
       mediaAlt: exercise.mediaAlt ?? null,

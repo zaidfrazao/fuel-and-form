@@ -167,6 +167,8 @@ const exercise = (id: string, sortOrder: number): WorkoutExercise => ({
   targetSets: 3,
   targetRepsLow: 12,
   targetRepsHigh: 12,
+  targetSecondsLow: null,
+  targetSecondsHigh: null,
   mediaKey: null,
   mediaKind: null,
   mediaAlt: null,
@@ -183,6 +185,7 @@ const exerciseSet = (id: string, setIndex: number, reps = 12): ExerciseSet => ({
   exerciseId: EXERCISE_ID,
   setIndex,
   reps,
+  seconds: null,
   loadKg: null,
   createdAt: new Date("2026-08-10T06:32:00.000Z"),
 });
@@ -1584,6 +1587,31 @@ describe("the sets round-trip", () => {
     // Every column survives too, `user_id` excepted — a round-trip that kept
     // the row and dropped its reps would pass an id-only assertion.
     expect(document.exerciseSets.map((row) => row.reps)).toEqual([12, 12, 12]);
+  });
+
+  test("carries a timed set's seconds, and a reps set as it always was — FUEL-123", () => {
+    const reps = exerciseSet("ffffffff-0000-4000-8000-000000000002", 1);
+    const hold = {
+      ...exerciseSet("ffffffff-0000-4000-8000-000000000003", 2),
+      reps: null,
+      seconds: 45,
+    };
+
+    const document = build({
+      ...TABLES,
+      workoutLogs: [workoutLog(WORKOUT_LOG_ID, "2026-08-10")],
+      exerciseSets: [reps, hold],
+    });
+
+    // The hold is 45 seconds and no reps — never the 45 reps it was stored as
+    // before this ticket. The reps row keeps its figure; `seconds: null` is
+    // the only difference a pre-ticket set shows, and it adds no value.
+    expect(
+      document.exerciseSets.map(({ setIndex, reps, seconds }) => ({ setIndex, reps, seconds })),
+    ).toEqual([
+      { setIndex: 1, reps: 12, seconds: null },
+      { setIndex: 2, reps: null, seconds: 45 },
+    ]);
   });
 });
 

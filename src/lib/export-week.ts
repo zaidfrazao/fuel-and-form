@@ -200,6 +200,12 @@ const TRAINING_HEADER = [
  * reason the sets are long form; naming one column two things across one file
  * would break the join for the sake of a synonym.
  *
+ * `reps` and `seconds` are two columns, exactly one filled per row — FUEL-123.
+ * A timed hold is seconds, and a single `amount` column would ask whoever
+ * sums it to know which rows are which. Beside each other, with the empty cell
+ * `cell` writes for null, a pivot sums reps and seconds apart without being
+ * told. A set logged before that ticket is a reps row with an empty `seconds`.
+ *
  * `section` is carried even though every row it can produce today reads `work`
  * — set entry is scoped to the working section by `section.ts`'s `working`. It
  * is not decoration. The vocabulary is open by design, an exercise moved to
@@ -214,6 +220,7 @@ const SETS_HEADER = [
   "section",
   "set_index",
   "reps",
+  "seconds",
   "load_kg",
 ] as const;
 
@@ -606,6 +613,7 @@ function setRows(
         exercise?.section ?? "",
         cell(set.setIndex),
         cell(set.reps),
+        cell(set.seconds),
         cell(set.loadKg),
       ];
     });

@@ -159,6 +159,8 @@ function exercise(
     targetSets: null,
     targetRepsLow: null,
     targetRepsHigh: null,
+    targetSecondsLow: null,
+    targetSecondsHigh: null,
     mediaKey: null,
     mediaKind: null,
     mediaAlt: null,
@@ -208,6 +210,7 @@ function set(
 ): ExerciseSet {
   return {
     userId: USER_ID,
+    seconds: null,
     loadKg: null,
     createdAt: new Date("2026-08-17T18:05:00.000Z"),
     ...over,
@@ -425,7 +428,7 @@ describe("the whole document", () => {
         // The sets section, between training and meals — it is the training
         // section at a finer grain, and the two join on (date, session).
         "sets",
-        "date,session,exercise,section,set_index,reps,load_kg",
+        "date,session,exercise,section,set_index,reps,seconds,load_kg",
         "",
         "meals",
         "date,slot,planned,swapped_with,actual,status,kcal,protein_g,fat_g,carb_g,note",
@@ -457,7 +460,7 @@ describe("the whole document", () => {
       "date,session,type,scheduled,status,duration_min,distance_m,steps,steps_source,est_burn_kcal_low,est_burn_kcal_high,note",
       "",
       "sets",
-      "date,session,exercise,section,set_index,reps,load_kg",
+      "date,session,exercise,section,set_index,reps,seconds,load_kg",
       "",
       "meals",
       "date,slot,planned,swapped_with,actual,status,kcal,protein_g,fat_g,carb_g,note",
@@ -991,9 +994,9 @@ describe("the sets section", () => {
     // Three rows, not one cell reading "12,10,8" — which is the whole point of
     // the section, since a packed cell cannot be pivoted or summed.
     expect(rows).toEqual([
-      "2026-08-17,Full body circuit,Goblet squat,work,1,12,",
-      "2026-08-17,Full body circuit,Goblet squat,work,2,10,",
-      "2026-08-17,Full body circuit,Goblet squat,work,3,8,",
+      "2026-08-17,Full body circuit,Goblet squat,work,1,12,,",
+      "2026-08-17,Full body circuit,Goblet squat,work,2,10,,",
+      "2026-08-17,Full body circuit,Goblet squat,work,3,8,,",
     ]);
   });
 
@@ -1034,10 +1037,10 @@ describe("the sets section", () => {
     });
 
     expect(rows).toEqual([
-      "2026-08-17,Full body circuit,Goblet squat,work,1,12,",
-      "2026-08-17,Full body circuit,Goblet squat,work,2,10,",
-      "2026-08-17,Full body circuit,Dumbbell row,work,1,10,",
-      "2026-08-17,Full body circuit,Dumbbell row,work,2,9,",
+      "2026-08-17,Full body circuit,Goblet squat,work,1,12,,",
+      "2026-08-17,Full body circuit,Goblet squat,work,2,10,,",
+      "2026-08-17,Full body circuit,Dumbbell row,work,1,10,,",
+      "2026-08-17,Full body circuit,Dumbbell row,work,2,9,,",
     ]);
   });
 
@@ -1055,7 +1058,38 @@ describe("the sets section", () => {
           }),
         ],
       }),
-    ).toEqual(["2026-08-17,Full body circuit,Dumbbell row,work,1,10,22.5"]);
+    ).toEqual(["2026-08-17,Full body circuit,Dumbbell row,work,1,10,,22.5"]);
+  });
+
+  test("writes a timed set as seconds, with the reps cell empty", () => {
+    // FUEL-123. A 45-second hold used to be `…,1,45,` — forty-five reps — and
+    // a pivot summing the column counted it as such. Now reps and seconds are
+    // separate columns, exactly one filled, and a reps set beside it is the
+    // row it always was plus one empty cell.
+    expect(
+      setsOf({
+        sets: [
+          set({
+            id: "1",
+            workoutLogId: CIRCUIT_LOG_ID,
+            exerciseId: SQUAT.id,
+            setIndex: 1,
+            reps: 12,
+          }),
+          set({
+            id: "2",
+            workoutLogId: CIRCUIT_LOG_ID,
+            exerciseId: ROW.id,
+            setIndex: 1,
+            reps: null,
+            seconds: 45,
+          }),
+        ],
+      }),
+    ).toEqual([
+      "2026-08-17,Full body circuit,Goblet squat,work,1,12,,",
+      "2026-08-17,Full body circuit,Dumbbell row,work,1,,45,",
+    ]);
   });
 
   test("names the section a set was performed in", () => {
@@ -1089,8 +1123,8 @@ describe("the sets section", () => {
         ],
       }),
     ).toEqual([
-      "2026-08-17,Full body circuit,Goblet squat,work,1,12,",
-      "2026-08-17,Full body circuit,Hip opener,cooldown,1,5,",
+      "2026-08-17,Full body circuit,Goblet squat,work,1,12,,",
+      "2026-08-17,Full body circuit,Hip opener,cooldown,1,5,,",
     ]);
   });
 
@@ -1099,7 +1133,7 @@ describe("the sets section", () => {
     // section reads as a broken export to the person opening the file.
     expect(setsOf()).toEqual([]);
     expect(lines(buildWeekCsv(trained()))).toContain(
-      "date,session,exercise,section,set_index,reps,load_kg",
+      "date,session,exercise,section,set_index,reps,seconds,load_kg",
     );
   });
 
@@ -1145,8 +1179,8 @@ describe("the sets section", () => {
         ],
       }),
     ).toEqual([
-      "2026-08-17,Full body circuit,Alpha press,work,1,12,",
-      "2026-08-17,Full body circuit,Beta curl,work,1,9,",
+      "2026-08-17,Full body circuit,Alpha press,work,1,12,,",
+      "2026-08-17,Full body circuit,Beta curl,work,1,9,,",
     ]);
   });
 
@@ -1174,8 +1208,8 @@ describe("the sets section", () => {
         ],
       }),
     ).toEqual([
-      "2026-08-17,Full body circuit,Dumbbell row,work,1,10,",
-      "2026-08-17,Full body circuit,,,1,6,",
+      "2026-08-17,Full body circuit,Dumbbell row,work,1,10,,",
+      "2026-08-17,Full body circuit,,,1,6,,",
     ]);
   });
 
@@ -1210,7 +1244,7 @@ describe("the sets section", () => {
       "2026-08-17,Full body circuit,circuit,no,done,30,,,,170,280,",
     ]);
     expect(section(csv, "sets")).toEqual([
-      "2026-08-17,Full body circuit,Goblet squat,work,1,12,",
+      "2026-08-17,Full body circuit,Goblet squat,work,1,12,,",
     ]);
   });
 });

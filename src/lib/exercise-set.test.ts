@@ -3,25 +3,30 @@ import { describe, expect, it } from "vitest";
 import {
   currentExercise,
   isComplete,
-  lastTimeReps,
+  lastTimeValue,
   type LoggedSet,
   MAX_REPS,
   MAX_PASSED,
+  MAX_SECONDS,
   MAX_SET_INDEX,
   type Moved,
   NOT_MOVED,
   parseMoved,
-  parseReps,
   parseSetIndex,
+  parseSetValue,
   sessionPosition,
   type SetTarget,
   setProgress,
   setRows,
+  setKind,
   setsFor,
   setUnitLine,
+  setValue,
+  storedSet,
   stepSession,
   stepsByRound,
   targetLabel,
+  targetLow,
 } from "./exercise-set";
 
 /**
@@ -38,6 +43,8 @@ const target = (fields: Partial<SetTarget> = {}): SetTarget => ({
   targetSets: null,
   targetRepsLow: null,
   targetRepsHigh: null,
+  targetSecondsLow: null,
+  targetSecondsHigh: null,
   ...fields,
 });
 
@@ -47,51 +54,108 @@ const FIXED = target({ targetSets: 3, targetRepsLow: 12, targetRepsHigh: 12 });
 /** '3 x 8–15' — a range. */
 const RANGE = target({ targetSets: 3, targetRepsLow: 8, targetRepsHigh: 15 });
 
-/** '3 x 30–60 sec' — sets, and nothing this app counts as a rep. */
-const HELD = target({ targetSets: 3 });
+/** '3 x 30–60 sec' — a timed hold: sets of seconds, never reps (FUEL-123). */
+const HELD = target({ targetSets: 3, targetSecondsLow: 30, targetSecondsHigh: 60 });
 
-const set = (setIndex: number, reps = 12): LoggedSet => ({ setIndex, reps });
+/** A set count and nothing else — what the plank was before FUEL-123. */
+const COUNT_ONLY = target({ targetSets: 3 });
 
-describe("parseReps", () => {
+const set = (setIndex: number, value = 12): LoggedSet => ({ setIndex, value });
+
+describe("parseSetValue, in reps", () => {
   it("takes a whole number of reps, as a number or as the string an input sends", () => {
-    expect(parseReps(8)).toBe(8);
-    expect(parseReps("8")).toBe(8);
+    expect(parseSetValue(8, "reps")).toBe(8);
+    expect(parseSetValue("8", "reps")).toBe(8);
   });
 
   it("refuses a set of no reps", () => {
     // Not a set with a blank field — a set that did not happen, and the way to
     // say that is the absence of a row. `parseDuration` refuses zero for the
     // same reason one table up.
-    expect(parseReps(0)).toBeUndefined();
-    expect(parseReps("0")).toBeUndefined();
+    expect(parseSetValue(0, "reps")).toBeUndefined();
+    expect(parseSetValue("0", "reps")).toBeUndefined();
   });
 
   it("refuses a negative count", () => {
-    expect(parseReps(-5)).toBeUndefined();
+    expect(parseSetValue(-5, "reps")).toBeUndefined();
   });
 
   it("refuses a fraction", () => {
     // `reps` is an `integer` column, so 8.5 would be ROUNDED by Postgres and
     // come back as a number nobody entered.
-    expect(parseReps(8.5)).toBeUndefined();
-    expect(parseReps("8.5")).toBeUndefined();
+    expect(parseSetValue(8.5, "reps")).toBeUndefined();
+    expect(parseSetValue("8.5", "reps")).toBeUndefined();
   });
 
   it("refuses the values a text box can produce that are not numbers", () => {
-    expect(parseReps("")).toBeUndefined();
-    expect(parseReps("eight")).toBeUndefined();
-    expect(parseReps(Number.NaN)).toBeUndefined();
-    expect(parseReps(Number.POSITIVE_INFINITY)).toBeUndefined();
-    expect(parseReps(null)).toBeUndefined();
-    expect(parseReps(undefined)).toBeUndefined();
-    expect(parseReps({})).toBeUndefined();
-    expect(parseReps(true)).toBeUndefined();
+    expect(parseSetValue("", "reps")).toBeUndefined();
+    expect(parseSetValue("eight", "reps")).toBeUndefined();
+    expect(parseSetValue(Number.NaN, "reps")).toBeUndefined();
+    expect(parseSetValue(Number.POSITIVE_INFINITY, "reps")).toBeUndefined();
+    expect(parseSetValue(null, "reps")).toBeUndefined();
+    expect(parseSetValue(undefined, "reps")).toBeUndefined();
+    expect(parseSetValue({}, "reps")).toBeUndefined();
+    expect(parseSetValue(true, "reps")).toBeUndefined();
   });
 
   it("holds the ceiling, and takes the value at it", () => {
-    expect(parseReps(MAX_REPS)).toBe(MAX_REPS);
-    expect(parseReps(MAX_REPS + 1)).toBeUndefined();
-    expect(parseReps(1e9)).toBeUndefined();
+    expect(parseSetValue(MAX_REPS, "reps")).toBe(MAX_REPS);
+    expect(parseSetValue(MAX_REPS + 1, "reps")).toBeUndefined();
+    expect(parseSetValue(1e9, "reps")).toBeUndefined();
+  });
+});
+
+describe("parseSetValue, in seconds — FUEL-123", () => {
+  it("holds seconds to their own ceiling, above the reps one", () => {
+    // 1200 is twenty minutes of plank and no rep count anybody performs. One
+    // ceiling for both would either refuse the hold or accept the reps.
+    expect(parseSetValue(1200, "seconds")).toBe(1200);
+    expect(parseSetValue(1200, "reps")).toBeUndefined();
+    expect(parseSetValue(MAX_SECONDS, "seconds")).toBe(MAX_SECONDS);
+    expect(parseSetValue(MAX_SECONDS + 1, "seconds")).toBeUndefined();
+  });
+
+  it("refuses what reps refuse", () => {
+    expect(parseSetValue(0, "seconds")).toBeUndefined();
+    expect(parseSetValue(-30, "seconds")).toBeUndefined();
+    expect(parseSetValue(30.5, "seconds")).toBeUndefined();
+    expect(parseSetValue("", "seconds")).toBeUndefined();
+    expect(parseSetValue("45", "seconds")).toBe(45);
+  });
+});
+
+describe("the unit a set is counted in — FUEL-123", () => {
+  it("is seconds for a seconds target and reps for everything else", () => {
+    expect(setKind(HELD)).toBe("seconds");
+    expect(setKind(RANGE)).toBe("reps");
+    // No target at all is reps, which is what every set was before timed
+    // sets existed — an untargeted row keeps meaning what it meant.
+    expect(setKind(COUNT_ONLY)).toBe("reps");
+    expect(setKind(target())).toBe("reps");
+  });
+
+  it("offers the low end in the exercise's own unit", () => {
+    // What the placeholder shows and what an empty tick logs: 30 seconds for
+    // the plank, 8 reps for the range, and nothing where there is no target.
+    expect(targetLow(HELD)).toBe(30);
+    expect(targetLow(RANGE)).toBe(8);
+    expect(targetLow(COUNT_ONLY)).toBeNull();
+  });
+
+  it("stores a number in its own column and null in the other", () => {
+    expect(storedSet("seconds", 45)).toEqual({ reps: null, seconds: 45 });
+    expect(storedSet("reps", 12)).toEqual({ reps: 12, seconds: null });
+  });
+
+  it("reads a stored set back from whichever column holds it", () => {
+    // A row written before FUEL-123 is a reps row, and reads unchanged.
+    expect(setValue({ reps: 12, seconds: null })).toBe(12);
+    expect(setValue({ reps: null, seconds: 45 })).toBe(45);
+    expect(setValue(storedSet("seconds", 45))).toBe(45);
+  });
+
+  it("refuses a row holding neither, which the schema never stores", () => {
+    expect(() => setValue({ reps: null, seconds: null })).toThrow();
   });
 });
 
@@ -127,15 +191,15 @@ describe("parseSetIndex", () => {
 
 describe("setsFor", () => {
   const SETS = [
-    { exerciseId: "b", setIndex: 1, reps: 10 },
-    { exerciseId: "a", setIndex: 2, reps: 8 },
-    { exerciseId: "a", setIndex: 1, reps: 9 },
+    { exerciseId: "b", setIndex: 1, value: 10 },
+    { exerciseId: "a", setIndex: 2, value: 8 },
+    { exerciseId: "a", setIndex: 1, value: 9 },
   ];
 
   it("takes one exercise's sets and leaves the rest of the session's", () => {
     expect(setsFor("a", SETS)).toEqual([
-      { setIndex: 1, reps: 9 },
-      { setIndex: 2, reps: 8 },
+      { setIndex: 1, value: 9 },
+      { setIndex: 2, value: 8 },
     ]);
   });
 
@@ -152,18 +216,18 @@ describe("setRows", () => {
   it("draws the target's rows before anything is logged", () => {
     // What makes a target visible as an offer rather than as a sentence.
     expect(setRows(FIXED, [])).toEqual([
-      { index: 1, reps: null },
-      { index: 2, reps: null },
-      { index: 3, reps: null },
+      { index: 1, value: null },
+      { index: 2, value: null },
+      { index: 3, value: null },
     ]);
   });
 
   it("fills the rows that have sets and leaves the rest offered", () => {
     // The mock's own state: two logged against a target of three.
     expect(setRows(FIXED, [set(1, 8), set(2, 8)])).toEqual([
-      { index: 1, reps: 8 },
-      { index: 2, reps: 8 },
-      { index: 3, reps: null },
+      { index: 1, value: 8 },
+      { index: 2, value: 8 },
+      { index: 3, value: null },
     ]);
   });
 
@@ -173,19 +237,19 @@ describe("setRows", () => {
     expect(setRows(FIXED, [set(1), set(2), set(3)])).toHaveLength(4);
     expect(setRows(FIXED, [set(1), set(2), set(3)]).at(3)).toEqual({
       index: 4,
-      reps: null,
+      value: null,
     });
   });
 
   it("gives an exercise with no target a single empty row to start from", () => {
-    expect(setRows(target(), [])).toEqual([{ index: 1, reps: null }]);
+    expect(setRows(target(), [])).toEqual([{ index: 1, value: null }]);
   });
 
   it("keeps offering the next row to an exercise with no target", () => {
     expect(setRows(target(), [set(1, 20), set(2, 18)])).toEqual([
-      { index: 1, reps: 20 },
-      { index: 2, reps: 18 },
-      { index: 3, reps: null },
+      { index: 1, value: 20 },
+      { index: 2, value: 18 },
+      { index: 3, value: null },
     ]);
   });
 
@@ -195,8 +259,8 @@ describe("setRows", () => {
     const rows = setRows(FIXED, [set(1), set(4, 6)]);
 
     expect(rows).toHaveLength(4);
-    expect(rows.at(3)).toEqual({ index: 4, reps: 6 });
-    expect(rows.at(1)).toEqual({ index: 2, reps: null });
+    expect(rows.at(3)).toEqual({ index: 4, value: 6 });
+    expect(rows.at(1)).toEqual({ index: 2, value: null });
   });
 
   it("never offers a row the action would refuse", () => {
@@ -249,7 +313,7 @@ describe("currentExercise", () => {
     Array.from({ length: count }, (_set, index) => ({
       exerciseId,
       setIndex: index + 1,
-      reps: 10,
+      value: 10,
     }));
 
   it("is the first exercise before anything is logged", () => {
@@ -304,7 +368,7 @@ describe("sessionPosition", () => {
   ];
 
   const at = (exerciseId: string, ...indexes: number[]) =>
-    indexes.map((setIndex) => ({ exerciseId, setIndex, reps: 10 }));
+    indexes.map((setIndex) => ({ exerciseId, setIndex, value: 10 }));
 
   const where = (sets: ReturnType<typeof at>, exercises = CIRCUIT) =>
     sessionPosition(exercises, sets, true);
@@ -424,10 +488,10 @@ describe("sessionPosition — the last step", () => {
     // An untargeted exercise last takes part in round 1 only, so "Round 3 of 3"
     // is drawn over the exercise that HAS a round 3, not over one without it.
     const mixed = [{ id: "a", ...FIXED }, { id: "free", ...target() }];
-    const sets = [1, 2, 3].map((setIndex) => ({ exerciseId: "a", setIndex, reps: 10 }));
+    const sets = [1, 2, 3].map((setIndex) => ({ exerciseId: "a", setIndex, value: 10 }));
 
     expect(
-      sessionPosition(mixed, [...sets, { exerciseId: "free", setIndex: 1, reps: 10 }], true),
+      sessionPosition(mixed, [...sets, { exerciseId: "free", setIndex: 1, value: 10 }], true),
     ).toEqual({ index: 0, round: 3, rounds: 3 });
   });
 });
@@ -475,7 +539,7 @@ describe("stepSession — FUEL-120", () => {
   ];
 
   const at = (exerciseId: string, ...indexes: number[]) =>
-    indexes.map((setIndex) => ({ exerciseId, setIndex, reps: 10 }));
+    indexes.map((setIndex) => ({ exerciseId, setIndex, value: 10 }));
 
   /** Squats done, push-ups two sets of three: the state that had no way on. */
   const SHORT = [...at("squats", 1, 2, 3), ...at("pushups", 1, 2)];
@@ -687,10 +751,16 @@ describe("targetLabel", () => {
     expect(targetLabel(RANGE)).toBe("Target 8–15");
   });
 
-  it("says nothing for sets that are not counted in reps", () => {
-    // '3 x 30–60 sec' has a set count and no rep target. A label here would be
-    // "Target 30–60" against a plank.
-    expect(targetLabel(HELD)).toBeNull();
+  it("names a seconds target with its unit — FUEL-123", () => {
+    // A bare "Target 30–60" against a plank reads as reps, which is the bug.
+    expect(targetLabel(HELD)).toBe("Target 30–60 sec");
+    expect(targetLabel(target({ targetSecondsLow: 45, targetSecondsHigh: 45 }))).toBe(
+      "Target 45 sec",
+    );
+  });
+
+  it("says nothing for a set count with no target beside it", () => {
+    expect(targetLabel(COUNT_ONLY)).toBeNull();
     expect(targetLabel(target())).toBeNull();
   });
 
@@ -699,16 +769,17 @@ describe("targetLabel", () => {
     // database refuses — the guard is here because the type cannot say so.
     expect(targetLabel(target({ targetRepsLow: 8 }))).toBeNull();
     expect(targetLabel(target({ targetRepsHigh: 15 }))).toBeNull();
+    expect(targetLabel(target({ targetSecondsLow: 30 }))).toBeNull();
   });
 });
 
-describe("lastTimeReps — FUEL-122", () => {
+describe("lastTimeValue — FUEL-122", () => {
   it("reads the same set number from last time", () => {
     const previous = [set(1, 10), set(2, 9), set(3, 7)];
 
-    expect(lastTimeReps(1, previous)).toBe(10);
-    expect(lastTimeReps(2, previous)).toBe(9);
-    expect(lastTimeReps(3, previous)).toBe(7);
+    expect(lastTimeValue(1, previous)).toBe(10);
+    expect(lastTimeValue(2, previous)).toBe(9);
+    expect(lastTimeValue(3, previous)).toBe(7);
   });
 
   it("matches by set number, not by position", () => {
@@ -716,16 +787,16 @@ describe("lastTimeReps — FUEL-122", () => {
     // recall, and row 3 is set 3's figure rather than the second one listed.
     const previous = [set(1, 10), set(3, 7)];
 
-    expect(lastTimeReps(2, previous)).toBeNull();
-    expect(lastTimeReps(3, previous)).toBe(7);
+    expect(lastTimeValue(2, previous)).toBeNull();
+    expect(lastTimeValue(3, previous)).toBe(7);
   });
 
   it("gives a row beyond last time's sets nothing", () => {
-    expect(lastTimeReps(3, [set(1, 10), set(2, 9)])).toBeNull();
+    expect(lastTimeValue(3, [set(1, 10), set(2, 9)])).toBeNull();
   });
 
   it("gives a first session nothing", () => {
-    expect(lastTimeReps(1, [])).toBeNull();
+    expect(lastTimeValue(1, [])).toBeNull();
   });
 });
 
@@ -735,7 +806,7 @@ describe("setUnitLine — FUEL-122", () => {
     // exactly what it said before this ticket.
     expect(setUnitLine(RANGE, false, null)).toBe("Target 8–15");
     expect(setUnitLine(RANGE, true, null)).toBe("reps");
-    expect(setUnitLine(HELD, false, null)).toBe("reps");
+    expect(setUnitLine(COUNT_ONLY, false, null)).toBe("reps");
   });
 
   it("follows the target with last time on a row still on offer", () => {
@@ -749,8 +820,18 @@ describe("setUnitLine — FUEL-122", () => {
     expect(setUnitLine(RANGE, true, 10)).toBe("reps · 10 last time");
   });
 
-  it("names the unit with last time for an exercise with no rep target", () => {
-    expect(setUnitLine(HELD, false, 30)).toBe("reps · 30 last time");
+  it("names the unit with last time for an exercise with no target", () => {
+    expect(setUnitLine(COUNT_ONLY, false, 30)).toBe("reps · 30 last time");
+  });
+
+  it("says seconds for a timed hold, and names the unit once — FUEL-123", () => {
+    // On offer, logged, and with last time. The clause carries no second
+    // `sec`: the line has already said it, and the 375 row has no width for
+    // a repeat.
+    expect(setUnitLine(HELD, false, null)).toBe("Target 30–60 sec");
+    expect(setUnitLine(HELD, true, null)).toBe("sec");
+    expect(setUnitLine(HELD, false, 45)).toBe("Target 30–60 sec · 45 last time");
+    expect(setUnitLine(HELD, true, 45)).toBe("sec · 45 last time");
   });
 });
 

@@ -125,6 +125,8 @@ const CIRCUIT: TrainingItem = {
       targetSets: 3,
       targetRepsLow: 12,
       targetRepsHigh: 12,
+      targetSecondsLow: null,
+      targetSecondsHigh: null,
       media: null,
     },
     {
@@ -136,10 +138,14 @@ const CIRCUIT: TrainingItem = {
       targetSets: 2,
       targetRepsLow: 8,
       targetRepsHigh: 10,
+      targetSecondsLow: null,
+      targetSecondsHigh: null,
       media: null,
     },
-    // Sets and no rep target — a hold. The third state a set row has to draw,
-    // and the one a regex over "3 x 45s" would get wrong.
+    // Sets and no target of either unit. The third state a set row has to
+    // draw, and the one a regex over "3 x 45s" would get wrong. It is what the
+    // seed's planks were before FUEL-123 gave them seconds; the timed hold has
+    // its own fixture, `TIMED_HOLD`, below.
     {
       id: "e3",
       name: "Plank",
@@ -149,6 +155,8 @@ const CIRCUIT: TrainingItem = {
       targetSets: 3,
       targetRepsLow: null,
       targetRepsHigh: null,
+      targetSecondsLow: null,
+      targetSecondsHigh: null,
       media: null,
     },
   ],
@@ -1295,11 +1303,32 @@ describe("the second column", () => {
 /* -------------------------------------------------------------------------- */
 
 /** A set as the screen is given one. */
-const set = (exerciseId: string, setIndex: number, reps = 12) => ({
+const set = (exerciseId: string, setIndex: number, value = 12) => ({
   exerciseId,
   setIndex,
-  reps,
+  value,
 });
+
+/** '3 x 30–60 sec' with its seconds transcribed — FUEL-123. */
+const TIMED_HOLD = {
+  id: "e4",
+  name: "Plank",
+  prescription: "3 x 30–60 sec",
+  section: WORKING_SECTION,
+  notes: null,
+  targetSets: 3,
+  targetRepsLow: null,
+  targetRepsHigh: null,
+  targetSecondsLow: 30,
+  targetSecondsHigh: 60,
+  media: null,
+};
+
+/** A session of the timed hold alone, holding it until its sets are in. */
+const timed = (sets: ReturnType<typeof set>[] = []) => [
+  { ...CIRCUIT, type: "intervals", exercises: [TIMED_HOLD], sets },
+  WALK,
+];
 
 /** The session with sets already against it. */
 const withSets = (sets: ReturnType<typeof set>[]) => [{ ...CIRCUIT, sets }, WALK];
@@ -1667,8 +1696,43 @@ describe("the sets sub-list", () => {
       entryId: "entry-circuit",
       exerciseId: "e1",
       setIndex: 1,
-      reps: 12,
+      value: 12,
     });
+  });
+
+  test("offers a timed hold in seconds, and an empty tick logs its low end — FUEL-123", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: timed() }));
+
+    // The box names its unit, the line says the target in seconds, and the
+    // placeholder is the low end the tick will log — never a reps box.
+    expect(screen.queryByLabelText("Set 1 reps")).toBeNull();
+    expect(screen.getByLabelText<HTMLInputElement>("Set 1 seconds").placeholder).toBe("30");
+    expect(screen.getAllByText("Target 30–60 sec")).toHaveLength(3);
+
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    expect(logExerciseSet).toHaveBeenCalledWith({
+      date: TODAY,
+      entryId: "entry-circuit",
+      exerciseId: "e4",
+      setIndex: 1,
+      value: 30,
+    });
+  });
+
+  test("shows a logged hold as its seconds", () => {
+    resumed();
+    render(view({ sessions: timed([set("e4", 1, 45)]) }));
+
+    expect(screen.getByLabelText<HTMLInputElement>("Set 1 seconds").value).toBe("45");
+    expect(screen.getByText("sec")).toBeTruthy();
+    // Four digits fit: `MAX_SECONDS` is an hour, and a three-digit box would
+    // refuse a twenty-minute hold the action accepts.
+    expect(screen.getByLabelText<HTMLInputElement>("Set 1 seconds").maxLength).toBe(4);
+    expect(screen.getByLabelText<HTMLInputElement>("Set 2 seconds").maxLength).toBe(4);
   });
 
   test("logs what was typed rather than what was asked for", async () => {
@@ -1680,7 +1744,7 @@ describe("the sets sub-list", () => {
     await user.click(screen.getByRole("button", { name: "Log set 1" }));
 
     expect(logExerciseSet).toHaveBeenCalledWith(
-      expect.objectContaining({ setIndex: 1, reps: 9 }),
+      expect.objectContaining({ setIndex: 1, value: 9 }),
     );
   });
 
@@ -1733,7 +1797,7 @@ describe("the sets sub-list", () => {
     await user.tab();
 
     expect(logExerciseSet).toHaveBeenCalledWith(
-      expect.objectContaining({ setIndex: 1, reps: 8 }),
+      expect.objectContaining({ setIndex: 1, value: 8 }),
     );
   });
 
@@ -1848,7 +1912,7 @@ describe("the sets sub-list", () => {
     await user.click(screen.getByRole("button", { name: "Log set 1" }));
 
     expect(logExerciseSet).toHaveBeenCalledWith(
-      expect.objectContaining({ exerciseId: "e3", setIndex: 1, reps: 20 }),
+      expect.objectContaining({ exerciseId: "e3", setIndex: 1, value: 20 }),
     );
   });
 
@@ -1879,7 +1943,7 @@ describe("the sets sub-list", () => {
 
     expect(logExerciseSet).toHaveBeenCalledTimes(2);
     expect(logExerciseSet).toHaveBeenLastCalledWith(
-      expect.objectContaining({ setIndex: 1, reps: 12 }),
+      expect.objectContaining({ setIndex: 1, value: 12 }),
     );
   });
 
@@ -1966,7 +2030,7 @@ describe("last time, on the set rows — FUEL-122", () => {
     await user.click(screen.getByRole("button", { name: "Log set 1" }));
 
     expect(logExerciseSet).toHaveBeenCalledWith(
-      expect.objectContaining({ exerciseId: "e1", setIndex: 1, reps: 12 }),
+      expect.objectContaining({ exerciseId: "e1", setIndex: 1, value: 12 }),
     );
   });
 });
@@ -2031,6 +2095,8 @@ const SECTIONED: TrainingItem = {
       targetSets: null,
       targetRepsLow: null,
       targetRepsHigh: null,
+      targetSecondsLow: null,
+      targetSecondsHigh: null,
       media: null,
     },
     ...CIRCUIT.exercises,
@@ -2043,6 +2109,8 @@ const SECTIONED: TrainingItem = {
       targetSets: null,
       targetRepsLow: null,
       targetRepsHigh: null,
+      targetSecondsLow: null,
+      targetSecondsHigh: null,
       media: null,
     },
   ],
@@ -2109,6 +2177,8 @@ describe("a session with rows but no work", () => {
           targetSets: null,
           targetRepsLow: null,
           targetRepsHigh: null,
+          targetSecondsLow: null,
+          targetSecondsHigh: null,
           media: null,
         },
       ],

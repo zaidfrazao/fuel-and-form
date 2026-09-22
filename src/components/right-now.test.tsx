@@ -169,6 +169,8 @@ function exercise(fields: Partial<WorkoutExercise> & { id: string }): WorkoutExe
     targetSets: null,
     targetRepsLow: null,
     targetRepsHigh: null,
+    targetSecondsLow: null,
+    targetSecondsHigh: null,
     mediaKey: null,
     mediaKind: null,
     mediaAlt: null,
