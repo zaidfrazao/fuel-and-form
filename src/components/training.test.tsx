@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -860,17 +860,24 @@ describe("the action bar", () => {
   });
 
   test.each([
-    ["the plan state, today", "Start session", () => render(view())],
-    ["the plan state, another date", "Mark done", () => render(view({ date: YESTERDAY }))],
+    ["the plan state, today", "Start session", "Skip", () => render(view())],
+    [
+      "the plan state, another date",
+      "Mark done",
+      "Skip",
+      () => render(view({ date: YESTERDAY })),
+    ],
     [
       "the session state",
       "Mark done",
+      // FUEL-121: the session state names what its Skip acts on.
+      "Skip session",
       () => {
         resumed();
         return render(view());
       },
     ],
-  ])("takes `/`'s one row in %s — FUEL-109", (_state, primary, draw) => {
+  ])("takes `/`'s one row in %s — FUEL-109", (_state, primary, skip, draw) => {
     // § Buttons: "`/training`'s bar takes the same row, in both of its states."
     // Decided rather than inherited from a shared string: the primary leads and
     // takes the spare width, Partial and Skip take their own, in that order.
@@ -880,7 +887,7 @@ describe("the action bar", () => {
     const row = lead.closest(".action-bar-fade > div")!;
     const inRow = [...row.querySelectorAll("button")];
 
-    expect(inRow.map((button) => button.textContent)).toEqual([primary, "Partial", "Skip"]);
+    expect(inRow.map((button) => button.textContent)).toEqual([primary, "Partial", skip]);
     expect(lead.className).toContain("flex-1");
     for (const secondary of inRow.slice(1)) {
       expect(secondary.className).toContain("flex-none");
@@ -1405,6 +1412,17 @@ describe("entering and leaving the session state", () => {
     await user.click(bar().getByRole("button", { name: "Partial" }));
 
     expect(await list().findByRole("heading", { name: "Exercises" })).toBeTruthy();
+
+    // With nothing logged, Skip session records in one tap (FUEL-121): a
+    // session started by mistake has nothing to lose, and needs a way out.
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+    await user.click(bar().getByRole("button", { name: "Skip session" }));
+
+    expect(setSessionStatus).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "skipped", entryId: "entry-circuit" }),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(await list().findByRole("heading", { name: "Exercises" })).toBeTruthy();
   });
 
   test("keeps the bar pinned at every width, unlike every other bar", () => {
@@ -1443,6 +1461,169 @@ describe("entering and leaving the session state", () => {
     render(view({ sessions: [{ ...CIRCUIT, entry: { status: "partial", note: null, durationMin: null } }, WALK] }));
 
     expect(bar().queryByRole("button", { name: "Clear" })).toBeNull();
+  });
+});
+
+/**
+ * Skip session, once a set is logged — FUEL-121.
+ *
+ * A bare Skip under a list of sets reads as *skip this exercise*, and one tap
+ * of it recorded the day as skipped and left the state. The sets survived, but
+ * the adherence record said *skipped* about a session that was mostly done.
+ * So the session state names what it acts on, and asks first once there is
+ * something the answer would misdescribe.
+ */
+describe("Skip session, once a set is logged", () => {
+  const dialog = () => screen.getByRole("dialog", { name: "Skip session" });
+
+  test("asks before it records, and records nothing by asking", async () => {
+    const user = userEvent.setup();
+    resumed();
+
+    render(view({ sessions: withSets([set("e1", 1), set("e1", 2)]) }));
+    await user.click(bar().getByRole("button", { name: "Skip session" }));
+
+    expect(dialog()).toBeTruthy();
+    expect(within(dialog()).getByText(/2 sets are logged\. They’re kept,/)).toBeTruthy();
+    expect(within(dialog()).getByText(/Partial says so/)).toBeTruthy();
+    expect(setSessionStatus).not.toHaveBeenCalled();
+  });
+
+  test("counts one set in the singular", async () => {
+    const user = userEvent.setup();
+    resumed();
+
+    render(view({ sessions: withSets([set("e1", 1)]) }));
+    await user.click(bar().getByRole("button", { name: "Skip session" }));
+
+    expect(within(dialog()).getByText(/1 set is logged\. It’s kept,/)).toBeTruthy();
+  });
+
+  test("Keep going closes it and leaves the session where it was", async () => {
+    const user = userEvent.setup();
+    resumed();
+
+    render(view({ sessions: withSets([set("e1", 1)]) }));
+    await user.click(bar().getByRole("button", { name: "Skip session" }));
+    await user.click(within(dialog()).getByRole("button", { name: "Keep going" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(setSessionStatus).not.toHaveBeenCalled();
+    // Still in the session state, on the exercise the sets say.
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Reverse lunges");
+  });
+
+  test("Record as skipped records it, leaves the state, and keeps the sets", async () => {
+    const user = userEvent.setup();
+    resumed();
+
+    render(view({ sessions: withSets([set("e1", 1)]) }));
+    await user.click(bar().getByRole("button", { name: "Skip session" }));
+    await user.click(within(dialog()).getByRole("button", { name: "Record as skipped" }));
+
+    expect(setSessionStatus).toHaveBeenCalledOnce();
+    expect(setSessionStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "skipped", entryId: "entry-circuit" }),
+    );
+    expect(removeExerciseSet).not.toHaveBeenCalled();
+    expect(await list().findByRole("heading", { name: "Exercises" })).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("fills its Destructive button, which only a confirmation sheet may", async () => {
+    // § Buttons: "no fill; it is filled only inside a confirmation sheet".
+    const user = userEvent.setup();
+    resumed();
+
+    render(view({ sessions: withSets([set("e1", 1)]) }));
+    await user.click(bar().getByRole("button", { name: "Skip session" }));
+
+    const confirm = within(dialog()).getByRole("button", { name: "Record as skipped" });
+    expect(confirm.getAttribute("data-variant")).toBe("destructive");
+    expect(confirm.className).toContain("bg-destructive");
+    // And the bar's own Skip session stays a Secondary, the weight of Partial.
+    expect(
+      bar().getByRole("button", { name: "Skip session", hidden: true }).getAttribute(
+        "data-variant",
+      ),
+    ).toBe("secondary");
+  });
+
+  test("does not reopen by itself when the state ended under it", async () => {
+    // Another tab clears the entered flag while the sheet is open. The sheet
+    // goes with the state, and entering again must not bring it back unasked.
+    const user = userEvent.setup();
+    const key = `fuel:training-session:${TODAY}`;
+    resumed();
+
+    render(view({ sessions: withSets([set("e1", 1)]) }));
+    await user.click(bar().getByRole("button", { name: "Skip session" }));
+    expect(dialog()).toBeTruthy();
+
+    act(() => {
+      window.localStorage.removeItem(key);
+      window.dispatchEvent(new StorageEvent("storage", { key }));
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(bar().getByRole("button", { name: "Skip session" })).toBeTruthy();
+    expect(setSessionStatus).not.toHaveBeenCalled();
+  });
+
+  test("never draws a bare Skip in the session state", () => {
+    // The criterion: whatever label remains cannot be read as acting on the
+    // current exercise. FUEL-120's steps are Previous and Next exercise, so no
+    // control on the screen is called Skip on its own.
+    resumed();
+
+    render(view({ sessions: withSets([set("e1", 1)]) }));
+
+    expect(screen.queryByRole("button", { name: /^Skip$/ })).toBeNull();
+  });
+
+  test("keeps aria-pressed on the recorded answer", () => {
+    // The three are one choice with three answers, in either state.
+    resumed();
+
+    render(
+      view({
+        sessions: [
+          {
+            ...CIRCUIT,
+            sets: [set("e1", 1)],
+            entry: { status: "skipped", note: null, durationMin: null },
+          },
+          WALK,
+        ],
+      }),
+    );
+
+    expect(bar().getByRole("button", { name: "Skip session" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(bar().getByRole("button", { name: "Partial" }).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+    expect(bar().getByRole("button", { name: "Mark done" }).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+  });
+
+  test("leaves the plan state's Skip a single tap, sets or not", async () => {
+    // Outside the session there is no list of sets for Skip to be read
+    // against: it answers "did you do today's session?", as it always has.
+    const user = userEvent.setup();
+
+    render(view({ sessions: withSets([set("e1", 1)]) }));
+    await user.click(bar().getByRole("button", { name: "Skip" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(setSessionStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "skipped", entryId: "entry-circuit" }),
+    );
   });
 });
 

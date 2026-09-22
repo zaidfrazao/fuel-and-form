@@ -33,7 +33,8 @@ import { SlashMeta } from "@/components/kv-grid";
 import { PageMain } from "@/components/page-main";
 import { RecentSessions } from "@/components/recent-sessions";
 import { RestTimer } from "@/components/rest-timer";
-import { Button } from "@/components/ui/button";
+import { Button, CONFIRM_DESTRUCTIVE } from "@/components/ui/button";
+import { Sheet } from "@/components/ui/sheet";
 import { WalkList, WalkRow } from "@/components/walk-row";
 import { recentSessions, weekStanding } from "@/lib/adherence";
 import { addDays, type CalendarDate } from "@/lib/date";
@@ -1330,6 +1331,39 @@ export function Training({
   };
 
   /**
+   * Whether the Skip session sheet is open — FUEL-121.
+   *
+   * In the session state the third button is `Skip session`. Once a working
+   * set is logged it asks before it records, because by then *skipped* is
+   * usually the wrong answer: the sets are kept whichever status is tapped,
+   * so the one thing a stray tap would get wrong is the adherence record,
+   * which is the thing the three-way status exists to get right. With nothing
+   * logged it records in one tap, as it always has. A session started by
+   * mistake needs an honest way out, and there is nothing to lose.
+   */
+  const [confirmingSkip, setConfirmingSkip] = useState(false);
+
+  // A sheet can be open when the state ends without it: another tab clears
+  // the entered flag, or a reload elsewhere records the session. `open` below
+  // already hides it then, but the flag would survive and reopen the sheet,
+  // unasked, the next time the session state is entered. So the flag is reset
+  // during render, React's way to adjust state to a changed input, rather than
+  // in an effect that would paint the stale sheet for a frame first.
+  if (confirmingSkip && !inSession) setConfirmingSkip(false);
+
+  // Only the working section can hold a set — see `working` above — but the
+  // count is filtered anyway, so the number the sheet prints is exactly the
+  // rows the session state drew.
+  const loggedSets = sets.filter((set) =>
+    workingExercises.some((exercise) => exercise.id === set.exerciseId),
+  ).length;
+
+  const skipSession = () => {
+    if (loggedSets > 0) setConfirmingSkip(true);
+    else finish("skipped");
+  };
+
+  /**
    * Which exercise the session state is showing, and in a circuit which round.
    *
    * Derived from the optimistic sets, so it moves on the frame a set is ticked:
@@ -1612,7 +1646,9 @@ export function Training({
           leaving a slab over a pair here. Three answers to one question
           read as one choice side by side. `action-bar.ts` carries the
           argument and the strings; the banner and the timer above stay
-          outside the row because each is a block that spans the column. */}
+          outside the row because each is a block that spans the column.
+          The session state's `Skip session` (FUEL-121) is the one label
+          that does not fit: below ~401px the pair wraps under Mark done. */}
       <div className={ACTION_BAR_CONTROLS}>
         {/*
          * The primary changes because the screen's question does — § Desktop.
@@ -1651,13 +1687,19 @@ export function Training({
           >
             Partial
           </Button>
+          {/*
+           * `Skip session` in the session state, where a bare Skip sits under
+           * a list of sets and reads as *skip this exercise* (FUEL-121). The
+           * plan state keeps `Skip`, where it answers the question it was
+           * written for: did you do today's session?
+           */}
           <Button
             variant="secondary"
             className={ACTION_BAR_SECONDARY}
             aria-pressed={entry?.status === "skipped"}
-            onClick={() => (inSession ? finish("skipped") : record("skipped"))}
+            onClick={() => (inSession ? skipSession() : record("skipped"))}
           >
-            Skip
+            {inSession ? "Skip session" : "Skip"}
           </Button>
         </div>
 
@@ -2024,6 +2066,55 @@ export function Training({
             media={formExercise.media}
           />
         ) : null}
+
+        {/*
+         * Skip session's confirmation — FUEL-121. § Buttons gives Destructive
+         * a confirmation-sheet form, and § Progressive Disclosure makes it a
+         * sheet rather than a modal, as the weigh-in delete is.
+         *
+         * `inSession` is in `open` as well as in the opener, so a sheet left
+         * open when the state ends (the date paged away, or the entered flag
+         * cleared in another tab) closes instead of offering to finish a
+         * session the screen is no longer showing.
+         */}
+        <Sheet
+          open={confirmingSkip && inSession}
+          onOpenChange={(open) => !open && setConfirmingSkip(false)}
+          title="Skip session"
+        >
+          {/* § UI Copy Examples, Destructive: the question names the thing,
+              and the sentences state the consequence and the other answer. */}
+          <p className="text-body text-text-primary">
+            Record today as skipped?{" "}
+            {loggedSets === 1
+              ? "1 set is logged. It’s kept,"
+              : `${loggedSets} sets are logged. They’re kept,`}{" "}
+            but the session will read as skipped. If you stopped partway,
+            Partial says so.
+          </p>
+
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="destructive"
+              className={CONFIRM_DESTRUCTIVE}
+              onClick={() => {
+                setConfirmingSkip(false);
+                finish("skipped");
+              }}
+            >
+              Record as skipped
+            </Button>
+
+            {/* § Voice: the way out says what it does, not "Cancel". */}
+            <Button
+              variant="link"
+              className="w-full"
+              onClick={() => setConfirmingSkip(false)}
+            >
+              Keep going
+            </Button>
+          </div>
+        </Sheet>
 
         </div>
 

@@ -4,7 +4,7 @@ import { startTransition, useOptimistic, useRef, useState, useTransition } from 
 
 import { ACTION_BAR_PRIMARY } from "@/components/action-bar";
 import { PageMain } from "@/components/page-main";
-import { Button } from "@/components/ui/button";
+import { Button, CONFIRM_DESTRUCTIVE } from "@/components/ui/button";
 import { KeyValueGrid, type KeyValueItem } from "@/components/kv-grid";
 import { Sheet } from "@/components/ui/sheet";
 import { WeightChart } from "@/components/weight-chart";
@@ -1227,15 +1227,14 @@ export function WeighIns({
 
         <div className="flex flex-col gap-2">
           {/*
-           * The one filled destructive in the app, which is exactly what
-           * § Buttons allows: "no fill; it is filled only inside a confirmation
-           * sheet". Done at the call site rather than by adding a variant,
-           * because widening a shared primitive for a single caller is how the
-           * fill escapes the sheet it is confined to.
+           * A filled destructive, which is exactly what § Buttons allows: "no
+           * fill; it is filled only inside a confirmation sheet". Done at the
+           * call site rather than by adding a variant, because a variant is
+           * how the fill escapes the sheet it is confined to.
            */}
           <Button
             variant="destructive"
-            className="w-full bg-destructive text-ink-fg hover:bg-destructive/90"
+            className={CONFIRM_DESTRUCTIVE}
             onClick={() => {
               // Read before the state is cleared — `confirming` is what the
               // sheet was opened for, and closing it first would delete `null`.
