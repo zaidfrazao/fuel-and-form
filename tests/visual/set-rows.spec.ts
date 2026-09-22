@@ -1,6 +1,7 @@
 import { type Page, expect, test } from "@playwright/test";
 
 import { FROZEN_NOW_MS } from "./constants";
+import { stepIntoWork } from "./session";
 
 /**
  * The set row at 375, with last time's reps on it — FUEL-122.
@@ -59,7 +60,11 @@ async function enterSession(page: Page) {
   await page.setViewportSize({ width: 375, height: 800 });
   await page.goto("/training");
   await page.getByRole("button", { name: "Start session" }).click();
-  await expect(page.locator(ROWS).first()).toBeVisible();
+  // The session opens on the warm-up since FUEL-125, and a warm-up draws no
+  // set rows — PRD § P10 puts set logging on the working section only. So the
+  // rows this file measures are two steps in, and `stepIntoWork` walks there
+  // the way a reader does.
+  await stepIntoWork(page);
 }
 
 /** A row's height, and how many lines its unit span wraps to. */
