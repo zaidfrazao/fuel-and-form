@@ -105,9 +105,11 @@ function narrow(
   session: TrainingSession,
   logs: readonly WorkoutLog[],
   sets: readonly ExerciseSet[],
+  previousSets: readonly ExerciseSet[],
   routed: ReadonlySet<string>,
 ): TrainingItem {
   const log = logs.find((row) => row.workoutId === session.workout.id);
+  const ids = new Set(session.exercises.map((exercise) => exercise.id));
 
   return {
     entryId: session.entryId,
@@ -173,6 +175,15 @@ function narrow(
           .filter((set) => set.workoutLogId === log.id)
           .map(({ exerciseId, setIndex, reps }) => ({ exerciseId, setIndex, reps }))
       : [],
+    /*
+     * Last time's sets for this session's own exercises — FUEL-122. Narrowed
+     * to the same three fields as the date's sets, and by exercise rather than
+     * by log: last time is per exercise, so one session's rows can come from
+     * several earlier logs.
+     */
+    lastTime: previousSets
+      .filter((set) => ids.has(set.exerciseId))
+      .map(({ exerciseId, setIndex, reps }) => ({ exerciseId, setIndex, reps })),
   };
 }
 
@@ -224,7 +235,7 @@ export default async function TrainingPage({
       date={training.date}
       today={training.today}
       sessions={training.day.sessions.map((item) =>
-        narrow(item, training.logs, training.sets, routed),
+        narrow(item, training.logs, training.sets, training.previousSets, routed),
       )}
       /*
        * What a session on this date is costed at — § P10's energy figure,

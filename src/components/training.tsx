@@ -63,7 +63,8 @@ import {
   stepSession,
   stepsByRound,
   setsFor,
-  targetLabel,
+  lastTimeReps,
+  setUnitLine,
 } from "@/lib/exercise-set";
 import { dayLabel } from "@/lib/now-display";
 
@@ -225,6 +226,15 @@ export type TrainingItem = {
    * absent set list is not a state this screen distinguishes from an empty one.
    */
   sets: readonly LoggedSetView[];
+  /**
+   * What this session's exercises were done at last time — § P10's recall,
+   * FUEL-122.
+   *
+   * Per exercise, from the latest earlier date that exercise had any set, so
+   * the rows can come from different sessions. Empty for a first session, and
+   * a row with nothing here draws nothing: no dash, no zero.
+   */
+  lastTime: readonly LoggedSetView[];
 };
 
 /**
@@ -465,6 +475,7 @@ function Estimate({ range }: { range: EnergyRange | null }) {
 function SetList({
   exercise,
   logged,
+  lastTime,
   drafts,
   onDraft,
   onLog,
@@ -472,13 +483,13 @@ function SetList({
 }: {
   exercise: TrainingExercise;
   logged: readonly LoggedSet[];
+  /** This exercise's sets last time — FUEL-122. Empty draws no clause. */
+  lastTime: readonly LoggedSet[];
   drafts: ReadonlyMap<string, string>;
   onDraft: (setIndex: number, value: string) => void;
   onLog: (setIndex: number, reps: number) => void;
   onRemove: (setIndex: number) => void;
 }) {
-  const target = targetLabel(exercise);
-
   return (
     // 30px — the parent row's content column. § Lists gives the figure and this
     // is where it is spent; `exercise-list.tsx` draws the 18px ordinal and the
@@ -552,9 +563,14 @@ function SetList({
               />
               {/* The mock's two states, in words: `8 reps` for a set performed
                   and `Target 8` for one still on offer. An exercise with no rep
-                  target says neither and just names the unit. */}
+                  target says neither and just names the unit. Last time's reps
+                  follow as a clause where there were any — FUEL-122. */}
               <span className="text-slash text-text-tertiary">
-                {row.reps === null ? (target ?? "reps") : "reps"}
+                {setUnitLine(
+                  exercise,
+                  row.reps !== null,
+                  lastTimeReps(row.index, lastTime),
+                )}
               </span>
             </span>
 
@@ -1899,6 +1915,7 @@ export function Training({
               <SetList
                 exercise={currentEx}
                 logged={setsFor(currentEx.id, sets)}
+                lastTime={setsFor(currentEx.id, session?.lastTime ?? NO_SETS)}
                 drafts={drafts}
                 onDraft={(setIndex, value) => draft(currentEx.id, setIndex, value)}
                 onLog={(setIndex, reps) => {

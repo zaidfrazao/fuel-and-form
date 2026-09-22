@@ -505,6 +505,45 @@ export function targetLabel(target: SetTarget): string | null {
 }
 
 /**
+ * What this set was done at last time — § P10's recall, FUEL-122 — or `null`.
+ *
+ * By SET NUMBER, not by position in the list: last time's third set is what
+ * row 3 is compared against, and a last time that stopped at two sets gives
+ * row 3 nothing rather than its second set's figure.
+ *
+ * Recall, and never more than one number. Not the best of last time's sets,
+ * not an average, not a suggestion — PRD § P10 records why each of those is
+ * the progression engine § Non-Goals rules out.
+ */
+export function lastTimeReps(index: number, previous: readonly LoggedSet[]): number | null {
+  return previous.find((set) => set.setIndex === index)?.reps ?? null;
+}
+
+/**
+ * The words beside a set's box: the unit, and what last time was.
+ *
+ * `Target 8–12` for a row still on offer, `reps` once it is logged, and `reps`
+ * alone for an exercise with no rep target. Last time follows as a clause —
+ * `Target 8–12 · 10 last time` — in the slash lines' own middle dot, and a row
+ * with no last time carries no clause at all: no dash, no zero, no "first
+ * time". § Tone of Voice describes what is there.
+ *
+ * Text, and never the box's placeholder. The placeholder is the target's low
+ * rep because that is what the tick logs from an empty box (see `SetList`), and
+ * a placeholder reading last time's figure would have the box offer one number
+ * while the tick recorded another.
+ */
+export function setUnitLine(
+  target: SetTarget,
+  logged: boolean,
+  lastTime: number | null,
+): string {
+  const unit = logged ? "reps" : (targetLabel(target) ?? "reps");
+
+  return lastTime === null ? unit : `${unit} · ${lastTime} last time`;
+}
+
+/**
  * How far through an exercise a session got, as words — `3 of 3 sets`.
  *
  * `null` when nothing is logged, and that is what keeps the plan state looking
