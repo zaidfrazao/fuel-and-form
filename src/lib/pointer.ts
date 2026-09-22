@@ -70,9 +70,9 @@ export const HOVER_GROUND = "hover:bg-surface";
  * these sit, because all three of them sit on the canvas.
  *
  * § Desktop says "that fill" rather than "`ink`" because Destructive has two
- * rest states; the filled one is `hover:bg-destructive/90`, written at its one
- * call site in `weigh-ins.tsx` rather than here, since it is the variant's
- * exception rather than its rule.
+ * rest states; the filled one is `hover:bg-destructive/90`, declared with its
+ * fill as `CONFIRM_DESTRUCTIVE` in `button.tsx` rather than here, since it is
+ * the variant's exception rather than its rule.
  */
 export const HOVER_FILL = "hover:bg-ink/90";
 

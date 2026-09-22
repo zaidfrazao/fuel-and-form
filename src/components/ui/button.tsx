@@ -104,4 +104,16 @@ function Button({
   )
 }
 
-export { Button, buttonVariants }
+/**
+ * A Destructive button inside a confirmation sheet: § Buttons' "no fill; it is
+ * filled only inside a confirmation sheet".
+ *
+ * Classes for the call site rather than a variant, because a variant is
+ * offered everywhere and this fill is allowed in one place. There are two
+ * sheets that use it, the weigh-in delete and `/training`'s Skip session
+ * (FUEL-121), so it is declared once instead of spelled out in each.
+ */
+const CONFIRM_DESTRUCTIVE =
+  "w-full bg-destructive text-ink-fg hover:bg-destructive/90"
+
+export { Button, buttonVariants, CONFIRM_DESTRUCTIVE }

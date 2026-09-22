@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 
 import { Tile } from "@/components/tile";
-import { Button } from "@/components/ui/button";
+import { Button, CONFIRM_DESTRUCTIVE } from "@/components/ui/button";
 
 /**
  * The two places a pointer state can be lost between `pointer.ts` and the DOM.
@@ -45,10 +45,7 @@ describe("the Destructive button's two rest states", () => {
 
   test("filled: the call site's fill at 90% wins outright", () => {
     render(
-      <Button
-        variant="destructive"
-        className="w-full bg-destructive text-ink-fg hover:bg-destructive/90"
-      >
+      <Button variant="destructive" className={CONFIRM_DESTRUCTIVE}>
         Delete
       </Button>,
     );
