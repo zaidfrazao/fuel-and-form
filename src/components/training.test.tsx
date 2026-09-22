@@ -2419,16 +2419,52 @@ describe("a session with rows but no work", () => {
 });
 
 describe("the session state, when a session has sections", () => {
-  test("opens on the first WORKING exercise, not on the warm-up", async () => {
+  test("opens on the first WARM-UP row — FUEL-125", async () => {
     const user = userEvent.setup();
 
     render(view({ sessions: sectioned() }));
     await user.click(bar().getByRole("button", { name: "Start session" }));
 
-    // The whole point of the column. A mobility drill offered per-set rep entry
-    // is the fault § P10 describes, and the state stepping through it first is
-    // how that fault would reach a phone.
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Press-ups");
+    // FUEL-92 made the bookends sections of the list; FUEL-125 makes them steps
+    // of the session. Until it, the reader warmed up from the plan-state list
+    // BEFORE tapping Start session, so the session did not start when the
+    // workout did. This test asserted "Press-ups" for exactly that reason and is
+    // reversed by decision, not by regression.
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Joint prep");
+  });
+
+  test("offers no set entry on a warm-up row — PRD § P10", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: sectioned() }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    // "Set logging offered on the working section only." Three sets of a hip
+    // opener is not information anybody wants recorded, and a box to type it in
+    // is the invitation to record it. The step is a movement and a way on.
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+    expect(screen.queryByRole("heading", { level: 2, name: "Sets" })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Next exercise/ })).toBeTruthy();
+
+    // And no way BACK from the first step of the session, which is the boundary
+    // an overloaded "nothing that way" would draw a button on — one that jumped
+    // the reader straight into the work.
+    expect(screen.queryByRole("button", { name: /^Previous exercise/ })).toBeNull();
+  });
+
+  test("counts a bookend in its own stage, never in the working count", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: sectioned() }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    // "Warm-up 1 of 1", not "Exercise 1 of 5" and not "Exercise 1 of 3". The
+    // working count keeps meaning the work: a warm-up in that denominator would
+    // be a session reporting itself as longer than the work it asks for. The
+    // round is the work's too — a warm-up has no rounds.
+    expect(screen.getByText(/~2 min · Warm-up 1 of 1/)).toBeTruthy();
+    expect(screen.queryByText(/Exercise 1 of/)).toBeNull();
+    expect(screen.queryByText(/Round/)).toBeNull();
   });
 
   test("counts the working rows in the position, not the whole session", async () => {
@@ -2436,6 +2472,8 @@ describe("the session state, when a session has sections", () => {
 
     render(view({ sessions: sectioned() }));
     await user.click(bar().getByRole("button", { name: "Start session" }));
+    // Past the warm-up, into the work.
+    await user.click(screen.getByRole("button", { name: /^Next exercise/ }));
 
     // Three working rows out of five. "Exercise 1 of 5" would be a session
     // reporting itself as longer than the work it is asking for, and the count
@@ -2443,11 +2481,21 @@ describe("the session state, when a session has sections", () => {
     expect(screen.getByText(/3 x 12 · Round 1 of 3 · Exercise 1 of 3/)).toBeTruthy();
   });
 
-  test("names the part being worked in the eyebrow", async () => {
+  test("names the stage the reader is in, in the eyebrow", async () => {
     const user = userEvent.setup();
 
     render(view({ sessions: sectioned() }));
     await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    // The eyebrow is the only place that says which of the three stages this is
+    // — the Title is the movement's and the slash line is the position's. It
+    // said "· Work" unconditionally before FUEL-125, which was true while the
+    // work was the only stage the state stepped through.
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Bodyweight Circuit B · Warm-up" }),
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /^Next exercise/ }));
 
     expect(
       screen.getByRole("heading", { level: 2, name: "Bodyweight Circuit B · Work" }),
@@ -2473,20 +2521,39 @@ describe("the session state, when a session has sections", () => {
 
     render(view({ sessions: sectioned() }));
     await user.click(bar().getByRole("button", { name: "Start session" }));
+    // Into the work, which is where the two lists diverge.
+    await user.click(screen.getByRole("button", { name: /^Next exercise/ }));
 
     // The aside holds the WHOLE session — § Desktop's "the rest of the list" —
-    // while the measure steps through the working rows only. So the current
-    // marker cannot be an index: index 0 of this list is the warm-up, and the
-    // measure is showing the first working exercise.
+    // while the measure's working position is an index into the working rows
+    // alone. So the current marker cannot be that index: index 0 of this list is
+    // the warm-up, and the measure is showing the first working exercise.
     //
-    // Invisible to both suites without this test: jsdom has no width and the
-    // column is `hidden` below the cap, and the screen baselines photograph the
-    // plan state rather than this one.
+    // FUEL-125 steps the bookends too, so reaching the work now takes a tap.
+    // The fault this guards is unchanged and still invisible to both suites:
+    // jsdom has no width and the column is `hidden` below the cap, and the
+    // screen baselines photograph the plan state rather than this one.
     const marked = document.querySelectorAll('[aria-current="step"]');
 
     expect(marked).toHaveLength(1);
     expect(marked[0]!.textContent).toContain("Press-ups");
     expect(marked[0]!.textContent).not.toContain("Joint prep");
+  });
+
+  test("marks the bookend row in the aside while the reader is on it", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: sectioned() }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    // The other half of the same rule, and the ticket's own ≥1272 note: the
+    // aside already lists all three sections, so the marking extends to bookend
+    // rows. It does because the mark is by id and the measure's subject is now
+    // the stage's row — nothing here translates a position.
+    const marked = document.querySelectorAll('[aria-current="step"]');
+
+    expect(marked).toHaveLength(1);
+    expect(marked[0]!.textContent).toContain("Joint prep");
   });
 
   test("marks nothing in the aside when there is no exercise to work", () => {

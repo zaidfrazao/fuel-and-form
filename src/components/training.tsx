@@ -93,7 +93,16 @@ const FormMediaSheet = dynamic(
   () => import("@/components/form-media-sheet").then((m) => m.FormMediaSheet),
   { ssr: false },
 );
-import { sectionLabel, WORKING_SECTION, working } from "@/lib/section";
+import { sectionLabel, working } from "@/lib/section";
+import {
+  leadIn,
+  readStage,
+  sectionRows,
+  stageLabel,
+  stageRow,
+  type StageStep,
+  stepStage,
+} from "@/lib/session-stage";
 import { isEntered, parseEnteredAt, prefillMinutes } from "@/lib/session-clock";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { MAX_NOTE_LENGTH } from "@/lib/session-entry";
@@ -746,24 +755,22 @@ function SessionList({
  * Nothing here calls an action. A move is stored in the browser beside the
  * entered boolean, and the session's sets and status are exactly as they were.
  *
+ * Since FUEL-125 a step either side can be a WARM-UP or COOL-DOWN row as well
+ * as a working one, so this takes each step already resolved — a label and what
+ * to do — rather than an index into the working list and the list to read it
+ * against. The caller owns which stage a step belongs to; this owns the row of
+ * controls, the focus hand-off and the words. That also removes the class of
+ * fault `SessionList` records above: there is no index here to read against the
+ * wrong list, because there is no index.
+ *
  * Drawing only what exists has one cost, and this pays it: Next pressed onto
  * the last step unmounts the button that had focus, and a keyboard or
  * screen-reader user is dropped to the top of the document mid-session. So a
  * press that removes its own button hands focus to the one that remains.
  */
-function ExerciseSteps({
-  exercises,
-  previous,
-  next,
-  onPrevious,
-  onNext,
-}: {
-  exercises: readonly TrainingExercise[];
-  previous: SessionPosition | null;
-  next: SessionPosition | null;
-  onPrevious: () => void;
-  onNext: () => void;
-}) {
+type Step = { label: string; go: () => void };
+
+function ExerciseSteps({ previous, next }: { previous: Step | null; next: Step | null }) {
   const nav = useRef<HTMLElement>(null);
   const pressed = useRef(false);
 
@@ -787,11 +794,6 @@ function ExerciseSteps({
     move();
   };
 
-  const where = (step: SessionPosition) =>
-    [exercises[step.index]?.name, step.round ? `round ${step.round}` : null]
-      .filter(Boolean)
-      .join(", ");
-
   return (
     <nav ref={nav} aria-label="Exercises" className="flex items-center justify-between gap-3">
       {previous ? (
@@ -799,8 +801,8 @@ function ExerciseSteps({
           variant="link"
           size="xs"
           className="px-0"
-          aria-label={`Previous exercise, ${where(previous)}`}
-          onClick={press(onPrevious)}
+          aria-label={`Previous exercise, ${previous.label}`}
+          onClick={press(previous.go)}
         >
           <span aria-hidden="true">&lsaquo; Previous exercise</span>
         </Button>
@@ -810,8 +812,8 @@ function ExerciseSteps({
           variant="link"
           size="xs"
           className="ml-auto px-0"
-          aria-label={`Next exercise, ${where(next)}`}
-          onClick={press(onNext)}
+          aria-label={`Next exercise, ${next.label}`}
+          onClick={press(next.go)}
         >
           <span aria-hidden="true">Next exercise &rsaquo;</span>
         </Button>
@@ -891,7 +893,8 @@ function banner(failure: Attempt): string {
  * state was entered, and where the reader moved without logging." This is the
  * first, and it was one boolean until FUEL-124 — `"1"`, which `isEntered`
  * still reads as entered, so a session open when that shipped stayed open. The
- * second is `MOVED_KEY` below.
+ * second is `MOVED_KEY` below, and FUEL-125 added a third, `STAGE_KEY`: which
+ * bookend the reader is on, for the one stage whose position cannot be derived.
  *
  * Keyed to the date so that entering Wednesday's session does not open
  * Thursday's, and read only for today — a past date has no session state at
@@ -1031,6 +1034,42 @@ function rememberMoved(date: CalendarDate, moved: Moved | null): void {
   } catch {
     // As for the entered instant: the move still works while the page is open,
     // and a reload puts the reader where the sets alone say.
+  }
+
+  for (const listener of listeners) listener();
+}
+
+/**
+ * Which bookend the reader is standing on — FUEL-125, and `session-stage.ts`
+ * for what the value means.
+ *
+ * The third of the three keys, under the same rules as the other two: keyed to
+ * the date, every access wrapped, nothing in the database. It holds ONE exercise
+ * id, and its absence means the work — so the only stage that stores anything is
+ * the one that cannot be derived, and crossing back into the work is a removal.
+ *
+ * The work keeps reading itself off the sets. A bookend logs none, by § P10's
+ * own ruling, so there is nothing there to read and this is the alternative to
+ * inventing a set that was never performed.
+ */
+const STAGE_KEY = (date: CalendarDate) => `fuel:training-stage:${date}`;
+
+function readStoredStage(date: CalendarDate): string | null {
+  try {
+    return window.localStorage.getItem(STAGE_KEY(date));
+  } catch {
+    return null;
+  }
+}
+
+/** Stands on a bookend by id, or returns to the work by forgetting one. */
+function rememberStage(date: CalendarDate, id: string | null): void {
+  try {
+    if (id) window.localStorage.setItem(STAGE_KEY(date), id);
+    else window.localStorage.removeItem(STAGE_KEY(date));
+  } catch {
+    // As for the other two: the step still works while the page is open, and a
+    // reload opens in the work, which is where every session opened before this.
   }
 
   for (const listener of listeners) listener();
@@ -1181,6 +1220,13 @@ export function Training({
       () => readMoved(date),
       () => null,
     ),
+  );
+
+  /** Which bookend the reader is on, if any — FUEL-125. See `STAGE_KEY`. */
+  const storedStage = useSyncExternalStore(
+    subscribeToStorage,
+    () => readStoredStage(date),
+    () => null,
   );
 
   // What the screen says is recorded, before the server has answered. One
@@ -1389,12 +1435,53 @@ export function Training({
    */
   const workingExercises = working(session?.exercises ?? []);
 
+  /**
+   * Every row of the session, bookends included — FUEL-125.
+   *
+   * The list the session state now STEPS through, as against `workingExercises`
+   * above, which is the list it logs sets against. Those were the same list
+   * until FUEL-92 gave a session sections, and the whole of this ticket is that
+   * they stopped being the same and the state kept using the narrower one.
+   *
+   * Also what the ≥1272 aside has always drawn, which is why the mark there
+   * needed no work to reach a bookend row.
+   */
+  const allExercises = session?.exercises ?? [];
+
+  /** The rows before the work, for `enter` — `session-stage.ts`' `leadIn`. */
+  const beforeWork = leadIn(allExercises);
+
   const canEnter =
     session !== undefined && date === today && workingExercises.length > 0;
 
   const inSession = entered && canEnter;
 
-  const enter = () => rememberEntered(date, true);
+  // Only the working section can hold a set — see `working` above — but the
+  // count is filtered anyway, so the number the sheet prints is exactly the
+  // rows the session state drew.
+  const loggedSets = sets.filter((set) =>
+    workingExercises.some((exercise) => exercise.id === set.exerciseId),
+  ).length;
+
+  /**
+   * Starts the session where the workout starts — FUEL-125.
+   *
+   * At the first warm-up row, because that is where a session begins: until this
+   * ticket the reader warmed up from the plan-state list BEFORE tapping Start
+   * session, so the state did not begin when the workout did.
+   *
+   * UNLESS a working set is already logged, in which case the work is where the
+   * session is. That case is a reader who left the state and came back — the
+   * status is recorded on the way out, but a reload in another tab or a tap on
+   * the wrong control gets them here — and putting them back at the arm circles
+   * they did twenty minutes ago would be the screen telling them to repeat it.
+   * The sets are the one honest account of how far along they are, which is the
+   * rule this screen keeps everywhere else, and the warm-up is one Previous away.
+   */
+  const enter = () => {
+    rememberEntered(date, true);
+    rememberStage(date, loggedSets > 0 ? null : (beforeWork[0]?.id ?? null));
+  };
 
   /**
    * Leaves the state, and records the session on the way out.
@@ -1416,8 +1503,10 @@ export function Training({
     act({ kind: "record", status, note, duration: filled });
     rememberEntered(date, false);
     // A session that has stopped keeps nobody's place in it. Entered again,
-    // it opens where the sets say.
+    // it opens where the sets say — and, since FUEL-125, at the warm-up when
+    // they say nothing yet.
     rememberMoved(date, null);
+    rememberStage(date, null);
   };
 
   /**
@@ -1440,13 +1529,6 @@ export function Training({
   // during render, React's way to adjust state to a changed input, rather than
   // in an effect that would paint the stale sheet for a frame first.
   if (confirmingSkip && !inSession) setConfirmingSkip(false);
-
-  // Only the working section can hold a set — see `working` above — but the
-  // count is filtered anyway, so the number the sheet prints is exactly the
-  // rows the session state drew.
-  const loggedSets = sets.filter((set) =>
-    workingExercises.some((exercise) => exercise.id === set.exerciseId),
-  ).length;
 
   const skipSession = () => {
     if (loggedSets > 0) setConfirmingSkip(true);
@@ -1471,9 +1553,79 @@ export function Training({
     ? sessionPosition(workingExercises, sets, byRound, moved)
     : null;
   const current = position?.index ?? -1;
-  const currentEx = workingExercises[current];
+  const workingEx = workingExercises[current];
   const previous = stepSession(workingExercises, sets, byRound, moved, "previous");
   const next = stepSession(workingExercises, sets, byRound, moved, "next");
+
+  /**
+   * Which of the three stages the reader is in, and so which exercise the
+   * measure draws — FUEL-125.
+   *
+   * The work is the derivation above, untouched. A bookend is the stored id,
+   * read against THIS session's rows, so a stale one falls back to the work
+   * rather than landing on a row that is not there. `session-stage.ts` carries
+   * the rule and the reason the two halves are kept apart.
+   *
+   * `currentEx` is the bookend when there is one and the working exercise
+   * otherwise, which is what keeps the rest of this component — the form sheet's
+   * identity comparison, the ≥1272 aside's mark — reading one name for "the
+   * exercise on screen" rather than branching at each site.
+   */
+  const stage = readStage(allExercises, storedStage);
+  const bookend = stageRow(allExercises, stage);
+  const currentEx = bookend ?? workingEx;
+
+  /**
+   * What each control does, and whether it exists at all.
+   *
+   * `stepStage` answers first, because it owns the boundaries: it gives a
+   * bookend to stand on, the work to fall back into, `null` for the two ends of
+   * the session, or "the working stepper's question" — and only then does
+   * FUEL-120's `stepSession` answer, unchanged.
+   *
+   * `null` for no step, which is what `ExerciseSteps` reads to draw no control
+   * rather than a disabled one.
+   *
+   * `label` is where the accessible name says the step goes. A bookend names its
+   * row; the work keeps FUEL-120's "Reverse lunges, round 1", built from the
+   * position it lands on — including when the step is the hand-over BACK into
+   * the work, where the landing place is the derived position rather than a
+   * stored one.
+   */
+  const named = (at: SessionPosition | null, ex: TrainingExercise | undefined) =>
+    [ex?.name, at?.round ? `round ${at.round}` : null].filter(Boolean).join(", ");
+
+  const stepTo = (
+    handover: StageStep | null,
+    working: ReturnType<typeof stepSession<TrainingExercise>>,
+  ) => {
+    if (handover === null) return null;
+
+    if (handover.kind === "to") {
+      const { id } = handover;
+      const row = id === null ? workingEx : allExercises.find((one) => one.id === id);
+
+      if (!row) return null;
+
+      return {
+        label: id === null ? named(position, workingEx) : row.name,
+        go: () => rememberStage(date, id),
+      };
+    }
+
+    if (!working) return null;
+
+    return {
+      label: named(working.position, workingExercises[working.position.index]),
+      go: () => rememberMoved(date, working.moved),
+    };
+  };
+
+  const stepPrevious = stepTo(
+    stepStage(allExercises, stage, "previous", previous !== null),
+    previous,
+  );
+  const stepNext = stepTo(stepStage(allExercises, stage, "next", next !== null), next);
 
   /*
    * Which exercise the form sheet is open FOR — § P10, FUEL-94.
@@ -1910,6 +2062,12 @@ export function Training({
            * Only where it HAS them: a session whose rows are all one section has
            * no divisions to name, and appending "· Work" to it would be a
            * distinction drawn about nothing.
+           *
+           * Since FUEL-125 that part is the STAGE the reader is in rather than
+           * always the work, because the warm-up and the cool-down are steps of
+           * the session now. The eyebrow is what says which, and it is the only
+           * place that says it: the Title is the movement's, and the slash line
+           * below carries the position within the stage.
            */
           <>
             <div className="flex flex-col gap-3">
@@ -1919,7 +2077,7 @@ export function Training({
                 <Eyebrow>
                   {workingExercises.length === session.exercises.length
                     ? session.name
-                    : `${session.name} · ${sectionLabel(WORKING_SECTION)}`}
+                    : `${session.name} · ${sectionLabel(currentEx.section)}`}
                 </Eyebrow>
                 <SessionClock stored={stored} />
               </div>
@@ -1937,11 +2095,25 @@ export function Training({
                   loses count of, and the rows under it are drawn unchanged: the
                   round's row is always the first open one, so nothing on the
                   sub-list needs to say it again. */}
+              {/* A bookend counts within its own stage — "Warm-up 1 of 2",
+                  FUEL-125 — and never in the working count, which keeps meaning
+                  the work and only it. The round is the work's too: a warm-up
+                  has no rounds and a cool-down is not part of them. */}
               <SlashMeta>
                 {[
                   currentEx.prescription,
-                  position?.round ? `Round ${position.round} of ${position.rounds}` : null,
-                  `Exercise ${current + 1} of ${workingExercises.length}`,
+                  bookend || !position
+                    ? null
+                    : position.round
+                      ? `Round ${position.round} of ${position.rounds}`
+                      : null,
+                  bookend
+                    ? stageLabel(
+                        sectionLabel(bookend.section),
+                        stage.kind === "bookend" ? stage.index : 0,
+                        sectionRows(allExercises, bookend.section).length,
+                      )
+                    : `Exercise ${current + 1} of ${workingExercises.length}`,
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -1989,30 +2161,55 @@ export function Training({
               ) : null}
             </div>
 
+            {/*
+             * The set sub-list, or — on a bookend — the cues, FUEL-125.
+             *
+             * A bookend is NOT offered set entry, and that is PRD § P10's own
+             * ruling rather than a shape chosen here: "set logging offered on
+             * the working section only". Three sets of a hip opener is not
+             * information anybody wants recorded, and a box to type it in is
+             * the invitation to record it.
+             *
+             * What takes the slot is the cues, because on a bookend they ARE
+             * the content: "10 arm circles forward, 10 backward, 10 shoulder
+             * rolls" is the whole of what the step asks for, where a working
+             * exercise's own instruction is the sets. The measure keeps the
+             * Sets section's shape — eyebrow, then the block — so the two
+             * kinds of step read as one composition rather than two.
+             *
+             * A row with no cues draws nothing here, the refusal `Show form`
+             * above makes: no eyebrow over an empty block, and the gap closes
+             * because the section is absent rather than hidden.
+             */}
             <section className="flex flex-col gap-[14px]">
-              <Eyebrow>Sets</Eyebrow>
-              <SetList
-                exercise={currentEx}
-                logged={setsFor(currentEx.id, sets)}
-                lastTime={setsFor(currentEx.id, session?.lastTime ?? NO_SETS)}
-                drafts={drafts}
-                onDraft={(setIndex, value) => draft(currentEx.id, setIndex, value)}
-                onLog={(setIndex, value) => {
-                  forget(currentEx.id, setIndex);
-                  act({ kind: "log-set", exerciseId: currentEx.id, setIndex, value });
-                }}
-                onRemove={(setIndex) => {
-                  forget(currentEx.id, setIndex);
-                  act({ kind: "remove-set", exerciseId: currentEx.id, setIndex });
-                }}
-              />
-              <ExerciseSteps
-                exercises={workingExercises}
-                previous={previous?.position ?? null}
-                next={next?.position ?? null}
-                onPrevious={() => previous && rememberMoved(date, previous.moved)}
-                onNext={() => next && rememberMoved(date, next.moved)}
-              />
+              {bookend ? (
+                bookend.notes ? (
+                  <>
+                    <Eyebrow>Cues</Eyebrow>
+                    <p className="text-body text-text-primary">{bookend.notes}</p>
+                  </>
+                ) : null
+              ) : (
+                <>
+                  <Eyebrow>Sets</Eyebrow>
+                  <SetList
+                    exercise={currentEx}
+                    logged={setsFor(currentEx.id, sets)}
+                    lastTime={setsFor(currentEx.id, session?.lastTime ?? NO_SETS)}
+                    drafts={drafts}
+                    onDraft={(setIndex, value) => draft(currentEx.id, setIndex, value)}
+                    onLog={(setIndex, value) => {
+                      forget(currentEx.id, setIndex);
+                      act({ kind: "log-set", exerciseId: currentEx.id, setIndex, value });
+                    }}
+                    onRemove={(setIndex) => {
+                      forget(currentEx.id, setIndex);
+                      act({ kind: "remove-set", exerciseId: currentEx.id, setIndex });
+                    }}
+                  />
+                </>
+              )}
+              <ExerciseSteps previous={stepPrevious} next={stepNext} />
             </section>
           </>
         ) : (
