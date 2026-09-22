@@ -87,8 +87,8 @@ const positionOf = (locator: Locator) =>
  * Enter the session state through the control a reader uses.
  *
  * Seeding `localStorage` directly would be one line shorter and would also pass
- * against a build where Start session had stopped working — the state is a
- * boolean keyed to the date (`training.tsx`), and writing it by hand asserts
+ * against a build where Start session had stopped working — the state is an
+ * instant keyed to the date (`training.tsx`), and writing it by hand asserts
  * that the key is spelled right rather than that the state is reachable.
  *
  * The marker on the way in is the timer row's `Rest` label, which renders in
@@ -328,7 +328,7 @@ test("leaves the plan state and `/` released, which is FUEL-72's ruling", async 
    * This test wants the plan state, and the obvious way to reach it from the
    * session state is to press the primary — which is what the first draft did,
    * and which RECORDS THE SESSION. Entering costs nothing (the state is one
-   * boolean in `localStorage`) but leaving writes a row, and the demo is
+   * instant in `localStorage`) but leaving writes a row, and the demo is
    * provisioned once for the whole run by `demo.setup.ts`: every project after
    * this one then photographed a day with a logged session on it. Twenty
    * baselines failed, on `/` and on `/training` and in the swap sheet, none of

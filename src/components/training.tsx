@@ -135,8 +135,9 @@ import { cn } from "@/lib/utils";
  * off the rows themselves. That is the schema's own "derive from an absolute,
  * never accumulate", and it makes a phone locked mid-session and woken twenty
  * minutes later resume where the data says it is. What is stored on the client
- * is whether the state is entered at all, one boolean in `localStorage`, and
- * since FUEL-120 where the reader moved without logging, beside it.
+ * is when the state was entered — an instant in `localStorage` since FUEL-124,
+ * which is what the session clock reads — and since FUEL-120 where the reader
+ * moved without logging, beside it.
  *
  * ## Why it is a screen of its own and not a branch of `/`
  *
@@ -886,9 +887,11 @@ function banner(failure: Attempt): string {
  * Where the session state remembers that it is entered — Brand Guide § Desktop.
  *
  * "The client stores two things, both in `localStorage`, keyed to the date and
- * wrapped in try/catch like every other read of it: whether the session state
- * is entered at all, one boolean, and where the reader moved without logging."
- * This is the first. The second is `MOVED_KEY` below.
+ * wrapped in try/catch like every other read of it: the instant the session
+ * state was entered, and where the reader moved without logging." This is the
+ * first, and it was one boolean until FUEL-124 — `"1"`, which `isEntered`
+ * still reads as entered, so a session open when that shipped stayed open. The
+ * second is `MOVED_KEY` below.
  *
  * Keyed to the date so that entering Wednesday's session does not open
  * Thursday's, and read only for today — a past date has no session state at
@@ -898,7 +901,7 @@ function banner(failure: Attempt): string {
  *
  * Every access is wrapped: `localStorage` throws outright in a Safari private
  * window and in any browser set to block site data, and a screen that cannot
- * render because it could not remember a boolean is a worse answer than one
+ * render because it could not remember an instant is a worse answer than one
  * that opens in the plan state.
  */
 const SESSION_KEY = (date: CalendarDate) => `fuel:training-session:${date}`;
@@ -1002,7 +1005,7 @@ function durationOnFinish(
  * Where the session state remembers that the reader moved without logging —
  * FUEL-120, and `Moved` in `exercise-set.ts` for what it holds.
  *
- * The entered boolean's second, under the same rules and for the same reason:
+ * The entered instant's second, under the same rules and for the same reason:
  * keyed to the date, every access wrapped, nothing in the database. What the
  * data says was done is the sets; this says only where the reader chose to
  * stand, which is not a fact about the session and so is not the export's.
@@ -1026,7 +1029,7 @@ function rememberMoved(date: CalendarDate, moved: Moved | null): void {
     if (moved) window.localStorage.setItem(MOVED_KEY(date), JSON.stringify(moved));
     else window.localStorage.removeItem(MOVED_KEY(date));
   } catch {
-    // As for the entered boolean: the move still works while the page is open,
+    // As for the entered instant: the move still works while the page is open,
     // and a reload puts the reader where the sets alone say.
   }
 

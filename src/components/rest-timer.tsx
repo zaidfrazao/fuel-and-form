@@ -48,7 +48,7 @@ import { hold, release } from "@/lib/wake-lock";
  * Where the running timer is kept, so a reload or a hop to `/` and back does
  * not lose it.
  *
- * One key rather than one per date, unlike `training.tsx`'s session boolean. A
+ * One key rather than one per date, unlike `training.tsx`'s session key. A
  * rest is not a property of a day — it is ninety seconds long and the only date
  * it can belong to is the one it was started on — and `parseRestEnd` refuses an
  * instant already past, so a key left behind by yesterday is refused on the
@@ -61,7 +61,9 @@ const KEY = "fuel:rest-timer";
  *
  * A module variable mirrored to `localStorage`, and NOT `training.tsx`'s
  * arrangement, where the snapshot reads storage on every call. That shape is
- * right for the boolean it serves and wrong here, in two ways that both matter:
+ * right for the raw string it serves — whose clock-dependent reading happens
+ * outside the snapshot, in `session-clock.ts` — and wrong here, in two ways
+ * that both matter:
  *
  *   - **A snapshot computed against the clock cannot be a snapshot.**
  *     `parseRestEnd` refuses a past instant, so a storage-reading snapshot would
