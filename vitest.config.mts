@@ -73,6 +73,7 @@ export default defineConfig({
         "src/lib/push.ts",
         "src/lib/repeat.ts",
         "src/lib/rest-timer.ts",
+        "src/lib/session-clock.ts",
         "src/lib/resolve-plan.ts",
         "src/lib/recording.ts",
         "src/lib/route.ts",
@@ -176,6 +177,10 @@ export default defineConfig({
         // to `Number()`, it formats as `NaN:NaN`, and a timer counting down
         // from it never elapses and never clears.
         "src/lib/rest-timer.ts": FULLY_COVERED,
+        // FUEL-124. The pre-fill writes a duration into the reader's record
+        // that they did not type, so a wrong bound is a plausible number in a
+        // training log that nobody will think to check.
+        "src/lib/session-clock.ts": FULLY_COVERED,
         "src/lib/resolve-plan.ts": FULLY_COVERED,
         // FUEL-27. The dot grid is a claim about the user's own history, made
         // at a glance and with no figures beside it to check it against — so a
