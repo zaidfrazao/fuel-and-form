@@ -149,7 +149,10 @@ export function readStage<T extends Row>(
 
   const row = exercises.find((exercise) => exercise.id === storedId);
 
-  if (!row || row.section === WORKING_SECTION) return IN_WORK;
+  // `side` and not a test against the work, so an unrecognised section is the
+  // work here too. It is not a stage — see `side` — and reading it as one would
+  // stand the reader on a row `stepStage` then refuses to step off.
+  if (!row || side(row.section) === null) return IN_WORK;
 
   return {
     kind: "bookend",
