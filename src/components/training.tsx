@@ -1343,6 +1343,14 @@ export function Training({
    */
   const [confirmingSkip, setConfirmingSkip] = useState(false);
 
+  // A sheet can be open when the state ends without it: another tab clears
+  // the entered flag, or a reload elsewhere records the session. `open` below
+  // already hides it then, but the flag would survive and reopen the sheet,
+  // unasked, the next time the session state is entered. So the flag is reset
+  // during render, React's way to adjust state to a changed input, rather than
+  // in an effect that would paint the stale sheet for a frame first.
+  if (confirmingSkip && !inSession) setConfirmingSkip(false);
+
   // Only the working section can hold a set — see `working` above — but the
   // count is filtered anyway, so the number the sheet prints is exactly the
   // rows the session state drew.

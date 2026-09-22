@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -1547,6 +1547,30 @@ describe("Skip session, once a set is logged", () => {
         "data-variant",
       ),
     ).toBe("secondary");
+  });
+
+  test("does not reopen by itself when the state ended under it", async () => {
+    // Another tab clears the entered flag while the sheet is open. The sheet
+    // goes with the state, and entering again must not bring it back unasked.
+    const user = userEvent.setup();
+    const key = `fuel:training-session:${TODAY}`;
+    resumed();
+
+    render(view({ sessions: withSets([set("e1", 1)]) }));
+    await user.click(bar().getByRole("button", { name: "Skip session" }));
+    expect(dialog()).toBeTruthy();
+
+    act(() => {
+      window.localStorage.removeItem(key);
+      window.dispatchEvent(new StorageEvent("storage", { key }));
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(bar().getByRole("button", { name: "Skip session" })).toBeTruthy();
+    expect(setSessionStatus).not.toHaveBeenCalled();
   });
 
   test("never draws a bare Skip in the session state", () => {
