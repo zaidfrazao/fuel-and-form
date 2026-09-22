@@ -59,6 +59,9 @@ function subscribe(listener: () => void): () => void {
 
   return () => {
     listeners.delete(listener);
+    // Forgotten with the last watcher, so a clock mounted again ten minutes
+    // later does not paint the instant it was last seen for a frame.
+    if (listeners.size === 0) painted = undefined;
   };
 }
 
