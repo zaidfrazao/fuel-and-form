@@ -7,6 +7,7 @@ import { adherenceWeeks, adherenceWindow } from "@/lib/adherence";
 import { nearestWeight } from "@/lib/energy";
 import type { Week } from "@/components/dot-grid";
 import { type CalendarDate, todayIn } from "@/lib/date";
+import { type SetKind, storedSet } from "@/lib/exercise-set";
 import { type TrainingDay, trainingDay } from "@/lib/resolve-training";
 import type { TrainingPlan } from "@/lib/rotation";
 import type { StorableRoute } from "@/lib/route";
@@ -575,8 +576,9 @@ export async function clearSession(
 /**
  * What one set write says. The address is a log, an exercise and an ordinal.
  *
- * `reps` is the only thing that is not an address, which is why it is the only
- * field `exercise-set.ts` has to refuse. `loadKg` is deliberately absent: the
+ * `value` is the only thing that is not an address, which is why it is the only
+ * field `exercise-set.ts` has to refuse. `kind` says which column it is stored
+ * in (FUEL-123), and the caller takes it from the exercise's own target. `loadKg` is deliberately absent: the
  * column ships dormant (§ Gym-restart readiness), and a parameter for a value
  * nothing sends is a parameter somebody eventually sends something wrong in.
  */
@@ -585,7 +587,8 @@ export type SetRecord = {
   workoutId: string;
   exerciseId: string;
   setIndex: number;
-  reps: number;
+  kind: SetKind;
+  value: number;
 };
 
 /**
@@ -658,7 +661,7 @@ export async function logSet(userId: string, record: SetRecord): Promise<void> {
       workoutLogId: log.id,
       exerciseId: record.exerciseId,
       setIndex: record.setIndex,
-      reps: record.reps,
+      ...storedSet(record.kind, record.value),
     },
     {
       // The unique index from schema.ts, minus the `user_id` the scope
@@ -668,7 +671,9 @@ export async function logSet(userId: string, record: SetRecord): Promise<void> {
         schema.exerciseSets.exerciseId,
         schema.exerciseSets.setIndex,
       ],
-      set: { reps: record.reps },
+      // Both columns, so a correction can never leave the other one behind —
+      // `exercise_sets_one_unit` would refuse a row holding both.
+      set: storedSet(record.kind, record.value),
     },
   );
 }

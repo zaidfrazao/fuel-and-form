@@ -63,8 +63,13 @@ import {
   stepSession,
   stepsByRound,
   setsFor,
-  lastTimeReps,
+  lastTimeValue,
+  MAX_REPS,
+  MAX_SECONDS,
+  setKind,
   setUnitLine,
+  storedSet,
+  targetLow,
 } from "@/lib/exercise-set";
 import { dayLabel } from "@/lib/now-display";
 
@@ -451,14 +456,14 @@ function Estimate({ range }: { range: EnergyRange | null }) {
  * list — that is the accordion § Progressive Disclosure bans, and it is banned
  * geometrically as well as by name.
  *
- * ## The row is an ordinal, a reps figure and one control
+ * ## The row is an ordinal, a figure and one control
  *
  * The mock draws the figure as text — `8 reps` for a set performed, `Target 8`
  * for one still offered. Here it is an input holding that same number, because
  * the acceptance criteria ask for sets to be CORRECTABLE and because an
  * exercise with no structured target has no number to tick at: a plank has
- * three sets and no rep count, and '8–12 rounds — 40 sec on / 40 sec off' has
- * neither. At rest the row reads as the mock draws it; the difference is only
+ * three sets of seconds, not reps (FUEL-123), and '8–12 rounds — 40 sec on /
+ * 40 sec off' has no target at all. At rest the row reads as the mock draws it; the difference is only
  * that the figure can be typed into.
  *
  * The tick is the one control, and it means the same thing in both directions:
@@ -467,7 +472,8 @@ function Estimate({ range }: { range: EnergyRange | null }) {
  *
  * ## What the tick does with an empty box
  *
- * It falls back to the target's low rep, which is what "Target 8" is offering.
+ * It falls back to the target's low end, which is what "Target 8" is offering —
+ * in the exercise's own unit, so a plank's empty tick logs 30 seconds.
  * Without a target and without a typed number there is nothing to record, so the
  * control is disabled — the alternative is a button that reports a refusal for a
  * value the reader never entered.
@@ -487,9 +493,12 @@ function SetList({
   lastTime: readonly LoggedSet[];
   drafts: ReadonlyMap<string, string>;
   onDraft: (setIndex: number, value: string) => void;
-  onLog: (setIndex: number, reps: number) => void;
+  onLog: (setIndex: number, value: number) => void;
   onRemove: (setIndex: number) => void;
 }) {
+  const kind = setKind(exercise);
+  const offered = targetLow(exercise);
+
   return (
     // 30px — the parent row's content column. § Lists gives the figure and this
     // is where it is spent; `exercise-list.tsx` draws the 18px ordinal and the
@@ -501,12 +510,12 @@ function SetList({
         // string is a real draft — it is how a box is cleared — so the fallback
         // is on the key's absence rather than on the value being falsy.
         const draft = drafts.get(key);
-        const value = draft ?? (row.reps === null ? "" : String(row.reps));
+        const value = draft ?? (row.value === null ? "" : String(row.value));
         const typed = Number(value);
         const entered = value !== "" && Number.isInteger(typed);
         // What the tick would record: what is in the box, or the target it is
         // offering. `null` is a control with nothing to write.
-        const wouldLog = entered ? typed : exercise.targetRepsLow;
+        const wouldLog = entered ? typed : offered;
 
         return (
           <li
@@ -522,14 +531,14 @@ function SetList({
                 // The label is the ordinal beside it, which is decorative to a
                 // screen reader — a bare "01" says nothing about what the box
                 // holds. § Accessibility asks for a name, not a position.
-                aria-label={`Set ${row.index} reps`}
+                aria-label={`Set ${row.index} ${kind}`}
                 value={value}
                 /*
                  * Digits only, stripped as they arrive — the identical
                  * treatment the duration box takes above, for the identical
                  * reason: `inputMode` asks for a numeric keypad and does not
                  * stop a paste, and "1e2" reaching `Number()` as `NaN` would
-                 * render as a set of NaN reps while the request was in flight.
+                 * render as a set of NaN while the request was in flight.
                  */
                 onChange={(event) =>
                   onDraft(row.index, event.target.value.replace(/\D/g, ""))
@@ -548,28 +557,28 @@ function SetList({
                   // number changed. An unlogged row committing on blur would
                   // mean tapping anywhere on the screen after typing a number
                   // recorded a set nobody confirmed.
-                  if (row.reps === null || !entered || typed === row.reps) return;
+                  if (row.value === null || !entered || typed === row.value) return;
 
                   onLog(row.index, typed);
                 }}
                 inputMode="numeric"
-                // Three digits, and `MAX_REPS` is three digits: the box cannot
-                // hold a value the action would refuse.
-                maxLength={3}
+                // As many digits as the unit's ceiling — three for `MAX_REPS`,
+                // four for `MAX_SECONDS` — so the box cannot hold a value
+                // longer than any the action would accept.
+                maxLength={String(kind === "seconds" ? MAX_SECONDS : MAX_REPS).length}
                 className="h-11 w-14 rounded-md border border-border bg-surface px-2 text-body tabular-nums text-text-primary outline-none placeholder:text-text-tertiary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                placeholder={
-                  exercise.targetRepsLow === null ? "" : String(exercise.targetRepsLow)
-                }
+                placeholder={offered === null ? "" : String(offered)}
               />
               {/* The mock's two states, in words: `8 reps` for a set performed
-                  and `Target 8` for one still on offer. An exercise with no rep
-                  target says neither and just names the unit. Last time's reps
-                  follow as a clause where there were any — FUEL-122. */}
+                  and `Target 8` for one still on offer — `sec` and `Target
+                  30–60s` for a timed one (FUEL-123). An exercise with no
+                  target says neither and just names the unit. Last time's
+                  figure follows as a clause where there was one — FUEL-122. */}
               <span className="text-slash text-text-tertiary">
                 {setUnitLine(
                   exercise,
-                  row.reps !== null,
-                  lastTimeReps(row.index, lastTime),
+                  row.value !== null,
+                  lastTimeValue(row.index, lastTime),
                 )}
               </span>
             </span>
@@ -582,14 +591,14 @@ function SetList({
               // mark lands where the mock draws it rather than 13px inside it.
               className={`-mr-[13px] flex h-11 w-11 shrink-0 items-center justify-center ${FOCUS_RING}`}
               aria-label={
-                row.reps === null ? `Log set ${row.index}` : `Remove set ${row.index}`
+                row.value === null ? `Log set ${row.index}` : `Remove set ${row.index}`
               }
               // One control with two states rather than two controls — the
               // reason `Recorded`'s three status buttons carry it too.
-              aria-pressed={row.reps !== null}
-              disabled={row.reps === null && wouldLog === null}
+              aria-pressed={row.value !== null}
+              disabled={row.value === null && wouldLog === null}
               onClick={() => {
-                if (row.reps !== null) {
+                if (row.value !== null) {
                   onRemove(row.index);
 
                   return;
@@ -605,7 +614,7 @@ function SetList({
                   // Ink rather than umber. § The Four Rules allows one accent
                   // element per screen and the day's dot has it; a filled tick
                   // is a mark, which is what the dot grid's own filled dots are.
-                  row.reps !== null && "border-text-primary bg-text-primary",
+                  row.value !== null && "border-text-primary bg-text-primary",
                 )}
               />
             </button>
@@ -826,7 +835,7 @@ function ExerciseSteps({
 type Attempt =
   | { kind: "record"; status: WorkoutLogStatus; note: string; duration: string }
   | { kind: "clear" }
-  | { kind: "log-set"; exerciseId: string; setIndex: number; reps: number }
+  | { kind: "log-set"; exerciseId: string; setIndex: number; value: number }
   | { kind: "remove-set"; exerciseId: string; setIndex: number };
 
 /**
@@ -1160,7 +1169,7 @@ export function Training({
             {
               exerciseId: attempt.exerciseId,
               setIndex: attempt.setIndex,
-              reps: attempt.reps,
+              value: attempt.value,
             },
           ];
     },
@@ -1183,11 +1192,18 @@ export function Training({
    * `lib/energy.ts` is pure and imports no pg-core precisely so this is
    * possible — the contract every module this component already imports keeps.
    */
+  const kindOf = new Map(
+    (session?.exercises ?? []).map((exercise) => [exercise.id, setKind(exercise)]),
+  );
   const energy = session
     ? sessionEnergy({
         type: session.type,
         exercises: session.exercises,
-        sets,
+        // In each exercise's own unit (FUEL-123): a plank's 45 is seconds of
+        // work, not 45 reps of it.
+        sets: sets.map((set) =>
+          storedSet(kindOf.get(set.exerciseId) ?? "reps", set.value),
+        ),
         durationMin: entry?.durationMin ?? null,
         /*
          * Always null here, and the reason is a ruling rather than an
@@ -1238,7 +1254,7 @@ export function Training({
                 entryId: session.entryId,
                 exerciseId: attempt.exerciseId,
                 setIndex: attempt.setIndex,
-                reps: attempt.reps,
+                value: attempt.value,
               })
             : await removeExerciseSet({
                 date,
@@ -1918,9 +1934,9 @@ export function Training({
                 lastTime={setsFor(currentEx.id, session?.lastTime ?? NO_SETS)}
                 drafts={drafts}
                 onDraft={(setIndex, value) => draft(currentEx.id, setIndex, value)}
-                onLog={(setIndex, reps) => {
+                onLog={(setIndex, value) => {
                   forget(currentEx.id, setIndex);
-                  act({ kind: "log-set", exerciseId: currentEx.id, setIndex, reps });
+                  act({ kind: "log-set", exerciseId: currentEx.id, setIndex, value });
                 }}
                 onRemove={(setIndex) => {
                   forget(currentEx.id, setIndex);

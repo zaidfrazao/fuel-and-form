@@ -1555,7 +1555,7 @@ describe.skipIf(!configured)("logging sets, scoped", () => {
       workoutId,
       exerciseId,
       setIndex: 1,
-      reps: 12,
+      kind: "reps", value: 12,
     });
 
     const created = (await logsOf(userId)).find((log) => log.date === UNLOGGED);
@@ -1580,7 +1580,7 @@ describe.skipIf(!configured)("logging sets, scoped", () => {
       workoutId,
       exerciseId,
       setIndex: 4,
-      reps: 6,
+      kind: "reps", value: 6,
     });
 
     const after = (await logsOf(userId)).find((log) => log.date === ALICE_LOGGED);
@@ -1594,7 +1594,7 @@ describe.skipIf(!configured)("logging sets, scoped", () => {
     const { userId, workoutId, exerciseId } = fixture.alice;
 
     // The fixture's own set is index 1. Writing it again is one row twice.
-    await logSet(userId, { date: ALICE_LOGGED, workoutId, exerciseId, setIndex: 1, reps: 7 });
+    await logSet(userId, { date: ALICE_LOGGED, workoutId, exerciseId, setIndex: 1, kind: "reps", value: 7 });
 
     const sets = await setsOf(userId);
 
@@ -1602,10 +1602,25 @@ describe.skipIf(!configured)("logging sets, scoped", () => {
     expect(sets.at(0)?.reps).toBe(7);
   });
 
+  it("stores a timed set as seconds, and a correction never leaves both — FUEL-123", async () => {
+    const { userId, workoutId, exerciseId } = fixture.alice;
+
+    // The fixture's set at index 1 is reps. Rewritten as seconds, the upsert
+    // must null `reps` in the same statement, or `exercise_sets_one_unit`
+    // refuses the row — this is the case the conflict clause writes both
+    // columns for, and only a real constraint can prove it.
+    await logSet(userId, { date: ALICE_LOGGED, workoutId, exerciseId, setIndex: 1, kind: "seconds", value: 45 });
+
+    const sets = await setsOf(userId);
+
+    expect(sets).toHaveLength(1);
+    expect(sets.at(0)).toMatchObject({ reps: null, seconds: 45 });
+  });
+
   it("adds a set beside the ones already there", async () => {
     const { userId, workoutId, exerciseId } = fixture.alice;
 
-    await logSet(userId, { date: ALICE_LOGGED, workoutId, exerciseId, setIndex: 2, reps: 10 });
+    await logSet(userId, { date: ALICE_LOGGED, workoutId, exerciseId, setIndex: 2, kind: "reps", value: 10 });
 
     expect((await setsOf(userId)).map((row) => row.setIndex)).toEqual([1, 2]);
   });
@@ -1615,7 +1630,7 @@ describe.skipIf(!configured)("logging sets, scoped", () => {
     // change rather than a migration, and nothing writes it until then.
     const { userId, workoutId, exerciseId } = fixture.alice;
 
-    await logSet(userId, { date: UNLOGGED, workoutId, exerciseId, setIndex: 1, reps: 12 });
+    await logSet(userId, { date: UNLOGGED, workoutId, exerciseId, setIndex: 1, kind: "reps", value: 12 });
 
     for (const row of await setsOf(userId)) expect(row.loadKg).toBeNull();
   });
@@ -1674,7 +1689,7 @@ describe.skipIf(!configured)("logging sets, scoped", () => {
         workoutId: bob.workoutId,
         exerciseId: fixture.alice.exerciseId,
         setIndex: 2,
-        reps: 12,
+        kind: "reps", value: 12,
       }),
     ).rejects.toThrow();
 
@@ -1712,7 +1727,7 @@ describe.skipIf(!configured)("logging sets, scoped", () => {
     // date's reps.
     const { userId, workoutId, exerciseId } = fixture.alice;
 
-    await logSet(userId, { date: UNLOGGED, workoutId, exerciseId, setIndex: 1, reps: 5 });
+    await logSet(userId, { date: UNLOGGED, workoutId, exerciseId, setIndex: 1, kind: "reps", value: 5 });
 
     const viewed = await loadTraining(userId, ALICE_LOGGED, new Date());
 
@@ -1765,7 +1780,7 @@ describe.skipIf(!configured)("last time's sets, scoped", () => {
 
     expect(await repsBefore(userId, ALICE_LOGGED)).toEqual([]);
 
-    await logSet(userId, { date: LATER, workoutId, exerciseId, setIndex: 1, reps: 11 });
+    await logSet(userId, { date: LATER, workoutId, exerciseId, setIndex: 1, kind: "reps", value: 11 });
 
     expect(await repsBefore(userId, LATER)).toEqual([[exerciseId, 1, ALICE_FIXTURE_REPS]]);
   });
@@ -1781,7 +1796,7 @@ describe.skipIf(!configured)("last time's sets, scoped", () => {
       [2, 8],
       [3, 7],
     ] as const) {
-      await logSet(userId, { date: EARLIER, workoutId, exerciseId, setIndex, reps });
+      await logSet(userId, { date: EARLIER, workoutId, exerciseId, setIndex, kind: "reps", value: reps });
     }
 
     expect(await repsBefore(userId, LATER)).toEqual([[exerciseId, 1, ALICE_FIXTURE_REPS]]);
@@ -1813,7 +1828,7 @@ describe.skipIf(!configured)("last time's sets, scoped", () => {
       workoutId,
       exerciseId: second!.id,
       setIndex: 1,
-      reps: 10,
+      kind: "reps", value: 10,
     });
 
     expect(await repsBefore(userId, LATER)).toEqual(

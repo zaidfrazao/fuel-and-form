@@ -800,6 +800,23 @@ export const workoutExercises = pgTable(
     targetRepsHigh: integer("target_reps_high"),
 
     /**
+     * A timed target, in seconds — FUEL-123.
+     *
+     * '3 x 30–60 sec' is three sets of a HOLD, which the three columns above
+     * could only describe as a set count with no rep target, and which the set
+     * rows then logged as reps: a 45-second plank stored as 45 reps. These are
+     * the same pair as the reps target, for the other unit, and on the same
+     * terms: transcribed by hand, never read off `prescription`, equal for a
+     * fixed target, and moving together.
+     *
+     * A row has a reps target or a seconds target, never both — the check below.
+     * Which one it has is what `exercise_sets` stores a set as, so an exercise
+     * with both would have no answer to "is this 30 reps or 30 seconds".
+     */
+    targetSecondsLow: integer("target_seconds_low"),
+    targetSecondsHigh: integer("target_seconds_high"),
+
+    /**
      * Form reference media — § P10, FUEL-94. All four nullable, and null is the
      * ordinary case: media exists for the exercises the project could licence,
      * and one without it renders no affordance rather than a broken box.
@@ -897,6 +914,21 @@ export const workoutExercises = pgTable(
           and ("target_reps_low" is null
                or ("target_reps_low" between 1 and 999
                    and "target_reps_high" between "target_reps_low" and 999))`,
+    ),
+
+    // FUEL-123. The seconds pair on the reps pair's terms, the ceiling the one
+    // `exercise_sets_seconds_range` holds a set to, and never beside a reps
+    // target. Every row already stored holds nulls here and satisfies all three.
+    check(
+      "workout_exercises_target_seconds_range",
+      sql`("target_seconds_low" is null) = ("target_seconds_high" is null)
+          and ("target_seconds_low" is null
+               or ("target_seconds_low" between 1 and 3600
+                   and "target_seconds_high" between "target_seconds_low" and 3600))`,
+    ),
+    check(
+      "workout_exercises_one_target_unit",
+      sql`"target_reps_low" is null or "target_seconds_low" is null`,
     ),
 
     // The media vocabulary — § P10, FUEL-94. Built from the one array, and
@@ -1231,7 +1263,22 @@ export const exerciseSets = pgTable(
 
     /** 1-based, and the ordinal the screen prints. Bounded by the check below. */
     setIndex: integer("set_index").notNull(),
-    reps: integer().notNull(),
+
+    /**
+     * What the set was, in exactly one of two units — FUEL-123.
+     *
+     * `reps` was `not null` until a plank had nowhere else to go, and a
+     * 45-second hold was stored, exported and costed as 45 reps. A timed set
+     * is `seconds` with `reps` null; every row written before this column
+     * existed is a reps row, and reads exactly as it did. The check below
+     * requires one and refuses both, so there is never a set of neither or a
+     * row that has to be tie-broken.
+     *
+     * Which one a set is follows its exercise's target (`setKind`), decided on
+     * the server — never by the client that sends the number.
+     */
+    reps: integer(),
+    seconds: integer(),
 
     /** Null until the gym restart — see above. Nothing writes it today. */
     loadKg: kilograms("load_kg"),
@@ -1290,6 +1337,10 @@ export const exerciseSets = pgTable(
      */
     check("exercise_sets_set_index_range", sql`"set_index" between 1 and 20`),
     check("exercise_sets_reps_range", sql`"reps" between 1 and 999`),
+    // An hour: far above any hold this program prescribes (the longest is a
+    // minute) and far below the point where a number stops meaning a set.
+    check("exercise_sets_seconds_range", sql`"seconds" between 1 and 3600`),
+    check("exercise_sets_one_unit", sql`("reps" is null) <> ("seconds" is null)`),
     check("exercise_sets_load_positive", sql`"load_kg" is null or "load_kg" > 0`),
   ],
 );

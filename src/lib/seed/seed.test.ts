@@ -183,22 +183,43 @@ describe("workout library", () => {
     expect(intervals.targetSets ?? null).toBeNull();
     expect(intervals.targetRepsLow ?? null).toBeNull();
     expect(intervals.targetRepsHigh ?? null).toBeNull();
+    // Nor seconds (FUEL-123): 40 is how long a round lasts, not a set.
+    expect(intervals.targetSecondsLow ?? null).toBeNull();
+    expect(intervals.targetSecondsHigh ?? null).toBeNull();
   });
 
-  it("gives a held exercise its sets and no rep target", () => {
+  it("gives a held exercise its sets and a seconds target, never a rep target", () => {
     // The second case where a person and a regex disagree: '3 x 30–60 sec' is
     // three sets of a hold. The set count transcribes; the seconds are not
     // reps, and a target of "30–60" against a plank is a number nobody wrote.
-    for (const name of ["Plank", "Superman hold", "Side plank"]) {
-      const held = exerciseNamed(name);
+    // Since FUEL-123 the seconds ARE transcribed — into the seconds columns,
+    // by hand, and asserted here value by value rather than read back out of
+    // the string, which is exactly the parse this rule forbids.
+    const holds: [workout: string, name: string, low: number, high: number][] = [
+      ["bodyweight-circuit-a", "Plank", 30, 60],
+      ["bodyweight-circuit-b", "Superman hold", 20, 40],
+      ["skipping-intervals-core", "Plank", 30, 45],
+      ["skipping-intervals-core", "Side plank", 20, 30],
+    ];
 
-      expect(held.targetSets).not.toBeNull();
-      expect(held.targetRepsLow ?? null).toBeNull();
-      expect(held.targetRepsHigh ?? null).toBeNull();
+    for (const [workout, name, low, high] of holds) {
+      const held = allExercises.find(
+        (exercise) => exercise.workout === workout && exercise.name === name,
+      );
 
-      // Whatever seconds the prescription names, they are not the target.
-      expect(numbersIn(held.prescription).length).toBeGreaterThan(1);
+      if (!held) throw new Error(`No seeded exercise named ${name} in ${workout}.`);
+
+      expect(held.targetSets, name).not.toBeNull();
+      expect(held.targetRepsLow ?? null, name).toBeNull();
+      expect(held.targetRepsHigh ?? null, name).toBeNull();
+      expect(held.targetSecondsLow, name).toBe(low);
+      expect(held.targetSecondsHigh, name).toBe(high);
     }
+
+    // And nothing else in the library is timed: every other seconds pair is null.
+    const timed = allExercises.filter((exercise) => (exercise.targetSecondsLow ?? null) !== null);
+
+    expect(timed).toHaveLength(holds.length);
   });
 
   it("transcribes a rep range where the prescription has one", () => {
@@ -230,6 +251,19 @@ describe("workout library", () => {
         expect(low).toBeGreaterThanOrEqual(1);
         expect(high).toBeGreaterThanOrEqual(low);
         expect(high).toBeLessThanOrEqual(999);
+      }
+
+      // `workout_exercises_target_seconds_range` and `_one_target_unit` — FUEL-123.
+      const secondsLow = exercise.targetSecondsLow ?? null;
+      const secondsHigh = exercise.targetSecondsHigh ?? null;
+
+      expect(secondsLow === null).toBe(secondsHigh === null);
+
+      if (secondsLow !== null && secondsHigh !== null) {
+        expect(secondsLow).toBeGreaterThanOrEqual(1);
+        expect(secondsHigh).toBeGreaterThanOrEqual(secondsLow);
+        expect(secondsHigh).toBeLessThanOrEqual(3600);
+        expect(low).toBeNull();
       }
     }
   });

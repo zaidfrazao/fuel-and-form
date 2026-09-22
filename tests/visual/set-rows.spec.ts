@@ -38,7 +38,21 @@ const ROWS = 'main li:has(input[aria-label^="Set "])';
  * `seed/workouts.ts`. Both are measured because the digits are proportional in
  * this face, so the character count does not settle which is wider.
  */
-const WIDEST = ["Target 30–40 · 40 last time", "Target 12–20 · 20 last time"];
+const WIDEST = [
+  "Target 30–40 · 40 last time",
+  "Target 12–20 · 20 last time",
+  /*
+   * The timed holds — FUEL-123. Every seconds range in the seed is two digits
+   * to two, so these four are the candidates, and all four are measured for
+   * the proportional-digit reason above. The unit is `s` against the figure
+   * rather than `sec`: `Target 30–60 sec · 60 last time` measured wider than
+   * the line's 164px, and wrapped.
+   */
+  "Target 30–60s · 60 last time",
+  "Target 30–45s · 45 last time",
+  "Target 20–40s · 40 last time",
+  "Target 20–30s · 30 last time",
+];
 
 async function enterSession(page: Page) {
   await page.clock.setFixedTime(FROZEN_NOW_MS);

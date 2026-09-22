@@ -290,7 +290,11 @@ export const SUPPORT_BAND: Band = { low: 2.0, high: 3.0 };
  * So they feed the DURATION and nothing else, and only where `duration_min` is
  * absent — a measured number beats a modelled one, always.
  *
- * The model is `reps × SECONDS_PER_REP + REST_SECONDS`, per set. Two to four
+ * The model is `reps × SECONDS_PER_REP + REST_SECONDS`, per set — or, for a
+ * timed set (FUEL-123), its own `seconds + REST_SECONDS`, because a hold's
+ * length is not modelled: it was measured, and the rep rate does not apply to
+ * it. Until that ticket a 45-second plank was stored as 45 reps and priced at
+ * 90 to 180 seconds of work. Two to four
  * seconds a rep covers the range from a fast bodyweight squat to a controlled
  * push-up; forty to eighty seconds of rest takes the seed's own '40 sec on /
  * 40 sec off' as its floor and twice that as its ceiling.
@@ -341,14 +345,20 @@ export type EnergyRange = { lowKcal: number; highKcal: number };
 /** A weigh-in, as `weight_logs` stores it and as this file needs it. */
 export type WeighIn = { date: CalendarDate; weightKg: number };
 
+/** One set as `exercise_sets` stores it: reps or seconds — FUEL-123. */
+export type StoredSet = { reps: number | null; seconds: number | null };
+
 /** What a session's cost is computed from. Structural — see the module note. */
 export type EnergyInput = {
   /** `workouts.type`. A value with no MET band yields no estimate. */
   type: string;
   /** The session's rows, for their sections only. */
   exercises: readonly { section: string }[];
-  /** The sets performed on this date, against this session — FUEL-91's rows. */
-  sets: readonly { reps: number }[];
+  /**
+   * The sets performed on this date, against this session — FUEL-91's rows.
+   * Exactly one of the two is non-null, as `exercise_sets_one_unit` holds it.
+   */
+  sets: readonly StoredSet[];
   /** `workout_logs.duration_min`. Wins outright over the modelled duration. */
   durationMin: number | null;
   /**
@@ -456,13 +466,23 @@ function apportion(durationMin: number, share: number): Band {
  * the vacuous-coverage trap this project has hit before, so the model is part of
  * the module's surface and is asserted directly.
  */
-export function modelledMinutes(sets: readonly { reps: number }[]): Band {
+export function modelledMinutes(sets: readonly StoredSet[]): Band {
   let low = 0;
   let high = 0;
 
   for (const set of sets) {
-    low += set.reps * SECONDS_PER_REP.low + REST_SECONDS.low;
-    high += set.reps * SECONDS_PER_REP.high + REST_SECONDS.high;
+    // A timed set's work is the same at both ends: it was measured. The rest
+    // around it is still a guess, and is the only width it adds.
+    const work: Band =
+      set.seconds !== null
+        ? { low: set.seconds, high: set.seconds }
+        : {
+            low: (set.reps ?? 0) * SECONDS_PER_REP.low,
+            high: (set.reps ?? 0) * SECONDS_PER_REP.high,
+          };
+
+    low += work.low + REST_SECONDS.low;
+    high += work.high + REST_SECONDS.high;
   }
 
   return { low: low / 60, high: high / 60 };

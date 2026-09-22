@@ -47,9 +47,13 @@ const rows = (count: number, section: string) =>
 /** A session's rows as the seed shapes one: a warm-up, the work, a cool-down. */
 const SESSION_ROWS = [...rows(2, "warmup"), ...rows(6, "work"), ...rows(2, "cooldown")];
 
-/** `count` sets of `reps`, which is all the duration model reads. */
+/** `count` sets of `reps` — a reps set, which is what every set was until FUEL-123. */
 const sets = (count: number, reps: number) =>
-  Array.from({ length: count }, () => ({ reps }));
+  Array.from({ length: count }, () => ({ reps, seconds: null }));
+
+/** `count` timed sets of `seconds` each — FUEL-123. */
+const holds = (count: number, seconds: number) =>
+  Array.from({ length: count }, () => ({ reps: null, seconds }));
 
 /**
  * The bodyweight every worked example below is costed at.
@@ -223,6 +227,22 @@ describe("where the duration comes from", () => {
       modelledMinutes(sets(3, 8)).high,
     );
     expect(modelledMinutes(sets(6, 10)).low).toBe(2 * modelledMinutes(sets(3, 10)).low);
+  });
+
+  test("prices a timed set at its measured seconds, not at a rep rate — FUEL-123", () => {
+    // Three 40-second holds: 3 × (40 + 40) = 240s low and 3 × (40 + 80) = 360s
+    // high. The work is the same at both ends because it was measured; only
+    // the rest is a guess. Stored as 40 reps, as it was before this ticket,
+    // the same holds modelled 3 × (40 × 2 + 40) = 360s to 3 × (40 × 4 + 80) =
+    // 720s — double the high end, for work nobody did.
+    expect(modelledMinutes(holds(3, 40))).toEqual({ low: 4, high: 6 });
+    expect(modelledMinutes(sets(3, 40))).toEqual({ low: 6, high: 12 });
+
+    // And a session mixing both sums the two models, set by set.
+    expect(modelledMinutes([...sets(3, 10), ...holds(3, 40)])).toEqual({
+      low: 3 + 4,
+      high: 6 + 6,
+    });
   });
 
   test("no sets model no time at all", () => {

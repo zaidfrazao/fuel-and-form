@@ -11,7 +11,12 @@ import {
   removeSet,
 } from "@/lib/db/queries/training";
 import { type CalendarDate, parseCalendarDate } from "@/lib/date";
-import { parseReps, parseSetIndex } from "@/lib/exercise-set";
+import {
+  parseSetIndex,
+  parseSetValue,
+  type SetKind,
+  setKind,
+} from "@/lib/exercise-set";
 import { parseSessionEntry } from "@/lib/session-entry";
 
 /**
@@ -107,7 +112,8 @@ async function resolveSession(
   date: CalendarDate,
   entryId: string,
 ): Promise<
-  { userId: string; workoutId: string; exerciseIds: Set<string> } | undefined
+  | { userId: string; workoutId: string; exerciseKinds: ReadonlyMap<string, SetKind> }
+  | undefined
 > {
   const session = await getSession();
 
@@ -139,8 +145,14 @@ async function resolveSession(
        * as evidence of a set performed in a session that never contained that
        * movement. Taking the candidates from the server's own resolution is
        * what closes it, exactly as re-resolving the workout does above.
+       *
+       * Keyed to each exercise's unit (FUEL-123) for the same reason: whether
+       * a number is reps or seconds is the server's row's to say, never the
+       * client's, so a forged request cannot store a plank as reps.
        */
-      exerciseIds: new Set(resolved.exercises.map((exercise) => exercise.id)),
+      exerciseKinds: new Map(
+        resolved.exercises.map((exercise) => [exercise.id, setKind(exercise)]),
+      ),
     }
   );
 }
@@ -279,16 +291,19 @@ export async function logExerciseSet(input: {
   entryId: string;
   exerciseId: string;
   setIndex: unknown;
-  reps: unknown;
+  /** Reps or seconds — which one is the exercise's, decided below. */
+  value: unknown;
 }): Promise<TrainingResult> {
   try {
     // Before anything is fetched, on `setSessionStatus`'s reasoning: a refusal
     // that costs a query is a refusal that can be used to make the database
     // work, and both of these are reachable by anyone who can POST here.
+    // The unit is not known until the exercise is, so the value is held to
+    // the wider of the two bounds here and to its own below.
     const setIndex = parseSetIndex(input.setIndex);
-    const reps = parseReps(input.reps);
+    const loose = parseSetValue(input.value, "seconds");
 
-    if (setIndex === undefined || reps === undefined) return FAILED;
+    if (setIndex === undefined || loose === undefined) return FAILED;
 
     const resolved = await resolveSession(input.date, input.entryId);
 
@@ -297,18 +312,25 @@ export async function logExerciseSet(input: {
     // `setSessionStatus` gives: the second most likely cause is a screen whose
     // plan changed underneath it, and this path returns before reaching the
     // refresh below.
-    if (!resolved || !resolved.exerciseIds.has(input.exerciseId)) {
+    const kind = resolved?.exerciseKinds.get(input.exerciseId);
+
+    if (!resolved || !kind) {
       refresh();
 
       return FAILED;
     }
+
+    const value = parseSetValue(loose, kind);
+
+    if (value === undefined) return FAILED;
 
     await logSet(resolved.userId, {
       date: input.date,
       workoutId: resolved.workoutId,
       exerciseId: input.exerciseId,
       setIndex,
-      reps,
+      kind,
+      value,
     });
 
     refresh();
@@ -347,7 +369,7 @@ export async function removeExerciseSet(input: {
 
     const resolved = await resolveSession(input.date, input.entryId);
 
-    if (!resolved || !resolved.exerciseIds.has(input.exerciseId)) {
+    if (!resolved || !resolved.exerciseKinds.has(input.exerciseId)) {
       refresh();
 
       return FAILED;

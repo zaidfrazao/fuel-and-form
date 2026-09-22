@@ -126,6 +126,8 @@ function seededLibrary() {
       targetSets: exercise.targetSets ?? null,
       targetRepsLow: exercise.targetRepsLow ?? null,
       targetRepsHigh: exercise.targetRepsHigh ?? null,
+      targetSecondsLow: exercise.targetSecondsLow ?? null,
+      targetSecondsHigh: exercise.targetSecondsHigh ?? null,
       mediaKey: exercise.mediaKey ?? null,
       mediaKind: exercise.mediaKind ?? null,
       mediaAlt: exercise.mediaAlt ?? null,
@@ -816,14 +818,21 @@ describe("set history", () => {
     const { exerciseSets } = demoHistory(provisionedOn(date));
 
     for (const set of exerciseSets) {
-      // `exercise_sets_set_index_range` and `exercise_sets_reps_range`. A
-      // generator that produced a row outside these would fail at the driver,
-      // during provisioning, for every visitor — and nothing else here runs
-      // against a real constraint.
+      // `exercise_sets_set_index_range`, `_reps_range`, `_seconds_range` and
+      // `_one_unit`. A generator that produced a row outside these would fail
+      // at the driver, during provisioning, for every visitor — and nothing
+      // else here runs against a real constraint.
       expect(set.setIndex).toBeGreaterThanOrEqual(1);
       expect(set.setIndex).toBeLessThanOrEqual(20);
-      expect(set.reps).toBeGreaterThanOrEqual(1);
-      expect(set.reps).toBeLessThanOrEqual(999);
+      expect((set.reps ?? null) === null).not.toBe((set.seconds ?? null) === null);
+
+      if (set.reps != null) {
+        expect(set.reps).toBeGreaterThanOrEqual(1);
+        expect(set.reps).toBeLessThanOrEqual(999);
+      } else {
+        expect(set.seconds).toBeGreaterThanOrEqual(1);
+        expect(set.seconds).toBeLessThanOrEqual(3600);
+      }
     }
   });
 
@@ -868,21 +877,39 @@ describe("set history", () => {
     }
   });
 
-  it.each(eachWeekday)("never invents a rep count for a timed hold, %s", (date) => {
+  it.each(eachWeekday)("logs a timed hold in seconds and never as reps, %s", (date) => {
     const input = provisionedOn(date);
     const { exerciseSets } = demoHistory(input);
 
+    // FUEL-123. The planks, the side plank and the superman hold carry a
+    // seconds target, and their sets are seconds; everything else is reps.
+    // Exactly one of the two, as `exercise_sets_one_unit` requires — and the
+    // skipping session, which has no target_sets at all, still declines for
+    // the reason workouts.ts gives.
     for (const set of exerciseSets) {
       const exercise = exerciseFor(input, set.exerciseId);
 
-      // The planks, the side plank and the superman hold carry a set count and
-      // no rep range, because seconds are not reps. `reps` is NOT NULL, so the
-      // only honest row for one is no row — and the skipping session, which has
-      // no target_sets at all, declines for the reason workouts.ts gives.
       expect(exercise.targetSets).not.toBeNull();
-      expect(exercise.targetRepsLow).not.toBeNull();
-      expect(exercise.targetRepsHigh).not.toBeNull();
+
+      if (exercise.targetSecondsLow !== null) {
+        expect(set.reps ?? null).toBeNull();
+        expect(set.seconds).not.toBeNull();
+      } else {
+        expect(set.seconds ?? null).toBeNull();
+        expect(set.reps).not.toBeNull();
+      }
     }
+
+  });
+
+  it("gives the demo holds to show, in seconds", () => {
+    // The bug FUEL-123 fixed is only visible where a plank has sets, so a
+    // history that quietly generated none would hide the fix exactly as it
+    // used to hide the bug. Four weeks of the program always include a
+    // circuit and an intervals session, and both carry a hold.
+    const { exerciseSets } = demoHistory(provisionedOn("2026-08-25"));
+
+    expect(exerciseSets.filter((set) => set.seconds != null).length).toBeGreaterThan(0);
   });
 
   it.each(eachWeekday)("performs the prescription, and never under it, %s", (date) => {
@@ -892,8 +919,14 @@ describe("set history", () => {
     for (const set of exerciseSets) {
       const exercise = exerciseFor(input, set.exerciseId);
 
-      expect(set.reps).toBeGreaterThanOrEqual(exercise.targetRepsLow!);
-      expect(set.reps).toBeLessThanOrEqual(exercise.targetRepsHigh!);
+      // In the set's own unit (FUEL-123).
+      const [value, low, high] =
+        exercise.targetSecondsLow !== null
+          ? [set.seconds, exercise.targetSecondsLow, exercise.targetSecondsHigh]
+          : [set.reps, exercise.targetRepsLow, exercise.targetRepsHigh];
+
+      expect(value).toBeGreaterThanOrEqual(low!);
+      expect(value).toBeLessThanOrEqual(high!);
       expect(set.setIndex).toBeLessThanOrEqual(exercise.targetSets!);
     }
   });
@@ -949,7 +982,11 @@ describe("set history", () => {
       // session that stopped two exercises in is not a done session.
       const eligible = working(
         input.workoutExercises.filter((row) => row.workoutId === log.workoutId),
-      ).filter((row) => row.targetSets !== null && row.targetRepsLow !== null);
+      ).filter(
+        (row) =>
+          row.targetSets !== null &&
+          (row.targetRepsLow !== null || row.targetSecondsLow !== null),
+      );
 
       expect(new Set(sets.map((set) => set.exerciseId)).size).toBe(eligible.length);
 
@@ -1015,7 +1052,7 @@ describe("set history", () => {
     }
   });
 
-  it("returns no sets when nothing in the library carries a rep range", () => {
+  it("returns no sets when nothing in the library carries a target range", () => {
     const input = provisionedOn("2026-08-25");
 
     // The empty batch `provisionDemoUser` guards against, reached the way it
@@ -1028,6 +1065,8 @@ describe("set history", () => {
         ...exercise,
         targetRepsLow: null,
         targetRepsHigh: null,
+        targetSecondsLow: null,
+        targetSecondsHigh: null,
       })),
     });
 

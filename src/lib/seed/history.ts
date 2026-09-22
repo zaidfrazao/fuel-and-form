@@ -23,6 +23,7 @@ import type {
   workoutLogs,
 } from "@/lib/db/schema";
 import type { ScopedInsert } from "@/lib/db/scope";
+import { setKind, storedSet } from "@/lib/exercise-set";
 // § P11's storage rules, applied to the demo's own routes — FUEL-100. The
 // generator below produces a raw track and `storableRoute` is what truncates,
 // trims and caps it, so the demo goes through the same write path a real
@@ -758,7 +759,9 @@ const SET_MINUTES = 3;
 const PARTIAL_REACH = { from: 1 / 3, spread: 1 / 3 } as const;
 
 /**
- * The reps performed in one set, tapering across an exercise.
+ * The reps performed in one set, tapering across an exercise — or, for a
+ * hold, the seconds (FUEL-123). A plank tires across its sets the same way a
+ * squat does, so the one taper serves both units.
  *
  * Drawn from the prescription's own range, with the top of the range coming
  * down as the sets go on. A flat draw over [12, 20] gives 20, 13, 18 — three
@@ -1138,21 +1141,27 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
       let setNumber = 0;
 
       rows.slice(0, reach).forEach((exercise, exerciseIndex) => {
-        const { targetSets, targetRepsLow: low, targetRepsHigh: high } = exercise;
+        const { targetSets } = exercise;
+        const kind = setKind(exercise);
+        const [low, high] =
+          kind === "seconds"
+            ? [exercise.targetSecondsLow, exercise.targetSecondsHigh]
+            : [exercise.targetRepsLow, exercise.targetRepsHigh];
 
-        // Two shapes of prescription decline sets here, and both are real rows
-        // in the shipped library rather than defensive branches:
+        // One shape of prescription declines sets here, and it is a real row
+        // in the shipped library rather than a defensive branch: no
+        // `target_sets` at all is the skipping session, whose "8–12 rounds"
+        // workouts.ts refuses to transcribe because "an interval session
+        // logged as eight sets of eight reps would be a record of something
+        // nobody did". The same argument forbids GENERATING one. It leaves a
+        // working exercise with no sets under a session that has some, which
+        // is a state the app reaches on the owner's account too.
         //
-        //   - No `target_sets` at all is the skipping session, whose "8–12
-        //     rounds" workouts.ts refuses to transcribe because "an interval
-        //     session logged as eight sets of eight reps would be a record of
-        //     something nobody did". The same argument forbids GENERATING one.
-        //   - A set count with no rep range is a timed HOLD — the planks, the
-        //     side plank, the superman. `reps` is NOT NULL, so a row here means
-        //     inventing a rep count for something measured in seconds.
-        //
-        // Both leave a working exercise with no sets under a session that has
-        // some, which is a state the app reaches on the owner's account too.
+        // The timed holds — the planks, the side plank, the superman — were a
+        // second shape until FUEL-123 gave them seconds targets. Before it,
+        // `reps` was NOT NULL and a row here meant inventing a rep count for
+        // something measured in seconds; now they log their seconds, which is
+        // what keeps the demo from showing the bug that ticket fixed.
         if (targetSets === null || low === null || high === null) return;
 
         for (let setIndex = 0; setIndex < targetSets; setIndex += 1) {
@@ -1165,7 +1174,7 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
             // 1-based, which is both the schema's check and the ordinal the
             // screen prints.
             setIndex: setIndex + 1,
-            reps: repsFor(low, high, setIndex, targetSets, n),
+            ...storedSet(kind, repsFor(low, high, setIndex, targetSets, n)),
             // From the window the session opens in — the log above is stamped
             // an hour later, at the end — so the sets fall inside the session
             // rather than after it.

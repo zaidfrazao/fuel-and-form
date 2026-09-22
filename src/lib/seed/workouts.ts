@@ -65,7 +65,11 @@ import { BODYWEIGHT_CIRCUIT, type SeedExercise, type SeedWorkout } from "./types
  *   - '3 x 12–20' is three sets of twelve to twenty, and transcribes cleanly.
  *   - '3 x 30–60 sec' is three sets of a HOLD. It has a set count and no rep
  *     target at all, because seconds are not reps, and a regex that took the
- *     first two numbers would offer "Target 30–60" against a plank.
+ *     first two numbers would offer "Target 30–60" against a plank. Since
+ *     FUEL-123 it has a SECONDS target, 30 to 60, transcribed by the same hand
+ *     into the columns that mean seconds, so the set rows log a hold as a hold.
+ *     'each side' is per side, as the dead bug's '10 each side' is per side:
+ *     the side plank's 20–30 is what one side is held for.
  *   - '8–12 rounds — 40 sec on / 40 sec off' has no target of either kind.
  *     Rounds are not sets, the first number in the string is 8, and an
  *     interval session logged as eight sets of eight reps would be a record of
@@ -243,6 +247,8 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetSets: 3,
         targetRepsLow: null,
         targetRepsHigh: null,
+        targetSecondsLow: 30,
+        targetSecondsHigh: 60,
         notes:
           "Straight line from heel to head. Squeeze the glutes — that's what stops the hips sagging.",
         mediaKey: "plank",
@@ -342,6 +348,8 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetSets: 3,
         targetRepsLow: null,
         targetRepsHigh: null,
+        targetSecondsLow: 20,
+        targetSecondsHigh: 40,
         notes:
           "Face down, lift chest and thighs off the floor. The only real posterior-chain and back work available without a pull-up bar — don't skip it.",
         mediaKey: "superman",
@@ -400,6 +408,8 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetSets: 3,
         targetRepsLow: null,
         targetRepsHigh: null,
+        targetSecondsLow: 30,
+        targetSecondsHigh: 45,
         notes: "Core finisher, straight after the intervals.",
         mediaKey: "plank",
         mediaKind: "image",
@@ -425,6 +435,8 @@ export const seedWorkouts: readonly SeedWorkout[] = [
         targetSets: 2,
         targetRepsLow: null,
         targetRepsHigh: null,
+        targetSecondsLow: 20,
+        targetSecondsHigh: 30,
         notes: null,
         mediaKey: "side-plank",
         mediaKind: "image",

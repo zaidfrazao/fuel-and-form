@@ -8,6 +8,7 @@ import { type CalendarDate, parseCalendarDate } from "@/lib/date";
 import { routedLogIds } from "@/lib/db/queries/route";
 import { loadTraining } from "@/lib/db/queries/training";
 import { resolveFormMedia } from "@/lib/form-media";
+import { setValue } from "@/lib/exercise-set";
 import type { TrainingSession } from "@/lib/resolve-training";
 import type { ExerciseSet, WorkoutLog } from "@/lib/db/schema";
 
@@ -129,6 +130,8 @@ function narrow(
       targetSets: exercise.targetSets,
       targetRepsLow: exercise.targetRepsLow,
       targetRepsHigh: exercise.targetRepsHigh,
+      targetSecondsLow: exercise.targetSecondsLow,
+      targetSecondsHigh: exercise.targetSecondsHigh,
       /*
        * Form media, resolved HERE and never on the client — § P10, FUEL-94.
        *
@@ -173,17 +176,18 @@ function narrow(
     sets: log
       ? sets
           .filter((set) => set.workoutLogId === log.id)
-          .map(({ exerciseId, setIndex, reps }) => ({ exerciseId, setIndex, reps }))
+          .map((set) => ({ exerciseId: set.exerciseId, setIndex: set.setIndex, value: setValue(set) }))
       : [],
     /*
      * Last time's sets for this session's own exercises — FUEL-122. Narrowed
-     * to the same three fields as the date's sets, and by exercise rather than
+     * to the same three fields as the date's sets — the number in whichever
+     * column holds it (FUEL-123) —, and by exercise rather than
      * by log: last time is per exercise, so one session's rows can come from
      * several earlier logs.
      */
     lastTime: previousSets
       .filter((set) => ids.has(set.exerciseId))
-      .map(({ exerciseId, setIndex, reps }) => ({ exerciseId, setIndex, reps })),
+      .map((set) => ({ exerciseId: set.exerciseId, setIndex: set.setIndex, value: setValue(set) })),
   };
 }
 

@@ -70,6 +70,7 @@ const CIRCUIT = "workout-circuit-b";
 const WALK_ENTRY = "entry-daily-walk";
 
 const EXERCISE = "exercise-press-ups";
+const HOLD = "exercise-plank";
 
 /** An exercise of the circuit, narrowed to what the resolver hands over. */
 const exercise = (id: string): WorkoutExercise => ({
@@ -84,6 +85,8 @@ const exercise = (id: string): WorkoutExercise => ({
   targetSets: 3,
   targetRepsLow: 12,
   targetRepsHigh: 12,
+  targetSecondsLow: null,
+  targetSecondsHigh: null,
   mediaKey: null,
   mediaKind: null,
   mediaAlt: null,
@@ -112,7 +115,19 @@ const training = (): Training => ({
         source: "rotation",
         entryId: ENTRY,
         kind: "session",
-        exercises: [exercise(EXERCISE)],
+        exercises: [
+          exercise(EXERCISE),
+          // A timed hold — FUEL-123. Its sets are seconds.
+          {
+            ...exercise(HOLD),
+            name: "Plank",
+            prescription: "3 x 30–60 sec",
+            targetRepsLow: null,
+            targetRepsHigh: null,
+            targetSecondsLow: 30,
+            targetSecondsHigh: 60,
+          },
+        ],
       },
       {
         workout: workout("workout-daily-walk", "Daily Walk", "walk"),
@@ -361,7 +376,7 @@ const logging = (overrides: Record<string, unknown> = {}) => ({
   entryId: ENTRY,
   exerciseId: EXERCISE,
   setIndex: 1,
-  reps: 12,
+  value: 12,
   ...overrides,
 });
 
@@ -376,18 +391,57 @@ describe("logging a set", () => {
       workoutId: CIRCUIT,
       exerciseId: EXERCISE,
       setIndex: 1,
-      reps: 12,
+      kind: "reps",
+      value: 12,
     });
     expect(refresh).toHaveBeenCalled();
   });
 
+  test("writes a timed exercise's number as seconds — FUEL-123", async () => {
+    expect(await logExerciseSet(logging({ exerciseId: HOLD, value: 45 }))).toEqual({
+      ok: true,
+    });
+
+    expect(logSet).toHaveBeenCalledWith(
+      USER,
+      expect.objectContaining({ exerciseId: HOLD, kind: "seconds", value: 45 }),
+    );
+  });
+
+  test("takes the unit from the exercise, never from the caller", async () => {
+    // The input has no `kind` field, and a forged one is ignored: a plank
+    // posted with `kind: "reps"` is still a plank, and still seconds. If the
+    // client could choose, a timed set could be stored as reps again — the
+    // bug this ticket exists to close.
+    await logExerciseSet({
+      ...logging({ exerciseId: HOLD, value: 45 }),
+      kind: "reps",
+    } as Parameters<typeof logExerciseSet>[0]);
+
+    expect(logSet).toHaveBeenCalledWith(
+      USER,
+      expect.objectContaining({ exerciseId: HOLD, kind: "seconds" }),
+    );
+  });
+
+  test("holds each unit to its own ceiling", async () => {
+    // 1200 is twenty minutes of plank, which `MAX_SECONDS` allows, and 1200
+    // reps, which `MAX_REPS` does not. The same number, two answers — and the
+    // wider bound checked before the fetch must not let it through as reps.
+    expect(await logExerciseSet(logging({ exerciseId: HOLD, value: 1200 }))).toEqual({
+      ok: true,
+    });
+    expect(await logExerciseSet(logging({ value: 1200 }))).toEqual({ ok: false });
+    expect(logSet).toHaveBeenCalledTimes(1);
+  });
+
   test("takes the numbers a form sends as strings", async () => {
-    expect(await logExerciseSet(logging({ setIndex: "2", reps: "8" }))).toEqual({
+    expect(await logExerciseSet(logging({ setIndex: "2", value: "8" }))).toEqual({
       ok: true,
     });
     expect(logSet).toHaveBeenCalledWith(
       USER,
-      expect.objectContaining({ setIndex: 2, reps: 8 }),
+      expect.objectContaining({ setIndex: 2, value: 8 }),
     );
   });
 
@@ -424,11 +478,13 @@ describe("logging a set", () => {
   });
 
   test.each([
-    ["zero reps", { reps: 0 }],
-    ["negative reps", { reps: -8 }],
-    ["a fraction", { reps: 8.5 }],
-    ["a number that is not one", { reps: "eight" }],
-    ["more reps than anyone performs", { reps: 100000 }],
+    ["zero reps", { value: 0 }],
+    ["negative reps", { value: -8 }],
+    ["a fraction", { value: 8.5 }],
+    ["a number that is not one", { value: "eight" }],
+    ["more reps than anyone performs", { value: 100000 }],
+    ["zero seconds", { exerciseId: HOLD, value: 0 }],
+    ["a hold longer than an hour", { exerciseId: HOLD, value: 3601 }],
     ["a zeroth set", { setIndex: 0 }],
     ["a set index past the ceiling", { setIndex: 1e9 }],
   ])("refuses %s before it reaches the database", async (_case, overrides) => {
@@ -440,7 +496,7 @@ describe("logging a set", () => {
     // The refusal costs no query, on `plan.ts`'s reasoning: a refusal that
     // costs a round trip is a refusal that can be used to make the database
     // work.
-    await logExerciseSet(logging({ reps: 0 }));
+    await logExerciseSet(logging({ value: 0 }));
 
     expect(loadTraining).not.toHaveBeenCalled();
   });
