@@ -1,7 +1,7 @@
 import "server-only";
 
-import { and, asc, between, desc, eq, gt, inArray, lte, sql } from "drizzle-orm";
-import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { and, asc, between, desc, eq, gt, inArray, lt, lte, sql } from "drizzle-orm";
+import { alias, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 import { adherenceWeeks, adherenceWindow } from "@/lib/adherence";
 import { nearestWeight } from "@/lib/energy";
@@ -91,6 +91,23 @@ export type Training = {
    * breaks the first time somebody adds a second reader.
    */
   sets: ExerciseSet[];
+  /**
+   * What each exercise was done at LAST TIME — § P10's recall, FUEL-122.
+   *
+   * For every exercise with any set before the viewed date, the sets of the
+   * latest such session and nothing older. Per exercise rather than per
+   * workout: an exercise row belongs to one workout, so this already means the
+   * same workout, and a partial session that never reached push-ups hands
+   * push-ups the time before it rather than nothing.
+   *
+   * Strictly before the viewed date, never on it. The date's own sets are
+   * `sets` above, and a "last time" that could be the set just ticked would
+   * read back the number the reader has only now written.
+   *
+   * Recall, and PRD § P10 says why it is not the personal record § Non-Goals
+   * rules out: it is one earlier session's own number, never a best.
+   */
+  previousSets: ExerciseSet[];
   /** Six weeks of dots, shaped — Brand Guide § The Dot Grid. */
   adherence: Week[];
   /**
@@ -155,7 +172,41 @@ export async function loadTraining(
   const viewing = date ?? today;
   const window = adherenceWindow(viewing);
 
-  const [workouts, template, exerciseRows, logs, sets, before, after] = await Promise.all([
+  /*
+   * The latest earlier session for each exercise, as `(exercise, log)` pairs —
+   * FUEL-122. `distinct on` keeps the first row per exercise in the order
+   * given, which is the newest date.
+   *
+   * Aliased, because the outer read is ALSO of `exercise_sets`: unaliased, the
+   * inner columns would resolve by Postgres's innermost-scope rule to the right
+   * table, and a reader would have to know that rule to see it. Its `user_id`
+   * is named here and the scope adds its own outside, the two independent
+   * filters the date's own sets use below.
+   *
+   * `exercise_sets` has no index on `exercise_id`, and this reads every earlier
+   * set the user has. One person's history is hundreds of rows a year; that is
+   * the size at which an index would be a guess, and `exercise_sets_user_log_idx`
+   * narrows it to the user already.
+   */
+  const earlier = alias(schema.exerciseSets, "earlier");
+  const latest = db
+    .selectDistinctOn([earlier.exerciseId], {
+      exerciseId: earlier.exerciseId,
+      workoutLogId: earlier.workoutLogId,
+    })
+    .from(earlier)
+    .innerJoin(
+      schema.workoutLogs,
+      and(
+        eq(schema.workoutLogs.id, earlier.workoutLogId),
+        eq(schema.workoutLogs.userId, earlier.userId),
+      ),
+    )
+    .where(and(eq(earlier.userId, userId), lt(schema.workoutLogs.date, viewing)))
+    .orderBy(asc(earlier.exerciseId), desc(schema.workoutLogs.date));
+
+  const [workouts, template, exerciseRows, logs, sets, previousSets, before, after] =
+    await Promise.all([
     s.select(schema.workouts),
     s.select(schema.trainingTemplateEntries),
     s.select(schema.workoutExercises, undefined, {
@@ -191,6 +242,21 @@ export async function loadTraining(
             ),
           ),
       ),
+      {
+        orderBy: [
+          asc(schema.exerciseSets.exerciseId),
+          asc(schema.exerciseSets.setIndex),
+        ],
+      },
+    ),
+
+    /*
+     * Last time's sets — FUEL-122, and the pairs are built above. Inside this
+     * same `Promise.all`, so the count of sequential waits stays at two.
+     */
+    s.select(
+      schema.exerciseSets,
+      sql`(${schema.exerciseSets.exerciseId}, ${schema.exerciseSets.workoutLogId}) in ${latest}`,
       {
         orderBy: [
           asc(schema.exerciseSets.exerciseId),
@@ -237,6 +303,7 @@ export async function loadTraining(
     day: trainingDay(plan, byWorkout(exerciseRows), viewing),
     logs: logs.filter((log) => log.date === viewing),
     sets,
+    previousSets,
     adherence: adherenceWeeks(plan, logs, viewing),
     bodyweightKg: nearestWeight(
       [...before, ...after],

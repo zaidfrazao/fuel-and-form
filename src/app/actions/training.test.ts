@@ -125,6 +125,7 @@ const training = (): Training => ({
   },
   logs: [],
   sets: [],
+  previousSets: [],
   adherence: [],
   bodyweightKg: 75,
 });

@@ -1723,3 +1723,116 @@ describe.skipIf(!configured)("logging sets, scoped", () => {
     expect(other?.sets.map((row) => row.reps)).toEqual([5]);
   });
 });
+
+/**
+ * FUEL-122 — last time's sets, against a real Postgres.
+ *
+ * The one read in `loadTraining` written as a row-value `in` over a
+ * `distinct on` subquery, which is exactly the shape a unit test cannot hold
+ * still: the ordering inside the subquery is what picks "latest", and a
+ * `distinct on` whose `order by` drifted would pick an arbitrary session and
+ * still return rows of the right type.
+ */
+describe.skipIf(!configured)("last time's sets, scoped", () => {
+  let fixture: Fixture;
+
+  beforeEach(async () => {
+    await truncateAll(getDb());
+    fixture = await seedFixture();
+  });
+
+  const LATER = "2026-03-09"; // a Monday after the fixture's own log
+  const EARLIER = "2026-02-23"; // a Monday before it
+
+  const repsBefore = async (userId: string, date: string) =>
+    (await loadTraining(userId, date, new Date()))?.previousSets.map((row) => [
+      row.exerciseId,
+      row.setIndex,
+      row.reps,
+    ]);
+
+  it("hands a later date the latest earlier session's sets", async () => {
+    const { userId, exerciseId } = fixture.alice;
+
+    expect(await repsBefore(userId, LATER)).toEqual([[exerciseId, 1, ALICE_FIXTURE_REPS]]);
+  });
+
+  it("gives a first session nothing, and never the date's own sets", async () => {
+    // The fixture's log is Alice's only one, so on its own date there is no
+    // earlier session. And a set logged on the viewed date is `sets`, not last
+    // time: recall that read back the set just ticked would be no recall.
+    const { userId, workoutId, exerciseId } = fixture.alice;
+
+    expect(await repsBefore(userId, ALICE_LOGGED)).toEqual([]);
+
+    await logSet(userId, { date: LATER, workoutId, exerciseId, setIndex: 1, reps: 11 });
+
+    expect(await repsBefore(userId, LATER)).toEqual([[exerciseId, 1, ALICE_FIXTURE_REPS]]);
+  });
+
+  it("takes the newest session and none older", async () => {
+    // Three sets on an older date, and the fixture's one set after it. The
+    // older session's set 2 and 3 must not fill in where the newer one stopped:
+    // last time is one session, not a merge of every session.
+    const { userId, workoutId, exerciseId } = fixture.alice;
+
+    for (const [setIndex, reps] of [
+      [1, 9],
+      [2, 8],
+      [3, 7],
+    ] as const) {
+      await logSet(userId, { date: EARLIER, workoutId, exerciseId, setIndex, reps });
+    }
+
+    expect(await repsBefore(userId, LATER)).toEqual([[exerciseId, 1, ALICE_FIXTURE_REPS]]);
+    // And between the two, the older one is last time.
+    expect(await repsBefore(userId, "2026-02-24")).toEqual([
+      [exerciseId, 1, 9],
+      [exerciseId, 2, 8],
+      [exerciseId, 3, 7],
+    ]);
+  });
+
+  it("passes over a session that never reached the exercise", async () => {
+    // Per exercise, not per workout. The fixture's session on 03-02 has
+    // press-ups only; a second exercise last trained on 02-23 takes 02-23's
+    // figure rather than nothing.
+    const { userId, workoutId, exerciseId } = fixture.alice;
+    const [second] = await scope(userId, getDb()).insert(schema.workoutExercises, {
+      workoutId,
+      name: "Reverse lunges",
+      prescription: "3 x 10",
+      sortOrder: 1,
+      targetSets: 3,
+      targetRepsLow: 8,
+      targetRepsHigh: 10,
+    });
+
+    await logSet(userId, {
+      date: EARLIER,
+      workoutId,
+      exerciseId: second!.id,
+      setIndex: 1,
+      reps: 10,
+    });
+
+    expect(await repsBefore(userId, LATER)).toEqual(
+      [
+        [exerciseId, 1, ALICE_FIXTURE_REPS],
+        [second!.id, 1, 10],
+      ].sort((a, b) => (String(a[0]) < String(b[0]) ? -1 : 1)),
+    );
+  });
+
+  it("never hands a demo visitor the owner's history", async () => {
+    // Bob's one set is 3 reps and Alice's is 5, so a leak cannot pass for a
+    // coincidence. The scope's WHERE is one filter and the subquery's own
+    // `user_id` is the other; this holds while either does.
+    const bob = fixture.bob;
+
+    expect(await repsBefore(bob.userId, LATER)).toEqual([
+      [bob.exerciseId, 1, "Bob".length],
+    ]);
+    expect(await repsBefore(bob.userId, BOB_DATE_LOGGED)).toEqual([]);
+  });
+});

@@ -119,6 +119,7 @@ const training = (overrides: Partial<TrainingView> = {}): TrainingView => ({
   },
   logs: [LOG],
   sets: [],
+  previousSets: [],
   adherence: [[{ date: TODAY, label: WORKOUT.name, status: "partial" }]],
   bodyweightKg: 75,
   ...overrides,
@@ -236,6 +237,35 @@ describe("what crosses to the browser", () => {
     await renderPage();
 
     expect(screen.getByRole("status").textContent).toBe("Not recorded.");
+  });
+});
+
+describe("last time's sets — FUEL-122", () => {
+  const EARLIER = {
+    id: "set-earlier",
+    userId: USER,
+    workoutLogId: "log-earlier",
+    exerciseId: EXERCISE.id,
+    setIndex: 1,
+    reps: 10,
+    loadKg: null,
+    createdAt: new Date("2026-03-05T18:00:00Z"),
+  };
+
+  test("reach the set rows through the narrowing", async () => {
+    // In the session state on arrival, the way a reload lands in it. What the
+    // narrowing drops is not assertable here — jsdom's markup never holds the
+    // props — so this pins only that last time arrives at all.
+    window.localStorage.setItem(`fuel:training-session:${TODAY}`, "1");
+    loadTraining.mockResolvedValue(training({ previousSets: [EARLIER] }));
+
+    try {
+      await renderPage();
+
+      expect(screen.getByText("Target 12 · 10 last time")).toBeTruthy();
+    } finally {
+      window.localStorage.clear();
+    }
   });
 });
 

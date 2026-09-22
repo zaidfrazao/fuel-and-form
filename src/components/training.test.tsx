@@ -154,6 +154,7 @@ const CIRCUIT: TrainingItem = {
   ],
   entry: null,
   sets: [],
+  lastTime: [],
 };
 
 const WALK: TrainingItem = {
@@ -164,6 +165,7 @@ const WALK: TrainingItem = {
   exercises: [],
   entry: null,
   sets: [],
+  lastTime: [],
 };
 
 /**
@@ -182,6 +184,7 @@ const AFTERNOON_WALK: TrainingItem = {
   exercises: [],
   entry: null,
   sets: [],
+  lastTime: [],
 };
 
 /** Two weeks of dots, enough for the grid to have something to say. */
@@ -1892,6 +1895,79 @@ describe("the sets sub-list", () => {
     await waitFor(() => expect(logExerciseSet).toHaveBeenCalledOnce());
     expect(setSessionStatus).not.toHaveBeenCalled();
     expect(clearSessionStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe("last time, on the set rows — FUEL-122", () => {
+  /** The session stepped straight, with last time's sets against it. */
+  const recalled = (
+    lastTime: ReturnType<typeof set>[],
+    sets: ReturnType<typeof set>[] = [],
+  ) => [{ ...CIRCUIT, type: "intervals", sets, lastTime }, WALK];
+
+  test("follows each row's target with that set's reps last time", () => {
+    resumed();
+    render(view({ sessions: recalled([set("e1", 1, 10), set("e1", 2, 9)]) }));
+
+    const rows = screen.getAllByRole("listitem").filter((row) =>
+      within(row).queryByLabelText(/^Set \d reps$/),
+    );
+
+    // By set number: row 1 is last time's set 1, row 2 its set 2, and row 3,
+    // which last time never reached, carries the target and nothing else.
+    expect(rows.map((row) => within(row).getByText(/^Target/).textContent)).toEqual([
+      "Target 12 · 10 last time",
+      "Target 12 · 9 last time",
+      "Target 12",
+    ]);
+  });
+
+  test("draws nothing at all on a first session", () => {
+    // No dash, no zero, no "first time" — the rows read exactly as they did
+    // before this ticket.
+    resumed();
+    render(view({ sessions: recalled([]) }));
+
+    expect(screen.getAllByText("Target 12")).toHaveLength(3);
+    expect(screen.queryByText(/last time/)).toBeNull();
+  });
+
+  test("reads only the exercise on screen", () => {
+    // Reverse lunges' last time is in the same list, and press-ups is the
+    // subject. `setsFor` is what keeps one exercise's history off another's rows.
+    resumed();
+    render(view({ sessions: recalled([set("e2", 1, 8), set("e2", 2, 7)]) }));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Press-ups");
+    expect(screen.queryByText(/last time/)).toBeNull();
+  });
+
+  test("keeps last time beside a set once it is logged", () => {
+    resumed();
+    render(
+      view({ sessions: recalled([set("e1", 1, 10), set("e1", 2, 9)], [set("e1", 1, 11)]) }),
+    );
+
+    expect(screen.getByLabelText<HTMLInputElement>("Set 1 reps").value).toBe("11");
+    expect(screen.getByText("reps · 10 last time")).toBeTruthy();
+    expect(screen.getByText("Target 12 · 9 last time")).toBeTruthy();
+  });
+
+  test("leaves the placeholder and the empty tick on the target, not last time", async () => {
+    // The ticket's one decision in writing: last time is text beside the box.
+    // A placeholder of 9 over a tick that logs 12 would be a box offering one
+    // number while the control recorded another.
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: recalled([set("e1", 1, 9)]) }));
+
+    expect(screen.getByLabelText<HTMLInputElement>("Set 1 reps").placeholder).toBe("12");
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    expect(logExerciseSet).toHaveBeenCalledWith(
+      expect.objectContaining({ exerciseId: "e1", setIndex: 1, reps: 12 }),
+    );
   });
 });
 

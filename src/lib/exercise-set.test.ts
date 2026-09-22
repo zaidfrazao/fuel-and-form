@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   currentExercise,
   isComplete,
+  lastTimeReps,
   type LoggedSet,
   MAX_REPS,
   MAX_PASSED,
@@ -17,6 +18,7 @@ import {
   setProgress,
   setRows,
   setsFor,
+  setUnitLine,
   stepSession,
   stepsByRound,
   targetLabel,
@@ -697,6 +699,58 @@ describe("targetLabel", () => {
     // database refuses — the guard is here because the type cannot say so.
     expect(targetLabel(target({ targetRepsLow: 8 }))).toBeNull();
     expect(targetLabel(target({ targetRepsHigh: 15 }))).toBeNull();
+  });
+});
+
+describe("lastTimeReps — FUEL-122", () => {
+  it("reads the same set number from last time", () => {
+    const previous = [set(1, 10), set(2, 9), set(3, 7)];
+
+    expect(lastTimeReps(1, previous)).toBe(10);
+    expect(lastTimeReps(2, previous)).toBe(9);
+    expect(lastTimeReps(3, previous)).toBe(7);
+  });
+
+  it("matches by set number, not by position", () => {
+    // Last time logged sets 1 and 3 and skipped 2. Row 2 has nothing to
+    // recall, and row 3 is set 3's figure rather than the second one listed.
+    const previous = [set(1, 10), set(3, 7)];
+
+    expect(lastTimeReps(2, previous)).toBeNull();
+    expect(lastTimeReps(3, previous)).toBe(7);
+  });
+
+  it("gives a row beyond last time's sets nothing", () => {
+    expect(lastTimeReps(3, [set(1, 10), set(2, 9)])).toBeNull();
+  });
+
+  it("gives a first session nothing", () => {
+    expect(lastTimeReps(1, [])).toBeNull();
+  });
+});
+
+describe("setUnitLine — FUEL-122", () => {
+  it("is the unit alone with no last time", () => {
+    // No dash, no zero, no "first time": a row with nothing to recall says
+    // exactly what it said before this ticket.
+    expect(setUnitLine(RANGE, false, null)).toBe("Target 8–15");
+    expect(setUnitLine(RANGE, true, null)).toBe("reps");
+    expect(setUnitLine(HELD, false, null)).toBe("reps");
+  });
+
+  it("follows the target with last time on a row still on offer", () => {
+    expect(setUnitLine(RANGE, false, 10)).toBe("Target 8–15 · 10 last time");
+    expect(setUnitLine(FIXED, false, 12)).toBe("Target 12 · 12 last time");
+  });
+
+  it("keeps last time once the set is logged", () => {
+    // The figure is what the reader compares the number they just wrote
+    // against, so it stays after the tick rather than leaving with the target.
+    expect(setUnitLine(RANGE, true, 10)).toBe("reps · 10 last time");
+  });
+
+  it("names the unit with last time for an exercise with no rep target", () => {
+    expect(setUnitLine(HELD, false, 30)).toBe("reps · 30 last time");
   });
 });
 
