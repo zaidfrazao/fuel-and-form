@@ -28,7 +28,11 @@ import {
   TRAINING_BAR_AT,
 } from "@/components/action-bar";
 import { DotGrid, type Week } from "@/components/dot-grid";
-import { ExerciseList, type ListedExercise } from "@/components/exercise-list";
+import {
+  ExerciseList,
+  type ListedExercise,
+  type RowOpens,
+} from "@/components/exercise-list";
 import { SlashMeta } from "@/components/kv-grid";
 import { PageMain } from "@/components/page-main";
 import { RecentSessions } from "@/components/recent-sessions";
@@ -1697,16 +1701,47 @@ export function Training({
   })();
 
   /**
-   * Which rows of the plan list may be opened, by id.
+   * Which working exercise the sets sheet is open for — § P10, FUEL-127.
+   *
+   * The plan state's door to a session's sets, on any date. The session state
+   * is today's alone and stays so — "you cannot start Tuesday's session on
+   * Thursday" — but correcting Tuesday's record is not starting it, and before
+   * this a past session's reps could not even be READ in the app.
+   *
+   * An id alone is enough here, where `FormRequest` needed its origin: only the
+   * plan state opens this sheet, so there is no second state for a stale id to
+   * be handed to. Entering the session answers it with nothing, which closes
+   * the sheet by construction — the session state has its own sub-list, and
+   * two editors of one set on one screen is one too many.
+   *
+   * Resolved against the WORKING rows, so an id that names a bookend opens
+   * nothing: § P10 offers set logging on the working section only.
+   */
+  const [setsOpenFor, setSetsOpenFor] = useState<string | null>(null);
+
+  const setsExercise = inSession
+    ? undefined
+    : workingExercises.find((exercise) => exercise.id === setsOpenFor);
+
+  /**
+   * Which rows of the plan list may be opened, by id, and what each opens —
+   * FUEL-108, FUEL-127.
+   *
+   * A WORKING row opens its sets, on every date. That is the half of § P10's
+   * first criterion the session state cannot reach: it is today's alone, so
+   * before FUEL-127 a past session's reps could not be read, a set trained
+   * without Start session could be logged only until midnight, and a wrong
+   * number noticed the next day was permanent. The reference is one tap on,
+   * inside that sheet, so a working row gives up nothing it offered.
+   *
+   * A warm-up or cool-down row opens its reference, as it did — § P10 offers
+   * the bookends no sets at all. One with no reference is absent from the map
+   * and its row draws nothing, the refusal the session state's button makes:
+   * a control that promises a sheet that does not exist is worse than none.
    *
    * Derived rather than fetched: `page.tsx` resolves `media` for every exercise
-   * in the session and not only for the one being worked, so this is a set
-   * built from data the screen already holds. Nothing new crosses the wire.
-   *
-   * An exercise with no reference is absent from this set and its row draws
-   * nothing — the same refusal the session state's button makes, for the same
-   * reason: a control that promises a reference that does not exist is worse
-   * than no control.
+   * in the session and not only for the one being worked, so this is built
+   * from data the screen already holds. Nothing new crosses the wire.
    *
    * ## Plain derivations, and not `useMemo`
    *
@@ -1719,11 +1754,12 @@ export function Training({
    * lint rule that says so (`react-hooks/preserve-manual-memoization`) is an
    * error rather than a warning for exactly that reason.
    */
-  const formAvailable = new Set(
-    (session?.exercises ?? [])
-      .filter((exercise) => exercise.media !== null)
-      .map((exercise) => exercise.id),
-  );
+  const rowOpens = new Map<string, RowOpens>();
+
+  for (const exercise of allExercises) {
+    if (workingExercises.includes(exercise)) rowOpens.set(exercise.id, "sets");
+    else if (exercise.media !== null) rowOpens.set(exercise.id, "form");
+  }
 
   const draft = (exerciseId: string, setIndex: number, value: string) =>
     setDrafts((previous) => new Map(previous).set(`${exerciseId}#${setIndex}`, value));
@@ -1736,6 +1772,26 @@ export function Training({
 
       return next;
     });
+
+  /**
+   * A set written or taken back, from whichever sub-list the reader used.
+   *
+   * The session state's and the sets sheet's (FUEL-127) are the same two
+   * writes. What differs is only what the session state does AROUND the log —
+   * a circuit's rest, which belongs to training rather than to correcting a
+   * record — so that stays at its call site and this is the part they share.
+   * The draft is forgotten first, so the stored value takes over the box on
+   * the frame the optimistic row lands.
+   */
+  const commitSet = (exerciseId: string, setIndex: number, value: number) => {
+    forget(exerciseId, setIndex);
+    act({ kind: "log-set", exerciseId, setIndex, value });
+  };
+
+  const withdrawSet = (exerciseId: string, setIndex: number) => {
+    forget(exerciseId, setIndex);
+    act({ kind: "remove-set", exerciseId, setIndex });
+  };
 
   /**
    * Set progress for the plan state's rows, in one pass over the date's sets.
@@ -1809,13 +1865,22 @@ export function Training({
        * Offered on every date, not only today. `canEnter` gates STARTING
        * a session, which is a claim about what can be performed now; how
        * a movement is done is not a claim about today at all.
+       *
+       * A working row opens its SETS since FUEL-127, and the reference
+       * from inside that sheet — see `rowOpens`. Same door, same reason:
+       * what Tuesday's session recorded is not a claim about today either,
+       * and correcting it is not starting it, so the session state stays
+       * today's and the record is read and corrected here.
        */}
       <ExerciseList
         exercises={of.exercises}
         progress={progress}
-        form={{
-          available: formAvailable,
-          onShow: (id) => setFormFor({ id, from: "plan" }),
+        affordance={{
+          available: rowOpens,
+          onShow: (id) =>
+            rowOpens.get(id) === "sets"
+              ? setSetsOpenFor(id)
+              : setFormFor({ id, from: "plan" }),
         }}
       />
     </section>
@@ -2217,13 +2282,9 @@ export function Training({
 
                       if (rest !== null) startRest(CIRCUIT_REST[rest]);
 
-                      forget(currentEx.id, setIndex);
-                      act({ kind: "log-set", exerciseId: currentEx.id, setIndex, value });
+                      commitSet(currentEx.id, setIndex, value);
                     }}
-                    onRemove={(setIndex) => {
-                      forget(currentEx.id, setIndex);
-                      act({ kind: "remove-set", exerciseId: currentEx.id, setIndex });
-                    }}
+                    onRemove={(setIndex) => withdrawSet(currentEx.id, setIndex)}
                   />
                 </>
               )}
@@ -2376,6 +2437,88 @@ export function Training({
             exerciseName={formExercise.name}
             media={formExercise.media}
           />
+        ) : null}
+
+        {/*
+         * A working exercise's sets, from the plan row — § P10, FUEL-127.
+         *
+         * The session state's own sub-list in a sheet, on any date: the
+         * logged reps readable, a set addable by the tick or by Enter, a
+         * number correctable by retyping it, and a set removable by
+         * untapping. `SetList` is not copied — it is the same component on
+         * the same drafts and the same two writes, so a correction here and
+         * one in the session state cannot come to mean different things.
+         *
+         * A SHEET, because § Progressive Disclosure bans the accordion by
+         * name and FUEL-108 settled what a plan row does instead: it opens
+         * one rather than growing one. So the list's window is untouched.
+         *
+         * What it does NOT carry, and why: no rest timer and no stepping,
+         * which are the session state's and are about training rather than
+         * about the record; and no status, note or duration, which a set
+         * edit may not touch — the writes below are `logExerciseSet` and
+         * `removeExerciseSet` and nothing else. The one exception is the
+         * server's, not this sheet's: a first set on a session with no
+         * record creates one as `partial`, FUEL-91's rule in `logSet`, and
+         * the refresh after it shows that record here.
+         *
+         * `Show form` hands over to the reference sheet rather than stacking
+         * one on the other, so there is only ever one sheet open. It is
+         * absent, not disabled, where there is no reference.
+         *
+         * The failure banner is repeated inside, because the bar that
+         * carries it is behind an `aria-modal` panel: a refusal reported only
+         * there would be reported to nobody.
+         */}
+        {setsExercise ? (
+          <Sheet
+            open
+            onOpenChange={(open) => {
+              if (!open) setSetsOpenFor(null);
+            }}
+            title={`Sets · ${setsExercise.name}`}
+          >
+            {failure &&
+            (failure.kind === "log-set" || failure.kind === "remove-set") &&
+            failure.exerciseId === setsExercise.id ? (
+              <div role="alert" className="flex items-center justify-between gap-3">
+                <p className="text-slash text-error">{banner(failure)}</p>
+                <Button variant="link" size="xs" onClick={() => act(failure)}>
+                  Try again
+                </Button>
+              </div>
+            ) : null}
+
+            <div className="flex flex-col gap-2">
+              <SlashMeta>{setsExercise.prescription}</SlashMeta>
+              {setsExercise.media ? (
+                <Button
+                  variant="link"
+                  size="xs"
+                  className="self-start px-0"
+                  onClick={() => {
+                    setSetsOpenFor(null);
+                    setFormFor({ id: setsExercise.id, from: "plan" });
+                  }}
+                >
+                  Show form
+                </Button>
+              ) : null}
+            </div>
+
+            <section className="flex flex-col gap-[14px]">
+              <Eyebrow>Sets</Eyebrow>
+              <SetList
+                exercise={setsExercise}
+                logged={setsFor(setsExercise.id, sets)}
+                lastTime={setsFor(setsExercise.id, session?.lastTime ?? NO_SETS)}
+                drafts={drafts}
+                onDraft={(setIndex, value) => draft(setsExercise.id, setIndex, value)}
+                onLog={(setIndex, value) => commitSet(setsExercise.id, setIndex, value)}
+                onRemove={(setIndex) => withdrawSet(setsExercise.id, setIndex)}
+              />
+            </section>
+          </Sheet>
         ) : null}
 
         {/*
