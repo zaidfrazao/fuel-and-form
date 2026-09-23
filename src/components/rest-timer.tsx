@@ -1,9 +1,16 @@
 "use client";
 
-import { type RefObject, useEffect, useRef, useSyncExternalStore } from "react";
+import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
-import { REST_PRESETS, parseRestEnd, restLabel, restReading } from "@/lib/rest-timer";
+import {
+  MAX_CUSTOM_REST_SECONDS,
+  REST_PRESETS,
+  parseCustomRest,
+  parseRestEnd,
+  restLabel,
+  restReading,
+} from "@/lib/rest-timer";
 import { hold, release } from "@/lib/wake-lock";
 
 /**
@@ -164,8 +171,25 @@ function write(endsAt: number | null): void {
   emit();
 }
 
-/** The tap that starts a rest. Module scope, so no clock is read in render. */
-function startRest(seconds: number, audio: RefObject<AudioContext | null>): void {
+/**
+ * The audio context, at module scope since FUEL-126.
+ *
+ * It lived in a ref inside the component while the component's own buttons
+ * were the only thing that started a rest. A circuit's rest now starts on the
+ * tick that logs a set, in `training.tsx`, and that tick is the gesture that
+ * has to prime it — see `prime`. There is one timer on a page, so one context.
+ */
+const audio: RefObject<AudioContext | null> = { current: null };
+
+/**
+ * Starts a rest of `seconds`. Module scope, so no clock is read in render.
+ *
+ * Exported for FUEL-126's automatic rest, and it must be called INSIDE the
+ * gesture that caused it — a preset's tap, or the tick that logged a set —
+ * because it primes the sound. A timer already running is replaced, which is
+ * what a new set means: the rest before it is over.
+ */
+export function startRest(seconds: number): void {
   // On the tap, because this is the gesture — see `prime`.
   prime(audio);
   write(Date.now() + seconds * 1000);
@@ -417,7 +441,25 @@ export function RestTimer() {
    */
   const now = useSyncExternalStore(subscribe, paintedSnapshot, () => 0);
 
-  const audio = useRef<AudioContext | null>(null);
+  /**
+   * The custom box's contents, or `null` while the presets are drawn —
+   * FUEL-126. Component state and never stored: a half-typed rest is not a
+   * rest, and there is nothing to resume after a reload.
+   */
+  const [custom, setCustom] = useState<string | null>(null);
+
+  /*
+   * A rest started from outside the row — a logged set in a circuit — closes
+   * the box, or it would come back half-typed when that rest ended. Adjusted
+   * during render rather than in an effect, for the reason
+   * `useSyncExternalStore` is used above: no second render pass.
+   */
+  const [seen, setSeen] = useState(endsAt);
+
+  if (seen !== endsAt) {
+    setSeen(endsAt);
+    if (endsAt !== null) setCustom(null);
+  }
   const lock = useRef<WakeLockSentinel | null>(null);
   /** Whether a lock is still wanted by the time the platform grants one. */
   const wantsLock = useRef(false);
@@ -483,7 +525,8 @@ export function RestTimer() {
   }, [endsAt]);
 
   // The audio context outlives individual timers — the gesture that primed it
-  // has already happened — but not the component.
+  // has already happened — but not the component, which is the only thing on
+  // the page that can sound it.
   useEffect(
     () => () => {
       void audio.current?.close().catch(() => {});
@@ -506,7 +549,56 @@ export function RestTimer() {
     <div className="flex items-center justify-between gap-3 border-b border-border pb-3">
       <span className="text-micro uppercase text-text-tertiary">Rest</span>
 
-      {reading === null ? (
+      {reading === null && custom !== null ? (
+        /*
+         * The custom rest — FUEL-126. It takes the presets' place in the row,
+         * the swap the row already makes for a running timer, so nothing opens
+         * and nothing is laid over the bar (§ Progressive Disclosure).
+         *
+         * A form, so Enter starts it — the set rows' own confirm. Seconds,
+         * digits only, for `parseCustomRest`'s reason, and stripped as they
+         * arrive like every other number box on this screen.
+         */
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+
+            const seconds = parseCustomRest(custom);
+
+            if (seconds === null) return;
+
+            startRest(seconds);
+            setCustom(null);
+          }}
+        >
+          <span className="flex items-center gap-2">
+            <input
+              aria-label="Rest in seconds"
+              value={custom}
+              onChange={(event) => setCustom(event.target.value.replace(/\D/g, ""))}
+              inputMode="numeric"
+              maxLength={String(MAX_CUSTOM_REST_SECONDS).length}
+              // The reader tapped `Custom` to type here; making them tap again
+              // to reach the box would be a second step for one intent.
+              autoFocus
+              className="h-11 w-16 rounded-md border border-border bg-surface px-2 text-body tabular-nums text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            />
+            <span className="text-slash text-text-tertiary">sec</span>
+          </span>
+          <Button
+            type="submit"
+            variant="secondary"
+            size="xs"
+            disabled={parseCustomRest(custom) === null}
+          >
+            Start
+          </Button>
+          <Button type="button" variant="link" size="xs" onClick={() => setCustom(null)}>
+            Cancel
+          </Button>
+        </form>
+      ) : reading === null ? (
         /*
          * Presets rather than a keypad — `WALK_PRESETS`' precedent, and
          * `walk-row.tsx` is where the interaction is drawn. Labelled in the
@@ -514,6 +606,9 @@ export function RestTimer() {
          * button is the figure the timer starts from: a control reading `1:30`
          * beside a readout counting down from `1:30` is one number in one
          * register, where "90s" would be a second.
+         *
+         * `Custom` follows them since FUEL-126, as a Text button: it is the way
+         * to a box rather than a rest, so it does not wear a preset's slab.
          */
         <div className="flex items-center gap-2">
           {REST_PRESETS.map((seconds) => (
@@ -522,11 +617,14 @@ export function RestTimer() {
               variant="secondary"
               size="xs"
               className="tabular-nums"
-              onClick={() => startRest(seconds, audio)}
+              onClick={() => startRest(seconds)}
             >
               {restLabel(seconds * 1000)}
             </Button>
           ))}
+          <Button variant="link" size="xs" onClick={() => setCustom("")}>
+            Custom
+          </Button>
         </div>
       ) : (
         <>
