@@ -262,10 +262,12 @@ describe("the session", () => {
     const rows = within(exercises as HTMLElement).getAllByRole("listitem");
 
     expect(rows).toHaveLength(3);
+    // Each working row is the door to its sets since FUEL-127, and says so
+    // before its contents — an `sr-only` prefix, announced and not drawn.
     expect(rows.map((row) => row.textContent)).toEqual([
-      "01Press-ups3 x 12",
-      "02Reverse lunges/ Slow down.3 x 10 ea",
-      "03Plank3 x 45s",
+      "Show sets for 01Press-ups3 x 12",
+      "Show sets for 02Reverse lunges/ Slow down.3 x 10 ea",
+      "Show sets for 03Plank3 x 45s",
     ]);
   });
 
@@ -3406,31 +3408,43 @@ describe("form reference media", () => {
    * the row rather than against a string that used to be unique.
    */
   describe("from the plan state", () => {
-    test("a row with a reference is the control that opens it", async () => {
+    test("a working row opens its sets, and the reference is inside them", async () => {
       // FUEL-90 put the affordance with the subject, and the reader who is
       // PLANNING never reaches a subject: the session state is today-only and
-      // shows one exercise at a time. Before this, checking a movement before
-      // starting was three gates away from the state you were in.
+      // shows one exercise at a time. FUEL-108 gave the row the reference;
+      // FUEL-127 gave a working row its sets, and the reference moved one tap
+      // on, into that sheet — handed over rather than stacked.
       const user = userEvent.setup();
 
       render(view({ sessions: withMedia() }));
 
       await user.click(
-        await list().findByRole("button", { name: /Show form for.*Press-ups/ }),
+        await list().findByRole("button", { name: /Show sets for.*Press-ups/ }),
       );
 
-      expect(await screen.findByRole("dialog")).toBeTruthy();
-      expect(screen.getByText("Form · Press-ups")).toBeTruthy();
+      const sets = await screen.findByRole("dialog", { name: "Sets · Press-ups" });
+
+      await user.click(within(sets).getByRole("button", { name: "Show form" }));
+
+      expect(await screen.findByRole("dialog", { name: "Form · Press-ups" })).toBeTruthy();
+      // One sheet at a time: the sets sheet gave way to the reference.
+      expect(screen.getAllByRole("dialog")).toHaveLength(1);
     });
 
-    test("a row with no reference offers nothing", async () => {
+    test("a working row with no reference opens sets that offer none", async () => {
       // The other two exercises in the fixture carry `media: null`. Absent, not
       // disabled — the same refusal the session state's button makes.
+      const user = userEvent.setup();
+
       render(view({ sessions: withMedia() }));
 
-      expect(await list().findByRole("button", { name: /Show form for.*Press-ups/ })).toBeTruthy();
-      expect(list().queryByRole("button", { name: /Show form for.*Reverse lunges/ })).toBeNull();
-      expect(list().queryByRole("button", { name: /Show form for.*Plank/ })).toBeNull();
+      await user.click(
+        await list().findByRole("button", { name: /Show sets for.*Reverse lunges/ }),
+      );
+
+      const sets = await screen.findByRole("dialog", { name: "Sets · Reverse lunges" });
+
+      expect(within(sets).queryByRole("button", { name: "Show form" })).toBeNull();
     });
 
     test("opens the exercise that was pressed, not the one the session is on", async () => {
@@ -3455,10 +3469,43 @@ describe("form reference media", () => {
       );
 
       await user.click(
-        await list().findByRole("button", { name: /Show form for.*Reverse lunges/ }),
+        await list().findByRole("button", { name: /Show sets for.*Reverse lunges/ }),
+      );
+      await user.click(
+        within(await screen.findByRole("dialog")).getByRole("button", { name: "Show form" }),
       );
 
       expect(await screen.findByText("Form · Reverse lunges")).toBeTruthy();
+    });
+
+    test("a bookend row opens its reference directly, and without one offers nothing", async () => {
+      // § P10 offers set logging on the working section only, so a warm-up row
+      // has no sets to open — its door is still FUEL-108's, straight to the
+      // reference. The cool-down here has none, so its row stays inert.
+      const user = userEvent.setup();
+
+      render(
+        view({
+          sessions: [
+            {
+              ...SECTIONED,
+              exercises: SECTIONED.exercises.map((exercise) =>
+                exercise.id === "u1" ? { ...exercise, media: MEDIA } : exercise,
+              ),
+            },
+            WALK,
+          ],
+        }),
+      );
+
+      expect(list().queryByRole("button", { name: /Show sets for.*Joint prep/ })).toBeNull();
+      expect(list().queryByRole("button", { name: /Lower-body stretches/ })).toBeNull();
+
+      await user.click(
+        await list().findByRole("button", { name: /Show form for.*Joint prep/ }),
+      );
+
+      expect(await screen.findByRole("dialog", { name: "Form · Joint prep" })).toBeTruthy();
     });
 
     test("a request made in one state does not answer in the other", async () => {
@@ -3500,13 +3547,21 @@ describe("form reference media", () => {
     test("is offered on a past date, where a session cannot be started", async () => {
       // `canEnter` gates STARTING a session — a claim about what can be
       // performed now. How a movement is done is not a claim about today, so
-      // the reference is not gated with it.
+      // the reference is not gated with it, and neither is the record.
+      const user = userEvent.setup();
+
       render(view({ sessions: withMedia(), date: "2026-08-31", today: "2026-09-07" }));
 
       expect(bar().queryByRole("button", { name: "Start session" })).toBeNull();
-      expect(
-        await list().findByRole("button", { name: /Show form for.*Press-ups/ }),
-      ).toBeTruthy();
+
+      await user.click(
+        await list().findByRole("button", { name: /Show sets for.*Press-ups/ }),
+      );
+      await user.click(
+        within(await screen.findByRole("dialog")).getByRole("button", { name: "Show form" }),
+      );
+
+      expect(await screen.findByRole("dialog", { name: "Form · Press-ups" })).toBeTruthy();
     });
   });
 
@@ -3673,5 +3728,230 @@ describe("form reference media", () => {
     // too — which is what says the sheet closed on identity rather than on the
     // media going away.
     expect(screen.getByRole("button", { name: "Show form" })).toBeTruthy();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* FUEL-127 — a session's sets, from the plan row, on any date                */
+/* -------------------------------------------------------------------------- */
+
+describe("the sets sheet", () => {
+  const PAST = "2026-08-17"; // the Monday before TODAY
+
+  /** The circuit on a past date, with two sets of press-ups on record. */
+  const past = (sets: ReturnType<typeof set>[] = [set("e1", 1, 10), set("e1", 2, 9)]) =>
+    view({
+      date: PAST,
+      today: TODAY,
+      sessions: [
+        {
+          ...CIRCUIT,
+          entry: { status: "done", note: "Felt strong.", durationMin: 30 },
+          sets,
+        },
+        WALK,
+      ],
+    });
+
+  const open = async (user: ReturnType<typeof userEvent.setup>, name = "Press-ups") => {
+    await user.click(
+      await list().findByRole("button", { name: new RegExp(`Show sets for.*${name}`) }),
+    );
+
+    return within(await screen.findByRole("dialog", { name: `Sets · ${name}` }));
+  };
+
+  test("reads a past session's reps, which nothing in the app could before", async () => {
+    // The first acceptance criterion. Before FUEL-127 the plan row said
+    // `/ 2 of 3 sets` and the numbers themselves reached only the export.
+    const user = userEvent.setup();
+
+    render(past());
+
+    const sheet = await open(user);
+
+    expect(
+      (sheet.getByRole("textbox", { name: "Set 1 reps" }) as HTMLInputElement).value,
+    ).toBe("10");
+    expect(
+      (sheet.getByRole("textbox", { name: "Set 2 reps" }) as HTMLInputElement).value,
+    ).toBe("9");
+    expect(
+      (sheet.getByRole("textbox", { name: "Set 3 reps" }) as HTMLInputElement).value,
+    ).toBe("");
+    // The one still missing is on offer, as the session state offers it.
+    expect(sheet.getByRole("button", { name: "Log set 3" })).toBeTruthy();
+  });
+
+  test("adds a set to the past date, addressed to that date", async () => {
+    const user = userEvent.setup();
+
+    render(past());
+
+    const sheet = await open(user);
+
+    await user.click(sheet.getByRole("button", { name: "Log set 3" }));
+
+    await waitFor(() =>
+      expect(logExerciseSet).toHaveBeenCalledWith({
+        date: PAST,
+        entryId: CIRCUIT.entryId,
+        exerciseId: "e1",
+        setIndex: 3,
+        value: 12,
+      }),
+    );
+  });
+
+  test("corrects a logged number when the box loses focus", async () => {
+    // The session state's rule, because it is the session state's component:
+    // a logged row commits a changed number on blur, an unlogged one does not.
+    const user = userEvent.setup();
+
+    render(past());
+
+    const sheet = await open(user);
+    const box = sheet.getByRole("textbox", { name: "Set 1 reps" });
+
+    await user.clear(box);
+    await user.type(box, "8");
+    await user.tab();
+
+    await waitFor(() =>
+      expect(logExerciseSet).toHaveBeenCalledWith(
+        expect.objectContaining({ date: PAST, exerciseId: "e1", setIndex: 1, value: 8 }),
+      ),
+    );
+  });
+
+  test("removes a set by untapping it", async () => {
+    const user = userEvent.setup();
+    // Held, so the optimistic row is observed while the server is still out —
+    // a mock that resolves at once reverts it to the fixture before `findBy`.
+    const held = deferred<{ ok: true }>();
+    removeExerciseSet.mockReturnValue(held.promise);
+
+    render(past());
+
+    const sheet = await open(user);
+
+    await user.click(sheet.getByRole("button", { name: "Remove set 2" }));
+
+    // Optimistic, so the row is open again before the server answers.
+    expect(await sheet.findByRole("button", { name: "Log set 2" })).toBeTruthy();
+    expect(removeExerciseSet).toHaveBeenCalledWith({
+      date: PAST,
+      entryId: CIRCUIT.entryId,
+      exerciseId: "e1",
+      setIndex: 2,
+    });
+
+    held.settle({ ok: true });
+  });
+
+  test("leaves the session's status, note and duration alone", async () => {
+    // A set edit is `logExerciseSet` or `removeExerciseSet` and nothing else.
+    // The record was marked done with a note and a duration, and none of the
+    // three writes that could change it may be reached from this sheet.
+    const user = userEvent.setup();
+
+    render(past());
+
+    const sheet = await open(user);
+
+    await user.click(sheet.getByRole("button", { name: "Log set 3" }));
+    await user.click(sheet.getByRole("button", { name: "Remove set 1" }));
+
+    await waitFor(() => expect(removeExerciseSet).toHaveBeenCalledOnce());
+    expect(logExerciseSet).toHaveBeenCalledOnce();
+    expect(setSessionStatus).not.toHaveBeenCalled();
+    expect(clearSessionStatus).not.toHaveBeenCalled();
+  });
+
+  test("reports a refused set inside the sheet, where the reader is", async () => {
+    // The bar's banner is behind an `aria-modal` panel, so a refusal reported
+    // only there would be reported to nobody.
+    const user = userEvent.setup();
+    logExerciseSet.mockResolvedValue({ ok: false });
+
+    render(past());
+
+    const sheet = await open(user);
+
+    await user.click(sheet.getByRole("button", { name: "Log set 3" }));
+
+    expect((await sheet.findByRole("alert")).textContent).toContain(
+      "Couldn’t save that set.",
+    );
+  });
+
+  test("never makes a past date a session state", async () => {
+    // "Only today has one" stands: the record is corrected here, and the
+    // session is still never started on Thursday for Tuesday.
+    const user = userEvent.setup();
+
+    render(past());
+    await open(user);
+
+    expect(screen.queryByRole("button", { name: "Mark done" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
+  });
+
+  test("is today's plan state's door too, and entering the session closes it", async () => {
+    // The row does the same thing on every date. Once the session is entered
+    // the sub-list is the session state's, and two editors of one set on one
+    // screen would be one too many — so the request answers with nothing.
+    const user = userEvent.setup();
+
+    render(view());
+    await open(user);
+
+    resumed();
+    window.dispatchEvent(new StorageEvent("storage"));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+  });
+
+  test("stays closed when the session is left again — the request is retired, not hidden", async () => {
+    // FUEL-108's resurrection bug, which `FormRequest` exists to rule out for
+    // the form sheet. A request that entering only HID would survive the
+    // session and reopen this sheet, unasked, the moment it ended.
+    const user = userEvent.setup();
+
+    render(view());
+    await open(user);
+
+    resumed();
+    window.dispatchEvent(new StorageEvent("storage"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    window.localStorage.removeItem(`fuel:training-session:${TODAY}`);
+    window.dispatchEvent(new StorageEvent("storage"));
+
+    // Back in the plan state, which is what makes the absence mean something.
+    // (Two copies of the bar in the plan state, one per position — FUEL-118.)
+    expect(
+      await screen.findAllByRole("button", { name: "Start session" }),
+    ).not.toHaveLength(0);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("starts no rest, which is the session state's and not the record's", async () => {
+    // FUEL-126 starts a circuit's rest on a newly logged set. Correcting a
+    // record is not training, so the plan state's sheet must not start one.
+    const user = userEvent.setup();
+
+    render(view());
+
+    const sheet = await open(user);
+
+    await user.click(sheet.getByRole("button", { name: "Log set 1" }));
+    await waitFor(() => expect(logExerciseSet).toHaveBeenCalledOnce());
+
+    // `rest-timer.tsx` mirrors a running rest to this key, and the session
+    // state's own log in a circuit writes it (FUEL-126's tests).
+    expect(window.localStorage.getItem("fuel:rest-timer")).toBeNull();
   });
 });

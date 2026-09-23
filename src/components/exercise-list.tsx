@@ -5,8 +5,29 @@ import { bySection } from "@/lib/section";
 import { cn } from "@/lib/utils";
 
 /**
- * The form-reference affordance, offered by the screen rather than by the row —
- * § P10, FUEL-108.
+ * What a row opens — FUEL-127.
+ *
+ * `form` is FUEL-108's reference sheet. `sets` is the sheet that reads and
+ * corrects the sets logged against a working exercise, on any date, which the
+ * session state cannot reach because it is today's alone. A row opens ONE of
+ * the two, and the screen decides which: a working exercise opens its sets
+ * (the reference is one tap further, inside that sheet), a warm-up or
+ * cool-down row opens its reference, since § P10 offers it no sets at all.
+ *
+ * The value is also what the row's `sr-only` prefix says, so a screen reader
+ * hears what THIS row does rather than what the list's first row did.
+ */
+export type RowOpens = "form" | "sets";
+
+/** The prefix each kind of row announces before its contents. */
+const OPENS_PREFIX: Record<RowOpens, string> = {
+  form: "Show form for ",
+  sets: "Show sets for ",
+};
+
+/**
+ * The row affordance, offered by the screen rather than by the row — § P10,
+ * FUEL-108, and what it opens since FUEL-127.
  *
  * ## Why this is a prop and not something the row works out for itself
  *
@@ -14,8 +35,9 @@ import { cn } from "@/lib/utils";
  * FUEL-94's criterion is that media is "never loaded on `/`", and `/`'s whole
  * argument for rendering a session at all is that it is showing you today at a
  * glance. So the affordance is opt-in: `/training` passes this, `/` passes
- * nothing, and a row with no `form` renders precisely the markup it rendered
- * before this ticket — no button, no chevron, no `group`, no hover classes.
+ * nothing, and a row with no `affordance` renders precisely the markup it
+ * rendered before FUEL-108 — no button, no underline, no `group`, no hover
+ * classes.
  *
  * That is also what keeps the component renderable from a server component,
  * which `/` needs and this file's closing note has claimed since FUEL-27: with
@@ -24,25 +46,25 @@ import { cn } from "@/lib/utils";
  * ## One object rather than two optional props
  *
  * `available` and `onShow` are useless apart, and apart they are also
- * silently wrong in both directions: a handler with no set makes every row
- * inert, and a set with no handler draws chevrons that do nothing. Neither
+ * silently wrong in both directions: a handler with no map makes every row
+ * inert, and a map with no handler draws underlines that do nothing. Neither
  * would throw and neither would look broken in a screenshot. Bundling them
  * makes both states unrepresentable rather than merely unlikely.
  *
- * `available` is a set of ids rather than a predicate for `progress`'s reason
- * one prop up: the caller derives it once, and the row does a lookup instead of
+ * `available` is a map rather than a predicate for `progress`'s reason one prop
+ * up: the caller derives it once, and the row does a lookup instead of
  * re-deciding per render.
  */
-export type FormAffordance = {
+export type RowAffordance = {
   /**
-   * The exercises that HAVE a reference, by id.
+   * The rows that open something, by id, and what each opens.
    *
-   * A row outside this set draws nothing at all — not a disabled control, which
-   * would promise a reference that does not exist. `training.tsx` refuses the
-   * same state at the other end for the same reason: the session's "Show form"
-   * is absent rather than disabled where `media` is null.
+   * A row outside this map draws nothing at all — not a disabled control, which
+   * would promise a sheet that does not exist. `training.tsx` refuses the same
+   * state at the other end for the same reason: the session's "Show form" is
+   * absent rather than disabled where `media` is null.
    */
-  available: ReadonlySet<string>;
+  available: ReadonlyMap<string, RowOpens>;
   onShow: (exerciseId: string) => void;
 };
 
@@ -98,12 +120,13 @@ export type ListedExercise = Pick<
  * it is "displayed verbatim, never parsed" — so no formatting happens here that
  * could disagree with what was entered.
  *
- * ## A row may be the form affordance — § P10, FUEL-108
+ * ## A row may be the affordance — § P10, FUEL-108, FUEL-127
  *
- * Where the screen passes `form`, a row with a reference becomes the control
- * that opens it. FUEL-90 refused a per-row affordance on two grounds and only
- * one of them was about this: the accordion ban stands, and is why the row
- * OPENS A SHEET rather than expanding in place. The other was height — the plan
+ * Where the screen passes `affordance`, a row with something to open becomes
+ * the control that opens it: its sets on a working row, its reference on a
+ * bookend (FUEL-127 added the first). FUEL-90 refused a per-row affordance on
+ * two grounds and only one of them was about this: the accordion ban stands,
+ * and is why the row OPENS A SHEET rather than expanding in place. The other was height — the plan
  * list had no room to grow a control — and that argument is spent by a shape
  * that adds none, because the row itself is the control.
  *
@@ -114,13 +137,13 @@ export type ListedExercise = Pick<
  * one and "1." on the other happens, and the version that drifts is the one
  * nobody is looking at. There is no server or client boundary crossed by the
  * move: no state, no handlers, just rows — so both an RSC and a client
- * component can render it. `form` does not change that; it is the caller's
+ * component can render it. `affordance` does not change that; it is the caller's
  * handler, and the screen that has one is a client component already.
  */
 export function ExerciseList({
   exercises,
   progress,
-  form,
+  affordance,
 }: {
   exercises: readonly ListedExercise[];
   /**
@@ -141,13 +164,13 @@ export function ExerciseList({
    */
   progress?: ReadonlyMap<string, string>;
   /**
-   * The form-reference affordance, or nothing — § P10, FUEL-108.
+   * The row affordance, or nothing — § P10, FUEL-108, FUEL-127.
    *
    * Optional for `progress`'s reason and one further one: `progress` is a fact
    * `/` merely has no room for, while this is one `/` is forbidden to show. See
-   * `FormAffordance` above.
+   * `RowAffordance` above.
    */
-  form?: FormAffordance;
+  affordance?: RowAffordance;
 }) {
   if (exercises.length === 0) {
     // A workout with no exercise rows is valid data — the daily walk is exactly
@@ -171,7 +194,7 @@ export function ExerciseList({
    * that have rows, so there is never a heading with nothing under it to draw.
    */
   if (groups.length === 1)
-    return <Rows exercises={exercises} progress={progress} form={form} />;
+    return <Rows exercises={exercises} progress={progress} affordance={affordance} />;
 
   return (
     /*
@@ -201,7 +224,7 @@ export function ExerciseList({
           <h2 className="text-slash uppercase tracking-[0.16em] text-text-secondary">
             {group.label}
           </h2>
-          <Rows exercises={group.exercises} progress={progress} form={form} />
+          <Rows exercises={group.exercises} progress={progress} affordance={affordance} />
         </section>
       ))}
     </div>
@@ -220,27 +243,27 @@ export function ExerciseList({
 function Rows({
   exercises,
   progress,
-  form,
+  affordance,
 }: {
   exercises: readonly ListedExercise[];
   progress?: ReadonlyMap<string, string>;
-  form?: FormAffordance;
+  affordance?: RowAffordance;
 }) {
   return (
     <ol className="flex flex-col">
       {exercises.map((exercise, index) => {
         /*
-         * Whether THIS row is a control — § P10, FUEL-108.
+         * Whether THIS row is a control, and what it opens — § P10, FUEL-108,
+         * FUEL-127.
          *
          * Two conditions, and the second is the one that matters: the screen
-         * has to offer the affordance at all, and this exercise has to have a
-         * reference. Skipping intervals has none by FUEL-107's deliberate
-         * decision, so its row stays exactly what it was.
+         * has to offer the affordance at all, and this row has to have
+         * something to open. A cool-down with no reference has neither sets nor
+         * a form, so its row stays exactly what it was.
          */
-        const showForm =
-          form && form.available.has(exercise.id)
-            ? () => form.onShow(exercise.id)
-            : undefined;
+        const opens = affordance?.available.get(exercise.id);
+        const onOpen =
+          affordance && opens ? () => affordance.onShow(exercise.id) : undefined;
 
         /*
          * § Accessibility's 4.5, on the rows that became controls.
@@ -255,7 +278,7 @@ function Rows({
          * `undefined` on an inert row rather than an empty string, so `cn`
          * appends nothing and `/`'s markup is the markup it had.
          */
-        const lift = showForm ? HOVER_LIFT : undefined;
+        const lift = onOpen ? HOVER_LIFT : undefined;
 
         const content = (
           <>
@@ -288,7 +311,7 @@ function Rows({
               <span
                 className={cn(
                   "text-body text-text-primary",
-                  showForm && "underline decoration-text-tertiary underline-offset-4",
+                  onOpen && "underline decoration-text-tertiary underline-offset-4",
                 )}
               >
                 {exercise.name}
@@ -329,7 +352,7 @@ function Rows({
          *
          * This branch is what `/` renders, unchanged by FUEL-108.
          */
-        if (!showForm) {
+        if (!onOpen || !opens) {
           return (
             <li key={exercise.id} className={cn(ROW_LAYOUT, ROW_HAIRLINE)}>
               {content}
@@ -348,7 +371,7 @@ function Rows({
           <li key={exercise.id} className={ROW_HAIRLINE}>
             <button
               type="button"
-              onClick={showForm}
+              onClick={onOpen}
               className={cn(
                 ROW_LAYOUT,
                 "group w-full text-left",
@@ -380,7 +403,7 @@ function Rows({
                * and why it costs no layout — `day-ruler.tsx` and `dot-grid.tsx`
                * lean on the same property.
                */}
-              <span className="sr-only">{"Show form for "}</span>
+              <span className="sr-only">{OPENS_PREFIX[opens]}</span>
               {content}
             </button>
           </li>

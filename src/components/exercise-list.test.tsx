@@ -1,7 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 
-import { ExerciseList, type ListedExercise } from "@/components/exercise-list";
+import {
+  ExerciseList,
+  type ListedExercise,
+  type RowAffordance,
+} from "@/components/exercise-list";
 import { WORKING_SECTION } from "@/lib/section";
 
 /**
@@ -182,7 +186,7 @@ describe("a workout with no exercises at all", () => {
  * session, so neither would report it.
  */
 describe("the form affordance", () => {
-  const AVAILABLE = new Set(["w1"]);
+  const AVAILABLE = new Map([["w1", "form"]] as const);
 
   test("without the prop there is no control at all, which is what `/` renders", () => {
     // The regression guard for FUEL-94's criterion, asserted on the component
@@ -199,7 +203,7 @@ describe("the form affordance", () => {
     // without a reference deliberately, and a control that promises one that
     // does not exist is the state `training.tsx` refuses at the other end too.
     render(
-      <ExerciseList exercises={SESSION} form={{ available: AVAILABLE, onShow: () => {} }} />,
+      <ExerciseList exercises={SESSION} affordance={{ available: AVAILABLE, onShow: () => {} }} />,
     );
 
     const buttons = screen.getAllByRole("button");
@@ -222,7 +226,7 @@ describe("the form affordance", () => {
     render(
       <ExerciseList
         exercises={[exercise({ id: "w1", notes: "Sit back like you're reaching for a chair." })]}
-        form={{ available: new Set(["w1"]), onShow: () => {} }}
+        affordance={{ available: new Map([["w1", "form"]]), onShow: () => {} }}
       />,
     );
 
@@ -244,7 +248,7 @@ describe("the form affordance", () => {
     render(
       <ExerciseList
         exercises={SESSION}
-        form={{ available: new Set(["w2"]), onShow: (id) => shown.push(id) }}
+        affordance={{ available: new Map([["w2", "form"]]), onShow: (id) => shown.push(id) }}
       />,
     );
 
@@ -261,7 +265,13 @@ describe("the form affordance", () => {
     render(
       <ExerciseList
         exercises={SESSION}
-        form={{ available: new Set(["u1", "c1"]), onShow: () => {} }}
+        affordance={{
+          available: new Map([
+            ["u1", "form"],
+            ["c1", "form"],
+          ]),
+          onShow: () => {},
+        }}
       />,
     );
 
@@ -273,6 +283,29 @@ describe("the form affordance", () => {
     ]);
   });
 
+  test("each row announces what IT opens, not what the list's first row does", () => {
+    // FUEL-127. A working row opens its sets and a bookend its reference, in
+    // one list — so the prefix is per row. A list-wide prefix would tell a
+    // screen reader that a warm-up row opens sets it has never had, which is
+    // the promise of an action that does not exist, made in words.
+    render(
+      <ExerciseList
+        exercises={SESSION}
+        affordance={{
+          available: new Map([
+            ["u1", "form"],
+            ["w1", "sets"],
+          ]),
+          onShow: () => {},
+        }}
+      />,
+    );
+
+    expect(
+      screen.getAllByRole("button").map((button) => button.textContent),
+    ).toEqual(["Show form for 01Joint prep~2 min", "Show sets for 01Squats3 x 12"]);
+  });
+
   test("keeps the row a row: one list item, still carrying its own content", () => {
     // § Lists' window is a height, and the whole argument for this shape is that
     // it adds none. A control drawn as a second row — or a row that gained a
@@ -281,7 +314,7 @@ describe("the form affordance", () => {
     render(
       <ExerciseList
         exercises={[exercise({ id: "w1" })]}
-        form={{ available: AVAILABLE, onShow: () => {} }}
+        affordance={{ available: AVAILABLE, onShow: () => {} }}
       />,
     );
 
@@ -308,15 +341,12 @@ describe("the form affordance", () => {
  * back, whatever box it is.
  */
 describe("the affordance adds no box", () => {
-  const only = (form?: {
-    available: ReadonlySet<string>;
-    onShow: (id: string) => void;
-  }) => {
+  const only = (affordance?: RowAffordance) => {
     const { unmount } = render(
       <ExerciseList
         exercises={[exercise({ id: "w1", notes: "Squeeze at the top." })]}
         progress={new Map([["w1", "2 of 3 sets"]])}
-        form={form}
+        affordance={affordance}
       />,
     );
     const row = screen.getByRole("listitem");
@@ -348,7 +378,7 @@ describe("the affordance adds no box", () => {
 
   test("a control row holds the same elements as an inert one, plus the button", () => {
     const inert = only();
-    const control = only({ available: new Set(["w1"]), onShow: () => {} });
+    const control = only({ available: new Map([["w1", "sets"]]), onShow: () => {} });
 
     // One added element that occupies space, and it is the wrapper itself — no
     // glyph, no spacer, no second span holding a mark.
@@ -361,7 +391,7 @@ describe("the affordance adds no box", () => {
     // already there: nothing to lay out. The `sr-only` prefix is excluded
     // above for the same reason — it is announced, not drawn.
     const inert = only();
-    const control = only({ available: new Set(["w1"]), onShow: () => {} });
+    const control = only({ available: new Map([["w1", "sets"]]), onShow: () => {} });
 
     expect(control.text).toBe(inert.text);
   });
