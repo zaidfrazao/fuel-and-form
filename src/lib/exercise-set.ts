@@ -726,3 +726,31 @@ export function setProgress(target: SetTarget, logged: readonly LoggedSet[]): st
     ? `${logged.length} ${logged.length === 1 ? "set" : "sets"}`
     : `${logged.length} of ${target.targetSets} sets`;
 }
+
+/**
+ * What an exercise's sets WERE, as words — `10 · 10 · 8 reps` — for the recap
+ * a recorded session leads with (FUEL-128).
+ *
+ * The values and the unit, and nothing derived from them. Not `of 3`, which is
+ * `setProgress`'s ratio and is the adherence-as-a-percentage PRD § P10 refuses;
+ * not a total or a best, which is the progression engine § Non-Goals rules
+ * out. The reader wrote each of these numbers into a box, and this reads them
+ * back.
+ *
+ * In set order, sorted here for the reason `setsFor` gives: a second reader is
+ * exactly when an ordering held by accident breaks. `sec` rather than `s` —
+ * `UNIT_WORD`, the word the logged row itself uses beside its box.
+ *
+ * `null` for no sets, on `setProgress`'s terms: the recap omits the exercise
+ * rather than reporting an absence about it.
+ */
+export function setsDone(target: SetTarget, logged: readonly LoggedSet[]): string | null {
+  if (logged.length === 0) return null;
+
+  const values = [...logged]
+    .sort((a, b) => a.setIndex - b.setIndex)
+    .map((set) => set.value)
+    .join(" · ");
+
+  return `${values} ${UNIT_WORD[setKind(target)]}`;
+}
