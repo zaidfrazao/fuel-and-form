@@ -449,8 +449,9 @@ export function RestTimer() {
   const [custom, setCustom] = useState<string | null>(null);
 
   /*
-   * A rest started from outside the row — a logged set in a circuit — closes
-   * the box, or it would come back half-typed when that rest ended. Adjusted
+   * Any rest that starts closes the box: the box's own, and one started from
+   * outside the row by a logged set in a circuit, which would otherwise leave
+   * it to come back half-typed when that rest ended. Adjusted
    * during render rather than in an effect, for the reason
    * `useSyncExternalStore` is used above: no second render pass.
    */
@@ -568,8 +569,8 @@ export function RestTimer() {
 
             if (seconds === null) return;
 
+            // The box closes because a rest started — see `seen` above.
             startRest(seconds);
-            setCustom(null);
           }}
         >
           <span className="flex items-center gap-2">
