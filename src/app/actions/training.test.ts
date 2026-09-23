@@ -456,6 +456,21 @@ describe("logging a set", () => {
     expect(logSet).not.toHaveBeenCalled();
   });
 
+  test("writes a past date as the caller and only the caller — FUEL-127", async () => {
+    // The plan state's sets sheet reaches this action on any date, which makes
+    // "whose session" the question worth pinning: the user comes from the
+    // cookie at every step, never from the request, so a demo visitor paging
+    // back through their own week can only ever address their own rows.
+    const DEMO = "99999999-8888-7777-6666-555555555555";
+    getSession.mockResolvedValue({ userId: DEMO, kind: "demo" as const });
+
+    expect(await logExerciseSet(logging({ date: "2026-03-02" }))).toEqual({ ok: true });
+
+    expect(loadTraining).toHaveBeenCalledWith(DEMO, "2026-03-02", expect.any(Date));
+    expect(logSet).toHaveBeenCalledWith(DEMO, expect.objectContaining({ date: "2026-03-02" }));
+    expect(logSet).not.toHaveBeenCalledWith(USER, expect.anything());
+  });
+
   test("refuses an entry the date does not hold", async () => {
     expect(await logExerciseSet(logging({ entryId: "entry-elsewhere" }))).toEqual({
       ok: false,
