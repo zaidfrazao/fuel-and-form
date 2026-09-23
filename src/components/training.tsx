@@ -1709,15 +1709,19 @@ export function Training({
    * this a past session's reps could not even be READ in the app.
    *
    * An id alone is enough here, where `FormRequest` needed its origin: only the
-   * plan state opens this sheet, so there is no second state for a stale id to
-   * be handed to. Entering the session answers it with nothing, which closes
-   * the sheet by construction — the session state has its own sub-list, and
-   * two editors of one set on one screen is one too many.
+   * plan state opens this sheet. But entering the session must RETIRE the
+   * request, not merely hide it — the session state has its own sub-list, and
+   * two editors of one set on one screen is one too many. Hiding alone is
+   * FUEL-108's resurrection bug over again: the id would outlive the session
+   * and reopen the sheet, unasked, the moment the session was left. So it is
+   * reset during render below, as `confirmingSkip` is.
    *
    * Resolved against the WORKING rows, so an id that names a bookend opens
    * nothing: § P10 offers set logging on the working section only.
    */
   const [setsOpenFor, setSetsOpenFor] = useState<string | null>(null);
+
+  if (setsOpenFor !== null && inSession) setSetsOpenFor(null);
 
   const setsExercise = inSession
     ? undefined

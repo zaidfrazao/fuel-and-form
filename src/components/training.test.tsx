@@ -3914,6 +3914,30 @@ describe("the sets sheet", () => {
     });
   });
 
+  test("stays closed when the session is left again — the request is retired, not hidden", async () => {
+    // FUEL-108's resurrection bug, which `FormRequest` exists to rule out for
+    // the form sheet. A request that entering only HID would survive the
+    // session and reopen this sheet, unasked, the moment it ended.
+    const user = userEvent.setup();
+
+    render(view());
+    await open(user);
+
+    resumed();
+    window.dispatchEvent(new StorageEvent("storage"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    window.localStorage.removeItem(`fuel:training-session:${TODAY}`);
+    window.dispatchEvent(new StorageEvent("storage"));
+
+    // Back in the plan state, which is what makes the absence mean something.
+    // (Two copies of the bar in the plan state, one per position — FUEL-118.)
+    expect(
+      await screen.findAllByRole("button", { name: "Start session" }),
+    ).not.toHaveLength(0);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   test("starts no rest, which is the session state's and not the record's", async () => {
     // FUEL-126 starts a circuit's rest on a newly logged set. Correcting a
     // record is not training, so the plan state's sheet must not start one.
