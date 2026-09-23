@@ -1911,7 +1911,7 @@ export function Training({
    */
   const exerciseList = (of: TrainingItem, at: keyof typeof LIST_AT) => (
     /*
-     * Keyed by position, because the phone's copy has two places since
+     * Keyed by which copy it is, because the phone's copy has two places since
      * FUEL-128 and a record can arrive while a sheet it opened is up: a first
      * set logged from the sets sheet creates one as `partial`, and the
      * refresh moves the list under the open sheet. Both places are children
