@@ -507,12 +507,7 @@ function SetList({
   lastTime: readonly LoggedSet[];
   drafts: ReadonlyMap<string, string>;
   onDraft: (setIndex: number, value: string) => void;
-  /**
-   * `fresh` is a set that was not logged before — FUEL-126. The tick and Enter
-   * on an open row say so; a correction never does, and a removal is
-   * `onRemove`. It is how a circuit's rest starts on a new set alone.
-   */
-  onLog: (setIndex: number, value: number, fresh: boolean) => void;
+  onLog: (setIndex: number, value: number) => void;
   onRemove: (setIndex: number) => void;
 }) {
   const kind = setKind(exercise);
@@ -569,8 +564,7 @@ function SetList({
                   // never has to reach for the tick to commit what they just
                   // wrote. The tick stays the way back.
                   event.preventDefault();
-                  // Enter on a logged row is a correction, like the blur.
-                  onLog(row.index, wouldLog, row.value === null);
+                  onLog(row.index, wouldLog);
                 }}
                 onBlur={() => {
                   // Only a CORRECTION commits here — a row already logged whose
@@ -579,7 +573,7 @@ function SetList({
                   // recorded a set nobody confirmed.
                   if (row.value === null || !entered || typed === row.value) return;
 
-                  onLog(row.index, typed, false);
+                  onLog(row.index, typed);
                 }}
                 inputMode="numeric"
                 // As many digits as the unit's ceiling — three for `MAX_REPS`,
@@ -624,7 +618,7 @@ function SetList({
                   return;
                 }
 
-                if (wouldLog !== null) onLog(row.index, wouldLog, true);
+                if (wouldLog !== null) onLog(row.index, wouldLog);
               }}
             >
               <span
@@ -2206,18 +2200,20 @@ export function Training({
                     lastTime={setsFor(currentEx.id, session?.lastTime ?? NO_SETS)}
                     drafts={drafts}
                     onDraft={(setIndex, value) => draft(currentEx.id, setIndex, value)}
-                    onLog={(setIndex, value, fresh) => {
-                      // Read against the sets BEFORE this one, in the gesture
-                      // that logged it, because the gesture is what lets the
-                      // rest's tone sound — `startRest` primes it. Started
-                      // before the server answers: a refused set was still a
-                      // set performed, and the rest after it still true.
-                      const rest = fresh
-                        ? restAfterLog(workingExercises, sets, byRound, moved, {
-                            exerciseId: currentEx.id,
-                            setIndex,
-                          })
-                        : null;
+                    onLog={(setIndex, value) => {
+                      // A circuit's rest — FUEL-126. Read against the sets
+                      // BEFORE this one, in the gesture that logged it,
+                      // because the gesture is what lets the rest's tone sound
+                      // (`startRest` primes it). A correction re-logs a set
+                      // already there, so the position cannot move and
+                      // `restAfterLog` starts nothing: the split FUEL-93 asked
+                      // for is in the derivation, not in which control fired.
+                      // Started before the server answers, because a refused
+                      // set was still performed and the rest after it is true.
+                      const rest = restAfterLog(workingExercises, sets, byRound, moved, {
+                        exerciseId: currentEx.id,
+                        setIndex,
+                      });
 
                       if (rest !== null) startRest(CIRCUIT_REST[rest]);
 

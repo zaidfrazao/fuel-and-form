@@ -581,9 +581,11 @@ export function stepSession<T extends SetTarget & { id: string }>(
  *   - The session is finished. The last set has no rest after it, including
  *     when the step the state lands on was logged ahead of its round.
  *
- * The caller asks only on a NEW set. A correction or a removal never reaches
- * here, and that split is the answer to FUEL-93's objection that an automatic
- * timer "would start counting every time a set was corrected".
+ * **A correction starts nothing, and that is this function's to guarantee
+ * rather than the caller's.** It re-logs a set already in `sets`, so no step
+ * changes and the state cannot move. That is the answer to FUEL-93's objection
+ * that an automatic timer "would start counting every time a set was
+ * corrected". A removal never calls this.
  */
 export function restAfterLog<T extends SetTarget & { id: string }>(
   exercises: readonly T[],

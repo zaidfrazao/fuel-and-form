@@ -782,6 +782,14 @@ describe("restAfterLog — FUEL-126", () => {
     expect(rest(all, "b", 3)).toBeNull();
   });
 
+  it("starts no rest for a correction, which re-logs a set already there", () => {
+    // Round 2 on a: correcting a's set 1, or the set just before the position.
+    const sets = [...at("a", 1), ...at("b", 1), ...at("c", 1)];
+
+    expect(rest(sets, "a", 1)).toBeNull();
+    expect(rest(sets, "c", 1)).toBeNull();
+  });
+
   it("starts no rest outside a circuit, however the sets stand", () => {
     // Straight sets would otherwise read as "exercise" after a's set 1.
     expect(rest([], "a", 1, { byRound: false })).toBeNull();
