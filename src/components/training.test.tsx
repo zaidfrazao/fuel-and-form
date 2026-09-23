@@ -3955,3 +3955,242 @@ describe("the sets sheet", () => {
     expect(window.localStorage.getItem("fuel:rest-timer")).toBeNull();
   });
 });
+
+describe("the recap of a recorded session — FUEL-128", () => {
+  /**
+   * What finishing leaves on the screen. Not a state and not a sheet: the
+   * sets list added to `This session`, which already held the other four
+   * facts. So most of these assert that the five sit together, and the rest
+   * assert what the recap is forbidden to say.
+   */
+
+  const DONE = { status: "done" as const, note: "Felt strong", durationMin: 30 };
+
+  /** The `This session` section, found by its eyebrow. */
+  const thisSession = () => {
+    const section = screen.getByRole("heading", { name: "This session" }).closest("section");
+
+    if (!section) throw new Error("This session is not a section");
+
+    return within(section);
+  };
+
+  const recap = () => thisSession().getByRole("list", { name: "Sets" });
+
+  const rows = () =>
+    within(recap())
+      .getAllByRole("listitem")
+      .map((row) => row.textContent);
+
+  test("holds the sets per exercise, the duration, the note and the estimate in one place", () => {
+    render(
+      view({
+        sessions: [
+          {
+            ...CIRCUIT,
+            entry: DONE,
+            sets: [set("e1", 1, 12), set("e1", 2, 12), set("e1", 3, 10), set("e2", 1, 8)],
+          },
+          WALK,
+        ],
+      }),
+    );
+
+    expect(rows()).toEqual(["Press-ups12 · 12 · 10 reps", "Reverse lunges8 reps"]);
+    expect(thisSession().getByRole("status").textContent).toBe("Done · 30 min");
+    expect(thisSession().getByText(/^Estimated \d+–\d+ kcal$/)).toBeTruthy();
+    expect(thisSession().getByLabelText<HTMLTextAreaElement>("Note").value).toBe("Felt strong");
+    expect(thisSession().getByLabelText<HTMLInputElement>("Duration").value).toBe("30");
+  });
+
+  test("appears on the frame Mark done is tapped, before the server answers", async () => {
+    // The criterion's "after finishing today's session": from the session
+    // state, whose sets are the optimistic ones, into the plan state.
+    const user = userEvent.setup();
+    const pending = deferred<{ ok: boolean }>();
+
+    setSessionStatus.mockReturnValue(pending.promise);
+    resumed();
+    render(view({ sessions: withSets([set("e1", 1, 12), set("e1", 2, 11)]) }));
+
+    await user.click(bar().getByRole("button", { name: "Mark done" }));
+
+    const list = await screen.findByRole("list", { name: "Sets" });
+
+    expect(within(list).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
+      "Press-ups12 · 11 reps",
+    ]);
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(setSessionStatus).toHaveBeenCalledOnce());
+  });
+
+  test("never counts sets against a target, anywhere in the section", () => {
+    // § P10: no percentage, ratio or score from set completion. The rows'
+    // `3 of 3 sets` is exactly such a ratio, and it belongs to the list; the
+    // recap reads the values back and nothing else. An extra fourth set is a
+    // fourth value, not "4 of 3".
+    render(
+      view({
+        sessions: [
+          {
+            ...CIRCUIT,
+            entry: DONE,
+            sets: [set("e1", 1), set("e1", 2), set("e1", 3), set("e1", 4)],
+          },
+          WALK,
+        ],
+      }),
+    );
+
+    const text = screen
+      .getByRole("heading", { name: "This session" })
+      .closest("section")?.textContent;
+
+    expect(rows()).toEqual(["Press-ups12 · 12 · 12 · 12 reps"]);
+    expect(text).not.toMatch(/\d+ of \d+/);
+    expect(text).not.toMatch(/%/);
+    expect(text).not.toMatch(/\d+\s*\/\s*\d+/);
+    expect(text).not.toMatch(/completed|score|best|beat/i);
+  });
+
+  test("keeps the estimate a labelled range, never netted against intake", () => {
+    render(view({ sessions: [{ ...CIRCUIT, entry: DONE, sets: [set("e1", 1)] }, WALK] }));
+
+    const text = screen
+      .getByRole("heading", { name: "This session" })
+      .closest("section")?.textContent;
+
+    expect(text).toMatch(/Estimated \d+–\d+ kcal/);
+    expect(text).not.toMatch(/earned|eaten|left|remaining|net/i);
+  });
+
+  test("names the unit a timed hold was done in — FUEL-123", () => {
+    render(
+      view({
+        sessions: [
+          {
+            ...CIRCUIT,
+            type: "intervals",
+            exercises: [TIMED_HOLD],
+            sets: [set("e4", 1, 45), set("e4", 2, 40)],
+            entry: DONE,
+          },
+          WALK,
+        ],
+      }),
+    );
+
+    expect(rows()).toEqual(["Plank45 · 40 sec"]);
+  });
+
+  test("is drawn from the record, so it is there after a reload and on a past date", () => {
+    // Nothing the tap stored: a fresh render from the server's sets and entry
+    // is what a reload is, and yesterday is the same render with another date.
+    render(
+      view({
+        date: YESTERDAY,
+        sessions: [{ ...CIRCUIT, entry: DONE, sets: [set("e2", 1, 9)] }, WALK],
+      }),
+    );
+
+    expect(rows()).toEqual(["Reverse lunges9 reps"]);
+  });
+
+  test("leaves out an exercise nobody did, and a warm-up, which logs none", () => {
+    render(
+      view({
+        sessions: [
+          {
+            ...CIRCUIT,
+            exercises: [
+              { ...TIMED_HOLD, id: "w1", name: "Arm circles", section: "warmup" },
+              ...CIRCUIT.exercises,
+            ],
+            entry: DONE,
+            // A set against the warm-up is unreachable through the screen, and
+            // is here to prove the recap does not read one if the data has it.
+            sets: [set("w1", 1, 20), set("e3", 1, 45)],
+          },
+          WALK,
+        ],
+      }),
+    );
+
+    expect(rows()).toEqual(["Plank45 reps"]);
+  });
+
+  test("draws no sets list for a session recorded with no sets", () => {
+    // Skipped, nothing logged: the status line says what happened, and an
+    // empty "Sets" heading would be an absence reported as a thing.
+    render(
+      view({
+        sessions: recorded({ status: "skipped", note: null, durationMin: null }),
+      }),
+    );
+
+    expect(thisSession().getByRole("status").textContent).toBe("Skipped");
+    expect(screen.queryByRole("list", { name: "Sets" })).toBeNull();
+    expect(screen.queryByText("Sets")).toBeNull();
+  });
+
+  test("leaves the status, the note and the duration editable beside it", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: [{ ...CIRCUIT, entry: DONE, sets: [set("e1", 1)] }, WALK] }));
+
+    expect(recap()).toBeTruthy();
+
+    await user.clear(thisSession().getByLabelText("Duration"));
+    await user.type(thisSession().getByLabelText("Duration"), "35");
+    await user.click(bar().getByRole("button", { name: "Partial" }));
+
+    expect(setSessionStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "partial", note: "Felt strong", durationMin: "35" }),
+    );
+  });
+
+  test("moves the phone's list rather than remounting it when a record arrives", () => {
+    // A first set logged from the sets sheet creates a `partial` record and
+    // refreshes, with the sheet still up. A remounted list would disconnect the
+    // row that opened it, and the sheet would hand focus back to <body>.
+    const { rerender } = render(view());
+    const before = document.querySelector('[data-list="phone"]');
+
+    rerender(view({ sessions: recorded({ status: "partial", note: null, durationMin: null }) }));
+
+    expect(before).not.toBeNull();
+    expect(document.querySelector('[data-list="phone"]')).toBe(before);
+    expect(before?.isConnected).toBe(true);
+  });
+
+  test("leads the phone's screen once recorded, and not before", () => {
+    // Below 1024 the list is under the session until there is a record, then
+    // under `This session` — the order the measure has read in from 1024 since
+    // FUEL-118. One phone copy either way, never two.
+    const follows = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+    const phoneLists = () => document.querySelectorAll('[data-list="phone"]');
+    const phoneList = () => {
+      const [only] = phoneLists();
+
+      if (!only) throw new Error("no phone copy of the list is rendered");
+
+      return only;
+    };
+    const record = () =>
+      screen.getByRole("heading", { name: "This session" }).closest("section")!;
+
+    const { unmount } = render(view());
+
+    expect(phoneLists()).toHaveLength(1);
+    expect(follows(phoneList(), record())).toBe(true);
+
+    unmount();
+    render(view({ sessions: recorded(DONE) }));
+
+    expect(phoneLists()).toHaveLength(1);
+    expect(follows(record(), phoneList())).toBe(true);
+  });
+});

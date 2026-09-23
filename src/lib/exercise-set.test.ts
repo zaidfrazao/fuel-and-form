@@ -18,6 +18,7 @@ import {
   sessionPosition,
   type SetTarget,
   setProgress,
+  setsDone,
   setRows,
   setKind,
   setsFor,
@@ -963,5 +964,38 @@ describe("setProgress", () => {
 
   it("reports more sets than the target rather than capping the count", () => {
     expect(setProgress(FIXED, [set(1), set(2), set(3), set(4)])).toBe("4 of 3 sets");
+  });
+});
+
+describe("setsDone — FUEL-128", () => {
+  it("reads the values back in set order, with the unit once", () => {
+    expect(setsDone(RANGE, [set(1, 10), set(2, 10), set(3, 8)])).toBe("10 · 10 · 8 reps");
+  });
+
+  it("orders by set number, not by the order it was given", () => {
+    // A correction re-sends set 1 after set 3, and a reader that trusted the
+    // array would recap the session in the order it was typed.
+    expect(setsDone(RANGE, [set(3, 8), set(1, 12), set(2, 10)])).toBe("12 · 10 · 8 reps");
+  });
+
+  it("says seconds for a timed hold — FUEL-123", () => {
+    expect(setsDone(HELD, [set(1, 45), set(2, 40)])).toBe("45 · 40 sec");
+  });
+
+  it("is one value for one set, and reps for an exercise with no target", () => {
+    expect(setsDone(COUNT_ONLY, [set(1, 20)])).toBe("20 reps");
+  });
+
+  it("never counts against the target", () => {
+    // § P10: the ratio is the one thing the recap may not say. An extra set is
+    // simply a fourth value, not "4 of 3".
+    const line = setsDone(FIXED, [set(1), set(2), set(3), set(4)]);
+
+    expect(line).toBe("12 · 12 · 12 · 12 reps");
+    expect(line).not.toMatch(/ of |%|\//);
+  });
+
+  it("says nothing for an exercise with no sets", () => {
+    expect(setsDone(FIXED, [])).toBeNull();
   });
 });
