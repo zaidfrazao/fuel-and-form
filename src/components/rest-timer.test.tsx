@@ -277,6 +277,26 @@ describe("a custom rest — FUEL-126", () => {
 });
 
 describe("startRest, the start a logged set calls — FUEL-126", () => {
+  test("builds no audio context with no row mounted to close it", () => {
+    const constructed = vi.fn();
+
+    vi.stubGlobal("AudioContext", function AudioContextStub() {
+      constructed();
+      return { resume: vi.fn(async () => {}), close: vi.fn(async () => {}) };
+    });
+
+    act(() => {
+      startRest(20);
+    });
+
+    expect(constructed).not.toHaveBeenCalled();
+    // The rest is still stored, so a row mounted now shows it.
+    expect(window.localStorage.getItem(KEY)).toBe(String(NOW + 20_000));
+
+    render(<RestTimer />);
+    expect(reading()).toBe("0:20");
+  });
+
   test("starts a mounted row's timer, and replaces one already running", () => {
     render(<RestTimer />);
 

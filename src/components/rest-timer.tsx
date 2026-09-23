@@ -190,8 +190,10 @@ const audio: RefObject<AudioContext | null> = { current: null };
  * what a new set means: the rest before it is over.
  */
 export function startRest(seconds: number): void {
-  // On the tap, because this is the gesture — see `prime`.
-  prime(audio);
+  // On the tap, because this is the gesture — see `prime`. Only while a row is
+  // mounted: its unmount is what closes the context, so one built with no row
+  // to sound it would never be closed. The rest itself is still stored.
+  if (listeners.size > 0) prime(audio);
   write(Date.now() + seconds * 1000);
 }
 
