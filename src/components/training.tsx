@@ -32,7 +32,7 @@ import { ExerciseList, type ListedExercise } from "@/components/exercise-list";
 import { SlashMeta } from "@/components/kv-grid";
 import { PageMain } from "@/components/page-main";
 import { RecentSessions } from "@/components/recent-sessions";
-import { RestTimer } from "@/components/rest-timer";
+import { RestTimer, startRest } from "@/components/rest-timer";
 import { SessionClock } from "@/components/session-clock";
 import { Button, CONFIRM_DESTRUCTIVE } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
@@ -56,6 +56,7 @@ import {
   type LoggedSet,
   type Moved,
   parseMoved,
+  restAfterLog,
   type SessionPosition,
   type SetTarget,
   setProgress,
@@ -73,6 +74,7 @@ import {
   targetLow,
 } from "@/lib/exercise-set";
 import { dayLabel } from "@/lib/now-display";
+import { CIRCUIT_REST } from "@/lib/rest-timer";
 
 /**
  * The form sheet, kept out of this screen's first payload — § P10, FUEL-94.
@@ -505,7 +507,12 @@ function SetList({
   lastTime: readonly LoggedSet[];
   drafts: ReadonlyMap<string, string>;
   onDraft: (setIndex: number, value: string) => void;
-  onLog: (setIndex: number, value: number) => void;
+  /**
+   * `fresh` is a set that was not logged before — FUEL-126. The tick and Enter
+   * on an open row say so; a correction never does, and a removal is
+   * `onRemove`. It is how a circuit's rest starts on a new set alone.
+   */
+  onLog: (setIndex: number, value: number, fresh: boolean) => void;
   onRemove: (setIndex: number) => void;
 }) {
   const kind = setKind(exercise);
@@ -562,7 +569,8 @@ function SetList({
                   // never has to reach for the tick to commit what they just
                   // wrote. The tick stays the way back.
                   event.preventDefault();
-                  onLog(row.index, wouldLog);
+                  // Enter on a logged row is a correction, like the blur.
+                  onLog(row.index, wouldLog, row.value === null);
                 }}
                 onBlur={() => {
                   // Only a CORRECTION commits here — a row already logged whose
@@ -571,7 +579,7 @@ function SetList({
                   // recorded a set nobody confirmed.
                   if (row.value === null || !entered || typed === row.value) return;
 
-                  onLog(row.index, typed);
+                  onLog(row.index, typed, false);
                 }}
                 inputMode="numeric"
                 // As many digits as the unit's ceiling — three for `MAX_REPS`,
@@ -616,7 +624,7 @@ function SetList({
                   return;
                 }
 
-                if (wouldLog !== null) onLog(row.index, wouldLog);
+                if (wouldLog !== null) onLog(row.index, wouldLog, true);
               }}
             >
               <span
@@ -2198,7 +2206,21 @@ export function Training({
                     lastTime={setsFor(currentEx.id, session?.lastTime ?? NO_SETS)}
                     drafts={drafts}
                     onDraft={(setIndex, value) => draft(currentEx.id, setIndex, value)}
-                    onLog={(setIndex, value) => {
+                    onLog={(setIndex, value, fresh) => {
+                      // Read against the sets BEFORE this one, in the gesture
+                      // that logged it, because the gesture is what lets the
+                      // rest's tone sound — `startRest` primes it. Started
+                      // before the server answers: a refused set was still a
+                      // set performed, and the rest after it still true.
+                      const rest = fresh
+                        ? restAfterLog(workingExercises, sets, byRound, moved, {
+                            exerciseId: currentEx.id,
+                            setIndex,
+                          })
+                        : null;
+
+                      if (rest !== null) startRest(CIRCUIT_REST[rest]);
+
                       forget(currentEx.id, setIndex);
                       act({ kind: "log-set", exerciseId: currentEx.id, setIndex, value });
                     }}

@@ -2893,6 +2893,139 @@ describe("the rest timer", () => {
 });
 
 /**
+ * A circuit's rest starts on the set that earns it — FUEL-126.
+ *
+ * FUEL-93 ruled against auto-start because "an automatic timer would start
+ * counting every time a set was corrected". The answer is that a correction and
+ * a new set are different gestures in `SetList`, so every case below that is
+ * not a NEW set in a circuit asserts that no timer appeared.
+ */
+describe("the rest timer, started by a logged set", () => {
+  const timer = () => screen.queryByRole("timer")?.textContent ?? null;
+  /** Round 2 on press-ups, with its set 1 logged: a row to correct. */
+  const ROUND_2 = () => withSets([set("e1", 1, 12), set("e2", 1), set("e3", 1)]);
+
+  test("starts 0:20 when the round goes on to the next exercise", async () => {
+    const user = userEvent.setup();
+    const pending = deferred<{ ok: boolean }>();
+
+    logExerciseSet.mockReturnValue(pending.promise);
+
+    resumed();
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    // On the tick, before the server answers.
+    expect(await screen.findByRole("timer")).toBeTruthy();
+    expect(timer()).toBe("0:20");
+    expect(setSessionStatus).not.toHaveBeenCalled();
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(logExerciseSet).toHaveBeenCalledOnce());
+  });
+
+  test("starts 1:30 when the set finishes a round", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: withSets([set("e1", 1), set("e2", 1)]) }));
+    // Plank, whose fixture has no target, so its tick needs a number.
+    await user.type(screen.getByLabelText("Set 1 reps"), "45");
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    expect(await screen.findByRole("timer")).toBeTruthy();
+    expect(timer()).toBe("1:30");
+  });
+
+  test("starts on Enter in an open row, the tick's twin", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view());
+    await user.type(screen.getByLabelText("Set 1 reps"), "10{Enter}");
+
+    expect(await screen.findByRole("timer")).toBeTruthy();
+    expect(timer()).toBe("0:20");
+  });
+
+  test("starts nothing after the session's last set", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(
+      view({
+        sessions: withSets([
+          ...[1, 2, 3].map((n) => set("e1", n)),
+          set("e2", 1),
+          set("e2", 2),
+          set("e3", 1),
+          set("e3", 2),
+        ]),
+      }),
+    );
+    await user.type(screen.getByLabelText("Set 3 reps"), "45");
+    await user.click(screen.getByRole("button", { name: "Log set 3" }));
+
+    await waitFor(() => expect(logExerciseSet).toHaveBeenCalledOnce());
+    expect(timer()).toBeNull();
+  });
+
+  test("starts nothing on a correction, by blur or by Enter", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: ROUND_2() }));
+
+    const input = screen.getByLabelText("Set 1 reps");
+
+    await user.clear(input);
+    await user.type(input, "8");
+    await user.tab();
+    await user.clear(input);
+    await user.type(input, "9{Enter}");
+
+    await waitFor(() => expect(logExerciseSet).toHaveBeenCalledTimes(2));
+    expect(timer()).toBeNull();
+  });
+
+  test("starts nothing when a set is taken back", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: ROUND_2() }));
+    await user.click(screen.getByRole("button", { name: "Remove set 1" }));
+
+    await waitFor(() => expect(removeExerciseSet).toHaveBeenCalledOnce());
+    expect(timer()).toBeNull();
+  });
+
+  test("starts nothing outside a circuit, which keeps the manual timer", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: straight() }));
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    await waitFor(() => expect(logExerciseSet).toHaveBeenCalledOnce());
+    expect(timer()).toBeNull();
+    expect(screen.getByRole("button", { name: "0:20" })).toBeTruthy();
+  });
+
+  test("stops by hand, like any rest", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+    await screen.findByRole("timer");
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+
+    expect(timer()).toBeNull();
+    expect(window.localStorage.getItem("fuel:rest-timer")).toBeNull();
+  });
+});
+
+/**
  * The form affordance and what it opens — § P10, FUEL-94.
  *
  * The mock draws a Text button, "Show form", under the prescription in the
