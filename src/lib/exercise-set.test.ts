@@ -774,6 +774,14 @@ describe("restAfterLog — FUEL-126", () => {
     expect(rest(all, "c", 3)).toBeNull();
   });
 
+  it("starts no rest when the session ends on a step logged ahead of its round", () => {
+    // c's set 3 was ticked early; b's set 3 is the last open step, and the
+    // state lands on c's, which has nothing left to do.
+    const all = [...at("a", 1, 2, 3), ...at("b", 1, 2), ...at("c", 1, 2, 3)];
+
+    expect(rest(all, "b", 3)).toBeNull();
+  });
+
   it("starts no rest outside a circuit, however the sets stand", () => {
     // Straight sets would otherwise read as "exercise" after a's set 1.
     expect(rest([], "a", 1, { byRound: false })).toBeNull();

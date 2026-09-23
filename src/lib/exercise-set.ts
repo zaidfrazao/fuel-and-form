@@ -574,11 +574,12 @@ export function stepSession<T extends SetTarget & { id: string }>(
  *   - Not a circuit. § P10 forbids reading a rest off the format's prose, and
  *     only the circuits have a rest that `workouts.type` can stand for. Every
  *     other session keeps the manual timer it had.
- *   - Not the set the state is showing. A set logged ahead of its round fills
- *     no gap and moves nothing (see `sessionPosition`), so nothing follows it.
- *   - The state stays where it is. A step gone back to is held after its set
- *     is logged, because that reader is correcting the past, not training on.
- *   - The session is finished. The last set has no rest after it.
+ *   - The state stays where it is. A set logged ahead of its round fills no
+ *     gap and moves nothing (see `sessionPosition`), and a step gone back to
+ *     is held after its set is logged, because that reader is correcting the
+ *     past, not training on.
+ *   - The session is finished. The last set has no rest after it, including
+ *     when the step the state lands on was logged ahead of its round.
  *
  * The caller asks only on a NEW set. A correction or a removal never reaches
  * here, and that split is the answer to FUEL-93's objection that an automatic
@@ -593,16 +594,17 @@ export function restAfterLog<T extends SetTarget & { id: string }>(
 ): "exercise" | "round" | null {
   const before = locate(exercises, sets, byRound, moved);
 
+  // Without rounds the steps are whole exercises, and finishing one would read
+  // as a move "within the round" — the rest this refuses to invent.
   if (before.rounds === null) return null;
 
-  const from = before.steps[before.current];
-
-  if (from?.key !== `${logged.exerciseId}#${logged.setIndex}`) return null;
-
   const after = locate(exercises, [...sets, { ...logged, value: 0 }], byRound, moved);
-  // Defined: the same exercises give the same steps, and `from` is one of them.
+  // Both defined: a circuit has steps, and one set more removes none of them.
+  const from = before.steps[before.current]!;
   const to = after.steps[after.current]!;
 
+  // Where the state did not move, whichever set was logged, and where it came
+  // to rest on a step with nothing left to do.
   if (to.key === from.key || to.done) return null;
 
   return to.round === from.round ? "exercise" : "round";
