@@ -4069,7 +4069,13 @@ describe("the recap of a recorded session — FUEL-128", () => {
     render(
       view({
         sessions: [
-          { ...timed([set("e4", 1, 45), set("e4", 2, 40)])[0], entry: DONE },
+          {
+            ...CIRCUIT,
+            type: "intervals",
+            exercises: [TIMED_HOLD],
+            sets: [set("e4", 1, 45), set("e4", 2, 40)],
+            entry: DONE,
+          },
           WALK,
         ],
       }),
@@ -4098,7 +4104,7 @@ describe("the recap of a recorded session — FUEL-128", () => {
           {
             ...CIRCUIT,
             exercises: [
-              { ...CIRCUIT.exercises[0], id: "w1", name: "Arm circles", section: "warmup" },
+              { ...TIMED_HOLD, id: "w1", name: "Arm circles", section: "warmup" },
               ...CIRCUIT.exercises,
             ],
             entry: DONE,
@@ -4151,19 +4157,26 @@ describe("the recap of a recorded session — FUEL-128", () => {
     const follows = (a: Element, b: Element) =>
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-    const phoneList = () => document.querySelectorAll('[data-list="phone"]');
+    const phoneLists = () => document.querySelectorAll('[data-list="phone"]');
+    const phoneList = () => {
+      const [only] = phoneLists();
+
+      if (!only) throw new Error("no phone copy of the list is rendered");
+
+      return only;
+    };
     const record = () =>
       screen.getByRole("heading", { name: "This session" }).closest("section")!;
 
     const { unmount } = render(view());
 
-    expect(phoneList()).toHaveLength(1);
-    expect(follows(phoneList()[0], record())).toBe(true);
+    expect(phoneLists()).toHaveLength(1);
+    expect(follows(phoneList(), record())).toBe(true);
 
     unmount();
     render(view({ sessions: recorded(DONE) }));
 
-    expect(phoneList()).toHaveLength(1);
-    expect(follows(record(), phoneList()[0])).toBe(true);
+    expect(phoneLists()).toHaveLength(1);
+    expect(follows(record(), phoneList())).toBe(true);
   });
 });
