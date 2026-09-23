@@ -1148,8 +1148,9 @@ const NO_SETS: readonly LoggedSetView[] = [];
  * session`, bar, exercises. Below it, the list stays directly under the
  * session, where § Lists' window is measured, and the bar stays last and
  * sticky — until the date has a record, when the phone's copy follows `This
- * session` instead (FUEL-128). Still one phone copy: `entry` picks its place. One DOM cannot hold both orders, and CSS `order` would draw one and
- * read out the other, so this is the ruler's device: one copy per position,
+ * session` instead (FUEL-128). Still one phone copy: `entry` picks its place.
+ * One DOM cannot hold both orders, and CSS `order` would draw one and read out
+ * the other, so this is the ruler's device: one copy per position,
  * with the other `display: none` and out of the accessibility tree. The split
  * is at `lg`, where `TRAINING_BAR_AT` hands the bar over too.
  *
@@ -1909,7 +1910,20 @@ export function Training({
    * The exercise list, as a function since FUEL-118 — see `LIST_AT`.
    */
   const exerciseList = (of: TrainingItem, at: keyof typeof LIST_AT) => (
-    <section className={cn("flex flex-col gap-[14px]", LIST_AT[at])} data-list={at}>
+    /*
+     * Keyed by position, because the phone's copy has two places since
+     * FUEL-128 and a record can arrive while a sheet it opened is up: a first
+     * set logged from the sets sheet creates one as `partial`, and the
+     * refresh moves the list under the open sheet. Both places are children
+     * of one fragment, so the key lets React MOVE this node rather than
+     * remount it. Remounted, the row that opened the sheet would be gone, and
+     * `Sheet` hands focus back to `<body>` when its opener is disconnected.
+     */
+    <section
+      key={at}
+      className={cn("flex flex-col gap-[14px]", LIST_AT[at])}
+      data-list={at}
+    >
       <Eyebrow>Exercises</Eyebrow>
       {/* § Desktop gives the plan state set progress "on the exercise's
           own row, no rows added" — which is what keeps the list's window

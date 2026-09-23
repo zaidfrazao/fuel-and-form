@@ -4150,6 +4150,20 @@ describe("the recap of a recorded session — FUEL-128", () => {
     );
   });
 
+  test("moves the phone's list rather than remounting it when a record arrives", () => {
+    // A first set logged from the sets sheet creates a `partial` record and
+    // refreshes, with the sheet still up. A remounted list would disconnect the
+    // row that opened it, and the sheet would hand focus back to <body>.
+    const { rerender } = render(view());
+    const before = document.querySelector('[data-list="phone"]');
+
+    rerender(view({ sessions: recorded({ status: "partial", note: null, durationMin: null }) }));
+
+    expect(before).not.toBeNull();
+    expect(document.querySelector('[data-list="phone"]')).toBe(before);
+    expect(before?.isConnected).toBe(true);
+  });
+
   test("leads the phone's screen once recorded, and not before", () => {
     // Below 1024 the list is under the session until there is a record, then
     // under `This session` — the order the measure has read in from 1024 since
