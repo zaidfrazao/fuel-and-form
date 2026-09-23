@@ -168,3 +168,40 @@ test("the photograph is part of the row: tapping it opens the row's sheet", asyn
 
   await expect(page.getByRole("dialog")).toBeVisible();
 });
+
+test("a 16:9 reference keeps its own ratio rather than being cropped to 3:2", async ({ page }) => {
+  /*
+   * The dead bug's frames are 1280×720, the one asset that is not 850×567.
+   * § The row's photograph refuses a crop and a fill both, so its box is the
+   * column's 72 by its own 40.5 — not 72×48 with `object-fit` cutting the
+   * hand and the foot off the sides.
+   *
+   * Found by walking the frozen week rather than by naming a date, because
+   * which day carries the core session is the seed's to decide.
+   */
+  await page.setViewportSize({ width: 820, height: 1180 });
+
+  const monday = new Date(FROZEN_NOW_MS);
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+
+  for (let day = 0; day < 7; day += 1) {
+    const date = new Date(monday);
+    date.setUTCDate(monday.getUTCDate() + day);
+    await page.goto(`/training?date=${date.toISOString().slice(0, 10)}`);
+    await expect(page.getByRole("main")).toBeVisible();
+
+    const row = page.locator(`${LIST} li`, { hasText: "Dead bug" });
+    if ((await row.count()) === 0) continue;
+
+    const box = await row.locator("img").evaluate((img) => {
+      const rect = img.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    });
+
+    expect(box.width).toBe(72);
+    expect(box.height).toBeCloseTo(40.5, 0);
+    return;
+  }
+
+  throw new Error("no day in the frozen week draws the dead bug — the fixture has moved");
+});
