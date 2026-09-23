@@ -561,7 +561,7 @@ export function RestTimer() {
          * arrive like every other number box on this screen.
          */
         <form
-          className="flex items-center gap-2"
+          className="flex flex-wrap items-center justify-end gap-2"
           onSubmit={(event) => {
             event.preventDefault();
 
@@ -610,8 +610,14 @@ export function RestTimer() {
          *
          * `Custom` follows them since FUEL-126, as a Text button: it is the way
          * to a box rather than a rest, so it does not wear a preset's slab.
+         *
+         * It WRAPS, under the presets and to the right, below about 335px.
+         * Measured in the frozen demo, the presets and `Custom` need 291px and
+         * the row gives them 276 at 320, so without the wrap `Custom` overran
+         * the bar by 15px. § Buttons: where a row does not fit, it wraps, and it
+         * never scrolls sideways. At 375 it is one line with 40px to spare.
          */
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {REST_PRESETS.map((seconds) => (
             <Button
               key={seconds}
