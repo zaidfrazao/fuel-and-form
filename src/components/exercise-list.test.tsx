@@ -396,3 +396,171 @@ describe("the affordance adds no box", () => {
     expect(control.text).toBe(inert.text);
   });
 });
+
+/**
+ * The row's photograph — § Lists › The row's photograph, FUEL-129.
+ *
+ * Where it sits and how big it is are layout, which jsdom cannot see and
+ * `tests/visual/row-photograph.spec.ts` measures. What is held here is what a
+ * layout run cannot tell apart: whose photograph a row draws, that it names
+ * nothing, and that an empty column is empty.
+ */
+describe("the row's photograph", () => {
+  const SQUAT = { path: "/form/squat-2.jpg", width: 850, height: 567 };
+  const PUSH_UP = { path: "/form/push-up-2.jpg", width: 850, height: 567 };
+
+  const offering = (
+    thumbnails?: RowAffordance["thumbnails"],
+    onShow: (id: string) => void = () => {},
+  ): RowAffordance => ({
+    available: new Map([
+      ["u1", "form"],
+      ["w1", "sets"],
+      ["w2", "sets"],
+      ["c1", "form"],
+    ]),
+    thumbnails,
+    onShow,
+  });
+
+  /** The empty column — the one element in a row that is neither text nor a photograph. */
+  const spacers = (container: HTMLElement) =>
+    container.querySelectorAll('li span[aria-hidden="true"]:empty');
+
+  test("draws the frame it is given, as the shipped file at its own size", () => {
+    const { container } = render(
+      <ExerciseList exercises={SESSION} affordance={offering(new Map([["w1", SQUAT]]))} />,
+    );
+
+    const img = within(screen.getByRole("button", { name: /Squats/ })).getByRole("presentation");
+
+    expect(img.getAttribute("src")).toBe("/form/squat-2.jpg");
+    // The manifest's dimensions are what reserve the box before the file lands.
+    expect(img.getAttribute("width")).toBe("850");
+    expect(img.getAttribute("height")).toBe("567");
+    expect(img.getAttribute("loading")).toBe("lazy");
+    expect(img.getAttribute("decoding")).toBe("async");
+    expect(container.querySelectorAll("img")).toHaveLength(1);
+  });
+
+  test("names nothing: alt is empty and the row's accessible name is unchanged", () => {
+    // § The row as a control: the name is the row's contents. A described alt
+    // would read the frame's caption into it as though it were the exercise.
+    const name = (thumbnails?: RowAffordance["thumbnails"]) => {
+      const { unmount } = render(
+        <ExerciseList
+          exercises={[exercise({ id: "w1", notes: "Sit back." })]}
+          affordance={offering(thumbnails)}
+        />,
+      );
+      const button = screen.getByRole("button");
+      const img = button.querySelector("img");
+      const text = button.textContent;
+      unmount();
+      return { alt: img?.getAttribute("alt"), text };
+    };
+
+    const without = name();
+    const withPhoto = name(new Map([["w1", SQUAT]]));
+
+    expect(withPhoto.alt).toBe("");
+    expect(withPhoto.text).toBe(without.text);
+  });
+
+  test("gives the group's column to a row without one, and draws nothing in it", () => {
+    // Squats has a reference and Push-ups does not, so Push-ups keeps the
+    // column — an empty, unlabelled box — and the two names start on one x.
+    const { container } = render(
+      <ExerciseList exercises={SESSION} affordance={offering(new Map([["w1", SQUAT]]))} />,
+    );
+
+    const pushUps = screen.getByRole("button", { name: /Push-ups/ });
+
+    expect(pushUps.querySelector("img")).toBeNull();
+    expect(spacers(container)).toHaveLength(1);
+    expect(pushUps.contains(spacers(container)[0]!)).toBe(true);
+  });
+
+  test("draws no column in a group where no row has a photograph", () => {
+    // The warm-up and cool-down today. Both work rows have one, so no row in
+    // the list needs an empty column at all.
+    const { container } = render(
+      <ExerciseList
+        exercises={SESSION}
+        affordance={offering(
+          new Map([
+            ["w1", SQUAT],
+            ["w2", PUSH_UP],
+          ]),
+        )}
+      />,
+    );
+
+    expect(container.querySelectorAll("img")).toHaveLength(2);
+    expect(spacers(container)).toHaveLength(0);
+  });
+
+  test("holds the column in the flat, one-section shape too", () => {
+    const { container } = render(
+      <ExerciseList
+        exercises={[exercise({ id: "w1" }), exercise({ id: "w2", name: "Push-ups" })]}
+        affordance={offering(new Map([["w1", SQUAT]]))}
+      />,
+    );
+
+    expect(screen.queryByRole("heading")).toBeNull();
+    expect(container.querySelectorAll("img")).toHaveLength(1);
+    expect(spacers(container)).toHaveLength(1);
+  });
+
+  test("is drawn only inside a control, so it always opens something", () => {
+    // A frame for a row the screen did not make a door is dropped rather than
+    // drawn on an inert row, where tapping it would do nothing.
+    const { container } = render(
+      <ExerciseList
+        exercises={SESSION}
+        affordance={{
+          available: new Map([["w2", "sets"]]),
+          thumbnails: new Map([["w1", SQUAT]]),
+          onShow: () => {},
+        }}
+      />,
+    );
+
+    expect(container.querySelectorAll("img")).toHaveLength(0);
+    // And the dropped frame claims no column either: an empty column beside
+    // every row of the work, with no photograph in any of them, is the column
+    // drawn for nothing.
+    expect(spacers(container)).toHaveLength(0);
+  });
+
+  test("opens the row's sheet when it is the part that is tapped", () => {
+    const shown: string[] = [];
+    const { container } = render(
+      <ExerciseList
+        exercises={SESSION}
+        affordance={offering(new Map([["w2", PUSH_UP]]), (id) => shown.push(id))}
+      />,
+    );
+
+    container.querySelector("img")!.click();
+
+    expect(shown).toEqual(["w2"]);
+  });
+
+  test("an affordance without photographs draws the row it drew before", () => {
+    // What `/training` rendered before this ticket, and the shape any screen
+    // that offers the doors without the pictures gets: no image, no column.
+    const { container } = render(<ExerciseList exercises={SESSION} affordance={offering()} />);
+
+    expect(container.querySelectorAll("img")).toHaveLength(0);
+    expect(spacers(container)).toHaveLength(0);
+  });
+
+  test("`/` passes no affordance, so it can draw no photograph", () => {
+    const { container } = render(<ExerciseList exercises={SESSION} />);
+
+    expect(container.querySelectorAll("img")).toHaveLength(0);
+    expect(spacers(container)).toHaveLength(0);
+  });
+});

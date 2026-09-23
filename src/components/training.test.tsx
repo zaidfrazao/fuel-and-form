@@ -10,6 +10,7 @@ import {
   TRAINING_BAR_AT,
 } from "@/components/action-bar";
 import type { TrainingItem } from "@/components/training";
+import type { ResolvedFormMedia } from "@/lib/form-media";
 import {
   PAGE_ASIDE_COLUMN,
   PAGE_MEASURE_COLUMN,
@@ -3361,7 +3362,7 @@ describe("form reference media", () => {
   };
 
   /** The circuit with media on its FIRST working exercise, which is the subject. */
-  const withMedia = (media: typeof MEDIA | null = MEDIA) => [
+  const withMedia = (media: ResolvedFormMedia | null = MEDIA) => [
     {
       ...CIRCUIT,
       exercises: CIRCUIT.exercises.map((exercise, index) =>
@@ -3408,6 +3409,35 @@ describe("form reference media", () => {
    * the row rather than against a string that used to be unique.
    */
   describe("from the plan state", () => {
+    test("a row with a reference leads with its WORKING frame — FUEL-129", () => {
+      // The asset's last frame, not its first: the starts are people standing,
+      // and the working position is what tells one movement from the next.
+      render(view({ sessions: withMedia() }));
+
+      const photos = list().getByRole("button", { name: /Press-ups/ }).querySelectorAll("img");
+
+      expect(photos).toHaveLength(1);
+      expect(photos[0]!.getAttribute("src")).toBe("/form/side-plank-2.jpg");
+      // Every other row of the circuit has no reference, so only one is drawn.
+      expect(list().getByRole("list").querySelectorAll("img")).toHaveLength(1);
+    });
+
+    test("a video reference draws no photograph on the row — FUEL-129", () => {
+      // Its last frame is a video file, and the row's photograph is an `<img>`.
+      render(view({ sessions: withMedia({ ...MEDIA, kind: "video" }) }));
+
+      expect(list().getByRole("list").querySelectorAll("img")).toHaveLength(0);
+    });
+
+    test("the session state draws no photograph — FUEL-129", async () => {
+      // § The two states of `/training`: the measure keeps `Show form` and the
+      // list is the plan state's alone.
+      await start();
+
+      expect(await screen.findByRole("button", { name: "Show form" })).toBeTruthy();
+      expect(document.querySelectorAll("img")).toHaveLength(0);
+    });
+
     test("a working row opens its sets, and the reference is inside them", async () => {
       // FUEL-90 put the affordance with the subject, and the reader who is
       // PLANNING never reaches a subject: the session state is today-only and

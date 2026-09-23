@@ -1,5 +1,6 @@
 import { SlashMeta } from "@/components/kv-grid";
 import type { WorkoutExercise } from "@/lib/db/schema";
+import type { MediaFrame } from "@/lib/form-media";
 import { FOCUS_RING, HOVER_GROUND, HOVER_LIFT, POINTER } from "@/lib/pointer";
 import { bySection } from "@/lib/section";
 import { cn } from "@/lib/utils";
@@ -66,7 +67,38 @@ export type RowAffordance = {
    */
   available: ReadonlyMap<string, RowOpens>;
   onShow: (exerciseId: string) => void;
+  /**
+   * The photograph each row leads with, by id — § Lists › The row's
+   * photograph, FUEL-129. The reference's working frame, resolved by the
+   * caller, never a stored `media_key`.
+   *
+   * On the affordance rather than beside it, so a photograph is only ever drawn
+   * inside the control that opens its sheet, and so `/` — which passes no
+   * affordance — cannot draw one by construction: FUEL-94's "never loaded on
+   * `/`" is a type, not a convention.
+   *
+   * Optional, so a screen may offer the doors without the pictures.
+   */
+  thumbnails?: ReadonlyMap<string, RowThumbnail>;
 };
+
+/** What a row's photograph needs of a frame: the file and its own size. */
+export type RowThumbnail = Pick<MediaFrame, "path" | "width" | "height">;
+
+/**
+ * The photograph's column — § Lists › The row's photograph.
+ *
+ * 72px wide at every width. The height is the frame's own ratio rather than a
+ * fixed 48: every photograph but one is 850×567, which IS 72×48, and the dead
+ * bug's is 1280×720, which a 48px box could only take by cropping it or by
+ * filling the difference. The guide refuses both ("never cropped", "no fill"),
+ * so that one draws 72×41, top-aligned like the rest.
+ *
+ * `self-start` because the row is `items-baseline`, and a replaced element's
+ * baseline is its bottom edge — the photograph would hang its foot on the
+ * name's first line instead of standing beside it.
+ */
+const PHOTO_COLUMN = "w-[72px] shrink-0 self-start";
 
 /**
  * The row's own geometry, split from its hairline so the control can take one
@@ -193,8 +225,27 @@ export function ExerciseList({
    * The empty case needs no branch at all: `bySection` returns only sections
    * that have rows, so there is never a heading with nothing under it to draw.
    */
+  /*
+   * The photograph's column belongs to the group, not the row — § Lists › The
+   * row's photograph. Decided here, once per list the component draws, so
+   * every row in a group agrees on where its name starts.
+   */
+  const photoColumn = (rows: readonly ListedExercise[]) =>
+    rows.some(
+      // The same two conditions a row draws its photograph on, below — a frame
+      // for a row that is not a control is dropped, so it cannot claim a column.
+      (row) => affordance?.available.has(row.id) && affordance.thumbnails?.has(row.id),
+    );
+
   if (groups.length === 1)
-    return <Rows exercises={exercises} progress={progress} affordance={affordance} />;
+    return (
+      <Rows
+        exercises={exercises}
+        progress={progress}
+        affordance={affordance}
+        photoColumn={photoColumn(exercises)}
+      />
+    );
 
   return (
     /*
@@ -224,7 +275,12 @@ export function ExerciseList({
           <h2 className="text-slash uppercase tracking-[0.16em] text-text-secondary">
             {group.label}
           </h2>
-          <Rows exercises={group.exercises} progress={progress} affordance={affordance} />
+          <Rows
+            exercises={group.exercises}
+            progress={progress}
+            affordance={affordance}
+            photoColumn={photoColumn(group.exercises)}
+          />
         </section>
       ))}
     </div>
@@ -244,10 +300,13 @@ function Rows({
   exercises,
   progress,
   affordance,
+  photoColumn,
 }: {
   exercises: readonly ListedExercise[];
   progress?: ReadonlyMap<string, string>;
   affordance?: RowAffordance;
+  /** Whether this list draws the photograph's column — see `ExerciseList`. */
+  photoColumn: boolean;
 }) {
   return (
     <ol className="flex flex-col">
@@ -280,11 +339,54 @@ function Rows({
          */
         const lift = onOpen ? HOVER_LIFT : undefined;
 
+        /*
+         * Only a row that is a control draws its photograph — tapping it has
+         * to open the sheet, and an inert row has no sheet to open.
+         */
+        const thumbnail = onOpen ? affordance?.thumbnails?.get(exercise.id) : undefined;
+
         const content = (
           <>
             <span className={cn("font-mono text-slash text-text-tertiary", lift)}>
               {String(index + 1).padStart(2, "0")}
             </span>
+            {/*
+             * The row's photograph — § Lists › The row's photograph, FUEL-129.
+             *
+             * `alt=""`: the row's accessible name is its contents, and a
+             * described alt would enter it ("Show sets for 01 Squats Bottom of
+             * the squat …"). The sheet carries the description.
+             *
+             * A plain `<img>` with the manifest's own `width` and `height`, so
+             * the box is reserved before the file arrives and nothing shifts as
+             * the column fills in; `h-auto` keeps that intrinsic ratio at 72
+             * wide. `next/image` is refused for `form-media-sheet.tsx`'s
+             * reasons: this is the same shipped file, byte for byte, and the
+             * sheet opened afterwards reuses it.
+             *
+             * The sheet's hairline, drawn as an inset outline rather than a
+             * border: a border would take 2px out of the 72 the frame is
+             * scaled to and leave the box 48.7 tall. The outline paints over
+             * the photograph's own edge, so the box stays the frame's ratio.
+             *
+             * An empty column is a bare box — no fill, no border, nothing a
+             * reader could take for a missing picture — and hidden, because it
+             * says nothing.
+             */}
+            {thumbnail ? (
+              // eslint-disable-next-line @next/next/no-img-element -- see above
+              <img
+                src={thumbnail.path}
+                width={thumbnail.width}
+                height={thumbnail.height}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className={cn(PHOTO_COLUMN, "h-auto rounded-sm outline -outline-offset-1 outline-border")}
+              />
+            ) : (
+              photoColumn && <span aria-hidden className={PHOTO_COLUMN} />
+            )}
             <span className="flex min-w-[9rem] flex-1 flex-col gap-[3px]">
               {/*
                * The resting mark, and it costs no space — § P10, FUEL-108.

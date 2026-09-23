@@ -237,6 +237,17 @@ export default defineConfig({
       dependencies: ["setup"],
       use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
     },
+    /**
+     * The row's photograph on `/training` — FUEL-129. A project for the reason
+     * the others are: it asks where a box sits and what a page requested, which
+     * has no theme, and it sets its own viewport per assertion.
+     */
+    {
+      name: "row-photograph",
+      testMatch: /row-photograph\.spec\.ts/,
+      dependencies: ["setup"],
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+    },
     {
       name: "page-columns",
       testMatch: /page-columns\.spec\.ts/,

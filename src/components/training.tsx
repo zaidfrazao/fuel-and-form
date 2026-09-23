@@ -32,6 +32,7 @@ import {
   ExerciseList,
   type ListedExercise,
   type RowOpens,
+  type RowThumbnail,
 } from "@/components/exercise-list";
 import { SlashMeta } from "@/components/kv-grid";
 import { PageMain } from "@/components/page-main";
@@ -1828,6 +1829,25 @@ export function Training({
     else if (exercise.media !== null) rowOpens.set(exercise.id, "form");
   }
 
+  /*
+   * The photograph each row leads with — § Lists › The row's photograph,
+   * FUEL-129. The reference's LAST frame, its working position: the starts are
+   * three people standing, and the working positions are what tell a squat from
+   * a lunge from a split squat at a glance.
+   *
+   * From the same resolved `media` as the sheet, so the thumbnail is the file
+   * the sheet's second frame shows and opening it costs no second download.
+   */
+  const rowThumbnails = new Map<string, RowThumbnail>();
+
+  for (const exercise of allExercises) {
+    // An image reference only: a video's frame is a video file, and the row
+    // draws an `<img>`. None ships today; the sheet still plays one.
+    if (exercise.media?.kind !== "image") continue;
+    const frame = exercise.media.frames.at(-1);
+    if (frame) rowThumbnails.set(exercise.id, frame);
+  }
+
   const draft = (exerciseId: string, setIndex: number, value: string) =>
     setDrafts((previous) => new Map(previous).set(`${exerciseId}#${setIndex}`, value));
 
@@ -1957,6 +1977,7 @@ export function Training({
         progress={progress}
         affordance={{
           available: rowOpens,
+          thumbnails: rowThumbnails,
           onShow: (id) =>
             rowOpens.get(id) === "sets"
               ? setSetsOpenFor(id)
