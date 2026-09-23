@@ -561,6 +561,58 @@ export function stepSession<T extends SetTarget & { id: string }>(
 }
 
 /**
+ * Which rest a newly logged set is followed by, or `null` for none — FUEL-126.
+ *
+ * `"exercise"` when the state moves on within the round, `"round"` when the
+ * log finishes one. The durations are `rest-timer.ts`'s, not this file's: this
+ * says only where the reader is going, which is a fact about the steps.
+ *
+ * `sets` are the sets BEFORE the log. `null`, and so no rest, whenever the
+ * log does not move the reader, because a rest is the gap between two things
+ * and there is no second thing:
+ *
+ *   - Not a circuit. § P10 forbids reading a rest off the format's prose, and
+ *     only the circuits have a rest that `workouts.type` can stand for. Every
+ *     other session keeps the manual timer it had.
+ *   - The state stays where it is. A set logged ahead of its round fills no
+ *     gap and moves nothing (see `sessionPosition`), and a step gone back to
+ *     is held after its set is logged, because that reader is correcting the
+ *     past, not training on.
+ *   - The session is finished. The last set has no rest after it, including
+ *     when the step the state lands on was logged ahead of its round.
+ *
+ * **A correction starts nothing, and that is this function's to guarantee
+ * rather than the caller's.** It re-logs a set already in `sets`, so no step
+ * changes and the state cannot move. That is the answer to FUEL-93's objection
+ * that an automatic timer "would start counting every time a set was
+ * corrected". A removal never calls this.
+ */
+export function restAfterLog<T extends SetTarget & { id: string }>(
+  exercises: readonly T[],
+  sets: readonly (LoggedSet & { exerciseId: string })[],
+  byRound: boolean,
+  moved: Moved,
+  logged: { exerciseId: string; setIndex: number },
+): "exercise" | "round" | null {
+  const before = locate(exercises, sets, byRound, moved);
+
+  // Without rounds the steps are whole exercises, and finishing one would read
+  // as a move "within the round" — the rest this refuses to invent.
+  if (before.rounds === null) return null;
+
+  const after = locate(exercises, [...sets, { ...logged, value: 0 }], byRound, moved);
+  // Both defined: a circuit has steps, and one set more removes none of them.
+  const from = before.steps[before.current]!;
+  const to = after.steps[after.current]!;
+
+  // Where the state did not move, whichever set was logged, and where it came
+  // to rest on a step with nothing left to do.
+  if (to.key === from.key || to.done) return null;
+
+  return to.round === from.round ? "exercise" : "round";
+}
+
+/**
  * The word a logged set's number is counted in, as the set row prints it —
  * FUEL-123.
  *

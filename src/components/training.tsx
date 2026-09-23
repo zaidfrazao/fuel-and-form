@@ -32,7 +32,7 @@ import { ExerciseList, type ListedExercise } from "@/components/exercise-list";
 import { SlashMeta } from "@/components/kv-grid";
 import { PageMain } from "@/components/page-main";
 import { RecentSessions } from "@/components/recent-sessions";
-import { RestTimer } from "@/components/rest-timer";
+import { RestTimer, startRest } from "@/components/rest-timer";
 import { SessionClock } from "@/components/session-clock";
 import { Button, CONFIRM_DESTRUCTIVE } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
@@ -56,6 +56,7 @@ import {
   type LoggedSet,
   type Moved,
   parseMoved,
+  restAfterLog,
   type SessionPosition,
   type SetTarget,
   setProgress,
@@ -73,6 +74,7 @@ import {
   targetLow,
 } from "@/lib/exercise-set";
 import { dayLabel } from "@/lib/now-display";
+import { CIRCUIT_REST } from "@/lib/rest-timer";
 
 /**
  * The form sheet, kept out of this screen's first payload — § P10, FUEL-94.
@@ -2199,6 +2201,22 @@ export function Training({
                     drafts={drafts}
                     onDraft={(setIndex, value) => draft(currentEx.id, setIndex, value)}
                     onLog={(setIndex, value) => {
+                      // A circuit's rest — FUEL-126. Read against the sets
+                      // BEFORE this one, in the gesture that logged it,
+                      // because the gesture is what lets the rest's tone sound
+                      // (`startRest` primes it). A correction re-logs a set
+                      // already there, so the position cannot move and
+                      // `restAfterLog` starts nothing: the split FUEL-93 asked
+                      // for is in the derivation, not in which control fired.
+                      // Started before the server answers, because a refused
+                      // set was still performed and the rest after it is true.
+                      const rest = restAfterLog(workingExercises, sets, byRound, moved, {
+                        exerciseId: currentEx.id,
+                        setIndex,
+                      });
+
+                      if (rest !== null) startRest(CIRCUIT_REST[rest]);
+
                       forget(currentEx.id, setIndex);
                       act({ kind: "log-set", exerciseId: currentEx.id, setIndex, value });
                     }}

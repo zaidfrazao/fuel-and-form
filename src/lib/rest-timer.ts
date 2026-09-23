@@ -1,10 +1,10 @@
 /**
- * The rest timer's arithmetic — FUEL-93, PRD § P10.
+ * The rest timer's arithmetic — FUEL-93 and FUEL-126, PRD § P10.
  *
- * "A manual rest timer between exercises, started and stopped by hand.
- * Client-only — nothing about a rest interval is worth a row — and counted from
- * a stored end instant rather than an accumulated one, since the phone is
- * locked for most of a ninety-second rest and a throttled tab stops counting."
+ * "A rest timer between exercises. Client-only — nothing about a rest interval
+ * is worth a row — and counted from a stored end instant rather than an
+ * accumulated one, since the phone is locked for most of a ninety-second rest
+ * and a throttled tab stops counting."
  *
  * That second clause is the whole of this file, and it is here rather than in
  * the component because it is the half that can be held still. `rest-timer.tsx`
@@ -48,21 +48,43 @@
  * The durations offered, in seconds.
  *
  * Three, following `WALK_PRESETS`' precedent in shape as well as in count: a
- * tap starts a common duration and there is no keypad, because a rest is chosen
- * from a handful of habits rather than dialled in. Sixty, ninety and a hundred
- * and twenty are the rests the seeded circuits are written around.
+ * tap starts a common duration. **They are every rest the program writes**
+ * (FUEL-126): the circuits' ~20 s between exercises, the intervals' 40 s off,
+ * and the circuits' 90 s between rounds. Until then they were 60, 90 and 120,
+ * and the rest taken most often, twelve times a circuit, had no preset while
+ * two of the three were rests the program never asks for.
+ *
+ * Anything else is `parseCustomRest`'s. FUEL-93 ruled "there is no keypad" on
+ * the grounds that a rest is chosen from a handful of habits; FUEL-126 kept the
+ * handful and added the keypad beside it, because the habits are the program's
+ * and the reader's own are not always the same.
  *
  * Seconds rather than minutes — the walk's unit — because a rest is the one
  * duration in this app that is not a whole number of them.
  */
-export const REST_PRESETS: readonly number[] = [60, 90, 120];
+export const REST_PRESETS: readonly number[] = [20, 40, 90];
+
+/**
+ * The rests a circuit starts on its own, in seconds — FUEL-126.
+ *
+ * The circuits' format reads "~20 sec rest between exercises, then 90 sec rest
+ * between rounds". § P10 forbids parsing that prose, so it is written here
+ * instead, keyed by what `restAfterLog` in `exercise-set.ts` says comes next,
+ * and applies to the one workout type whose format it is. Both are presets, so
+ * an automatic rest and a tapped one read the same figure.
+ */
+export const CIRCUIT_REST: Readonly<Record<"exercise" | "round", number>> = {
+  exercise: 20,
+  round: 90,
+};
 
 /**
  * The longest rest a stored value may claim, and the reason it is capped.
  *
- * `parseRestEnd` refuses an end instant further away than this. It is not a
- * limit on what anybody can start — no preset comes near it — but a refusal of
- * a value that cannot have come from a tap: a corrupt entry, a number written
+ * `parseRestEnd` refuses an end instant further away than this. No preset
+ * comes near it, and since FUEL-126 it is also the ceiling a custom rest may
+ * be typed up to (`MAX_CUSTOM_REST_SECONDS`), so it refuses only values that
+ * cannot have come from a tap: a corrupt entry, a number written
  * by a different version of this file, or the ordinary case that is neither of
  * those, a device clock corrected BACKWARDS while a timer was running. All
  * three land as a timer counting down from an implausible figure with no way to
@@ -157,4 +179,33 @@ export function parseRestEnd(raw: string | null, now: number): number | null {
   if (endsAt - now > MAX_REST_MS) return null;
 
   return endsAt;
+}
+
+/**
+ * The longest custom rest, in seconds: the cap a stored value is refused past.
+ *
+ * Exactly `MAX_REST_MS`, so a rest this app will START is always a rest it
+ * will READ back. One second over and a reload would refuse the timer the
+ * reader had just typed in, which is a timer that vanishes for no reason.
+ */
+export const MAX_CUSTOM_REST_SECONDS = MAX_REST_MS / 1000;
+
+/**
+ * A typed custom rest in whole seconds, or `null` for one that cannot start —
+ * FUEL-126.
+ *
+ * Seconds rather than `m:ss`, because the box asks for a numeric keypad and
+ * the phone's has no colon; the set rows ask for digits for the same reason.
+ * The box strips anything else as it arrives, and this refuses what gets
+ * through anyway: an empty box, zero (a rest that is already over), and
+ * anything past the cap. Leading zeros are digits like any other.
+ */
+export function parseCustomRest(raw: string): number | null {
+  if (!/^\d+$/.test(raw)) return null;
+
+  const seconds = Number(raw);
+
+  if (seconds < 1 || seconds > MAX_CUSTOM_REST_SECONDS) return null;
+
+  return seconds;
 }

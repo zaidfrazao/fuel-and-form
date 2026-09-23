@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { RestTimer } from "./rest-timer";
+import { RestTimer, startRest } from "./rest-timer";
 
 /**
  * The rest timer's browser half — FUEL-93, PRD § P10.
@@ -93,13 +93,12 @@ describe("starting and stopping, and nothing else", () => {
   test("offers the presets and no readout until one is tapped", () => {
     render(<RestTimer />);
 
-    // The criterion is "started and stopped by hand; nothing starts it
-    // automatically". There is no prop through which a logged set could reach
-    // this component — see the render site in `training.tsx` — so the whole of
-    // that criterion is the absence asserted here.
+    // Nothing runs until something starts it. Since FUEL-126 that is a tap
+    // here or a logged set in a circuit, which is `training.test.tsx`'s to
+    // prove; this component takes no prop through which either could arrive.
     expect(screen.queryByRole("timer")).toBeNull();
 
-    for (const label of ["1:00", "1:30", "2:00"]) {
+    for (const label of ["0:20", "0:40", "1:30", "Custom"]) {
       expect(screen.getByRole("button", { name: label })).toBeTruthy();
     }
   });
@@ -165,12 +164,152 @@ describe("the reading is a subtraction, not an accumulation", () => {
 
   test("counts down across repaints without drifting", async () => {
     render(<RestTimer />);
-    press("1:00");
+    press("1:30");
 
     for (let elapsed = TICK; elapsed <= 30_000; elapsed += TICK) await tick();
 
-    // Two hundred and forty repaints later, the answer is still the clock's.
-    expect(reading()).toBe("0:30");
+    // A hundred and twenty repaints later, the answer is still the clock's.
+    expect(reading()).toBe("1:00");
+  });
+});
+
+describe("a custom rest — FUEL-126", () => {
+  const box = () => screen.getByRole("textbox", { name: "Rest in seconds" });
+  const type = (value: string) => {
+    act(() => {
+      fireEvent.change(box(), { target: { value } });
+    });
+  };
+  const start = () => screen.getByRole("button", { name: "Start" }) as HTMLButtonElement;
+
+  test("Custom swaps the presets for a box in the same row, and nothing opens", () => {
+    render(<RestTimer />);
+    press("Custom");
+
+    expect(box()).toBeTruthy();
+    expect(document.activeElement).toBe(box());
+    expect(screen.queryByRole("button", { name: "0:20" })).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("starts the seconds typed, and gives the presets back after", () => {
+    render(<RestTimer />);
+    press("Custom");
+    type("45");
+    press("Start");
+
+    expect(reading()).toBe("0:45");
+    expect(screen.queryByRole("textbox")).toBeNull();
+
+    press("Stop");
+
+    // The box does not come back half-remembered: the presets do.
+    expect(screen.getByRole("button", { name: "0:20" })).toBeTruthy();
+  });
+
+  test("Enter starts it, as it logs a set", () => {
+    render(<RestTimer />);
+    press("Custom");
+    type("150");
+    act(() => {
+      fireEvent.submit(box());
+    });
+
+    expect(reading()).toBe("2:30");
+  });
+
+  test("strips what is not a digit as it arrives", () => {
+    render(<RestTimer />);
+    press("Custom");
+    type("1e2");
+
+    expect((box() as HTMLInputElement).value).toBe("12");
+  });
+
+  test("cannot start an empty box, zero, or past the cap", () => {
+    render(<RestTimer />);
+    press("Custom");
+
+    expect(start().disabled).toBe(true);
+
+    type("0");
+    expect(start().disabled).toBe(true);
+
+    type("3601");
+    expect(start().disabled).toBe(true);
+    // A submit that gets past the disabled button starts nothing either.
+    act(() => {
+      fireEvent.submit(box());
+    });
+    expect(screen.queryByRole("timer")).toBeNull();
+
+    type("3600");
+    expect(start().disabled).toBe(false);
+  });
+
+  test("Cancel gives the presets back without starting anything", () => {
+    render(<RestTimer />);
+    press("Custom");
+    type("45");
+    press("Cancel");
+
+    expect(screen.queryByRole("timer")).toBeNull();
+    expect(screen.getByRole("button", { name: "0:20" })).toBeTruthy();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
+
+  test("a rest started from outside closes the box rather than hiding it", () => {
+    render(<RestTimer />);
+    press("Custom");
+    type("45");
+
+    // A set logged in a circuit, while the box was open.
+    act(() => {
+      startRest(20);
+    });
+    expect(reading()).toBe("0:20");
+
+    press("Stop");
+
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.getByRole("button", { name: "0:20" })).toBeTruthy();
+  });
+});
+
+describe("startRest, the start a logged set calls — FUEL-126", () => {
+  test("builds no audio context with no row mounted to close it", () => {
+    const constructed = vi.fn();
+
+    vi.stubGlobal("AudioContext", function AudioContextStub() {
+      constructed();
+      return { resume: vi.fn(async () => {}), close: vi.fn(async () => {}) };
+    });
+
+    act(() => {
+      startRest(20);
+    });
+
+    expect(constructed).not.toHaveBeenCalled();
+    // The rest is still stored, so a row mounted now shows it.
+    expect(window.localStorage.getItem(KEY)).toBe(String(NOW + 20_000));
+
+    render(<RestTimer />);
+    expect(reading()).toBe("0:20");
+  });
+
+  test("starts a mounted row's timer, and replaces one already running", () => {
+    render(<RestTimer />);
+
+    act(() => {
+      startRest(90);
+    });
+    expect(reading()).toBe("1:30");
+
+    act(() => {
+      startRest(20);
+    });
+    expect(reading()).toBe("0:20");
+    expect(window.localStorage.getItem(KEY)).toBe(String(NOW + 20_000));
   });
 });
 
@@ -184,10 +323,10 @@ describe("backgrounding and restoring", () => {
 
   test("the reading is right on the frame the tab comes back", async () => {
     render(<RestTimer />);
-    press("2:00");
+    press("1:30");
 
     visibility("hidden");
-    sleep(90_000);
+    sleep(60_000);
     // No tick. `visibilitychange` alone has to produce the correct figure,
     // because the interval may not fire for another minute.
     visibility("visible");
@@ -200,7 +339,7 @@ describe("backgrounding and restoring", () => {
     vi.stubGlobal("navigator", Object.assign(Object.create(navigator), { vibrate }));
 
     render(<RestTimer />);
-    press("1:00");
+    press("0:40");
 
     visibility("hidden");
     sleep(120_000);
@@ -218,9 +357,9 @@ describe("backgrounding and restoring", () => {
 
   test("pageshow restores it too, for a phone coming back from the bfcache", async () => {
     render(<RestTimer />);
-    press("2:00");
+    press("1:30");
 
-    sleep(90_000);
+    sleep(60_000);
     act(() => {
       window.dispatchEvent(new Event("pageshow"));
     });
@@ -295,10 +434,10 @@ describe("what a reload finds", () => {
 });
 
 describe("the completion signals", () => {
-  /** Runs a 60-second rest out, with one tick landing on the far side of it. */
+  /** Runs a 40-second rest out, with one tick landing on the far side of it. */
   const runOut = async () => {
-    press("1:00");
-    sleep(60_000 - TICK);
+    press("0:40");
+    sleep(40_000 - TICK);
     await tick();
   };
 
@@ -350,18 +489,18 @@ describe("the completion signals", () => {
     );
 
     render(<RestTimer />);
-    press("1:00");
+    press("0:40");
 
     /*
      * The context is built on the TAP and not when the rest runs out. That
      * ordering is the whole of why a sound arrives at all on a phone: mobile
      * browsers refuse to start audio outside a user gesture, and a context
-     * first constructed sixty seconds later is a context that is suspended.
+     * first constructed forty seconds later is a context that is suspended.
      */
     expect(constructed).toHaveBeenCalledTimes(1);
     expect(oscillator.start).not.toHaveBeenCalled();
 
-    sleep(60_000 - TICK);
+    sleep(40_000 - TICK);
     await tick();
 
     expect(oscillator.start).toHaveBeenCalledTimes(1);
@@ -499,7 +638,7 @@ describe("the wake lock", () => {
     const request = stubWakeLock(lock);
 
     render(<RestTimer />);
-    press("2:00");
+    press("1:30");
     await act(async () => {});
     expect(request).toHaveBeenCalledTimes(1);
 
@@ -561,7 +700,7 @@ describe("the wake lock", () => {
     stubWakeLock(lock);
 
     const { unmount } = render(<RestTimer />);
-    press("2:00");
+    press("1:30");
     await act(async () => {});
 
     unmount();

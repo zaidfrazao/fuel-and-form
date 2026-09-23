@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CIRCUIT_REST,
+  MAX_CUSTOM_REST_SECONDS,
   MAX_REST_MS,
+  parseCustomRest,
   parseRestEnd,
   REST_PRESETS,
   restLabel,
@@ -24,12 +27,12 @@ import {
 const NOW = Date.UTC(2026, 8, 2, 18, 30, 0);
 
 describe("the presets", () => {
-  it("are three durations in seconds, following the walk's precedent", () => {
+  it("are the three rests the program writes, in seconds — FUEL-126", () => {
     // Asserted as literals rather than derived from the array under test, for
     // `section.test.ts`'s reason: a test that reads the values off the same
     // constant it is checking passes on any edit to it, including one that
     // makes a rest four minutes long.
-    expect([...REST_PRESETS]).toEqual([60, 90, 120]);
+    expect([...REST_PRESETS]).toEqual([20, 40, 90]);
   });
 
   it("are all well inside the cap a stored value is refused for", () => {
@@ -38,6 +41,53 @@ describe("the presets", () => {
     // app itself started — which is the one way `MAX_REST_MS` could be wrong
     // without anything looking wrong.
     for (const seconds of REST_PRESETS) expect(seconds * 1000).toBeLessThan(MAX_REST_MS);
+  });
+});
+
+describe("the circuit's rests — FUEL-126", () => {
+  it("are 20 seconds between exercises and 90 between rounds", () => {
+    // Literals, for the presets' reason above: "~20 sec rest between
+    // exercises, then 90 sec rest between rounds" is the format's own prose.
+    expect(CIRCUIT_REST).toEqual({ exercise: 20, round: 90 });
+  });
+
+  it("are both presets, so an automatic rest reads a figure the row offers", () => {
+    expect(REST_PRESETS).toContain(CIRCUIT_REST.exercise);
+    expect(REST_PRESETS).toContain(CIRCUIT_REST.round);
+  });
+});
+
+describe("a custom rest — FUEL-126", () => {
+  it("reads typed digits as whole seconds", () => {
+    expect(parseCustomRest("45")).toBe(45);
+    expect(parseCustomRest("1")).toBe(1);
+    expect(parseCustomRest("045")).toBe(45);
+  });
+
+  it("refuses an empty box and a rest that is already over", () => {
+    expect(parseCustomRest("")).toBeNull();
+    expect(parseCustomRest("0")).toBeNull();
+    expect(parseCustomRest("000")).toBeNull();
+  });
+
+  it("refuses anything that is not plain digits", () => {
+    for (const raw of ["1e2", "4.5", "-5", " 45", "45 ", "1:30", "abc"]) {
+      expect(parseCustomRest(raw)).toBeNull();
+    }
+  });
+
+  it("takes exactly up to the cap and not a second past it", () => {
+    expect(MAX_CUSTOM_REST_SECONDS).toBe(3600);
+    expect(parseCustomRest("3600")).toBe(3600);
+    expect(parseCustomRest("3601")).toBeNull();
+  });
+
+  it("starts nothing a reload would refuse", () => {
+    // The longest custom rest, read back on the instant it was started, is a
+    // timer — not one the cap throws away.
+    const endsAt = NOW + MAX_CUSTOM_REST_SECONDS * 1000;
+
+    expect(parseRestEnd(String(endsAt), NOW)).toBe(endsAt);
   });
 });
 

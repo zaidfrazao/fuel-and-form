@@ -14,6 +14,7 @@ import {
   parseMoved,
   parseSetIndex,
   parseSetValue,
+  restAfterLog,
   sessionPosition,
   type SetTarget,
   setProgress,
@@ -737,6 +738,113 @@ describe("stepSession — FUEL-120", () => {
         rounds: 3,
       });
     });
+  });
+});
+
+describe("restAfterLog — FUEL-126", () => {
+  const CIRCUIT = [
+    { id: "a", ...FIXED },
+    { id: "b", ...RANGE },
+    { id: "c", ...HELD },
+  ];
+
+  const at = (exerciseId: string, ...indexes: number[]) =>
+    indexes.map((setIndex) => ({ exerciseId, setIndex, value: 10 }));
+
+  const rest = (
+    sets: ReturnType<typeof at>,
+    exerciseId: string,
+    setIndex: number,
+    { byRound = true, moved = NOT_MOVED, exercises = CIRCUIT } = {},
+  ) => restAfterLog(exercises, sets, byRound, moved, { exerciseId, setIndex });
+
+  it("rests between exercises when the round goes on", () => {
+    expect(rest([], "a", 1)).toBe("exercise");
+    expect(rest(at("a", 1), "b", 1)).toBe("exercise");
+  });
+
+  it("rests between rounds when the log finishes one", () => {
+    expect(rest([...at("a", 1), ...at("b", 1)], "c", 1)).toBe("round");
+    expect(rest([...at("a", 1, 2), ...at("b", 1, 2), ...at("c", 1)], "c", 2)).toBe("round");
+  });
+
+  it("starts no rest after the session's last set", () => {
+    const all = [...at("a", 1, 2, 3), ...at("b", 1, 2, 3), ...at("c", 1, 2)];
+
+    expect(rest(all, "c", 3)).toBeNull();
+  });
+
+  it("starts no rest when the session ends on a step logged ahead of its round", () => {
+    // c's set 3 was ticked early; b's set 3 is the last open step, and the
+    // state lands on c's, which has nothing left to do.
+    const all = [...at("a", 1, 2, 3), ...at("b", 1, 2), ...at("c", 1, 2, 3)];
+
+    expect(rest(all, "b", 3)).toBeNull();
+  });
+
+  it("starts no rest for a correction, which re-logs a set already there", () => {
+    // Round 2 on a: correcting a's set 1, or the set just before the position.
+    const sets = [...at("a", 1), ...at("b", 1), ...at("c", 1)];
+
+    expect(rest(sets, "a", 1)).toBeNull();
+    expect(rest(sets, "c", 1)).toBeNull();
+  });
+
+  it("starts no rest outside a circuit, however the sets stand", () => {
+    // Straight sets would otherwise read as "exercise" after a's set 1.
+    expect(rest([], "a", 1, { byRound: false })).toBeNull();
+    expect(rest(at("a", 1, 2), "a", 3, { byRound: false })).toBeNull();
+  });
+
+  it("starts no rest in a circuit with one round, which has no rounds to name", () => {
+    const single = [
+      { id: "a", ...target({ targetSets: 1, targetRepsLow: 10 }) },
+      { id: "b", ...target({ targetSets: 1, targetRepsLow: 10 }) },
+    ];
+
+    expect(rest([], "a", 1, { exercises: single })).toBeNull();
+  });
+
+  it("starts no rest for a set logged ahead of its round", () => {
+    // Round 1 is on b; a's set 2 fills no gap and moves nothing.
+    expect(rest(at("a", 1), "a", 2)).toBeNull();
+    // Nor for another exercise's set in the current round.
+    expect(rest(at("a", 1), "c", 1)).toBeNull();
+  });
+
+  it("starts no rest where the state holds a step gone back to", () => {
+    // Round 2, gone back to c's round-1 step, which was passed without a log.
+    const sets = [...at("a", 1), ...at("b", 1), ...at("a", 2)];
+    const moved: Moved = { passed: ["c#1"], at: "c#1" };
+
+    expect(sessionPosition(CIRCUIT, sets, true, moved)).toEqual({
+      index: 2,
+      round: 1,
+      rounds: 3,
+    });
+    expect(rest(sets, "c", 1, { moved })).toBeNull();
+  });
+
+  it("follows a passed step to where the state goes next", () => {
+    // b's round-1 step passed, so c's set 1 is the last of round 1.
+    const moved: Moved = { passed: ["b#1"], at: null };
+
+    expect(rest(at("a", 1), "c", 1, { moved })).toBe("round");
+  });
+
+  it("follows a shorter target out of the later rounds", () => {
+    const shorter = [
+      { id: "a", ...FIXED },
+      { id: "b", ...target({ targetSets: 2, targetRepsLow: 10 }) },
+    ];
+    const sets = [...at("a", 1, 2), ...at("b", 1, 2)];
+
+    // b has no round 3, so a's set 3 is the last set of all.
+    expect(rest(sets, "a", 3, { exercises: shorter })).toBeNull();
+    // And a's set 2 in round 2 is followed by b's, within the round.
+    expect(rest([...at("a", 1), ...at("b", 1)], "a", 2, { exercises: shorter })).toBe(
+      "exercise",
+    );
   });
 });
 
