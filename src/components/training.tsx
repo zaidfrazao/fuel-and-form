@@ -1147,7 +1147,8 @@ const NO_SETS: readonly LoggedSetView[] = [];
  * § The two states of `/training`: from 1024 the measure reads session, `This
  * session`, bar, exercises. Below it, the list stays directly under the
  * session, where § Lists' window is measured, and the bar stays last and
- * sticky. One DOM cannot hold both orders, and CSS `order` would draw one and
+ * sticky — until the date has a record, when the phone's copy follows `This
+ * session` instead (FUEL-128). Still one phone copy: `entry` picks its place. One DOM cannot hold both orders, and CSS `order` would draw one and
  * read out the other, so this is the ruler's device: one copy per position,
  * with the other `display: none` and out of the accessibility tree. The split
  * is at `lg`, where `TRAINING_BAR_AT` hands the bar over too.
