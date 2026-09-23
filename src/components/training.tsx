@@ -68,6 +68,7 @@ import {
   setRows,
   stepSession,
   stepsByRound,
+  setsDone,
   setsFor,
   lastTimeValue,
   MAX_REPS,
@@ -461,6 +462,62 @@ function Estimate({ range }: { range: EnergyRange | null }) {
         range.highKcal,
       )} kcal`}</span>
     </SlashMeta>
+  );
+}
+
+/**
+ * What was done, per exercise — the recap a recorded session leads with,
+ * FUEL-128.
+ *
+ * Not a state and not a sheet. `This session` already held the status, the
+ * estimate, the note and the duration, each editable, which is four of the
+ * recap's five facts; the sets were the one fact reachable only a row at a
+ * time. So the recap is this list added to the section that holds the rest,
+ * and "still there after a reload" and "still editable from it" are true by
+ * construction: it is drawn from the stored sets, beside the stored record,
+ * under the bar that changes it.
+ *
+ * Working rows only, and only those with a set. A bookend logs none (FUEL-92),
+ * and an exercise nobody did is left out rather than listed as zero —
+ * `setProgress`'s rule, and § Tone of Voice's.
+ *
+ * The values and never the target. `setsDone` carries the argument: the row's
+ * `3 of 3 sets` is a ratio, and PRD § P10 refuses any figure that turns set
+ * completion into a score. This list is on the one surface that reads as a
+ * verdict, so it is where that refusal matters most.
+ *
+ * The name gives and the values do not — § Lists' rule for a name beside a
+ * neighbour, the same `min-w-0 break-words` / `shrink-0` pair.
+ */
+function SessionRecap({
+  exercises,
+  sets,
+}: {
+  exercises: readonly TrainingExercise[];
+  sets: readonly LoggedSetView[];
+}) {
+  const done = exercises.flatMap((exercise) => {
+    const line = setsDone(exercise, setsFor(exercise.id, sets));
+
+    return line === null ? [] : [{ id: exercise.id, name: exercise.name, line }];
+  });
+
+  if (done.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p id="session-sets" className="text-slash text-text-secondary">
+        Sets
+      </p>
+      <ul aria-labelledby="session-sets" className="flex flex-col gap-1">
+        {done.map(({ id, name, line }) => (
+          <li key={id} className="flex items-baseline justify-between gap-4 text-body">
+            <span className="min-w-0 break-words text-text-primary">{name}</span>
+            <span className="shrink-0 tabular-nums text-text-secondary">{line}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -2327,8 +2384,10 @@ export function Training({
         )}
 
         {/* The phone's copy of the list, and the band's and the cap's is
-            after the bar below — FUEL-118, `LIST_AT`. */}
-        {session && exerciseList(session, "phone")}
+            after the bar below — FUEL-118, `LIST_AT`. Once the date has a
+            record, the phone's copy moves under `This session` instead —
+            FUEL-128, see the copy there. */}
+        {session && !entry && exerciseList(session, "phone")}
 
         {session && (
           <section className="flex flex-col gap-[14px]">
@@ -2341,6 +2400,10 @@ export function Training({
               <Recorded entry={entry} />
               <Estimate range={energy} />
             </div>
+
+            {/* FUEL-128: what was done, between what it amounted to and what
+                the reader wrote about it. */}
+            <SessionRecap exercises={workingExercises} sets={sets} />
 
             <div className="flex flex-col gap-2">
               <label htmlFor="session-note" className="text-slash text-text-secondary">
@@ -2403,6 +2466,21 @@ export function Training({
             </div>
           </section>
         )}
+
+        {/*
+         * The phone's copy again, once the date has a record — FUEL-128.
+         *
+         * A recorded session leads with its recap, so below 1024 `This
+         * session` comes first and the list after it: the order the measure
+         * has read in from 1024 since FUEL-118. Before a record there is
+         * nothing to recap, and the list stays where § Lists' window is
+         * measured, directly under the session. The bar is sticky at the foot
+         * either way, so the control the reader just tapped does not move.
+         *
+         * Two positions for one copy rather than a third copy: `entry` picks
+         * one, so the phone never draws the list twice.
+         */}
+        {session && entry && exerciseList(session, "phone")}
 
         {/*
          * From 1024: the bar, then the list — § The two states of `/training`,
