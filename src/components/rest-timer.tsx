@@ -451,9 +451,9 @@ export function RestTimer() {
   /*
    * Any rest that starts closes the box: the box's own, and one started from
    * outside the row by a logged set in a circuit, which would otherwise leave
-   * it to come back half-typed when that rest ended. Adjusted
-   * during render rather than in an effect, for the reason
-   * `useSyncExternalStore` is used above: no second render pass.
+   * it to come back half-typed when that rest ended. Adjusted during render
+   * rather than in an effect, for the reason `useSyncExternalStore` is used
+   * above: no second render pass.
    */
   const [seen, setSeen] = useState(endsAt);
 
@@ -461,6 +461,7 @@ export function RestTimer() {
     setSeen(endsAt);
     if (endsAt !== null) setCustom(null);
   }
+
   const lock = useRef<WakeLockSentinel | null>(null);
   /** Whether a lock is still wanted by the time the platform grants one. */
   const wantsLock = useRef(false);
@@ -602,11 +603,11 @@ export function RestTimer() {
       ) : reading === null ? (
         /*
          * Presets first and the keypad behind them — `WALK_PRESETS`'
-         * precedent, and `walk-row.tsx` is where the interaction is drawn. Labelled in the
-         * readout's own `m:ss` rather than in words, so the figure on the
-         * button is the figure the timer starts from: a control reading `1:30`
-         * beside a readout counting down from `1:30` is one number in one
-         * register, where "90s" would be a second.
+         * precedent, and `walk-row.tsx` is where the interaction is drawn.
+         * Labelled in the readout's own `m:ss` rather than in words, so the
+         * figure on the button is the figure the timer starts from: a control
+         * reading `1:30` beside a readout counting down from `1:30` is one
+         * number in one register, where "90s" would be a second.
          *
          * `Custom` follows them since FUEL-126, as a Text button: it is the way
          * to a box rather than a rest, so it does not wear a preset's slab.
