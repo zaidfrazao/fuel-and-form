@@ -601,8 +601,8 @@ export function RestTimer() {
         </form>
       ) : reading === null ? (
         /*
-         * Presets rather than a keypad — `WALK_PRESETS`' precedent, and
-         * `walk-row.tsx` is where the interaction is drawn. Labelled in the
+         * Presets first and the keypad behind them — `WALK_PRESETS`'
+         * precedent, and `walk-row.tsx` is where the interaction is drawn. Labelled in the
          * readout's own `m:ss` rather than in words, so the figure on the
          * button is the figure the timer starts from: a control reading `1:30`
          * beside a readout counting down from `1:30` is one number in one

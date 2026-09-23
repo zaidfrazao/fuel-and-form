@@ -1,10 +1,10 @@
 /**
- * The rest timer's arithmetic — FUEL-93, PRD § P10.
+ * The rest timer's arithmetic — FUEL-93 and FUEL-126, PRD § P10.
  *
- * "A manual rest timer between exercises, started and stopped by hand.
- * Client-only — nothing about a rest interval is worth a row — and counted from
- * a stored end instant rather than an accumulated one, since the phone is
- * locked for most of a ninety-second rest and a throttled tab stops counting."
+ * "A rest timer between exercises. Client-only — nothing about a rest interval
+ * is worth a row — and counted from a stored end instant rather than an
+ * accumulated one, since the phone is locked for most of a ninety-second rest
+ * and a throttled tab stops counting."
  *
  * That second clause is the whole of this file, and it is here rather than in
  * the component because it is the half that can be held still. `rest-timer.tsx`
