@@ -10,6 +10,7 @@ import {
   TRAINING_BAR_AT,
 } from "@/components/action-bar";
 import type { TrainingItem } from "@/components/training";
+import type { ResolvedFormMedia } from "@/lib/form-media";
 import {
   PAGE_ASIDE_COLUMN,
   PAGE_MEASURE_COLUMN,
@@ -3361,7 +3362,7 @@ describe("form reference media", () => {
   };
 
   /** The circuit with media on its FIRST working exercise, which is the subject. */
-  const withMedia = (media: typeof MEDIA | null = MEDIA) => [
+  const withMedia = (media: ResolvedFormMedia | null = MEDIA) => [
     {
       ...CIRCUIT,
       exercises: CIRCUIT.exercises.map((exercise, index) =>
@@ -3419,6 +3420,13 @@ describe("form reference media", () => {
       expect(photos[0]!.getAttribute("src")).toBe("/form/side-plank-2.jpg");
       // Every other row of the circuit has no reference, so only one is drawn.
       expect(list().getByRole("list").querySelectorAll("img")).toHaveLength(1);
+    });
+
+    test("a video reference draws no photograph on the row — FUEL-129", () => {
+      // Its last frame is a video file, and the row's photograph is an `<img>`.
+      render(view({ sessions: withMedia({ ...MEDIA, kind: "video" }) }));
+
+      expect(list().getByRole("list").querySelectorAll("img")).toHaveLength(0);
     });
 
     test("the session state draws no photograph — FUEL-129", async () => {

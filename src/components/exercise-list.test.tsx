@@ -528,6 +528,10 @@ describe("the row's photograph", () => {
     );
 
     expect(container.querySelectorAll("img")).toHaveLength(0);
+    // And the dropped frame claims no column either: an empty column beside
+    // every row of the work, with no photograph in any of them, is the column
+    // drawn for nothing.
+    expect(spacers(container)).toHaveLength(0);
   });
 
   test("opens the row's sheet when it is the part that is tapped", () => {

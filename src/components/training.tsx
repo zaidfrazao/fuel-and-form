@@ -1841,7 +1841,10 @@ export function Training({
   const rowThumbnails = new Map<string, RowThumbnail>();
 
   for (const exercise of allExercises) {
-    const frame = exercise.media?.frames.at(-1);
+    // An image reference only: a video's frame is a video file, and the row
+    // draws an `<img>`. None ships today; the sheet still plays one.
+    if (exercise.media?.kind !== "image") continue;
+    const frame = exercise.media.frames.at(-1);
     if (frame) rowThumbnails.set(exercise.id, frame);
   }
 

@@ -231,7 +231,11 @@ export function ExerciseList({
    * every row in a group agrees on where its name starts.
    */
   const photoColumn = (rows: readonly ListedExercise[]) =>
-    rows.some((row) => affordance?.thumbnails?.has(row.id));
+    rows.some(
+      // The same two conditions a row draws its photograph on, below — a frame
+      // for a row that is not a control is dropped, so it cannot claim a column.
+      (row) => affordance?.available.has(row.id) && affordance.thumbnails?.has(row.id),
+    );
 
   if (groups.length === 1)
     return (
