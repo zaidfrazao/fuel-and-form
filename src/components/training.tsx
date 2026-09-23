@@ -1759,9 +1759,13 @@ export function Training({
    * error rather than a warning for exactly that reason.
    */
   const rowOpens = new Map<string, RowOpens>();
+  // By id rather than by reference: `working` happens to filter the same
+  // objects today, and a clone anywhere upstream would silently turn every
+  // working row back into a form door.
+  const workingIds = new Set(workingExercises.map((exercise) => exercise.id));
 
   for (const exercise of allExercises) {
-    if (workingExercises.includes(exercise)) rowOpens.set(exercise.id, "sets");
+    if (workingIds.has(exercise.id)) rowOpens.set(exercise.id, "sets");
     else if (exercise.media !== null) rowOpens.set(exercise.id, "form");
   }
 
