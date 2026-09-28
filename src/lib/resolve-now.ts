@@ -387,8 +387,11 @@ export function buildTimeline(
  *     of them. The clock cannot distinguish them, so manual advance is what
  *     walks through the group, one tap each, which is the same mechanism it uses
  *     everywhere else.
+ *
+ * Exported for `undoRetreats` (FUEL-131), which has to predict the same floor
+ * `resolveNow` puts under the cursor: the card never sits behind the clock.
  */
-function clockIndex(timeline: ScheduledItem[], minutesOfDay: number): number {
+export function clockIndex(timeline: readonly ScheduledItem[], minutesOfDay: number): number {
   let latestStarted: number | null = null;
 
   // Ascending, so the last start that has passed is the greatest one that has.

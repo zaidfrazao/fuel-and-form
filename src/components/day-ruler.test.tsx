@@ -170,6 +170,60 @@ describe("DayRuler", () => {
     ]);
   });
 
+  describe("a slot the day walked past with nothing recorded — FUEL-131", () => {
+    const MORNING: Slot[] = [
+      { id: "circuit", label: "Circuit B", minutes: parseClock("06:30"), status: "unlogged" },
+      { id: "coffee", label: "Coffee + MCT oil", minutes: parseClock("06:45"), status: "unlogged" },
+      { id: "breakfast", label: "Breakfast", minutes: parseClock("07:10"), status: "now" },
+      { id: "lunch", label: "Lunch", minutes: parseClock("13:00"), status: "upcoming" },
+    ];
+
+    test("the table says Not logged, and Now for the card — never Upcoming", () => {
+      render(<DayRuler slots={MORNING} now={parseClock("07:53")} />);
+
+      const rows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
+
+      expect(rows.map((row) => row.textContent)).toEqual([
+        "Circuit B06:30Not logged",
+        "Coffee + MCT oil06:45Not logged",
+        "Breakfast07:10Now",
+        "Lunch13:00Upcoming",
+      ]);
+    });
+
+    test("the summary tallies them in the table's words", () => {
+      render(<DayRuler slots={MORNING} now={parseClock("07:53")} />);
+
+      expect(screen.getByRole("img").getAttribute("aria-label")).toBe(
+        "Day ruler, 06:00 to 22:00. 4 slots: 2 not logged, 1 now, 1 upcoming. Now 07:53.",
+      );
+    });
+
+    /*
+     * The one structural assertion in this suite, against the note above it,
+     * because the criterion is about the graphic: an unlogged slot must not be
+     * drawn as a tick still to come. Height says where a slot is and fill says
+     * what was recorded, so it takes the resolved marks' 15px and draws only
+     * the outline — no fill, no hatch, and no accent.
+     */
+    test("draws a hollow bar, not the hairline an upcoming slot gets", () => {
+      render(<DayRuler slots={MORNING} />);
+
+      const [circuit, , breakfast, lunch] = Array.from(
+        screen.getByRole("img").querySelectorAll<HTMLElement>("span[style*='left']"),
+      ).filter((mark) => !mark.textContent);
+
+      expect(circuit!.className).toContain("h-[15px]");
+      expect(circuit!.style.boxShadow).toContain("var(--text-tertiary)");
+      expect(circuit!.style.backgroundImage).toBe("");
+      expect(circuit!.className).not.toMatch(/bg-|accent/);
+
+      // The card's slot is drawn as the hairline: the NOW rule marks the moment.
+      expect(breakfast!.className).toBe(lunch!.className);
+      expect(lunch!.className).toContain("h-[9px]");
+    });
+  });
+
   test("orders the table chronologically whatever order the slots arrive in", () => {
     render(<DayRuler slots={[...SLOTS].reverse()} />);
 

@@ -7,6 +7,7 @@ import {
   logCount,
   latestLog,
   logIntent,
+  rowBelongsTo,
 } from "./log-intent";
 import type { NowItem } from "./resolve-now";
 
@@ -264,5 +265,38 @@ describe("latestLog", () => {
 
     expect(latestLog({ meals: [a, b], workouts: [] })).toEqual({ kind: "meal", log: b });
     expect(latestLog({ meals: [b, a], workouts: [] })).toEqual({ kind: "meal", log: b });
+  });
+});
+
+describe("rowBelongsTo — FUEL-131", () => {
+  const MEAL_ROW = { kind: "meal" as const, log: mealLog({ slot: "lunch", mealId: "meal-2" }) };
+  const WORKOUT_ROW = { kind: "workout" as const, log: workoutLog({ workoutId: workout().id }) };
+
+  it("matches a meal by its slot and its meal", () => {
+    expect(rowBelongsTo(MEAL_ROW, MEAL_ITEM)).toBe(true);
+  });
+
+  it("refuses the same meal in another slot", () => {
+    expect(rowBelongsTo({ ...MEAL_ROW, log: { ...MEAL_ROW.log, slot: "dinner" } }, MEAL_ITEM)).toBe(false);
+  });
+
+  it("refuses another meal in the same slot — a swap", () => {
+    expect(rowBelongsTo({ ...MEAL_ROW, log: { ...MEAL_ROW.log, mealId: "meal-9" } }, MEAL_ITEM)).toBe(false);
+  });
+
+  it("matches a session by its workout, and refuses another", () => {
+    expect(rowBelongsTo(WORKOUT_ROW, WORKOUT_ITEM)).toBe(true);
+    expect(
+      rowBelongsTo({ ...WORKOUT_ROW, log: { ...WORKOUT_ROW.log, workoutId: "workout-9" } }, WORKOUT_ITEM),
+    ).toBe(false);
+  });
+
+  it("never matches across the two tables", () => {
+    expect(rowBelongsTo(MEAL_ROW, WORKOUT_ITEM)).toBe(false);
+    expect(rowBelongsTo(WORKOUT_ROW, MEAL_ITEM)).toBe(false);
+  });
+
+  it("ignores what the row says about the item — a skip is still its row", () => {
+    expect(rowBelongsTo({ ...MEAL_ROW, log: { ...MEAL_ROW.log, status: "skipped" } }, MEAL_ITEM)).toBe(true);
   });
 });

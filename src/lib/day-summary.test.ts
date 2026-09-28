@@ -5,8 +5,10 @@ import {
   entryTotals,
   type LoggedEntry,
   type LogStatus,
+  notLogged,
   pendingEntry,
   theDay,
+  undoRetreats,
 } from "@/lib/day-summary";
 import type { Meal, MealLog, Workout, WorkoutLog } from "@/lib/db/schema";
 import type { DayLogs } from "@/lib/log-intent";
@@ -480,5 +482,111 @@ describe("theDay", () => {
 
   test("an empty timeline is an empty list, not a heading with nothing under it", () => {
     expect(theDay([], 0, [entry("Overnight oats", "eaten")])).toEqual([]);
+  });
+});
+
+describe("notLogged — FUEL-131", () => {
+  const timed = (item: NowItem, key: string, time: string): ScheduledItem => ({
+    ...item,
+    key,
+    at: time,
+    minutes: Number(time.slice(0, 2)) * 60 + Number(time.slice(3)),
+  });
+
+  const TIMELINE = [
+    timed(workoutItem(CIRCUIT), "w1", "06:30"),
+    timed(mealItem(OATS), "m1", "07:10"),
+    timed(mealItem(SALAD), "m2", "13:00"),
+  ];
+
+  const entry = (name: string, status: LogStatus, kind: LoggedEntry["kind"] = "meal"): LoggedEntry => ({
+    id: `log-${name}`,
+    name,
+    kind,
+    status,
+  });
+
+  const open = (position: number, entries: LoggedEntry[] = []) =>
+    notLogged(TIMELINE, theDay(TIMELINE, position, entries)).map((item) => item.key);
+
+  test("is everything behind the card with nothing recorded", () => {
+    expect(open(2)).toEqual(["w1", "m1"]);
+  });
+
+  test("leaves out what was logged, and what was skipped", () => {
+    expect(open(2, [entry("Circuit A", "done", "workout")])).toEqual(["m1"]);
+    expect(open(2, [entry("Overnight oats", "skipped")])).toEqual(["w1"]);
+  });
+
+  test("never offers the card, or anything ahead of it", () => {
+    expect(open(0)).toEqual([]);
+    expect(open(1)).toEqual(["w1"]);
+  });
+
+  test("offers the whole unanswered day once it is complete", () => {
+    expect(open(3, [entry("Overnight oats", "eaten")])).toEqual(["w1", "m2"]);
+  });
+
+  test("returns the items themselves, for the key a tap sends", () => {
+    expect(notLogged(TIMELINE, theDay(TIMELINE, 1, []))).toEqual([TIMELINE[0]]);
+  });
+});
+
+describe("undoRetreats — FUEL-131", () => {
+  const timed = (item: NowItem, key: string, time: string): ScheduledItem => ({
+    ...item,
+    key,
+    at: time,
+    minutes: Number(time.slice(0, 2)) * 60 + Number(time.slice(3)),
+  });
+
+  const TIMELINE = [
+    timed(workoutItem(CIRCUIT), "w1", "06:30"),
+    timed(mealItem(OATS), "m1", "07:10"),
+    timed(mealItem(SALAD), "m2", "13:00"),
+  ];
+
+  const entry = (name: string, kind: LoggedEntry["kind"] = "meal", walk = false): LoggedEntry => ({
+    id: `log-${name}`,
+    name,
+    kind,
+    status: "eaten",
+    ...(walk ? { walk: true as const } : {}),
+  });
+
+  const SIX_FORTY = 6 * 60 + 40;
+  const SEVEN_FIFTY_THREE = 7 * 60 + 53;
+
+  test("steps back over the card's own log, when the bar put the card there", () => {
+    // 06:40, oats logged early from the bar: the card is on the salad, ahead of
+    // the clock, and the newest row is the oats.
+    expect(undoRetreats(TIMELINE, 2, [entry("Overnight oats")], SIX_FORTY)).toBe(true);
+  });
+
+  test("stays put for a row logged against something further back", () => {
+    expect(
+      undoRetreats(TIMELINE, 2, [entry("Overnight oats"), entry("Circuit A", "workout")], SIX_FORTY),
+    ).toBe(false);
+  });
+
+  test("never puts the card behind the clock, whatever the name says", () => {
+    // 07:53: the coffee-shaped case. The row is the item behind the card, but
+    // the clock put the card there, so there is nowhere to step back to.
+    expect(undoRetreats(TIMELINE, 1, [entry("Circuit A", "workout")], SEVEN_FIFTY_THREE)).toBe(false);
+  });
+
+  test("matches by kind as well as name", () => {
+    expect(undoRetreats(TIMELINE, 2, [entry("Overnight oats", "workout")], SIX_FORTY)).toBe(false);
+  });
+
+  test("passes over the walk, which is not on the stack", () => {
+    expect(
+      undoRetreats(TIMELINE, 2, [entry("Overnight oats"), entry("Daily walk", "workout", true)], SIX_FORTY),
+    ).toBe(true);
+  });
+
+  test("has nothing to step back over at the start of the day, or with no log", () => {
+    expect(undoRetreats(TIMELINE, 0, [entry("Overnight oats")], 0)).toBe(false);
+    expect(undoRetreats(TIMELINE, 2, [], SIX_FORTY)).toBe(false);
   });
 });

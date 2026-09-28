@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 
+import type { DayRow } from "@/lib/day-summary";
 import type { Meal, MealSlot, Workout } from "@/lib/db/schema";
 import { positionInSpan } from "@/components/day-ruler";
 import {
@@ -126,9 +127,21 @@ describe("rulerSlots", () => {
     scheduled(workoutItem(), "workout:e3", "17:30", 1050),
   ];
 
+  const row = (
+    key: string,
+    place: DayRow["place"],
+    status?: DayRow["status"],
+  ): DayRow => ({ key, name: "", at: "00:00", place, ...(status ? { status } : {}) });
+
+  /** The rows for a day whose card is on `position`, with nothing logged. */
+  const at = (position: number) =>
+    TIMELINE.map((item, index) =>
+      row(item.key, index < position ? "past" : index === position ? "now" : "upcoming"),
+    );
+
   test("carries the item's key, name and minute across", () => {
-    expect(rulerSlots(TIMELINE)).toEqual([
-      { id: "meal:e1", label: "Coffee", minutes: 360, status: "upcoming" },
+    expect(rulerSlots(TIMELINE, at(0))).toEqual([
+      { id: "meal:e1", label: "Coffee", minutes: 360, status: "now" },
       { id: "meal:e2", label: "Overnight oats", minutes: 420, status: "upcoming" },
       { id: "workout:e3", label: "Circuit A", minutes: 1050, status: "upcoming" },
     ]);
@@ -139,7 +152,7 @@ describe("rulerSlots", () => {
     // mark's identity has to survive it, or React remounts it as a new one.
     const swapped = [scheduled(mealItem("dinner", { id: "meal-9", name: "Chilli" }), "meal:e1", "19:00", 1140)];
 
-    expect(rulerSlots(swapped)[0]?.id).toBe("meal:e1");
+    expect(rulerSlots(swapped, at(0))[0]?.id).toBe("meal:e1");
   });
 
   test("repositions its ticks when a slot time changes — FUEL-21", () => {
@@ -150,12 +163,15 @@ describe("rulerSlots", () => {
     // exactly the claim worth a test — the tick positions derive from the
     // configured times, so a settings edit moves them and no component caches
     // a position that could disagree.
-    const before = rulerSlots(TIMELINE);
-    const moved = rulerSlots([
-      ...TIMELINE.slice(0, 1),
-      scheduled(mealItem("breakfast"), "meal:e2", "09:00", 540),
-      ...TIMELINE.slice(2),
-    ]);
+    const before = rulerSlots(TIMELINE, at(0));
+    const moved = rulerSlots(
+      [
+        ...TIMELINE.slice(0, 1),
+        scheduled(mealItem("breakfast"), "meal:e2", "09:00", 540),
+        ...TIMELINE.slice(2),
+      ],
+      at(0),
+    );
 
     expect(before[1]!.minutes).toBe(420);
     expect(moved[1]!.minutes).toBe(540);
@@ -168,21 +184,56 @@ describe("rulerSlots", () => {
     );
   });
 
-  test("reports no status until logs exist", () => {
-    // Every mark is `upcoming` — the one of the three statuses that claims
-    // nothing about `meal_logs`, which nothing writes until FUEL-19. See the
-    // note on rulerSlots.
-    expect(rulerSlots(TIMELINE).every((slot) => slot.status === "upcoming")).toBe(true);
+  test("reads each status off the day's rows — FUEL-131", () => {
+    // Every mapping the note on rulerSlots lists, one row each.
+    const rows = [
+      row("a", "past", "eaten"),
+      row("b", "past", "done"),
+      row("c", "past", "partial"),
+      row("d", "past", "skipped"),
+      row("e", "past"),
+      row("f", "now"),
+      row("g", "upcoming"),
+    ];
+    const timeline = rows.map((r, index) =>
+      scheduled(mealItem("snack"), r.key, "08:00", 480 + index),
+    );
+
+    expect(rulerSlots(timeline, rows).map((slot) => slot.status)).toEqual([
+      "logged",
+      "logged",
+      "logged",
+      "skipped",
+      "unlogged",
+      "now",
+      "upcoming",
+    ]);
+  });
+
+  test("labels no slot behind the card Upcoming, wherever the card is — FUEL-131", () => {
+    // The criterion as a property: at every position, with nothing logged,
+    // everything behind the card is `unlogged` and nothing behind it reads as
+    // still to come.
+    for (let position = 0; position <= TIMELINE.length; position += 1) {
+      const slots = rulerSlots(TIMELINE, at(position));
+
+      expect(slots.slice(0, position).every((slot) => slot.status === "unlogged")).toBe(true);
+      expect(slots.slice(position + 1).every((slot) => slot.status === "upcoming")).toBe(true);
+    }
+  });
+
+  test("falls back to the status that claims nothing for a row it cannot find", () => {
+    expect(rulerSlots(TIMELINE, []).every((slot) => slot.status === "upcoming")).toBe(true);
   });
 
   test("preserves the timeline's order rather than re-sorting", () => {
     // `buildTimeline` has already ordered by the clock with a total tie-break,
     // and re-sorting here would be a second, weaker copy of that ordering.
-    expect(rulerSlots(TIMELINE).map((slot) => slot.minutes)).toEqual([360, 420, 1050]);
+    expect(rulerSlots(TIMELINE, at(0)).map((slot) => slot.minutes)).toEqual([360, 420, 1050]);
   });
 
   test("an empty day has no marks", () => {
-    expect(rulerSlots([])).toEqual([]);
+    expect(rulerSlots([], [])).toEqual([]);
   });
 });
 

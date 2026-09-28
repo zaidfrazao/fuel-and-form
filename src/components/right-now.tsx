@@ -16,7 +16,7 @@ import { repeatMeal, revertSwap, swapMeal } from "@/app/actions/swap";
 import { DayComplete } from "@/components/day-complete";
 import Link from "next/link";
 
-import { DayRuler, RULER_AT } from "@/components/day-ruler";
+import { DayRuler, RULER_AT, STATUS_LABEL as SLOT_STATUS_LABEL } from "@/components/day-ruler";
 import { ExerciseList } from "@/components/exercise-list";
 import { KeyValueGrid, SlashMeta } from "@/components/kv-grid";
 import { MacroGrid, MealDayGrid } from "@/components/macro-grid";
@@ -29,8 +29,10 @@ import {
   type DayRow,
   type LoggedEntry,
   pendingEntry,
+  notLogged,
   STATUS_LABEL,
   theDay,
+  undoRetreats,
 } from "@/lib/day-summary";
 import type { WorkoutExercise } from "@/lib/db/schema";
 import {
@@ -475,6 +477,106 @@ function UpNext({ items }: { items: readonly ScheduledItem[] }) {
             </span>
           </li>
         ))}
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * What the day walked past with nothing recorded — FUEL-131.
+ *
+ * A window that closes advances the card with no tap and writes nothing, so
+ * before this section the item it closed on simply went: Up next looks forward,
+ * the ruler drew it as a tick still to come, and only `The day` at the cap kept
+ * it at all. At 07:53 the morning's session — the day's most important item —
+ * had vanished from the phone the moment breakfast's window opened.
+ *
+ * So `/` offers those items back, each with the two answers the bar gives the
+ * card, until one is tapped. Nothing is resolved on the reader's behalf: an
+ * automatic skip would be the app asserting something it does not know, and
+ * `notLogged` in `day-summary.ts` is the rule.
+ *
+ * ## "Not logged", not "Missed"
+ *
+ * The ticket asked for "Missed". The app knows no row was written, not that the
+ * session did not happen — done and never tapped is exactly this state — and
+ * § Tone of Voice would rather say nothing than name it something it was not.
+ * § Governing Principle rules out the scold in "missed" as well: divergence is
+ * "data rather than guilt". The words are the ruler's (`SLOT_STATUS_LABEL`), so
+ * its table and this heading cannot drift apart.
+ *
+ * ## Above Up next, and at every width
+ *
+ * Above, because the criterion is reach: at 375 both of the morning's items have
+ * to be on screen above the action bar, and Up next's second row is already
+ * behind it. At every width, because it is the only place on `/` these items
+ * can be acted on — `The day` at the cap is a record, with no controls.
+ *
+ * ## The row
+ *
+ * The time first, as Up next prints it, then the name, which wraps (FUEL-111),
+ * then two `xs` secondaries — the walk row's pair, and for its reason: § Buttons
+ * allows one primary and the bar has it. 44px is the touch minimum, so the row
+ * is § Lists' 54 rather than the dense 46 it could not hold them in.
+ *
+ * The buttons say "Log" and "Skip", and each is named for its item, because a
+ * screen reader walking the section otherwise hears "Log, Skip, Log, Skip". The
+ * visible word begins the name, as WCAG 2.5.3 asks, so a voice user saying "Log"
+ * still reaches it. "Log", not "Log eaten": a row is half the width the bar's
+ * primary has, and the name beside it says whether it is a meal.
+ *
+ * A tap goes through the card's own `onAct`, so it is the same optimistic move,
+ * the same banner if it fails, and the same Undo — which, for a row logged here,
+ * takes the row back without moving the card (`undoRetreats`).
+ */
+function NotLogged({
+  items,
+  onAct,
+}: {
+  items: readonly ScheduledItem[];
+  onAct: (attempt: Attempt) => void;
+}) {
+  if (items.length === 0) return null;
+
+  return (
+    <section className="flex flex-col gap-[14px]">
+      <Eyebrow>{SLOT_STATUS_LABEL.unlogged}</Eyebrow>
+      <ul className="flex flex-col">
+        {items.map((item) => {
+          const name = itemName(item);
+
+          return (
+            <li
+              key={item.key}
+              className="flex min-h-[54px] items-center gap-3 border-b border-border py-[5px] last:border-b-0"
+            >
+              <span className="shrink-0 text-body tabular-nums text-text-secondary">
+                {item.at}
+              </span>
+              <span className="min-w-0 flex-1 break-words text-body text-text-primary">
+                {name}
+              </span>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  aria-label={`Log ${name}`}
+                  onClick={() => onAct({ kind: "act", item, verb: "log" })}
+                >
+                  Log
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  aria-label={`Skip ${name}`}
+                  onClick={() => onAct({ kind: "act", item, verb: "skip" })}
+                >
+                  Skip
+                </Button>
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -1059,24 +1161,44 @@ type Progress = {
 };
 
 type Move =
-  | { kind: "logged"; entry: LoggedEntry }
+  /** `key` is the item logged — the card's, or one the day had already passed. */
+  | { kind: "logged"; key: string; entry: LoggedEntry }
   | { kind: "undone" }
   | { kind: "swapped"; key: string; meal: SwappableMeal }
   | { kind: "reverted"; key: string };
 
-function applyMove(current: Progress, move: Move): Progress {
+/*
+ * `timeline` because two of the moves ask where they land — FUEL-131. Since the
+ * `Not logged` section, a log is not always the card's: one against an item the
+ * day already passed records it and moves nothing, exactly as `logItem` writes
+ * no cursor for a key that is not the active one. And Undo steps back only when
+ * the row it takes belongs to the item behind the card and the clock has not
+ * reached the card, which `undoRetreats` predicts the way `undoLastLog` and
+ * `resolveNow` decide it between them. Both are asked of `current`, not of
+ * the render the tap came from, so two taps in flight each see the other.
+ */
+function applyMove(
+  current: Progress,
+  move: Move,
+  timeline: readonly ScheduledItem[],
+  minutesOfDay: number,
+): Progress {
   if (move.kind === "logged") {
+    const advances = timeline[current.position]?.key === move.key;
+
     return {
       ...current,
-      position: current.position + 1,
+      position: current.position + (advances ? 1 : 0),
       entries: [...current.entries, move.entry],
     };
   }
 
   if (move.kind === "undone") {
+    const retreats = undoRetreats(timeline, current.position, current.entries, minutesOfDay);
+
     return {
       ...current,
-      position: current.position - 1,
+      position: current.position - (retreats ? 1 : 0),
       entries: current.entries.slice(0, -1),
     };
   }
@@ -1118,7 +1240,11 @@ function optimistic(attempt: Attempt, date: CalendarDate): Move {
       // screen prints and the status the row is written with are the same
       // decision. `view.date` rather than the clock: the day being logged is
       // the day that was resolved.
-      return { kind: "logged", entry: pendingEntry(attempt.item, attempt.verb, date) };
+      return {
+        kind: "logged",
+        key: attempt.item.key,
+        entry: pendingEntry(attempt.item, attempt.verb, date),
+      };
   }
 }
 
@@ -1218,7 +1344,7 @@ export function RightNow({
    */
   const [progress, move] = useOptimistic<Progress, Move>(
     { position: positionOf(view), entries, swaps: new Map() },
-    applyMove,
+    (current, next) => applyMove(current, next, view.timeline, view.minutesOfDay),
   );
 
   const [failure, setFailure] = useState<Attempt | null>(null);
@@ -1274,6 +1400,12 @@ export function RightNow({
   };
 
   const now = positionAt(base, progress.position);
+
+  // The timeline joined to the log, once — FUEL-131. The ruler's marks, the
+  // `Not logged` section and the cap's `The day` are three readings of it, and
+  // reading one array is what keeps them agreeing about a slot.
+  const dayRows = theDay(base.timeline, progress.position, progress.entries);
+  const unlogged = notLogged(base.timeline, dayRows);
 
   /*
    * Today's walks, if the plan has any — the items, not their logs.
@@ -1432,7 +1564,7 @@ export function RightNow({
     // the `md` rule is the later one at 1272 and an `xl:` override of it never
     // lands. Bounded to the band it is for, there is nothing to override.
     <DayRuler
-      slots={rulerSlots(base.timeline)}
+      slots={rulerSlots(base.timeline, dayRows)}
       now={base.minutesOfDay}
       className="md:max-xl:pt-2"
     />
@@ -1650,6 +1782,13 @@ export function RightNow({
       <Screen>
         <div className="flex flex-1 flex-col gap-[30px]">
           <DayComplete date={base.date} entries={progress.entries} target={target} />
+
+          {/* A closed page with open items under it — FUEL-131. Day-complete is
+              reached by a tap on the last item, and anything the clock walked
+              past earlier is still unrecorded; it stays offered here until it is
+              answered, as it was on the card's screen. Above the walks, in the
+              timeline state's order. */}
+          <NotLogged items={unlogged} onAct={act} />
 
           {/*
            * The one thing the closed page still offers — FUEL-29, FUEL-98.
@@ -1969,14 +2108,24 @@ export function RightNow({
             under the action bar and it should not be the numbers. */}
         {rulerBelow}
 
-        <UpNext items={now.upcoming} />
+        {/* One group at the cap, and no box at all below it — FUEL-131.
+            `Not logged` joins Anytime in the measure under the bar, the slot
+            Anytime had alone (`PAGE_AFTER_FOOT`), because both are lists of
+            things still to be done and neither is the subject. Two items in one
+            grid cell would overlap, so the group takes the cell instead.
 
-        <Anytime
-          items={base.anytime}
-          date={base.date}
-          walks={walks}
-          className={PAGE_AFTER_FOOT}
-        />
+            `contents` below the cap, so the three sections stay children of the
+            page's own column there, in its gap and its order: Not logged above
+            Up next, which is the phone's reach argument (see `NotLogged`). Up
+            next is inside the group only because it is `xl:hidden` — at the cap
+            it is not drawn, so the group holds exactly the two. */}
+        <div className={cn("contents xl:flex xl:flex-col xl:gap-[30px]", PAGE_AFTER_FOOT)}>
+          <NotLogged items={unlogged} onAct={act} />
+
+          <UpNext items={now.upcoming} />
+
+          <Anytime items={base.anytime} date={base.date} walks={walks} />
+        </div>
 
         {/*
          * The aside — § Desktop, as FUEL-115 amended it: the aside takes "the
@@ -2004,7 +2153,7 @@ export function RightNow({
             className="hidden xl:flex"
           />
 
-          <TheDay rows={theDay(base.timeline, progress.position, progress.entries)} />
+          <TheDay rows={dayRows} />
 
           {settingsFootLink}
         </div>

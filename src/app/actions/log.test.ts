@@ -431,6 +431,63 @@ describe("undo", () => {
     expect(writeCursor).not.toHaveBeenCalled();
   });
 
+  describe("a row logged from the Not logged section — FUEL-131", () => {
+    // 06:50: the clock is on the oats, but the bar has already logged them and
+    // moved the card on to the circuit. The 06:30 stretch behind them went
+    // unlogged, and was then logged from its row — the newest row of the day.
+    const STRETCH = scheduled(
+      {
+        kind: "workout",
+        workout: { workout: workout("workout-7", "Stretch", "mobility"), source: "fixed", entryId: "e7" },
+      },
+      "workout:e7",
+      "06:30",
+      390,
+    );
+    const MORNING = [STRETCH, OATS, CIRCUIT];
+
+    const ahead = (logs: DayLogs) => ({
+      ...today(),
+      view: {
+        date: MON,
+        minutesOfDay: 6 * 60 + 50,
+        timeline: MORNING,
+        anytime: [],
+        state: "active",
+        index: 2,
+        active: CIRCUIT,
+        upcoming: [],
+      } as NowView,
+      logs,
+    });
+
+    const oats = log({ id: "oats", loggedAt: new Date("2026-03-09T06:40:00Z") });
+    const stretch = walkLog({
+      id: "stretch",
+      workoutId: "workout-7",
+      loggedAt: new Date("2026-03-09T06:48:00Z"),
+    });
+
+    test("takes the row back without moving the card", async () => {
+      // Stepping back would put the card on the oats, which are logged.
+      loadToday.mockResolvedValue(ahead({ meals: [oats], workouts: [stretch] }));
+
+      expect(await undoLastLog()).toEqual({ ok: true });
+      expect(deleteLog).toHaveBeenCalledWith(USER, { kind: "workout", log: stretch });
+      expect(writeCursor).not.toHaveBeenCalled();
+    });
+
+    test("and the bar's row beneath it still steps back", async () => {
+      loadToday.mockResolvedValue(ahead({ meals: [oats], workouts: [] }));
+
+      await undoLastLog();
+
+      expect(deleteLog).toHaveBeenCalledWith(USER, { kind: "meal", log: oats });
+      // Back to the oats: advanced past the stretch.
+      expect(writeCursor).toHaveBeenCalledWith({ date: MON, advancedPast: "workout:e7" });
+    });
+  });
+
   test("still takes back a session logged from the bar", async () => {
     // The narrowing is the WALK's, not every workout's. A session logged from
     // the card is the bar's own row and has to stay in its stack.

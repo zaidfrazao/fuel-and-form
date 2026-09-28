@@ -181,3 +181,29 @@ function isAfter(row: LoggedRow, than: LoggedRow): boolean {
 
   return a === b ? row.log.id > than.log.id : a > b;
 }
+
+/**
+ * Whether a log row was written for this item — FUEL-131.
+ *
+ * Undo's question since the `Not logged` section gave `/` a second place to log
+ * from. The bar logs the card and moves it on, so taking that row back moves
+ * the card back; a row logged against an item the day already walked past moved
+ * nothing, and taking it back must not either. So Undo steps back only when the
+ * row it removes belongs to the item directly behind the card.
+ *
+ * The same fields `alreadyLogged` compares, less the date and the status: the
+ * date is today's by construction (the stack is today's rows), and the status is
+ * what the row SAYS about the item, not which item it is. A meal is its slot
+ * and its meal; a session is its workout.
+ */
+export function rowBelongsTo(row: LoggedRow, item: NowItem): boolean {
+  if (row.kind === "meal") {
+    return (
+      item.kind === "meal" &&
+      row.log.slot === item.meal.slot &&
+      row.log.mealId === item.meal.meal.id
+    );
+  }
+
+  return item.kind === "workout" && row.log.workoutId === item.workout.workout.id;
+}
