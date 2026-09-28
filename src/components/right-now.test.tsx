@@ -2252,7 +2252,10 @@ describe("what the day walked past — FUEL-131", () => {
       upcoming: MORNING.slice(index + 1),
     }) as NowView;
 
-  const section = () => screen.getByRole("heading", { name: "Not logged" }).closest("section")!;
+  /** The phone's copy — the first in the DOM; the cap's is `hidden xl:flex`. */
+  const section = () =>
+    screen.getAllByRole("heading", { name: "Not logged" })[0]!.closest("section")!;
+  const button = (name: string) => within(section()).getByRole("button", { name });
   const rows = () => within(section()).getAllByRole("listitem").map((li) => li.textContent);
   const card = () => screen.getByRole("heading", { level: 1 }).textContent;
 
@@ -2285,14 +2288,14 @@ describe("what the day walked past — FUEL-131", () => {
   test("is absent when nothing behind the card is open", () => {
     renderNow(morning(0));
 
-    expect(screen.queryByRole("heading", { name: "Not logged" })).toBeNull();
+    expect(screen.queryAllByRole("heading", { name: "Not logged" })).toHaveLength(0);
   });
 
   test("names each control for its item", () => {
     renderNow(morning());
 
-    expect(screen.getByRole("button", { name: "Log Circuit B" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Skip Coffee + MCT" })).toBeDefined();
+    expect(button("Log Circuit B")).toBeDefined();
+    expect(button("Skip Coffee + MCT")).toBeDefined();
   });
 
   test.each([
@@ -2301,7 +2304,7 @@ describe("what the day walked past — FUEL-131", () => {
   ] as const)("%s sends the item's key and the verb", async (word, verb) => {
     renderNow(morning());
 
-    await userEvent.click(screen.getByRole("button", { name: `${word} Circuit B` }));
+    await userEvent.click(button(`${word} Circuit B`));
 
     await waitFor(() => expect(logItem).toHaveBeenCalledWith("workout:m1", verb));
   });
@@ -2313,7 +2316,7 @@ describe("what the day walked past — FUEL-131", () => {
 
     renderNow(morning());
 
-    await userEvent.click(screen.getByRole("button", { name: "Log Circuit B" }));
+    await userEvent.click(button("Log Circuit B"));
 
     // Held, so this is the optimistic frame and not the server's.
     await waitFor(() => expect(rows()).toEqual(["06:45Coffee + MCTLogSkip"]));
@@ -2328,7 +2331,7 @@ describe("what the day walked past — FUEL-131", () => {
 
     renderNow(morning());
 
-    await userEvent.click(screen.getByRole("button", { name: "Skip Circuit B" }));
+    await userEvent.click(button("Skip Circuit B"));
 
     expect((await bar().findByRole("alert")).textContent).toContain("Couldn’t save that.");
     expect(rows()).toHaveLength(2);
@@ -2382,7 +2385,7 @@ describe("what the day walked past — FUEL-131", () => {
 
     renderNow(morning());
 
-    await userEvent.click(screen.getByRole("button", { name: "Log Coffee + MCT" }));
+    await userEvent.click(button("Log Coffee + MCT"));
     await userEvent.click(await bar().findByRole("button", { name: "Undo" }));
 
     await waitFor(() => expect(rows()).toHaveLength(2));
@@ -2406,6 +2409,21 @@ describe("what the day walked past — FUEL-131", () => {
     expect(status("Coffee + MCT")).toBe("Not logged");
     expect(status("Overnight oats")).toBe("Now");
     expect(status("Chicken salad")).toBe("Upcoming");
+  });
+
+  test("is drawn above Up next below the cap, and under the walks at it", () => {
+    renderNow(morning());
+
+    const [phone, cap] = screen
+      .getAllByRole("heading", { name: "Not logged" })
+      .map((heading) => heading.closest("section")!);
+    const walks = screen.getByRole("heading", { name: "Anytime" }).closest("section")!;
+
+    expect(phone!.className).toContain("xl:hidden");
+    expect(cap!.className).toMatch(/(^|\s)hidden xl:flex(\s|$)/);
+    expect(walks.compareDocumentPosition(cap!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // One group, so the grid places both copies in the measure under the bar.
+    expect(phone!.parentElement).toBe(cap!.parentElement);
   });
 
   test("stays offered on the finished page until it is answered", () => {

@@ -505,12 +505,19 @@ function UpNext({ items }: { items: readonly ScheduledItem[] }) {
  * "data rather than guilt". The words are the ruler's (`SLOT_STATUS_LABEL`), so
  * its table and this heading cannot drift apart.
  *
- * ## Above Up next, and at every width
+ * ## Above Up next, and at every width — but under the walks at the cap
  *
  * Above, because the criterion is reach: at 375 both of the morning's items have
  * to be on screen above the action bar, and Up next's second row is already
  * behind it. At every width, because it is the only place on `/` these items
  * can be acted on — `The day` at the cap is a record, with no controls.
+ *
+ * At the cap it comes after the walks instead. FUEL-115's criterion is that both
+ * walk rows are on screen on arrival at 1272×800 and 1366×768, and in the frozen
+ * demo at 18:54 four items are open: above the walks, the section put them 279px
+ * lower and off both windows. Below them it costs the walks nothing, and the
+ * items are not lost above the fold at the cap — `The day` lists them with
+ * their times, in the aside beside it.
  *
  * ## The row
  *
@@ -532,14 +539,17 @@ function UpNext({ items }: { items: readonly ScheduledItem[] }) {
 function NotLogged({
   items,
   onAct,
+  className,
 }: {
   items: readonly ScheduledItem[];
   onAct: (attempt: Attempt) => void;
+  /** Which of the timeline state's two copies this is — see the group below. */
+  className?: string;
 }) {
   if (items.length === 0) return null;
 
   return (
-    <section className="flex flex-col gap-[14px]">
+    <section className={cn("flex flex-col gap-[14px]", className)}>
       <Eyebrow>{SLOT_STATUS_LABEL.unlogged}</Eyebrow>
       <ul className="flex flex-col">
         {items.map((item) => {
@@ -2114,17 +2124,25 @@ export function RightNow({
             things still to be done and neither is the subject. Two items in one
             grid cell would overlap, so the group takes the cell instead.
 
-            `contents` below the cap, so the three sections stay children of the
-            page's own column there, in its gap and its order: Not logged above
-            Up next, which is the phone's reach argument (see `NotLogged`). Up
-            next is inside the group only because it is `xl:hidden` — at the cap
-            it is not drawn, so the group holds exactly the two. */}
+            `contents` below the cap, so the sections stay children of the
+            page's own column there, in its gap and its order. Up next is inside
+            the group only because it is `xl:hidden` — at the cap it is not
+            drawn.
+
+            `Not logged` is drawn twice, above Up next below the cap and under
+            the walks at it; `NotLogged` carries why. Two DOM copies rather than
+            `order`, so the reading order matches the visual order at both
+            widths — the device the ruler's copies use. The section holds no
+            state, so a copy that is `display: none` strands nothing, which is
+            what rules the device out for the walk row. */}
         <div className={cn("contents xl:flex xl:flex-col xl:gap-[30px]", PAGE_AFTER_FOOT)}>
-          <NotLogged items={unlogged} onAct={act} />
+          <NotLogged items={unlogged} onAct={act} className="xl:hidden" />
 
           <UpNext items={now.upcoming} />
 
           <Anytime items={base.anytime} date={base.date} walks={walks} />
+
+          <NotLogged items={unlogged} onAct={act} className="hidden xl:flex" />
         </div>
 
         {/*
