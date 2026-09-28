@@ -2230,6 +2230,213 @@ async function choose(user: ReturnType<typeof userEvent.setup>, name: string) {
   return sheet;
 }
 
+describe("what the day walked past — FUEL-131", () => {
+  /*
+   * The ticket's morning: 07:53, breakfast's window open, and the session at
+   * 06:30 and the coffee at 06:45 behind it with nothing recorded. The clock
+   * advanced the card past both without a tap.
+   */
+  const CIRCUIT = at(workoutItem({ id: "workout-9", name: "Circuit B" }), "workout:m1", "06:30", 390);
+  const COFFEE = at(mealItem({ id: "meal-8", name: "Coffee + MCT" }, "extra"), "meal:m2", "06:45", 405);
+  const OATS = at(mealItem(), "meal:m3", "07:10", 430);
+  const MORNING = [CIRCUIT, COFFEE, OATS, LUNCH, DINNER];
+
+  const morning = (index = 2): NowView =>
+    ({
+      ...BASE,
+      minutesOfDay: 7 * 60 + 53,
+      timeline: MORNING,
+      state: "active",
+      index,
+      active: MORNING[index]!,
+      upcoming: MORNING.slice(index + 1),
+    }) as NowView;
+
+  /** The phone's copy — the first in the DOM; the cap's is `hidden xl:flex`. */
+  const section = () =>
+    screen.getAllByRole("heading", { name: "Not logged" })[0]!.closest("section")!;
+  const button = (name: string) => within(section()).getByRole("button", { name });
+  const rows = () => within(section()).getAllByRole("listitem").map((li) => li.textContent);
+  const card = () => screen.getByRole("heading", { level: 1 }).textContent;
+
+  test("offers both back, time first, and writes nothing to do it", () => {
+    renderNow(morning());
+
+    expect(rows()).toEqual(["06:30Circuit BLogSkip", "06:45Coffee + MCTLogSkip"]);
+    // The third criterion: nothing is resolved on the reader's behalf.
+    expect(logItem).not.toHaveBeenCalled();
+  });
+
+  test("sits above Up next, so it is read before the day ahead", () => {
+    renderNow(morning());
+
+    const upNext = screen.getByRole("heading", { name: "Up next" });
+
+    expect(
+      section().compareDocumentPosition(upNext) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  test("leaves out what was logged, and what was skipped", () => {
+    renderNow(morning(), EXERCISES, [
+      entry({ id: "l1", name: "Circuit B", kind: "workout", status: "done" }),
+    ]);
+
+    expect(rows()).toEqual(["06:45Coffee + MCTLogSkip"]);
+  });
+
+  test("is absent when nothing behind the card is open", () => {
+    renderNow(morning(0));
+
+    expect(screen.queryAllByRole("heading", { name: "Not logged" })).toHaveLength(0);
+  });
+
+  test("names each control for its item", () => {
+    renderNow(morning());
+
+    expect(button("Log Circuit B")).toBeDefined();
+    expect(button("Skip Coffee + MCT")).toBeDefined();
+  });
+
+  test.each([
+    ["Log", "log"],
+    ["Skip", "skip"],
+  ] as const)("%s sends the item's key and the verb", async (word, verb) => {
+    renderNow(morning());
+
+    await userEvent.click(button(`${word} Circuit B`));
+
+    await waitFor(() => expect(logItem).toHaveBeenCalledWith("workout:m1", verb));
+  });
+
+  test("leaves the row before the server answers, and the card where it is", async () => {
+    const pending = deferred<{ ok: boolean }>();
+
+    logItem.mockReturnValue(pending.promise);
+
+    renderNow(morning());
+
+    await userEvent.click(button("Log Circuit B"));
+
+    // Held, so this is the optimistic frame and not the server's.
+    await waitFor(() => expect(rows()).toEqual(["06:45Coffee + MCTLogSkip"]));
+    expect(card()).toBe("Overnight oats");
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(logItem).toHaveBeenCalledOnce());
+  });
+
+  test("puts the row back and says so when the write is refused", async () => {
+    logItem.mockResolvedValue({ ok: false });
+
+    renderNow(morning());
+
+    await userEvent.click(button("Skip Circuit B"));
+
+    expect((await bar().findByRole("alert")).textContent).toContain("Couldn’t save that.");
+    expect(rows()).toHaveLength(2);
+    expect(card()).toBe("Overnight oats");
+  });
+
+  test("Undo takes a row logged here back without moving the card", async () => {
+    const pending = deferred<{ ok: boolean }>();
+
+    undoLastLog.mockReturnValue(pending.promise);
+
+    // The server's view after the coffee was logged from its row: the card is
+    // still on breakfast, and the newest row is the coffee's.
+    renderNow(morning(), EXERCISES, [entry({ id: "l1", name: "Coffee + MCT" })]);
+
+    await userEvent.click(bar().getByRole("button", { name: "Undo" }));
+
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    expect(card()).toBe("Overnight oats");
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(undoLastLog).toHaveBeenCalledOnce());
+  });
+
+  test("Undo still steps back over the card's own log", async () => {
+    const pending = deferred<{ ok: boolean }>();
+
+    undoLastLog.mockReturnValue(pending.promise);
+
+    // Breakfast logged from the bar, so the card moved on to lunch.
+    renderNow(morning(3), EXERCISES, [entry({ id: "l1", name: "Overnight oats" })]);
+
+    expect(card()).toBe("Chicken salad");
+
+    await userEvent.click(bar().getByRole("button", { name: "Undo" }));
+
+    await waitFor(() => expect(card()).toBe("Overnight oats"));
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(undoLastLog).toHaveBeenCalledOnce());
+  });
+
+  test("a row logged here, then Undo, lands back where it started", async () => {
+    // The two moves in sequence, entirely on the optimistic layer: logging the
+    // row must not advance, and taking it back must not retreat.
+    const log = deferred<{ ok: boolean }>();
+    const undo = deferred<{ ok: boolean }>();
+
+    logItem.mockReturnValue(log.promise);
+    undoLastLog.mockReturnValue(undo.promise);
+
+    renderNow(morning());
+
+    await userEvent.click(button("Log Coffee + MCT"));
+    await userEvent.click(await bar().findByRole("button", { name: "Undo" }));
+
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    expect(card()).toBe("Overnight oats");
+
+    log.settle({ ok: true });
+    undo.settle({ ok: true });
+    await waitFor(() => expect(undoLastLog).toHaveBeenCalledOnce());
+  });
+
+  test("the ruler's table calls them Not logged, and the card Now", () => {
+    renderNow(morning(), EXERCISES, [
+      entry({ id: "l1", name: "Circuit B", kind: "workout", status: "skipped" }),
+    ]);
+
+    const table = screen.getAllByRole("table")[0]!;
+    const status = (name: string) =>
+      within(table).getByRole("rowheader", { name }).parentElement!.lastElementChild!.textContent;
+
+    expect(status("Circuit B")).toBe("Skipped");
+    expect(status("Coffee + MCT")).toBe("Not logged");
+    expect(status("Overnight oats")).toBe("Now");
+    expect(status("Chicken salad")).toBe("Upcoming");
+  });
+
+  test("is drawn above Up next below the cap, and under the walks at it", () => {
+    renderNow(morning());
+
+    const [phone, cap] = screen
+      .getAllByRole("heading", { name: "Not logged" })
+      .map((heading) => heading.closest("section")!);
+    const walks = screen.getByRole("heading", { name: "Anytime" }).closest("section")!;
+
+    expect(phone!.className).toContain("xl:hidden");
+    expect(cap!.className).toMatch(/(^|\s)hidden xl:flex(\s|$)/);
+    expect(walks.compareDocumentPosition(cap!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // One group, so the grid places both copies in the measure under the bar.
+    expect(phone!.parentElement).toBe(cap!.parentElement);
+  });
+
+  test("stays offered on the finished page until it is answered", () => {
+    renderNow({ ...BASE, timeline: MORNING, state: "day-complete" }, EXERCISES, [
+      entry({ id: "l1", name: "Overnight oats" }),
+      entry({ id: "l2", name: "Chicken salad" }),
+      entry({ id: "l3", name: "Chilli" }),
+    ]);
+
+    expect(rows()).toEqual(["06:30Circuit BLogSkip", "06:45Coffee + MCTLogSkip"]);
+  });
+});
+
 describe("swapping a meal", () => {
   test("Swap opens the picker for the active slot", async () => {
     const user = userEvent.setup();
@@ -2812,8 +3019,16 @@ describe("the second column", () => {
     // Outside both groups, for the reason the desktop bar is: inside the
     // measure's it would be read before the bar. The grid puts it in the
     // measure's column at the cap, in a row of its own under the bar's.
+    //
+    // The row is its group's since FUEL-131, which it shares with `Not logged`:
+    // two items in one grid cell would overlap. Below the cap the group has no
+    // box (`contents`), so the walks are still children of the page's column.
+    const group = anytime.parentElement!;
+
     expect(anytime.closest("[data-column]")).toBeNull();
-    expect(anytime.className).toContain(PAGE_AFTER_FOOT);
+    expect(anytime.className).not.toContain(PAGE_AFTER_FOOT);
+    expect(group.className).toContain(PAGE_AFTER_FOOT);
+    expect(group.className).toMatch(/(^|\s)contents(\s|$)/);
     expect(document.querySelector("main")!.className).toContain(PAGE_ASIDE_GRID_AFTER_FOOT);
   });
 

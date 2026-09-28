@@ -76,6 +76,17 @@ const CASES: { label: string; note: string; slots: Slot[]; now?: number }[] = [
     now: parseClock("06:20"),
   },
   {
+    label: "Passed with nothing recorded",
+    note: "FUEL-131. The morning's window closed without a tap: hollow bars, the resolved marks' height with nothing inside. The card's slot keeps the hairline.",
+    slots: [
+      { id: "circuit", label: "Circuit B", minutes: parseClock("06:30"), status: "unlogged" },
+      { id: "coffee", label: "Coffee + MCT oil", minutes: parseClock("06:45"), status: "unlogged" },
+      { id: "breakfast", label: "Breakfast", minutes: parseClock("07:10"), status: "now" },
+      ...DAY.slice(2).map((slot) => ({ ...slot, status: "upcoming" as const })),
+    ],
+    now: parseClock("07:53"),
+  },
+  {
     label: "Every slot skipped",
     note: "Rendered at the same weight as a logged day. Data, not guilt.",
     slots: untouched(DAY, "skipped"),

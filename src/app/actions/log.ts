@@ -6,8 +6,8 @@ import { getSession } from "@/lib/auth/session";
 import { readCursor, writeCursor } from "@/lib/cursor-cookie";
 import { deleteLog, recordLog } from "@/lib/db/queries/log";
 import { loadToday } from "@/lib/db/queries/today";
-import { alreadyLogged, latestLog, logIntent, type LogVerb } from "@/lib/log-intent";
-import { advance, type NowItem, type NowView, retreat } from "@/lib/resolve-now";
+import { alreadyLogged, latestLog, logIntent, type LogVerb, rowBelongsTo } from "@/lib/log-intent";
+import { advance, type NowItem, type NowView, positionOf, retreat } from "@/lib/resolve-now";
 import { isWalk, walkWorkoutIds, withoutWalks } from "@/lib/walk";
 
 /**
@@ -221,8 +221,18 @@ export async function undoLastLog(): Promise<LogResult> {
     // returns false for a log already gone — another tab got there first — and
     // moving the cursor for a delete that did nothing would take the card back
     // past an item that is still logged.
+    //
+    // And only if the row was the bar's — FUEL-131. A row logged from the
+    // `Not logged` section is against an item the day had already passed, and
+    // writing it moved nothing; stepping back for it would put the card on the
+    // item behind it, which may well be logged. The bar's row is always the
+    // item directly behind the card, so that is the test.
     if (target && (await deleteLog(session.userId, target))) {
-      await writeCursor(retreat(today.view));
+      const behind = today.view.timeline[positionOf(today.view) - 1];
+
+      if (behind && rowBelongsTo(target, behind)) {
+        await writeCursor(retreat(today.view));
+      }
     }
 
     refresh();

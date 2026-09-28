@@ -3,7 +3,7 @@ import type { MealLogStatus, WorkoutLogStatus } from "./db/schema";
 import { type DayLogs, type LogVerb, logIntent } from "./log-intent";
 import { type MacroBearing, type MacroTotals, totalMacros } from "./macros";
 import { itemName, slotLabel } from "./now-display";
-import type { NowItem, ScheduledItem } from "./resolve-now";
+import { clockIndex, type NowItem, type ScheduledItem } from "./resolve-now";
 
 /**
  * The day-complete summary's data — FUEL-20, PRD § P1's last criterion.
@@ -391,4 +391,86 @@ export function theDay(
       ...(status !== undefined ? { status } : {}),
     };
   });
+}
+
+/**
+ * The timeline items the day has walked past with nothing recorded — FUEL-131.
+ *
+ * A window that closes advances the card with no tap, and before FUEL-131 the
+ * item it closed on vanished from the phone: Up next only looks forward, and
+ * `The day` is drawn at the cap only. This is the list `/` offers back, with a
+ * Log and a Skip on each, until a tap resolves it.
+ *
+ * Read off `theDay`'s rows rather than joined again, so this list, the aside and
+ * the ruler's marks are one decision: `past` with no status is the whole rule.
+ * An item skipped from the card is not here — the skip wrote a row — and nothing
+ * here writes one; a row only leaves when someone taps.
+ *
+ * Returns the ITEMS, in timeline order, because the section needs what the
+ * action bar needs — the key `logItem` takes, and the kind that picks the verb.
+ */
+export function notLogged(
+  timeline: readonly ScheduledItem[],
+  rows: readonly DayRow[],
+): ScheduledItem[] {
+  const unresolved = new Set(
+    rows.filter((row) => row.place === "past" && row.status === undefined).map((row) => row.key),
+  );
+
+  return timeline.filter((item) => unresolved.has(item.key));
+}
+
+/**
+ * Whether Undo, taken now, moves the card back — the client's half of
+ * `actions/log.ts`'s rule, FUEL-131.
+ *
+ * The server steps back only when the row it removes belongs to the item
+ * directly behind the card (`rowBelongsTo`); a row logged from the `Not logged`
+ * section moved nothing, so taking it back moves nothing. The optimistic layer
+ * has to predict the same answer or the card would jump for the length of the
+ * round trip and then jump back.
+ *
+ * It cannot ask the same question. The server compares ids; the client holds
+ * `LoggedEntry`s, which carry a kind and a name and no id — the reason `theDay`
+ * joins by name, argued there. So the prediction is by kind and name, and it is
+ * wrong only when the item behind the card and the row being undone are two
+ * different items with one name — a disagreement `refresh()` settles in one
+ * round trip, about which of two identical rows is which.
+ *
+ * The walk is not on the stack (see `walkWorkoutIds`), so its rows are passed
+ * over, as `undoLastLog` passes over them.
+ *
+ * ## And never behind the clock
+ *
+ * The server's retreat is a cursor, and `resolveNow` takes `max(clock,
+ * cursor)`, so stepping back can never put the card behind the window the
+ * clock is in. The client moves a position, not a cursor, and has to apply the
+ * same floor itself — and this is the case it bites: log the coffee from its
+ * row at 07:53, and the item directly behind breakfast IS the coffee, so the
+ * name matches, and without the floor Undo would put the card on it. It cannot
+ * have been the bar's row: the bar only logs the card and moves it on, so an
+ * item the bar passed always has a row and never reaches the section. An item
+ * logged from the section was passed by the clock, and the clock is still past
+ * it.
+ *
+ * `minutesOfDay` is the render's, not the moment of the tap, so on a page left
+ * open across a window boundary the floor is stale by that much. The server
+ * decides on its own clock, and `refresh()` settles any difference within the
+ * round trip. A client clock would fix that and would be a second authority on
+ * what time it is, which this screen has deliberately never had.
+ */
+export function undoRetreats(
+  timeline: readonly ScheduledItem[],
+  position: number,
+  entries: readonly LoggedEntry[],
+  minutesOfDay: number,
+): boolean {
+  if (position <= clockIndex(timeline, minutesOfDay)) return false;
+
+  const behind = timeline[position - 1];
+  const last = entries.filter((entry) => !entry.walk).at(-1);
+
+  if (!behind || !last) return false;
+
+  return last.kind === behind.kind && last.name === itemName(behind);
 }

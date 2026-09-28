@@ -4,7 +4,7 @@
 // re-declaring the shape here would compile just as happily on the day one of
 // them gained a field. Types are erased, so nothing of the component reaches
 // the bundle through this line.
-import type { Slot } from "@/components/day-ruler";
+import type { Slot, SlotStatus } from "@/components/day-ruler";
 import {
   addDays,
   type CalendarDate,
@@ -13,6 +13,9 @@ import {
   parseCalendarDate,
   startOfWeek,
 } from "@/lib/date";
+// Type-only for the same reason, and one more: `day-summary.ts` imports this
+// file at runtime, so a value import back would be a cycle. Erased, it is not.
+import type { DayRow } from "@/lib/day-summary";
 import type { MealSlot } from "@/lib/db/schema";
 import type { NowItem, ScheduledItem } from "@/lib/resolve-now";
 
@@ -223,34 +226,55 @@ const MONTH_LABEL = new Intl.DateTimeFormat("en-GB", {
 /**
  * The day's shape, as marks on the ruler.
  *
- * ## Why everything is `upcoming`
+ * ## Statuses come from `theDay`, and nowhere else — FUEL-131
  *
- * The ruler's three statuses — logged, skipped, upcoming — are claims about
- * `meal_logs` and `workout_logs`. Nothing writes those rows until FUEL-19, so
- * there is no status to report, and the two alternatives both assert something
- * that is not known: a solid `logged` mark would say breakfast was eaten
- * because 07:00 has passed, and `skipped` would say it wasn't. `upcoming` is
- * the one of the three that claims nothing — an unlogged item is still an item
- * waiting to be logged, whatever the clock says.
+ * Until FUEL-131 every mark went out as `upcoming`. That was written before
+ * FUEL-19, when no log rows existed and `upcoming` was the one status that
+ * claimed nothing — but logs have existed since, and the cost that note
+ * accepted as temporary had become permanent: the accessible table read
+ * "Upcoming" against a session two hours gone, and against breakfast after it
+ * was eaten.
  *
- * The cost is visible in the ruler's accessible table, which reads "Upcoming"
- * against this morning's breakfast at eight in the evening. That is the right
- * trade while logs do not exist and it disappears the moment they do: FUEL-19
- * passes the day's log rows through here and the statuses become real.
+ * So the marks take their statuses from `theDay`'s rows, the join the desktop
+ * aside already prints. Position says where a slot is and the log supplies the
+ * word, by the rule that function documents, so the ruler, `The day` and the
+ * `Not logged` section cannot disagree about a slot:
+ *
+ * - behind the card and logged (eaten, done or partial): `logged`
+ * - behind the card and skipped: `skipped`
+ * - behind the card with nothing recorded: `unlogged`
+ * - the card itself: `now`
+ * - ahead of it: `upcoming`
+ *
+ * A partial session is `logged`: it is resolved, which is the question the mark
+ * answers, and the table's row still carries the item for anyone who wants the
+ * word. A row the key misses — which `theDay` cannot produce, since it maps the
+ * timeline one to one — falls back to `upcoming`, the status that claims
+ * nothing, rather than throwing on the one screen that has to render.
  *
  * The NOW marker is unaffected — it is positioned from the clock, never from
- * status — so the AC the ruler is on this screen to satisfy holds today.
+ * status.
  */
-export function rulerSlots(timeline: readonly ScheduledItem[]): Slot[] {
+export function rulerSlots(
+  timeline: readonly ScheduledItem[],
+  rows: readonly DayRow[],
+): Slot[] {
+  const byKey = new Map(rows.map((row) => [row.key, row]));
+
   return timeline.map((item) => ({
-    // The item's own key, which is built from the ENTRY id — so a swap that
-    // changes which meal a slot holds keeps the same mark rather than
-    // remounting it as a new one. See resolve-now.ts on `ScheduledItem.key`.
     id: item.key,
     label: itemName(item),
     minutes: item.minutes,
-    status: "upcoming" as const,
+    status: slotStatus(byKey.get(item.key)),
   }));
+}
+
+function slotStatus(row: DayRow | undefined): SlotStatus {
+  if (!row || row.place === "upcoming") return "upcoming";
+  if (row.place === "now") return "now";
+  if (row.status === undefined) return "unlogged";
+
+  return row.status === "skipped" ? "skipped" : "logged";
 }
 
 /**

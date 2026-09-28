@@ -103,7 +103,20 @@ export const RULER_AT = {
  * no motion at all. If one is added later, it needs the guard.
  */
 
-export type SlotStatus = "logged" | "skipped" | "upcoming";
+/**
+ * Five statuses, drawn as four marks — FUEL-131.
+ *
+ * `unlogged` is a slot the day has walked past with nothing recorded against
+ * it: a window that closed on its own, with no tap. Before FUEL-131 every slot
+ * went out as `upcoming`, so the accessible table read "Upcoming" against a
+ * session two hours gone and the graphic drew it as a tick still ahead.
+ *
+ * `now` is the slot the card is on. It is drawn as the `upcoming` hairline —
+ * the NOW rule already marks the moment, and a second mark for the same fact
+ * would be a second "you are here" — and differs only in the table, where
+ * "Upcoming" against the item on screen would be the same false word.
+ */
+export type SlotStatus = "logged" | "skipped" | "unlogged" | "now" | "upcoming";
 
 export type Slot = {
   id: string;
@@ -291,11 +304,24 @@ export function scaleLabelClip(
   return `inset(0 0 0 clamp(0%, ${overlap} * 1000000, 100%))`;
 }
 
-const STATUS_LABEL: Record<SlotStatus, string> = {
+/**
+ * `unlogged` reads "Not logged" rather than "Missed", which is what the ticket
+ * asked for: the app knows no row was written, not that the thing did not
+ * happen — a session done and never tapped is exactly this state. § Tone of
+ * Voice would rather say nothing than name it something it was not, and "Not
+ * logged" says only what is known. Exported so the section on `/` that lists
+ * these slots uses the same words.
+ */
+export const STATUS_LABEL: Readonly<Record<SlotStatus, string>> = {
   logged: "Logged",
   skipped: "Skipped",
+  unlogged: "Not logged",
+  now: "Now",
   upcoming: "Upcoming",
 };
+
+/** The order the summary tallies in: behind the card, the card, ahead of it. */
+const TALLY_ORDER: readonly SlotStatus[] = ["logged", "skipped", "unlogged", "now", "upcoming"];
 
 /**
  * Status is carried by fill, hatch and hairline — never by colour — so the ruler
@@ -307,6 +333,15 @@ const STATUS_LABEL: Record<SlotStatus, string> = {
  * build error. The mark already carries an inline `left`, so this costs nothing
  * and is deterministic. Both reference `--text-tertiary`, so they still flip
  * with the mode and no hex appears outside the token layer.
+ *
+ * ## The hollow mark — FUEL-131
+ *
+ * `unlogged` takes the resolved marks' footprint, 5×15, with the skipped mark's
+ * 1px `text-tertiary` outline and nothing inside it. Height says where a slot
+ * is — full-height behind the card, a hairline ahead of it — and the fill says
+ * what was recorded: solid for a log, hatch for a skip, empty for nothing. So a
+ * slot the day walked past no longer reads as one still to come, and no accent
+ * is spent saying so (§ The Four Rules: one umber element, and it means now).
  */
 const MARK: Record<SlotStatus, { className: string; style?: CSSProperties }> = {
   logged: { className: "top-1 h-[15px] w-[5px] rounded-[1px] bg-text-primary" },
@@ -318,6 +353,11 @@ const MARK: Record<SlotStatus, { className: string; style?: CSSProperties }> = {
       boxShadow: "inset 0 0 0 1px var(--text-tertiary)",
     },
   },
+  unlogged: {
+    className: "top-1 h-[15px] w-[5px] rounded-[1px]",
+    style: { boxShadow: "inset 0 0 0 1px var(--text-tertiary)" },
+  },
+  now: { className: "top-[10px] h-[9px] w-px bg-text-tertiary" },
   upcoming: { className: "top-[10px] h-[9px] w-px bg-text-tertiary" },
 };
 
@@ -330,9 +370,8 @@ function summarise(slots: Slot[], span: Span, now?: number): string {
     {},
   );
 
-  const tallied = (["logged", "skipped", "upcoming"] as const)
-    .filter((status) => counts[status])
-    .map((status) => `${counts[status]} ${status}`)
+  const tallied = TALLY_ORDER.filter((status) => counts[status])
+    .map((status) => `${counts[status]} ${STATUS_LABEL[status].toLowerCase()}`)
     .join(", ");
 
   // Reports, never congratulates — Brand Guide § Tone of Voice.
