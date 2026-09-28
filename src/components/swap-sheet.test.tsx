@@ -112,6 +112,22 @@ async function open(props: Parameters<typeof Harness>[0] = {}) {
 }
 
 /**
+ * The four-figure panel in the scrolling body — FUEL-135.
+ *
+ * The footer repeats calories and protein, so "Calories" now appears twice in
+ * the sheet and every lookup has to say which copy it means. This is the full
+ * one; `footer` below is the pinned one.
+ */
+function panel(sheet: HTMLElement) {
+  return within(sheet).getByRole("region", { name: /^Full day totals/ });
+}
+
+/** The pinned footer's figures — the live region, calories and protein only. */
+function footer(sheet: HTMLElement) {
+  return within(sheet).getByRole("region", { name: /^Day totals/ });
+}
+
+/**
  * The value and its slash metadata for one column of the totals grid.
  *
  * `KeyValueGrid` renders each pair as `<div><dt>label</dt><dd>…</dd></div>`, so
@@ -122,7 +138,7 @@ async function open(props: Parameters<typeof Harness>[0] = {}) {
  * case in this describe pins that, so the helper is self-checking.
  */
 function column(sheet: HTMLElement, label: string) {
-  const heading = within(sheet).getByText(label);
+  const heading = within(panel(sheet)).getByText(label);
   const pair = heading.parentElement!;
 
   return pair.textContent ?? "";
@@ -195,7 +211,7 @@ describe("the resulting day totals", () => {
     const { sheet } = await open();
 
     for (const label of ["Calories", "Protein", "Fat", "Carbs"]) {
-      expect(within(sheet).getByText(label)).toBeTruthy();
+      expect(within(panel(sheet)).getByText(label)).toBeTruthy();
     }
   });
 
@@ -219,14 +235,17 @@ describe("the resulting day totals", () => {
     expect(column(sheet, "Calories")).toContain("+700");
     expect(column(sheet, "Protein")).toContain("+40");
 
-    // Exactly one red thing in the sheet, and it is the calorie delta. Counting
+    // Exactly one red thing in each grid, and it is the calorie delta. Counting
     // them is what makes this a claim about the rule rather than about one
     // element: a future change that painted the protein delta too would have to
-    // come here and say so.
+    // come here and say so. Two grids since FUEL-135 — the panel and the
+    // footer's slice of it — and they must agree.
     const red = sheet.querySelectorAll(".text-error");
 
-    expect(red).toHaveLength(1);
-    expect(red[0]?.textContent).toBe("+700");
+    expect(red).toHaveLength(2);
+    expect(panel(sheet).querySelectorAll(".text-error")).toHaveLength(1);
+    expect(footer(sheet).querySelectorAll(".text-error")).toHaveLength(1);
+    for (const figure of red) expect(figure.textContent).toBe("+700");
   });
 
   test("say when a total excludes an untracked meal", async () => {
@@ -256,10 +275,16 @@ describe("the resulting day totals", () => {
     // question the sheet exists to answer.
     const { sheet } = await open();
 
-    const live = sheet.querySelector('[aria-live="polite"]');
+    // One region, and it is the footer's (FUEL-135): the figures that are
+    // always on screen are the ones spoken, and a second live copy would read
+    // every tap's calories twice. `:not(span)` skips the repeat stepper's
+    // count, which is its own live region about a different number.
+    const live = sheet.querySelectorAll('[aria-live="polite"]:not(span)');
 
-    expect(live).toBeTruthy();
-    expect(within(live as HTMLElement).getByText("Calories")).toBeTruthy();
+    expect(live).toHaveLength(1);
+    expect(live[0]).toBe(footer(sheet));
+    expect(within(live[0] as HTMLElement).getByText("Calories")).toBeTruthy();
+    expect(within(live[0] as HTMLElement).getByText("Protein")).toBeTruthy();
   });
 
   test("move again when the selection moves to a second tile", async () => {
@@ -299,10 +324,6 @@ describe("the resulting day totals", () => {
 /* -------------------------------------------------------------------------- */
 /* The panel the figures sit in — FUEL-32                                     */
 /* -------------------------------------------------------------------------- */
-
-/** The tinted block: the live region, which is the panel's own element. */
-const panel = (sheet: HTMLElement) =>
-  sheet.querySelector('[aria-live="polite"]') as HTMLElement;
 
 describe("the preview panel", () => {
   test("sits above the confirm, never after it", async () => {
@@ -401,6 +422,57 @@ describe("the preview panel", () => {
     expect(onConfirm).not.toHaveBeenCalled();
     expect(onRepeat).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+});
+
+describe("the pinned footer — FUEL-135", () => {
+  // The sheet's scroller is the element carrying `overflow-y-auto`. The footer
+  // is the part of the sheet outside it: at 375×812 the confirm sat 947px down
+  // a 690px viewport, and a tap on a tile changed nothing on screen. Whether it
+  // is actually ON screen is a layout claim jsdom cannot make; that is
+  // `tests/visual/sheet-footer.spec.ts`. This pins the structure it relies on.
+  const scroller = (element: Element) => element.closest(".overflow-y-auto");
+
+  test("holds the confirm outside the scroller, and the tiles inside it", async () => {
+    const { sheet } = await open();
+
+    expect(scroller(within(sheet).getByRole("button", { name: "Swap" }))).toBeNull();
+    expect(scroller(within(sheet).getByRole("button", { name: /Chickpea curry/ }))).not.toBeNull();
+  });
+
+  test("holds the day's calories and protein beside it, and only those two", async () => {
+    const { sheet } = await open();
+
+    expect(scroller(footer(sheet))).toBeNull();
+    expect(within(footer(sheet)).getByText("Calories")).toBeTruthy();
+    expect(within(footer(sheet)).getByText("Protein")).toBeTruthy();
+    expect(within(footer(sheet)).queryByText("Fat")).toBeNull();
+    expect(within(footer(sheet)).queryByText("Carbs")).toBeNull();
+  });
+
+  test("moves its figures on the tap, with the panel", async () => {
+    const { user, sheet } = await open();
+
+    await user.click(within(sheet).getByRole("button", { name: /Salmon and greens/ }));
+
+    // 400 + 900 kcal, 30 + 60g — the same numbers the panel prints.
+    const figures = footer(sheet).textContent ?? "";
+
+    expect(figures).toContain("1,300");
+    expect(figures).toContain("90 g");
+    expect(column(sheet, "Calories")).toContain("1,300");
+  });
+
+  test("pins the repeat with the confirm, beneath it", async () => {
+    const { sheet } = await open();
+
+    expect(scroller(repeatButton(sheet))).toBeNull();
+  });
+
+  test("leaves the full panel in the scroll, above the confirm", async () => {
+    const { sheet } = await open();
+
+    expect(scroller(panel(sheet))).not.toBeNull();
   });
 });
 

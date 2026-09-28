@@ -75,12 +75,19 @@ export default function MealPickerSpecimenPage() {
 
       <p className="text-body text-text-secondary">
         Open the sheet and check it against the swap mock in{" "}
-        <code className="text-slash">docs/BRAND_GUIDE.html</code>: one ink tile among stone
-        ones, an umber inset rule on the selection, and a shadow on the sheet and nowhere
+        <code className="text-slash">docs/BRAND_GUIDE.html</code>: the chosen tile ink with an
+        umber inset rule, the planned one stone and marked Current, the rest showing what
+        choosing them would change, and a shadow on the sheet and nowhere
         else. The archived meal must not appear in either filter.
       </p>
 
-      <PickerSpecimen meals={MEALS} slot="dinner" date="Mon 10 Aug" currentMealId="d1" />
+      <PickerSpecimen
+        meals={MEALS}
+        slot="dinner"
+        date="Mon 10 Aug"
+        currentMealId="d3"
+        selectedMealId="d1"
+      />
 
       <section className="flex flex-col gap-[14px]">
         <h2 className="text-micro uppercase text-text-secondary">Derived motifs</h2>

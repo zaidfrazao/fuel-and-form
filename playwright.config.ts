@@ -188,6 +188,17 @@ export default defineConfig({
       dependencies: ["setup"],
       use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
     },
+    /**
+     * The swap's confirm on screen after a pick — FUEL-135. A project for the
+     * reason `sheet` is one: a position has no theme, and it sets its own two
+     * phone heights.
+     */
+    {
+      name: "sheet-footer",
+      testMatch: /sheet-footer\.spec\.ts/,
+      dependencies: ["setup"],
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+    },
     {
       name: "action-bar",
       testMatch: /action-bar\.spec\.ts/,

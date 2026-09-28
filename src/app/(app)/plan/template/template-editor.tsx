@@ -215,7 +215,7 @@ export function TemplateEditor({
 
   // The cell being edited, read back out of the shaped week rather than
   // remembered when the sheet opened: an optimistic save while the sheet is
-  // still open should leave the picker's ink anchor on the meal now in the
+  // still open should leave the picker's `Current` mark on the meal now in the
   // slot, not on the one that was there when it was tapped.
   const current = editing
     ? (week

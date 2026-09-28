@@ -689,3 +689,15 @@ html body[data-scroll-locked] {
 .action-bar-fade-pinned {
   mask-image: var(--action-bar-mask);
 }
+
+/* The sheet footer's scroll edge — FUEL-135.
+ *
+ * § The Scroll Edge again, in the one other place an opaque edge meets moving
+ * type: a sheet with a pinned footer (`ui/sheet.tsx`) scrolls its body and
+ * stops it at the footer's hairline. The action bars fade their OWN top over
+ * the page passing beneath them; here nothing passes beneath the footer —
+ * the body ends where it begins — so the ramp goes on the body's foot instead,
+ * pointing the other way. The same 24px, so the two edges read as one rule. */
+.sheet-body-fade {
+  mask-image: linear-gradient(to top, transparent, black 24px);
+}

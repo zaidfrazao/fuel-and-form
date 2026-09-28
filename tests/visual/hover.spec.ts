@@ -65,6 +65,23 @@ const openMealPicker = async (page: Page) => {
 };
 
 /**
+ * The picker with a tile chosen — FUEL-135. Ink follows the selection now, so
+ * the chosen tile is the only ink tile the picker ever draws, and its hover is
+ * the one § Desktop's second row describes: the fill goes to 90% under the
+ * ring, which the selection keeps. The first tile, because any will do and the
+ * first is the one least likely to move when the fixture's library grows.
+ */
+const openMealPickerAndChoose = async (page: Page) => {
+  await openMealPicker(page);
+  await page
+    .getByRole("dialog")
+    .getByRole("group", { name: /^Meals for/ })
+    .getByRole("button")
+    .first()
+    .click();
+};
+
+/**
  * The delete confirmation, which is where the Destructive button is filled.
  *
  * § Buttons gives that variant a fill "only inside a confirmation sheet", so
@@ -97,7 +114,7 @@ const SPECIMENS: readonly Specimen[] = [
   {
     name: "tile-ink",
     path: "/plan/template",
-    prepare: openMealPicker,
+    prepare: openMealPickerAndChoose,
     // `Tile` renders the material as `bg-ink` / `bg-surface`, which is the only
     // thing distinguishing the two tiles from outside the component.
     locate: (page) => page.getByRole("dialog").locator("button.bg-ink").first(),

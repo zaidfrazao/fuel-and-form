@@ -71,6 +71,15 @@ import { cn } from "@/lib/utils";
  * rather than a prop on this one.
  */
 
+/** The body's box: the guide's 22px gutters, 12px top and 20px stack gap. */
+const SCROLLER = "flex flex-col gap-5 px-[22px] pt-3";
+
+/**
+ * The sheet's foot. The home indicator sits below `bottom: 0`, so the guide's
+ * 26px is added to the inset rather than replaced by it.
+ */
+const FOOT = "pb-[calc(26px+env(safe-area-inset-bottom))]";
+
 export type SheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -85,10 +94,33 @@ export type SheetProps = {
   /** The right-hand side of the topbar — a date, typically. */
   meta?: ReactNode;
   children: ReactNode;
+  /**
+   * What must stay on screen however far the body is scrolled — FUEL-135.
+   *
+   * The swap sheet's confirm. Before this the whole sheet was one scroller, and
+   * at 375×812 the swap's Swap button sat 947px down a 690px viewport: picking a
+   * tile changed nothing visible, and the next step was a scroll the sheet gave
+   * no reason to make. With a footer the sheet splits in two: the grabber, the
+   * title and `children` scroll, and the footer sits beneath them at the
+   * sheet's foot, outside the scroller, so no amount of content can push it off.
+   *
+   * Absent means the sheet renders exactly as it did — one scroller, the same
+   * padding — so the walk sheet and the form-media sheet, which have no primary
+   * action to hold, are untouched along with their baselines.
+   */
+  footer?: ReactNode;
   className?: string;
 };
 
-export function Sheet({ open, onOpenChange, title, meta, children, className }: SheetProps) {
+export function Sheet({
+  open,
+  onOpenChange,
+  title,
+  meta,
+  children,
+  footer,
+  className,
+}: SheetProps) {
   /**
    * Whatever had focus when the sheet opened, so it can be given it back.
    *
@@ -106,6 +138,32 @@ export function Sheet({ open, onOpenChange, title, meta, children, className }: 
    * parent's, so focus is already inside the content by then.
    */
   const opener = useRef<HTMLElement | null>(null);
+
+  const body = (
+    <>
+      {/* Decorative. The sheet is dismissed by Escape or by the scrim, not
+          by dragging this — it is the affordance that says "this came from
+          the bottom edge", and announcing it would promise a gesture that
+          does not exist. § Desktop keeps it drawn at every width: a hybrid
+          laptop still has the thumb, and it is the mark that says the panel
+          is dismissible at all. */}
+      <div
+        aria-hidden="true"
+        className="h-[5px] w-9 shrink-0 self-center rounded-full bg-text-tertiary opacity-50"
+      />
+
+      <div className="flex items-baseline justify-between gap-4">
+        <Dialog.Title className="text-micro uppercase text-text-primary">
+          {title}
+        </Dialog.Title>
+        {meta !== undefined && (
+          <span className="text-micro uppercase text-text-secondary">{meta}</span>
+        )}
+      </div>
+
+      {children}
+    </>
+  );
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -180,11 +238,11 @@ export function Sheet({ open, onOpenChange, title, meta, children, className }: 
                 // full-width fixed box, which is what this element already was —
                 // so the phone is untouched, and its baselines are the control.
                 FRAME_MEASURE,
-                "pointer-events-auto flex max-h-[85dvh] flex-col gap-5",
-                "overflow-y-auto rounded-t-xl bg-raised px-[22px] pt-3 text-text-primary shadow-sheet",
-                // The home indicator sits below `bottom: 0`, so the guide's 26px
-                // foot is added to the inset rather than replaced by it.
-                "pb-[calc(26px+env(safe-area-inset-bottom))]",
+                "pointer-events-auto flex max-h-[85dvh] flex-col",
+                "rounded-t-xl bg-raised text-text-primary shadow-sheet",
+                // With a footer the scroller is the body inside; without one it
+                // is this element, as it always was.
+                footer === undefined && [SCROLLER, "overflow-y-auto", FOOT],
                 "data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:slide-in-from-bottom",
                 "data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:slide-out-to-bottom",
                 "duration-[250ms] ease-[cubic-bezier(0.32,0.72,0,1)]",
@@ -192,27 +250,32 @@ export function Sheet({ open, onOpenChange, title, meta, children, className }: 
                 className,
               )}
             >
-              {/* Decorative. The sheet is dismissed by Escape or by the scrim, not
-                  by dragging this — it is the affordance that says "this came from
-                  the bottom edge", and announcing it would promise a gesture that
-                  does not exist. § Desktop keeps it drawn at every width: a hybrid
-                  laptop still has the thumb, and it is the mark that says the panel
-                  is dismissible at all. */}
-              <div
-                aria-hidden="true"
-                className="h-[5px] w-9 shrink-0 self-center rounded-full bg-text-tertiary opacity-50"
-              />
-
-              <div className="flex items-baseline justify-between gap-4">
-                <Dialog.Title className="text-micro uppercase text-text-primary">
-                  {title}
-                </Dialog.Title>
-                {meta !== undefined && (
-                  <span className="text-micro uppercase text-text-secondary">{meta}</span>
-                )}
-              </div>
-
-              {children}
+              {footer === undefined ? (
+                body
+              ) : (
+                <>
+                  {/*
+                   * The scroller, and § The Scroll Edge's treatment at its
+                   * foot. The footer is opaque and the body stops at its top
+                   * edge, so a line of type would otherwise be cut through its
+                   * x-height there — the fault the action bars' mask exists
+                   * for. This fades the body's last 24px instead; `pb-6` keeps
+                   * the ramp over empty padding once the end is reached, so the
+                   * last control is never drawn faded at rest.
+                   */}
+                  <div className={cn(SCROLLER, "sheet-body-fade min-h-0 overflow-y-auto pb-6")}>
+                    {body}
+                  </div>
+                  <div
+                    className={cn(
+                      "flex shrink-0 flex-col gap-4 border-t border-border px-[22px] pt-4",
+                      FOOT,
+                    )}
+                  >
+                    {footer}
+                  </div>
+                </>
+              )}
             </Dialog.Content>
           </div>
         </div>

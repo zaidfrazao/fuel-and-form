@@ -7,6 +7,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { Tile } from "@/components/tile";
 import { Button } from "@/components/ui/button";
 import type { Meal, MealSlot } from "@/lib/db/schema";
+import { signed } from "@/lib/format";
 import { slotLabel } from "@/lib/now-display";
 
 /**
@@ -29,17 +30,26 @@ import { slotLabel } from "@/lib/now-display";
  *
  * ## The two rules the ticket leaves implicit
  *
- * **Which tile is ink.** § Tiles allows `ink` or `surface` and the mock draws
- * exactly one ink tile per sheet, so something has to choose it. It is the meal
- * currently planned for the slot — the one being swapped *away from* — and it
- * stays ink as the selection moves, because it is an anchor and not an echo of
- * the selection. When the planned meal is not in the visible list (archived, or
- * filtered out under the slot filter) the first tile takes ink instead, so
- * "exactly one ink tile" holds in every state rather than in the common one.
+ * **Which tile is ink: the one being chosen — FUEL-135.** § Tiles allows
+ * `ink` or `surface`, and `BRAND_GUIDE.html`'s swap frame draws its one ink tile
+ * as the selected one (`tile ink sel`), with the meal on the card behind it —
+ * Chilli — as plain stone. FUEL-22 read that frame the other way and made the
+ * meal currently planned the ink "anchor", which drew the incumbent as the
+ * strongest thing in the grid and the pick as a hairline beside it: at a
+ * glance, the current meal was the selected one. So ink now follows the
+ * selection, and with nothing chosen yet no tile is ink — the grid is asking a
+ * question, and a filled tile before the answer would be an answer.
+ *
+ * **The current meal is marked by a word, not a material.** Its metadata reads
+ * `Current`, and every other tile's reads what choosing it would CHANGE —
+ * `+765 kcal · +12 P` — because the question the sheet asks is what a swap does
+ * to the day, and the incumbent's figures are the zero that deltas count from.
+ * Absolute figures return wherever there is nothing to count from: an empty
+ * slot, or an incumbent that is untracked or not in the library.
  *
  * **One umber element** (§ The Four Rules). That element is the selection ring,
- * which `Tile` draws as a 1.5px `accent` inset — never a fill, so an ink tile
- * stays ink under it. Nothing else in this sheet may reach for `accent`; the
+ * which `Tile` draws as a 1.5px `accent` inset over the ink — the mock draws
+ * both on the one tile. Nothing else in this sheet may reach for `accent`; the
  * filter toggle is a Text button and the confirm the caller passes in is ink.
  *
  * ## Archived meals
@@ -57,7 +67,10 @@ import { slotLabel } from "@/lib/now-display";
 export type PickableMeal = Pick<
   Meal,
   "id" | "name" | "slotType" | "kcal" | "proteinG" | "isArchived"
->;
+> & {
+  /** `MacroBearing`'s flag — an untracked incumbent has no figures to count from. */
+  isUntracked?: boolean;
+};
 
 export type MealPickerProps = {
   open: boolean;
@@ -84,7 +97,7 @@ export type MealPickerProps = {
   date?: ReactNode;
   /** The whole library. Archived rows may be included; they are filtered here. */
   meals: readonly PickableMeal[];
-  /** What is planned for this slot today. The ink anchor. */
+  /** What is planned for this slot today. Marked `Current`; the tiles count from it. */
   currentMealId?: string | null;
   /** The chosen tile, if any. Controlled by the caller. */
   selectedMealId?: string | null;
@@ -97,6 +110,12 @@ export type MealPickerProps = {
    * that is where the test asserting it lives.
    */
   children?: ReactNode;
+  /**
+   * Pinned beneath the scrolling grid — FUEL-135. The swap's confirm and the
+   * two figures it changes, so a tap on a tile always has its next step on
+   * screen. See `Sheet`'s `footer`.
+   */
+  footer?: ReactNode;
 };
 
 export function MealPicker({
@@ -110,6 +129,7 @@ export function MealPicker({
   selectedMealId,
   onSelect,
   children,
+  footer,
 }: MealPickerProps) {
   return (
     <Sheet
@@ -117,6 +137,7 @@ export function MealPicker({
       onOpenChange={onOpenChange}
       title={title ?? `Swap ${slotLabel(slot).toLowerCase()}`}
       meta={date}
+      footer={footer}
     >
       {/* Its own component so that its `showAll` state unmounts with the sheet.
           Radix drops the portal's subtree on close, so reopening starts back at
@@ -152,25 +173,30 @@ function Candidates({
   const library = meals.filter((meal) => !meal.isArchived);
   const visible = showAll ? library : library.filter((meal) => meal.slotType === slot);
 
-  // The anchor, resolved once. `findIndex` rather than a comparison per tile so
-  // that the fallback to the first tile is a single decision — comparing ids
-  // inside the map would leave no ink tile at all whenever the planned meal is
-  // filtered out, which is exactly the case the fallback exists for.
-  const anchor = visible.findIndex((meal) => meal.id === currentMealId);
-  const inkIndex = anchor === -1 ? 0 : anchor;
+  // Looked up in the whole library rather than in `visible`: the incumbent is
+  // the zero the deltas count from whether or not the slot filter shows it.
+  const current = meals.find((meal) => meal.id === currentMealId);
+  const base = current && !current.isUntracked ? current : undefined;
+
+  function metaOf(meal: PickableMeal) {
+    if (meal.id === currentMealId) return "Current";
+    if (!base || meal.isUntracked) return `${meal.kcal} kcal · P ${meal.proteinG}`;
+
+    return `${signed(meal.kcal - base.kcal)} kcal · ${signed(meal.proteinG - base.proteinG)} P`;
+  }
 
   return (
     <div className="flex flex-col gap-5">
       {visible.length > 0 ? (
         <div role="group" aria-label={`Meals for ${label}`} className="grid grid-cols-2 gap-[10px]">
-          {visible.map((meal, index) => (
+          {visible.map((meal) => (
             <Tile
               key={meal.id}
               as="button"
               name={meal.name}
               motif={motifFor(meal)}
-              material={index === inkIndex ? "ink" : "surface"}
-              meta={`${meal.kcal} kcal · P ${meal.proteinG}`}
+              material={meal.id === selectedMealId ? "ink" : "surface"}
+              meta={metaOf(meal)}
               // Passed for every tile, selected or not: `Tile` maps this to
               // `aria-pressed`, and omitting it on the unselected ones would
               // announce them as ordinary buttons beside one pressed toggle.
