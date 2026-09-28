@@ -37,50 +37,58 @@ const MON = "2026-03-09";
 
 const GROUPS: ShoppingGroup[] = [
   {
-    category: "produce",
+    section: "produce",
     lines: [
       {
         key: "onion",
         name: "Onion",
-        category: "produce",
-        grams: null,
-        gramsPartial: true,
-        measures: [{ text: "1 large", times: 2 }],
-        times: 2,
+        section: "produce",
+        amounts: [{ qty: 2.25, unit: null }],
+        partial: false,
+        times: 5,
       },
       {
         key: "spinach",
         name: "Spinach",
-        category: "produce",
-        grams: 200,
-        gramsPartial: false,
-        measures: [],
+        section: "produce",
+        amounts: [{ qty: 200, unit: "g" }],
+        partial: false,
         times: 1,
       },
-      // FUEL-80's shape: both halves long at once. The real list has ~34 rows
-      // like this at 375px, and it is the row that clipped in both directions.
+      // FUEL-80's shape: a name long enough to wrap at 375px beside its amount.
       {
         key: "greens",
         name: "Greens (green beans, broccoli or spinach)",
-        category: "produce",
-        grams: 800,
-        gramsPartial: false,
-        measures: [{ text: "2/3–3/4 cup, or a small single-serve tin", times: 1 }],
-        times: 1,
+        section: "produce",
+        amounts: [{ qty: 800, unit: "g" }],
+        partial: true,
+        times: 2,
       },
     ],
   },
   {
-    category: "meat",
+    section: "meat",
     lines: [
       {
         key: "beef mince",
         name: "Beef mince",
-        category: "meat",
-        grams: 300,
-        gramsPartial: false,
-        measures: [],
+        section: "meat",
+        amounts: [{ qty: 300, unit: "g" }],
+        partial: false,
         times: 2,
+      },
+    ],
+  },
+  {
+    section: "pantry",
+    lines: [
+      {
+        key: "olive oil",
+        name: "Olive oil",
+        section: "pantry",
+        amounts: [],
+        partial: false,
+        times: 3,
       },
     ],
   },
@@ -119,7 +127,7 @@ describe("ticking a line", () => {
     // "Items individually checkable" — one control per line, not a bulk one.
     list();
 
-    expect(screen.getAllByRole("checkbox")).toHaveLength(4);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(5);
   });
 
   test("renders a line the server says is ticked as ticked", () => {
@@ -140,6 +148,7 @@ describe("ticking a line", () => {
       week: MON,
       key: "spinach",
       checked: true,
+      pantry: false,
     });
   });
 
@@ -152,6 +161,22 @@ describe("ticking a line", () => {
       week: MON,
       key: "spinach",
       checked: false,
+      pantry: false,
+    });
+  });
+
+  test("says a pantry line is one, so its untick clears every week", async () => {
+    // FUEL-137. The flag is what lets the action delete last month's row too;
+    // without it the box would spring back on the next render.
+    list(["olive oil"]);
+
+    await userEvent.setup().click(box("Olive oil"));
+
+    expect(setChecked).toHaveBeenCalledWith({
+      week: MON,
+      key: "olive oil",
+      checked: false,
+      pantry: true,
     });
   });
 
@@ -182,6 +207,38 @@ describe("ticking a line", () => {
     expect(box("Beef mince").checked).toBe(false);
 
     release();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Progress                                                                   */
+/* -------------------------------------------------------------------------- */
+
+describe("the count", () => {
+  test("says how many of the lines are ticked", () => {
+    list(["beef mince", "olive oil"]);
+
+    expect(screen.getByText("2 of 5 ticked")).toBeDefined();
+  });
+
+  test("moves on the frame of the tap, before the server answers", async () => {
+    // Read from the optimistic set like the row is. A count that waited for
+    // the round trip would disagree with the box it sits above.
+    const release = held();
+
+    list();
+    await userEvent.setup().click(box("Spinach"));
+
+    expect(await screen.findByText("1 of 5 ticked")).toBeDefined();
+
+    release();
+  });
+
+  test("ignores a stored tick the list no longer contains", () => {
+    // A tick left behind by a swap renders nowhere, and so counts nowhere.
+    list(["pork mince", "spinach"]);
+
+    expect(screen.getByText("1 of 5 ticked")).toBeDefined();
   });
 });
 
@@ -229,7 +286,12 @@ describe("a refusal", () => {
     setChecked.mockClear();
     await user.click(screen.getByRole("button", { name: "Try again" }));
 
-    expect(setChecked).toHaveBeenCalledWith({ week: MON, key: "spinach", checked: true });
+    expect(setChecked).toHaveBeenCalledWith({
+      week: MON,
+      key: "spinach",
+      checked: true,
+      pantry: false,
+    });
   });
 
   test("survives the request itself failing, not just the action refusing", async () => {
@@ -272,12 +334,15 @@ describe("copy to clipboard", () => {
     expect(await navigator.clipboard.readText()).toBe(
       [
         "PRODUCE",
-        "- [ ] Onion  1 large ×2",
+        "- [ ] Onion  2¼",
         "- [ ] Spinach  200g",
-        "- [ ] Greens (green beans, broccoli or spinach)  800g · 2/3–3/4 cup, or a small single-serve tin",
+        "- [ ] Greens (green beans, broccoli or spinach)  800g +",
         "",
         "MEAT",
         "- [x] Beef mince  300g",
+        "",
+        "PANTRY",
+        "- [ ] Olive oil",
       ].join("\n"),
     );
 
@@ -356,6 +421,21 @@ describe("the list is a list, not a card", () => {
     expect(screen.getByRole("heading", { name: "meat" })).toBeDefined();
   });
 
+  test("puts the pantry last, and says once what its ticks do", () => {
+    // FUEL-137. Not collapsed — § Progressive Disclosure refuses accordions —
+    // so the note is the pantry's whole difference on screen, and it belongs
+    // under that heading and no other.
+    const { container } = list();
+
+    const headings = [...container.querySelectorAll("h2")].map((h) => h.textContent);
+
+    expect(headings).toEqual(["produce", "meat", "pantry"]);
+    expect(screen.getAllByText(/stays ticked from week to week/)).toHaveLength(1);
+    expect(
+      screen.getByRole("heading", { name: "pantry" }).parentElement?.textContent,
+    ).toContain("stays ticked from week to week");
+  });
+
   test("gives each row a 46px target, the dense-context height", () => {
     // § Lists' dense height for ingredients, which is also what clears
     // § Accessibility's 44px touch minimum.
@@ -373,7 +453,7 @@ describe("the list is a list, not a card", () => {
 
 /** The name and the amount of the fixture row where both halves are long. */
 const GREENS_NAME = "Greens (green beans, broccoli or spinach)";
-const GREENS_AMOUNT = "800g · 2/3–3/4 cup, or a small single-serve tin";
+const GREENS_AMOUNT = "800g +";
 
 describe("a row too long for one line", () => {
   test("clips neither the name nor the amount", () => {
@@ -536,6 +616,21 @@ describe("the column flow", () => {
      * about the stylesheet, so it is a fact jsdom can hold.
      */
     expect(flow?.parentElement?.contains(copy)).toBe(true);
+  });
+
+  test("the copy control comes before the list, not after it", () => {
+    // FUEL-137: at the foot it sat under 3,918px of list at 375. DOM order is
+    // the claim, because it is visual order in both a column and a flow.
+    const { container } = render(
+      <ShoppingListView week={MON} groups={GROUPS} checked={[]} />,
+    );
+
+    const copy = screen.getByRole("button", { name: /copy/i });
+    const flow = container.querySelector("[data-column-flow]");
+
+    expect(
+      copy.compareDocumentPosition(flow as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   test("every aisle is a group inside the flow", () => {

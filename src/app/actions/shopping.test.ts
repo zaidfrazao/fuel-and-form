@@ -63,8 +63,26 @@ describe("ticking a line", () => {
   test("clears the tick when asked to uncheck", async () => {
     await expect(tick({ checked: false })).resolves.toEqual({ ok: true });
 
-    expect(uncheckItem).toHaveBeenCalledWith(USER, MON, "beef mince");
+    expect(uncheckItem).toHaveBeenCalledWith(USER, MON, "beef mince", { pantry: false });
     expect(checkItem).not.toHaveBeenCalled();
+  });
+
+  test("clears a pantry tick from every week when the line says it is one", async () => {
+    // FUEL-137: a pantry tick is read from any week, so its untick must reach
+    // them all. Ticking needs no flag — it writes this week's row either way.
+    await tick({ checked: false, pantry: true });
+    await tick({ checked: true, pantry: true });
+
+    expect(uncheckItem).toHaveBeenCalledWith(USER, MON, "beef mince", { pantry: true });
+    expect(checkItem).toHaveBeenCalledWith(USER, MON, "beef mince");
+  });
+
+  test("reads anything but a literal true as not the pantry", async () => {
+    // A Server Action's arguments are whatever the request carried. A truthy
+    // string must not widen an untick from one week to all of them.
+    await tick({ checked: false, pantry: "yes" as unknown as boolean });
+
+    expect(uncheckItem).toHaveBeenCalledWith(USER, MON, "beef mince", { pantry: false });
   });
 
   test("refreshes the screen behind the optimistic row", async () => {

@@ -51,15 +51,14 @@ const WEEK: ShoppingWeek = {
   today: MON,
   groups: [
     {
-      category: "meat",
+      section: "meat",
       lines: [
         {
           key: "beef mince",
           name: "Beef mince",
-          category: "meat",
-          grams: 300,
-          gramsPartial: false,
-          measures: [],
+          section: "meat",
+          amounts: [{ qty: 300, unit: "g" }],
+          partial: false,
           times: 2,
         },
       ],

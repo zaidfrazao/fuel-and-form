@@ -513,8 +513,38 @@ export const mealIngredients = pgTable(
     /** Rough shopping aisle: produce / dairy / meat / dry goods / other. */
     category: text(),
     sortOrder: integer("sort_order").notNull().default(0),
+
+    /*
+     * The shop's reading of the row, beside the kitchen's — FUEL-137.
+     *
+     * `name` and `non_scale_measure` are what the recipe says ("1 clove,
+     * minced"), and they stay exactly that: the prep note belongs in the
+     * method. What the shopping list needs is a different sentence about the
+     * same row — what to buy, and how many — and free text cannot be summed.
+     * `shopping-list.ts` held that line for as long as the measure was the only
+     * data, and printed "1 clove ×5". These columns are the data it lacked.
+     */
+
+    /**
+     * The name the list buys this under, when it is not `name`. Null means
+     * `name` already is. "Olive oil (for the fish)" and "Olive oil" meet here.
+     */
+    shopName: text("shop_name"),
+    /**
+     * How much of `shop_unit` one serving takes: 1 clove, 0.5 lemon, 200ml.
+     * Null where the row has no countable amount — then `grams`, if any, is
+     * the amount, and otherwise the name is the whole instruction.
+     */
+    shopQty: numeric("shop_qty", { precision: 7, scale: 2, mode: "number" }),
+    /** 'clove', 'slice', 'ml', 'g' … Null is a bare count: "Eggs 4". */
+    shopUnit: text("shop_unit"),
+    /** A staple kept in, not bought per week: salt, oils, dried spices. */
+    pantry: boolean().notNull().default(false),
   },
   (t) => [
+    check("meal_ingredients_shop_qty_positive", sql`"shop_qty" is null or "shop_qty" > 0`),
+    check("meal_ingredients_shop_unit_needs_qty", sql`"shop_unit" is null or "shop_qty" is not null`),
+
     foreignKey({
       name: "meal_ingredients_meal_fk",
       columns: [t.mealId, t.userId],

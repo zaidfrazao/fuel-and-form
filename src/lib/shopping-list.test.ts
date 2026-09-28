@@ -4,7 +4,10 @@ import type { DayPlanOverride, Meal, MealSlot, PlanTemplateEntry } from "./db/sc
 import { type Plan, resolveWeek } from "./resolve-plan";
 import { seedMeals } from "./seed/meals";
 import {
+  normaliseKey,
+  PANTRY,
   SHOPPING_CATEGORIES,
+  SHOPPING_SECTIONS,
   type ShoppingIngredient,
   shoppingList,
 } from "./shopping-list";
@@ -16,7 +19,8 @@ import type { PlannedDay } from "./week-grid";
  * Gated at 100% for the reason `macros.ts` and `week-totals.ts` are: every
  * failure here prints a plausible line rather than a crash. A dropped
  * occurrence, a merged pair of distinct spices, a total that silently omits the
- * rows with no weight — each produces a list that looks like a list, and is
+ * rows with no amount, a pantry staple summed into a figure nobody buys — each
+ * produces a list that looks like a list, and is
  * discovered in the kitchen rather than in a review.
  *
  * ## The fixtures
@@ -63,25 +67,41 @@ const oats: TestMeal = { id: "oats" };
 /** Macros but no recipe — PRD § Risks' promise, and every seeded treat. */
 const treat: TestMeal = { id: "treat" };
 
+type Shop = Partial<Pick<ShoppingIngredient, "shopName" | "shopQty" | "shopUnit" | "pantry">>;
+
 const ingredient = (
   mealId: string,
   name: string,
   grams: number | null,
-  nonScaleMeasure: string | null,
   category: string | null,
-): ShoppingIngredient => ({ mealId, name, grams, nonScaleMeasure, category });
+  shop: Shop = {},
+): ShoppingIngredient => ({
+  mealId,
+  name,
+  grams,
+  category,
+  shopName: null,
+  shopQty: null,
+  shopUnit: null,
+  pantry: false,
+  ...shop,
+});
 
 const INGREDIENTS: ShoppingIngredient[] = [
-  // The chilli and the curry share mince and spinach under identical names,
-  // which is the "combined into one line" criterion's evidence.
-  ingredient("chilli", "Beef mince, 5% fat", 150, "the size of your fist", "meat"),
-  ingredient("chilli", "Baby spinach", 40, "a big handful", "produce"),
-  ingredient("chilli", "Ground cumin", null, "1/2 tsp", "dry goods"),
-  ingredient("curry", "Beef mince, 5% fat", 125, "a smaller fist", "meat"),
-  ingredient("curry", "Baby spinach", 40, "a big handful", "produce"),
-  ingredient("curry", "Ground cumin", null, "1 tsp", "dry goods"),
-  ingredient("oats", "Whole oats", 60, "6 tbsp", "dry goods"),
-  ingredient("oats", "Milk", 200, "just under 1 cup", "dairy"),
+  // The chilli and the curry share mince, spinach and garlic under identical
+  // names, which is the "combined into one line" criterion's evidence. Garlic
+  // is counted in cloves and the two recipes ask for different counts, so a
+  // sum that took one row twice cannot land on the right figure by accident.
+  ingredient("chilli", "Beef mince, 5% fat", 150, "meat"),
+  ingredient("chilli", "Baby spinach", 40, "produce"),
+  ingredient("chilli", "Garlic", null, "produce", { shopQty: 1, shopUnit: "clove" }),
+  ingredient("chilli", "Ground cumin", null, "dry goods", { pantry: true }),
+  ingredient("curry", "Beef mince, 5% fat", 125, "meat"),
+  ingredient("curry", "Baby spinach", 40, "produce"),
+  ingredient("curry", "Garlic", null, "produce", { shopQty: 2, shopUnit: "clove" }),
+  ingredient("curry", "Ground cumin", null, "dry goods", { pantry: true }),
+  ingredient("oats", "Whole oats", 60, "dry goods"),
+  ingredient("oats", "Milk", null, "dairy", { shopQty: 200, shopUnit: "ml" }),
 ];
 
 const day = (date: string, meals: TestMeal[]): PlannedDay<TestMeal> => ({
@@ -98,19 +118,19 @@ const day = (date: string, meals: TestMeal[]): PlannedDay<TestMeal> => ({
 const lines = (days: readonly PlannedDay<TestMeal>[], rows = INGREDIENTS) =>
   shoppingList(days, rows).flatMap((group) =>
     group.lines.map((line) => ({
-      category: group.category,
+      section: group.section,
+      key: line.key,
       name: line.name,
-      grams: line.grams,
-      gramsPartial: line.gramsPartial,
-      measures: line.measures.map((measure) => `${measure.text} x${measure.times}`),
+      amounts: line.amounts.map((amount) => `${amount.qty} ${amount.unit ?? "×"}`),
+      partial: line.partial,
       times: line.times,
     })),
   );
 
-/** Just the names, aisle by aisle — for the ordering cases. */
+/** Just the names, section by section — for the ordering cases. */
 const shape = (days: readonly PlannedDay<TestMeal>[], rows = INGREDIENTS) =>
   shoppingList(days, rows).map(
-    (group) => `${group.category}: ${group.lines.map((line) => line.name).join(", ")}`,
+    (group) => `${group.section}: ${group.lines.map((line) => line.name).join(", ")}`,
   );
 
 const find = (days: readonly PlannedDay<TestMeal>[], name: string, rows = INGREDIENTS) =>
@@ -138,6 +158,82 @@ describe("SHOPPING_CATEGORIES", () => {
 
   it("lists the aisles in the order PRD § P8 names them", () => {
     expect(SHOPPING_CATEGORIES).toEqual(["produce", "dairy", "meat", "dry goods", "other"]);
+  });
+
+  it("draws the pantry after every aisle", () => {
+    expect(SHOPPING_SECTIONS).toEqual([...SHOPPING_CATEGORIES, PANTRY]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The seeded library — FUEL-137's criteria, held on the real data            */
+/* -------------------------------------------------------------------------- */
+
+describe("the seeded library", () => {
+  // Every seeded meal on one day: each row reaches the fold exactly once.
+  const everything = [day(MON, seedMeals.map((meal) => ({ id: meal.key })))];
+  const rows: ShoppingIngredient[] = seedMeals.flatMap((meal) =>
+    meal.ingredients.map((row) => ({
+      mealId: meal.key,
+      name: row.name,
+      grams: row.grams ?? null,
+      category: row.category ?? null,
+      shopName: row.shopName ?? null,
+      shopQty: row.shopQty ?? null,
+      shopUnit: row.shopUnit ?? null,
+      pantry: row.pantry ?? false,
+    })),
+  );
+  const list = lines(everything, rows);
+
+  it("gives every line at most one amount, in one unit", () => {
+    // Two units on a line print as "2 slices + 45g" — honest, and not a
+    // count anyone can shop from. The seed is held to never producing one.
+    expect(list.filter((line) => line.amounts.length > 1)).toEqual([]);
+  });
+
+  it("leaves no line outside the pantry partially counted", () => {
+    // "20g +" is the right print for data that has a gap, and the seed should
+    // not have gaps: every row of a counted line carries its amount.
+    expect(list.filter((line) => line.amounts.length > 0 && line.partial)).toEqual([]);
+  });
+
+  it("agrees with itself about each shop name's pantry flag and aisle", () => {
+    // First-seen decides a disagreement, which makes the answer depend on
+    // which recipe the week happens to plan first. The seed must not disagree.
+    const seen = new Map<string, string>();
+    const clashes: string[] = [];
+
+    for (const row of rows) {
+      const key = normaliseKey(row.shopName ?? row.name);
+      const where = row.pantry ? PANTRY : (row.category ?? "other");
+      const first = seen.get(key);
+
+      if (first === undefined) seen.set(key, where);
+      else if (first !== where) clashes.push(`${key}: ${first} / ${where}`);
+    }
+
+    expect(clashes).toEqual([]);
+  });
+
+  it("merges the variants the ticket named into one line each", () => {
+    const names = list.map((line) => line.name);
+
+    for (const variant of [
+      "Olive oil (for the fish)",
+      "Olive oil (for the potatoes)",
+      "Chilli flakes or cayenne",
+      "Hot sauce (optional)",
+      "Hot sauce or sriracha",
+      "Berries, fresh or frozen",
+      "Plain yoghurt",
+    ]) {
+      expect(names).not.toContain(variant);
+    }
+
+    for (const line of ["Olive oil", "Chilli flakes", "Hot sauce", "Frozen berries", "Plain Greek yoghurt"]) {
+      expect(names.filter((name) => name === line)).toHaveLength(1);
+    }
   });
 });
 
@@ -193,11 +289,11 @@ describe("a week containing a swap", () => {
     // Three chilli dinners is 450g of mince, not 150g. Deduplicating by meal
     // would shop for the recipe book instead of for the week.
     expect(find(resolveWeek(plan(), MON), "Beef mince, 5% fat")).toEqual({
-      category: "meat",
+      section: "meat",
+      key: "beef mince, 5% fat",
       name: "Beef mince, 5% fat",
-      grams: 450,
-      gramsPartial: false,
-      measures: ["the size of your fist x3"],
+      amounts: ["450 g"],
+      partial: false,
       times: 3,
     });
   });
@@ -207,27 +303,21 @@ describe("a week containing a swap", () => {
     // mince from the chillis plus 125g from the curry.
     const swapped = resolveWeek(plan([override(TUE, "dinner", "curry")]), MON);
 
-    expect(find(swapped, "Beef mince, 5% fat")).toEqual({
-      category: "meat",
-      name: "Beef mince, 5% fat",
-      grams: 425,
-      gramsPartial: false,
-      measures: ["the size of your fist x2", "a smaller fist x1"],
-      times: 3,
-    });
+    expect(find(swapped, "Beef mince, 5% fat")?.amounts).toEqual(["425 g"]);
 
-    // And the curry's own spice reaches the list at all, which is the half of
-    // the criterion that a mince total alone would not prove.
-    expect(find(swapped, "Ground cumin")?.measures).toEqual(["1/2 tsp x2", "1 tsp x1"]);
+    // And the curry's own count reaches the sum: a clove from each chilli and
+    // two from the curry. 3 would mean the swap was ignored; 6, that it was
+    // added on top of the meal it replaced.
+    expect(find(swapped, "Garlic")?.amounts).toEqual(["4 clove"]);
   });
 
-  it("drops an ingredient entirely when the swap removes its only meal", () => {
-    // Every chilli overridden away. Nothing left in the week needs mince.
+  it("drops an ingredient's contribution when the swap removes its meal", () => {
+    // Every chilli overridden away. Three curries.
     const overrides = [MON, TUE, THU].map((date) => override(date, "dinner", "curry"));
     const swapped = resolveWeek(plan(overrides), MON);
 
-    expect(find(swapped, "Beef mince, 5% fat")?.grams).toBe(375);
-    expect(find(swapped, "Ground cumin")?.measures).toEqual(["1 tsp x3"]);
+    expect(find(swapped, "Beef mince, 5% fat")?.amounts).toEqual(["375 g"]);
+    expect(find(swapped, "Garlic")?.amounts).toEqual(["6 clove"]);
   });
 
   it("plans nothing for a week entirely before the program starts", () => {
@@ -247,30 +337,30 @@ describe("combining identical ingredients", () => {
 
   it("combines one ingredient across two different recipes into one line", () => {
     expect(find(week, "Baby spinach")).toEqual({
-      category: "produce",
+      section: "produce",
+      key: "baby spinach",
       name: "Baby spinach",
-      grams: 80,
-      gramsPartial: false,
-      measures: ["a big handful x2"],
+      amounts: ["80 g"],
+      partial: false,
       times: 2,
     });
   });
 
   it("matches on name regardless of casing and surrounding whitespace", () => {
     const rows = [
-      ingredient("chilli", "Baby spinach", 40, "a big handful", "produce"),
-      ingredient("curry", "  BABY   spinach ", 30, "a big handful", "produce"),
+      ingredient("chilli", "Baby spinach", 40, "produce"),
+      ingredient("curry", "  BABY   spinach ", 30, "produce"),
     ];
 
     // One line, with the first-seen casing on it — the second row's shouting is
     // a data entry accident, not a second ingredient.
     expect(lines(week, rows)).toEqual([
       {
-        category: "produce",
+        section: "produce",
+        key: "baby spinach",
         name: "Baby spinach",
-        grams: 70,
-        gramsPartial: false,
-        measures: ["a big handful x2"],
+        amounts: ["70 g"],
+        partial: false,
         times: 2,
       },
     ]);
@@ -283,35 +373,85 @@ describe("combining identical ingredients", () => {
     // with it second the trim is unreachable — the case above would pass
     // against a version that never trimmed the displayed name at all.
     const rows = [
-      ingredient("chilli", "  BABY   spinach ", 30, "a big handful", "produce"),
-      ingredient("curry", "Baby spinach", 40, "a big handful", "produce"),
+      ingredient("chilli", "  BABY   spinach ", 30, "produce"),
+      ingredient("curry", "Baby spinach", 40, "produce"),
     ];
 
     // Trimmed, not otherwise rewritten: the inner run of spaces is left alone,
     // because collapsing it would be this file editing a name rather than
     // matching one, and `normalise` already handles the matching.
-    expect(lines(week, rows).map((line) => [line.name, line.grams])).toEqual([
-      ["BABY   spinach", 70],
+    expect(lines(week, rows).map((line) => [line.name, line.amounts])).toEqual([
+      ["BABY   spinach", ["70 g"]],
     ]);
   });
 
   it("keeps ingredients whose names merely resemble each other apart", () => {
     // The deliberate limitation, pinned so it cannot be "fixed" by accident.
-    // The seeded library really does contain all three olive oils and both
-    // chillis; a matcher loose enough to merge the oils merges the chillis too,
-    // and silently dropping one of a pair of distinct spices is worse than
-    // printing an oil twice. The fix, when it comes, is a seed edit.
+    // A matcher loose enough to merge "Olive oil (for the fish)" into "Olive
+    // oil" merges the chillis too, and silently dropping one of a pair of
+    // distinct spices is worse than printing an oil twice. The fix is a seed
+    // edit — `shop_name` — and the case below is that fix.
     const rows = [
-      ingredient("chilli", "Olive oil", null, "1 tsp", "other"),
-      ingredient("chilli", "Olive oil (for the fish)", null, "1 tsp", "other"),
-      ingredient("chilli", "Chilli flakes", null, "1/2 tsp", "dry goods"),
-      ingredient("chilli", "Chilli powder", null, "1 tsp", "dry goods"),
+      ingredient("chilli", "Olive oil", null, "other"),
+      ingredient("chilli", "Olive oil (for the fish)", null, "other"),
+      ingredient("chilli", "Chilli flakes", null, "dry goods"),
+      ingredient("chilli", "Chilli powder", null, "dry goods"),
     ];
 
     expect(shape([day(MON, [chilli])], rows)).toEqual([
       "dry goods: Chilli flakes, Chilli powder",
       "other: Olive oil, Olive oil (for the fish)",
     ]);
+  });
+
+  it("merges rows that name one shop item, under the shop name", () => {
+    // FUEL-137. The variant keys and prints as its `shop_name`; the recipe's
+    // own name, "(for the fish)" and all, stays in the recipe.
+    const rows = [
+      ingredient("chilli", "Olive oil", null, "other", { shopQty: 5, shopUnit: "ml" }),
+      ingredient("curry", "Olive oil (for the fish)", null, "other", {
+        shopName: "Olive oil",
+        shopQty: 10,
+        shopUnit: "ml",
+      }),
+    ];
+
+    expect(lines(week, rows)).toEqual([
+      {
+        section: "other",
+        key: "olive oil",
+        name: "Olive oil",
+        amounts: ["15 ml"],
+        partial: false,
+        times: 2,
+      },
+    ]);
+  });
+
+  it("names the line by its shop name even when the first row seen is the variant", () => {
+    const rows = [
+      ingredient("chilli", "Plain yoghurt", null, "dairy", {
+        shopName: "  Plain Greek yoghurt ",
+        shopQty: 15,
+        shopUnit: "g",
+      }),
+      ingredient("curry", "Plain Greek yoghurt", 160, "dairy"),
+    ];
+
+    expect(lines(week, rows).map((line) => [line.key, line.name, line.amounts])).toEqual([
+      ["plain greek yoghurt", "Plain Greek yoghurt", ["175 g"]],
+    ]);
+  });
+
+  it("falls back to the name when the shop name is blank", () => {
+    // Nullable, and an empty string there is a null nobody typed. Keying the
+    // line on "" would fold every such row in the library into one.
+    const rows = [
+      ingredient("chilli", "Rocket", 10, "produce", { shopName: "  " }),
+      ingredient("chilli", "Apple", null, "produce", { shopName: "", shopQty: 1 }),
+    ];
+
+    expect(shape([day(MON, [chilli])], rows)).toEqual(["produce: Apple, Rocket"]);
   });
 
   it("ignores ingredient rows whose meal the week does not plan", () => {
@@ -323,8 +463,8 @@ describe("combining identical ingredients", () => {
 
   it("ignores a row whose name is blank or only whitespace", () => {
     const rows = [
-      ingredient("oats", "   ", 999, "a mystery", "produce"),
-      ingredient("oats", "Milk", 200, "just under 1 cup", "dairy"),
+      ingredient("oats", "   ", 999, "produce"),
+      ingredient("oats", "Milk", null, "dairy", { shopQty: 200, shopUnit: "ml" }),
     ];
 
     // An unnamed line is unshoppable, and folding them together under "" would
@@ -334,90 +474,147 @@ describe("combining identical ingredients", () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* Criterion 3 — grams and non-scale measures                                 */
+/* Criterion 3 — summed amounts                                               */
 /* -------------------------------------------------------------------------- */
 
-describe("quantities", () => {
+describe("amounts", () => {
   const week = [day(MON, [chilli])];
+  const three = [day(MON, [chilli]), day(TUE, [chilli]), day(THU, [chilli])];
 
-  it("sums the rows that carry a weight and flags the ones that do not", () => {
-    // The real case: the seeded library has butter both with grams and without.
-    // A bare "20g" would look exactly like a complete figure while understating
-    // the shop by an unknown amount.
-    const rows = [
-      ingredient("chilli", "Butter", 20, "a knob", "dairy"),
-      ingredient("chilli", "Butter", null, "for the pan", "dairy"),
-    ];
+  it("sums a counted amount into one figure rather than counting occurrences", () => {
+    // FUEL-137's first criterion: "5 cloves", never "1 clove ×5".
+    const rows = [ingredient("chilli", "Garlic", null, "produce", { shopQty: 1, shopUnit: "clove" })];
 
-    expect(find(week, "Butter", rows)).toEqual({
-      category: "dairy",
-      name: "Butter",
-      grams: 20,
-      gramsPartial: true,
-      measures: ["a knob x1", "for the pan x1"],
-      times: 2,
-    });
-  });
-
-  it("reports no weight at all when nothing that contributed had one", () => {
-    expect(find(week, "Ground cumin")).toEqual({
-      category: "dry goods",
-      name: "Ground cumin",
-      grams: null,
-      gramsPartial: true,
-      measures: ["1/2 tsp x1"],
-      times: 1,
-    });
-  });
-
-  it("keeps a summed weight to one decimal place", () => {
-    // `grams` is numeric(_, 1), so three 20.1g rows sum to 60.300000000000004
-    // in JS and a shopping list can print it.
-    const rows = Array.from({ length: 3 }, () =>
-      ingredient("chilli", "Chia seeds", 20.1, "1 tbsp", "dry goods"),
-    );
-
-    expect(find(week, "Chia seeds", rows)?.grams).toBe(60.3);
-  });
-
-  it("counts a repeated measure rather than pretending to add it up", () => {
-    // "a big handful x3" is shoppable. A parsed "3 handfuls" would be a guess
-    // that happens to read well for handfuls and not at all for "to taste".
-    const rows = [ingredient("chilli", "Salt and pepper", null, "to taste", "other")];
-
-    const week = [day(MON, [chilli]), day(TUE, [chilli]), day(THU, [chilli])];
-
-    expect(find(week, "Salt and pepper", rows)).toEqual({
-      category: "other",
-      name: "Salt and pepper",
-      grams: null,
-      gramsPartial: true,
-      measures: ["to taste x3"],
+    expect(find(three, "Garlic", rows)).toEqual({
+      section: "produce",
+      key: "garlic",
+      name: "Garlic",
+      amounts: ["3 clove"],
+      partial: false,
       times: 3,
     });
   });
 
-  it("lists distinct measures separately, in the order the week asks for them", () => {
+  it("keeps a bare count unit-less, and adds fractions", () => {
+    // Half a lemon twice is a lemon.
     const rows = [
-      ingredient("chilli", "Salt and pepper", null, "to taste, generously", "other"),
-      ingredient("curry", "Salt and pepper", null, "to taste", "other"),
+      ingredient("chilli", "Lemon", null, "produce", { shopQty: 0.5 }),
+      ingredient("curry", "Lemon", null, "produce", { shopQty: 0.5, shopUnit: "  " }),
     ];
 
-    expect(find([day(MON, [chilli]), day(TUE, [curry])], "Salt and pepper", rows)?.measures).toEqual(
-      ["to taste, generously x1", "to taste x1"],
-    );
+    expect(find([day(MON, [chilli, curry])], "Lemon", rows)?.amounts).toEqual(["1 ×"]);
   });
 
-  it("carries no measure at all when the recipe defines none", () => {
-    const rows = [ingredient("chilli", "Beef mince, 5% fat", 150, null, "meat")];
+  it("prefers the shop amount to the weight where a row has both", () => {
+    // Butter's "1 tbsp for the base, plus 20g to finish" weighs 20 and shops
+    // for 35. The weight is the recipe's; the shop amount is what to buy.
+    const rows = [
+      ingredient("chilli", "Butter", 20, "dairy", { shopQty: 35, shopUnit: "g" }),
+      ingredient("curry", "Butter", 20, "dairy"),
+    ];
 
-    expect(find(week, "Beef mince, 5% fat", rows)?.measures).toEqual([]);
+    expect(find([day(MON, [chilli, curry])], "Butter", rows)?.amounts).toEqual(["55 g"]);
   });
 
-  it("treats a whitespace-only measure as no measure", () => {
-    const rows = [ingredient("chilli", "Beef mince, 5% fat", 150, "   ", "meat")];
+  it("flags a row with no amount, and still sums the ones that have one", () => {
+    // A bare "20g" would look exactly like a complete figure while understating
+    // the shop by an unknown amount.
+    const rows = [
+      ingredient("chilli", "Butter", 20, "dairy"),
+      ingredient("chilli", "Butter", null, "dairy"),
+    ];
 
-    expect(find(week, "Beef mince, 5% fat", rows)?.measures).toEqual([]);
+    expect(find(week, "Butter", rows)).toMatchObject({ amounts: ["20 g"], partial: true, times: 2 });
+  });
+
+  it("reports no amount at all when nothing that contributed had one", () => {
+    const rows = [ingredient("chilli", "Fresh coriander", null, "produce")];
+
+    expect(find(week, "Fresh coriander", rows)).toMatchObject({ amounts: [], partial: true });
+  });
+
+  it("keeps two units apart rather than adding them", () => {
+    // Not a case the seed has — its test above forbids it — but the fold must
+    // not add 2 slices to 45g, and must not drop either.
+    const rows = [
+      ingredient("chilli", "Ham", 45, "meat"),
+      ingredient("curry", "Ham", null, "meat", { shopQty: 2, shopUnit: "slice" }),
+      ingredient("oats", "Ham", 30, "meat"),
+    ];
+
+    expect(find([day(MON, [chilli, curry, oats])], "Ham", rows)?.amounts).toEqual([
+      "75 g",
+      "2 slice",
+    ]);
+  });
+
+  it("keeps a summed amount to two decimal places", () => {
+    // `grams` is numeric(_, 1) and `shop_qty` numeric(_, 2); float addition
+    // over either prints 60.300000000000004, and a shopping list would.
+    const grams = [ingredient("chilli", "Chia seeds", 20.1, "dry goods")];
+    const counts = [ingredient("chilli", "Onion", null, "produce", { shopQty: 0.1 })];
+
+    expect(find(three, "Chia seeds", grams)?.amounts).toEqual(["60.3 g"]);
+    expect(find(three, "Onion", counts)?.amounts).toEqual(["0.3 ×"]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The pantry — FUEL-137                                                      */
+/* -------------------------------------------------------------------------- */
+
+describe("the pantry", () => {
+  const week = [day(MON, [oats, chilli]), day(TUE, [curry])];
+
+  it("shelves a pantry row after every aisle, whatever its category", () => {
+    expect(shape(week)).toEqual([
+      "produce: Baby spinach, Garlic",
+      "dairy: Milk",
+      "meat: Beef mince, 5% fat",
+      "dry goods: Whole oats",
+      "pantry: Ground cumin",
+    ]);
+  });
+
+  it("sums nothing for a pantry line, and does not call it partial", () => {
+    // Seven teaspoons of olive oil is not an amount anybody buys. What the
+    // pantry asks is whether there is some — so no figure, and no "+" either.
+    const rows = [
+      ingredient("chilli", "Olive oil", null, "other", { pantry: true, shopQty: 5, shopUnit: "ml" }),
+      ingredient("curry", "Olive oil", 10, "other", { pantry: true }),
+    ];
+
+    expect(lines([day(MON, [chilli, curry])], rows)).toEqual([
+      { section: PANTRY, key: "olive oil", name: "Olive oil", amounts: [], partial: false, times: 2 },
+    ]);
+  });
+
+  it("makes a line a pantry line if any row says so, in either order", () => {
+    // The query reads a key's ticks from every week when ANY row is flagged,
+    // so the fold must shelve it by the same rule — or one line is drawn in an
+    // aisle while its tick behaves like the pantry's.
+    const pantryFirst = [
+      ingredient("chilli", "Honey", null, "dry goods", { pantry: true }),
+      ingredient("curry", "Honey", null, "dry goods", { shopQty: 1 }),
+    ];
+    // Aisle rows first, one counted and one not: by the time the pantry row
+    // arrives the line holds an amount AND a partial flag, and the promotion
+    // has to drop both — a pantry line prints neither a figure nor a "+".
+    const aisleFirst = [
+      ingredient("chilli", "Honey", null, "dry goods", { shopQty: 1 }),
+      ingredient("oats", "Honey", null, "dry goods"),
+      ingredient("curry", "Honey", null, "dry goods", { pantry: true }),
+    ];
+    const all = [day(MON, [chilli, oats, curry])];
+
+    for (const rows of [pantryFirst, aisleFirst]) {
+      expect(find(all, "Honey", rows)).toMatchObject({
+        section: PANTRY,
+        amounts: [],
+        partial: false,
+        times: rows.length,
+      });
+    }
   });
 });
 
@@ -426,16 +623,7 @@ describe("quantities", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("grouping", () => {
-  it("groups the lines by category, in aisle order, names sorted within each", () => {
-    expect(shape([day(MON, [oats, chilli]), day(TUE, [curry])])).toEqual([
-      "produce: Baby spinach",
-      "dairy: Milk",
-      "meat: Beef mince, 5% fat",
-      "dry goods: Ground cumin, Whole oats",
-    ]);
-  });
-
-  it("omits an aisle the week needs nothing from", () => {
+  it("omits a section the week needs nothing from", () => {
     // A heading with nothing under it reads as a section that failed to load.
     expect(shape([day(MON, [oats])])).toEqual(["dairy: Milk", "dry goods: Whole oats"]);
   });
@@ -444,8 +632,8 @@ describe("grouping", () => {
     // Tuesday's dinner is not a location in a shop. The apple planned last
     // still comes first.
     const rows = [
-      ingredient("chilli", "Rocket", 30, "a handful", "produce"),
-      ingredient("curry", "Apple", 100, "1 medium", "produce"),
+      ingredient("chilli", "Rocket", 30, "produce"),
+      ingredient("curry", "Apple", 100, "produce"),
     ];
 
     expect(shape([day(MON, [chilli]), day(TUE, [curry])], rows)).toEqual([
@@ -467,48 +655,48 @@ describe("grouping", () => {
     // An éclair at the bottom of the aisle is a smaller cost than a list whose
     // order depends on where it is being read.
     const rows = [
-      ingredient("chilli", "Éclair", 60, "1", "dairy"),
-      ingredient("chilli", "Milk", 200, "1 cup", "dairy"),
-      ingredient("chilli", "butter", 20, "a knob", "dairy"),
+      ingredient("chilli", "Éclair", 60, "dairy"),
+      ingredient("chilli", "Milk", 200, "dairy"),
+      ingredient("chilli", "butter", 20, "dairy"),
     ];
 
     expect(shape([day(MON, [chilli])], rows)).toEqual(["dairy: butter, Milk, Éclair"]);
   });
 
   it("files an ingredient with no category under other", () => {
-    const rows = [ingredient("chilli", "Worcestershire sauce", null, "1 tsp", null)];
+    const rows = [ingredient("chilli", "Worcestershire sauce", null, null)];
 
-    expect(find([day(MON, [chilli])], "Worcestershire sauce", rows)?.category).toBe("other");
+    expect(find([day(MON, [chilli])], "Worcestershire sauce", rows)?.section).toBe("other");
   });
 
   it("files an unrecognised category under other rather than inventing an aisle", () => {
-    const rows = [ingredient("chilli", "Cod fillet", 165, "1 fillet", "fishmonger")];
+    const rows = [ingredient("chilli", "Cod fillet", 165, "fishmonger")];
 
-    expect(find([day(MON, [chilli])], "Cod fillet", rows)?.category).toBe("other");
+    expect(find([day(MON, [chilli])], "Cod fillet", rows)?.section).toBe("other");
   });
 
   it("reads a category regardless of its casing and padding", () => {
-    const rows = [ingredient("chilli", "Cheddar", 30, "a slice", "  DAIRY ")];
+    const rows = [ingredient("chilli", "Cheddar", 30, "  DAIRY ")];
 
-    expect(find([day(MON, [chilli])], "Cheddar", rows)?.category).toBe("dairy");
+    expect(find([day(MON, [chilli])], "Cheddar", rows)?.section).toBe("dairy");
   });
 
   it("keeps one line in its first-seen aisle when two rows disagree", () => {
-    // No such clash exists in the seed today. First-seen at least makes the
-    // answer deterministic instead of dependent on the order Postgres returned
-    // the rows in — and it stays ONE line, which is what the criterion asks.
+    // First-seen at least makes the answer deterministic instead of dependent
+    // on the order Postgres returned the rows in — and it stays ONE line,
+    // which is what the criterion asks.
     const rows = [
-      ingredient("chilli", "Potatoes", 100, "1 small", "produce"),
-      ingredient("curry", "Potatoes", 250, "2 medium", "dry goods"),
+      ingredient("chilli", "Potatoes", 100, "produce"),
+      ingredient("curry", "Potatoes", 250, "dry goods"),
     ];
 
     expect(lines([day(MON, [chilli]), day(TUE, [curry])], rows)).toEqual([
       {
-        category: "produce",
+        section: "produce",
+        key: "potatoes",
         name: "Potatoes",
-        grams: 350,
-        gramsPartial: false,
-        measures: ["1 small x1", "2 medium x1"],
+        amounts: ["350 g"],
+        partial: false,
         times: 2,
       },
     ]);

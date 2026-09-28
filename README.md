@@ -620,7 +620,7 @@ restores a uuid pointing at nothing.
   "profile":  { "heightCm": …, "startWeightKg": …, "targetKcal": …, "slotTimes": {…}, … },
 
   "meals":                   [ { "id", "name", "slotType", "kcal", "proteinG", "fatG", "carbG", "method", "notes", "isArchived" } ],
-  "mealIngredients":         [ { "id", "mealId", "name", "grams", "nonScaleMeasure", "category", "sortOrder" } ],
+  "mealIngredients":         [ { "id", "mealId", "name", "grams", "nonScaleMeasure", "category", "sortOrder", "shopName", "shopQty", "shopUnit", "pantry" } ],
   "planTemplateEntries":     [ { "id", "dayOfWeek", "slot", "mealId", "sortOrder" } ],
   "dayPlanOverrides":        [ { "id", "date", "slot", "mealId", "createdAt" } ],
   "mealLogs":                [ { "id", "date", "slot", "mealId", "status", "note", "loggedAt" } ],
@@ -650,9 +650,10 @@ Dates are `YYYY-MM-DD` in the account's timezone. Instants — `createdAt`,
 object rather than an array because `profiles` holds exactly one row per user.
 
 `shoppingChecks` is the odd one, and it is here deliberately. `itemKey` is not
-an id but a normalised ingredient NAME — that is what lets a tick survive a
-swap regenerating the list underneath it, and it means these rows resolve
-against nothing else in the file. They are still an account's own data, and
+an id but a normalised ingredient NAME — the shop name since FUEL-137, so
+`shopName ?? name` — which is what lets a tick survive a swap regenerating the
+list underneath it, and it means these rows resolve against nothing else in the
+file. A pantry key's tick counts in every week, not only its own `weekStart`. They are still an account's own data, and
 `src/lib/export.test.ts` makes "not in the backup" a decision someone has to
 write down rather than one they can skip.
 

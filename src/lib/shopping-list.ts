@@ -1,5 +1,4 @@
 import type { MealIngredient } from "./db/schema";
-import { round1 } from "./macros";
 import type { PlannedDay } from "./week-grid";
 
 /**
@@ -76,39 +75,60 @@ export type ShoppingCategory = (typeof SHOPPING_CATEGORIES)[number];
 const OTHER: ShoppingCategory = "other";
 
 /**
+ * Where a line is shelved: one of the five aisles, or the pantry — FUEL-137.
+ *
+ * The pantry is not a sixth aisle and is not in `SHOPPING_CATEGORIES`, which
+ * mirrors a column's vocabulary. It is a property of the ingredient
+ * (`meal_ingredients.pantry`) that overrides the aisle: salt is shelved in
+ * "other" and is still not something this week's shop buys. Drawn last, after
+ * every aisle, because what is on it is mostly already in the cupboard.
+ */
+export const PANTRY = "pantry";
+
+export type ShoppingSection = ShoppingCategory | typeof PANTRY;
+
+/** Every section, in the order the list draws them. */
+export const SHOPPING_SECTIONS: readonly ShoppingSection[] = [...SHOPPING_CATEGORIES, PANTRY];
+
+/**
  * As much of an ingredient row as aggregation reads.
  *
  * `mealId` is the join back to the planned slot; the rest is what a line prints.
  * `sortOrder` is deliberately absent — it is a position WITHIN one recipe, and
  * once two recipes' rows are combined it describes nothing. Ordering below is
- * by name for that reason.
+ * by name for that reason. `nonScaleMeasure` has been absent since FUEL-137:
+ * it is the kitchen's sentence, prep note and all ("1 clove, minced"), and the
+ * list reads the shop's instead — `shopQty` and `shopUnit`.
  */
 export type ShoppingIngredient = Pick<
   MealIngredient,
-  "mealId" | "name" | "grams" | "nonScaleMeasure" | "category"
+  "mealId" | "name" | "grams" | "category" | "shopName" | "shopQty" | "shopUnit" | "pantry"
 >;
 
 /**
- * One free-text measure, and how many times the week asks for it.
+ * A summed amount in one unit: 5 cloves, 660ml, 2.25 onions (`unit: null`).
  *
- * Non-scale measures are never parsed and never summed. The seeded values are
- * things like "a big handful", "1/2–3/4 tsp" and "to taste, generously" — there
- * is no arithmetic that turns those into a quantity, and any that appeared to
- * would be inventing precision the kitchen does not have. Counting occurrences
- * is the honest aggregate: "1 clove ×5" is a shoppable instruction, where a
- * parsed "5 cloves" would be a guess that happens to be right for cloves and
- * wrong for handfuls.
+ * ## Summed, where it used to be counted — FUEL-137
+ *
+ * This file refused to add up measures for as long as the measure was free
+ * text, and printed "1 clove ×5": "a big handful" and "to taste, generously"
+ * have no arithmetic, and parsing the ones that start with a digit would be
+ * right for cloves and wrong for handfuls. That argument was sound and it was
+ * about the INPUT. `shop_qty` and `shop_unit` are a number and a unit that the
+ * seed wrote down on purpose, so what is summed is data rather than a guess at
+ * what a sentence meant — and a row with nothing countable simply contributes
+ * no amount, marking the line partial.
  */
-export type ShoppingMeasure = {
-  text: string;
-  times: number;
+export type ShoppingAmount = {
+  qty: number;
+  unit: string | null;
 };
 
 /** One combined line of the list. */
 export type ShoppingLine = {
   /**
-   * The normalised name: stable across regenerations, and the key FUEL-45's
-   * check state hangs off.
+   * The normalised shop name: stable across regenerations, and the key
+   * FUEL-45's check state hangs off.
    *
    * P8 requires that *"regenerating after a swap preserves existing check state
    * for unchanged items"*, which needs an identity that survives the swap. The
@@ -116,38 +136,37 @@ export type ShoppingLine = {
    * — a row id would not survive, and the position in the list survives even
    * less. The category is deliberately not part of it either, so that correcting
    * an ingredient's aisle in the seed moves the line without unchecking it.
+   *
+   * The SHOP name since FUEL-137 (`shop_name`, falling back to `name`), which
+   * is what makes "Olive oil (for the fish)" and "Olive oil" one line. The
+   * migration that introduced it moved the ticks stored under the old names.
    */
   key: string;
-  /** The name as first encountered, casing and all. */
+  /** The shop name as first encountered, casing and all. */
   name: string;
-  category: ShoppingCategory;
-  /** Summed over the rows that carry a weight; null when none of them did. */
-  grams: number | null;
+  section: ShoppingSection;
   /**
-   * Whether some contributing row had no weight.
+   * The week's total, one entry per unit, in first-seen order.
    *
-   * A real case in the seeded library, not a hypothetical: butter appears once
-   * with grams and once without. Printing the bare sum would understate the
-   * shop by an unknown amount while looking exactly like a complete figure —
-   * the failure mode this whole file is gated against. The flag lets the screen
-   * say "20g +" and be believed.
-   *
-   * Read it WITH `grams` rather than alone, because the pair carries three
-   * distinct states and only one of them is the interesting one:
-   *
-   *   grams: 20,   partial: false  -> a complete weight
-   *   grams: 20,   partial: true   -> at least 20g; the rest is unweighed
-   *   grams: null, partial: true   -> no weight at all, measures only
-   *
-   * The flag stays true in that last state deliberately. "Some row had no
-   * weight" is a property of the rows, and a flag that silently flipped false
-   * once ALL of them lacked one would be false in the case where the total is
-   * least complete — a worse invariant to hand a renderer than a redundant
-   * true, which it can simply not read when `grams` is null.
+   * One entry in every line the seed produces — `shopping-list.test.ts`
+   * asserts that every key uses one unit. More than one is still printed
+   * rather than dropped, because adding 2 slices to 45g is not a sum anyone
+   * can do and leaving one of them out is the understated shop this file
+   * exists to prevent. Always empty for a pantry line: what the pantry holds
+   * is whether you have it, not how many teaspoons a week spends.
    */
-  gramsPartial: boolean;
-  /** Distinct non-scale measures, in the order the week first asks for them. */
-  measures: readonly ShoppingMeasure[];
+  amounts: readonly ShoppingAmount[];
+  /**
+   * Whether some contributing row had no amount at all.
+   *
+   * A row the seed gave neither a shop amount nor a weight — "a small
+   * handful, chopped" — still belongs on the list. Printing the bare sum of
+   * its siblings would understate the shop by an unknown amount while looking
+   * exactly like a complete figure — the failure mode this whole file is gated against. The
+   * flag lets the screen say "100g +" and be believed. Where `amounts` is
+   * empty, the flag is true and says only what the empty list already does.
+   */
+  partial: boolean;
   /**
    * How many ingredient ROWS contributed to this line.
    *
@@ -160,9 +179,9 @@ export type ShoppingLine = {
   times: number;
 };
 
-/** One aisle's worth of lines. Absent entirely when the week needs nothing. */
+/** One section's worth of lines. Absent entirely when the week needs nothing. */
 export type ShoppingGroup = {
-  category: ShoppingCategory;
+  section: ShoppingSection;
   lines: readonly ShoppingLine[];
 };
 
@@ -171,16 +190,17 @@ export type ShoppingGroup = {
  *
  * This is the whole of what "identical ingredients" means here, and the
  * narrowness is deliberate. The seeded library contains "Olive oil", "Olive oil
- * (for the fish)" and "Olive oil (for the potatoes)", which stay three lines. A
- * matcher loose enough to merge those is loose enough to merge "Chilli flakes"
- * with "Chilli powder" — both are in there too, in the same recipe — and a
- * shopping list that silently drops one of a pair of distinct spices is worse
- * than one that prints an olive oil twice. Three honest lines cost a moment's
- * reading; a wrong merge costs the meal.
+ * (for the fish)" and "Olive oil (for the potatoes)". A matcher loose enough to
+ * merge those is loose enough to merge "Chilli flakes" with "Chilli powder" —
+ * both are in there too, in the same recipe — and a shopping list that silently
+ * drops one of a pair of distinct spices is worse than one that prints an olive
+ * oil twice.
  *
  * Where the seed genuinely names one thing twice, the fix belongs in the seed.
  * That is a data edit with a visible diff, not a heuristic in the aggregator
- * that has to be right about every future ingredient nobody has typed yet.
+ * that has to be right about every future ingredient nobody has typed yet —
+ * and since FUEL-137 it is the edit that was made: the three olive oils carry
+ * `shop_name: "Olive oil"` and meet as one line, while the two chillies do not.
  *
  * Exported since FUEL-45, because the check-state action has to arrive at the
  * same answer this does. A client sends the key it was rendered with, and the
@@ -215,57 +235,94 @@ const compareStrings = (a: string, b: string) => Number(a > b) - Number(a < b);
 type Tally = {
   key: string;
   name: string;
-  category: ShoppingCategory;
-  grams: number | null;
-  gramsPartial: boolean;
-  measures: Map<string, ShoppingMeasure>;
+  section: ShoppingSection;
+  /** Insertion-ordered by unit; `null` is the bare-count unit, a real key. */
+  amounts: Map<string | null, number>;
+  partial: boolean;
   times: number;
 };
 
 /**
+ * What one row asks the shop for, or null when it asks for nothing countable.
+ *
+ * `shop_qty` first: it is the amount the seed wrote down for the shop, and it
+ * wins over `grams` where both exist — butter's "1 tbsp for the base, plus
+ * 20g" has a weight of 20 and a shop amount of 35. Then `grams`, which is
+ * already a sum-able amount and needs no second column to say so. A row with
+ * neither is "a small handful, chopped": the line still lists it, and says it
+ * is partial.
+ */
+function rowAmount(row: ShoppingIngredient): ShoppingAmount | null {
+  if (row.shopQty !== null) return { qty: row.shopQty, unit: row.shopUnit?.trim() || null };
+
+  if (row.grams !== null) return { qty: row.grams, unit: "g" };
+
+  return null;
+}
+
+/**
  * Fold one ingredient row into its line, creating the line if it is the first.
  *
- * Category and display name are taken from whichever row arrives first and are
- * not revisited. Two rows that name one ingredient but disagree about its aisle
- * is a data problem with no correct resolution here — the seed has no such
- * clash today — and first-seen at least makes the answer deterministic rather
- * than dependent on the order Postgres happened to return.
+ * The aisle and display name are taken from whichever row arrives first and
+ * are not revisited. Two rows that name one ingredient but disagree about its
+ * aisle is a data problem with no correct resolution here —
+ * `shopping-list.test.ts` holds the seed to agreeing — and first-seen at least
+ * makes the answer deterministic rather than dependent on the order Postgres
+ * happened to return.
+ *
+ * The pantry flag is the exception: ANY row carrying it makes the line a
+ * pantry line, whichever order the rows arrive in. That is the rule
+ * `loadShoppingWeek` reads ticks by — a key is a pantry key if any row says
+ * so — and a first-seen rule here would let the two disagree about one line,
+ * drawing it in an aisle while its tick was read from every week.
  */
 function fold(tally: Tally | undefined, key: string, row: ShoppingIngredient): Tally {
   const line: Tally = tally ?? {
     key,
-    name: row.name.trim(),
-    category: toCategory(row.category),
-    grams: null,
-    gramsPartial: false,
-    measures: new Map(),
+    name: (row.shopName?.trim() || row.name).trim(),
+    section: row.pantry ? PANTRY : toCategory(row.category),
+    amounts: new Map(),
+    partial: false,
     times: 0,
   };
 
   line.times += 1;
 
-  // Nullable and genuinely used: "salt to taste" has no weight, and the column
-  // was made nullable precisely so the seed would not have to invent one.
-  if (row.grams === null) {
-    line.gramsPartial = true;
-  } else {
-    line.grams = (line.grams ?? 0) + row.grams;
+  // A later pantry row promotes the line, and drops what the aisle rows before
+  // it had summed: the pantry prints no amount, so there is nothing to keep.
+  if (row.pantry && line.section !== PANTRY) {
+    line.section = PANTRY;
+    line.amounts.clear();
+    line.partial = false;
   }
 
-  const measure = row.nonScaleMeasure?.trim();
+  // Nothing is summed for the pantry: a line saying 7 tsp of olive oil is an
+  // amount nobody buys, and the question the pantry asks is only "is there
+  // some". Checked against the LINE, not the row, so that a stray row without
+  // the flag cannot give a pantry line an amount it then half-prints.
+  if (line.section === PANTRY) return line;
 
-  if (measure) {
-    const seen = line.measures.get(measure);
+  const amount = rowAmount(row);
 
-    if (seen) seen.times += 1;
-    else line.measures.set(measure, { text: measure, times: 1 });
+  if (amount === null) {
+    line.partial = true;
+  } else {
+    line.amounts.set(amount.unit, (line.amounts.get(amount.unit) ?? 0) + amount.qty);
   }
 
   return line;
 }
 
 /**
- * The week's shopping list, grouped by aisle.
+ * Rounded once, where the total is produced. `shop_qty` is `numeric(_, 2)` and
+ * `grams` `numeric(_, 1)`, and float addition over either can print
+ * 60.300000000000004 — `round1` in `macros.ts` argues the case for grams; two
+ * places here because a quarter onion is a real amount.
+ */
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
+/**
+ * The week's shopping list, grouped by aisle, with the pantry last.
  *
  * `days` is the resolved, post-override week — `resolveWeek`'s output, or the
  * grid's columns once FUEL-45 decides which the screen holds. `ingredients` is
@@ -278,7 +335,7 @@ function fold(tally: Tally | undefined, key: string, row: ShoppingIngredient): T
  * data — *"schema accepts a meal with macros and no ingredient rows"* — and it
  * is still true of every treat and every weekend placeholder.
  *
- * Empty aisles are omitted rather than returned empty. A heading with nothing
+ * Empty sections are omitted rather than returned empty. A heading with nothing
  * under it reads as a section that failed to load, and § Materials reserves the
  * hatch for a genuine absence of data rather than an absence of chicken.
  */
@@ -299,47 +356,45 @@ export function shoppingList<M extends { id: string }>(
     else byMeal.set(row.mealId, [row]);
   }
 
-  // Insertion-ordered, which is what makes `measures` first-seen order and the
+  // Insertion-ordered, which is what makes `amounts` first-seen order and the
   // name tie-break below stable: both follow the week, Monday first.
   const tallies = new Map<string, Tally>();
 
   for (const day of days) {
     for (const cell of day.meals) {
       for (const row of byMeal.get(cell.meal.id) ?? []) {
-        const name = normaliseKey(row.name);
+        // A blank shop name falls back rather than keying the line on "": the
+        // column is nullable, and an empty string in it is a null nobody typed.
+        const key = normaliseKey(row.shopName?.trim() || row.name);
 
-        if (!name) continue;
+        if (!key) continue;
 
-        tallies.set(name, fold(tallies.get(name), name, row));
+        tallies.set(key, fold(tallies.get(key), key, row));
       }
     }
   }
 
-  const grouped = new Map<ShoppingCategory, ShoppingLine[]>();
+  const grouped = new Map<ShoppingSection, ShoppingLine[]>();
 
   for (const tally of tallies.values()) {
-    const lines = grouped.get(tally.category) ?? [];
+    const lines = grouped.get(tally.section) ?? [];
 
     lines.push({
       key: tally.key,
       name: tally.name,
-      category: tally.category,
-      // Rounded once, here, where the total is produced — `round1` argues the
-      // case: grams is `numeric(_, 1)`, so three 20.1g rows sum to
-      // 60.300000000000004 and a shopping list can print it.
-      grams: tally.grams === null ? null : round1(tally.grams),
-      gramsPartial: tally.gramsPartial,
-      measures: [...tally.measures.values()],
+      section: tally.section,
+      amounts: [...tally.amounts].map(([unit, qty]) => ({ qty: round2(qty), unit })),
+      partial: tally.partial,
       times: tally.times,
     });
 
-    grouped.set(tally.category, lines);
+    grouped.set(tally.section, lines);
   }
 
   const groups: ShoppingGroup[] = [];
 
-  for (const category of SHOPPING_CATEGORIES) {
-    const lines = grouped.get(category);
+  for (const section of SHOPPING_SECTIONS) {
+    const lines = grouped.get(section);
 
     if (!lines) continue;
 
@@ -349,7 +404,7 @@ export function shoppingList<M extends { id: string }>(
     // sorts on what the eye reads rather than on the casing the seed used.
     lines.sort((a, b) => compareStrings(a.key, b.key));
 
-    groups.push({ category, lines });
+    groups.push({ section, lines });
   }
 
   return groups;

@@ -148,7 +148,7 @@ describe.skipIf(!configured)("shopping check state, scoped", () => {
     const before = await listFor(fixture.alice);
 
     expect(lines(before.groups).map((line) => line.key)).toEqual(["rolled oats"]);
-    expect(lines(before.groups)[0]?.grams).toBe(80);
+    expect(lines(before.groups)[0]?.amounts).toEqual([{ qty: 80, unit: "g" }]);
 
     await checkItem(fixture.alice.userId, MONDAY, "rolled oats");
 
@@ -172,7 +172,7 @@ describe.skipIf(!configured)("shopping check state, scoped", () => {
       "blueberries",
       "rolled oats",
     ]);
-    expect(lines(after.groups).find((line) => line.key === "rolled oats")?.grams).toBe(50);
+    expect(lines(after.groups).find((line) => line.key === "rolled oats")?.amounts).toEqual([{ qty: 50, unit: "g" }]);
 
     // And the tick survived it. This is the criterion: the ingredient did not
     // change, so neither did its check state — even though the row it came from
@@ -286,6 +286,38 @@ describe.skipIf(!configured)("shopping check state, scoped", () => {
     await uncheckItem(fixture.bob.userId, MONDAY, "rolled oats");
 
     expect((await listFor(fixture.alice, MONDAY)).checked).toEqual(["rolled oats"]);
+  });
+
+  /* ------------------------------------------------------------------------ */
+  /* The pantry — FUEL-137                                                    */
+  /* ------------------------------------------------------------------------ */
+
+  it("carries a pantry tick into every week, and clears it from all of them", async () => {
+    // A pantry row on Alice's porridge, which the fixture plans every week.
+    await as(fixture.alice).insert(schema.mealIngredients, {
+      mealId: fixture.alice.mealId,
+      name: "Salt",
+      pantry: true,
+    });
+
+    await checkItem(fixture.alice.userId, FIXTURE_MONDAY, "salt");
+
+    // Ticked a week earlier, read as ticked now and next week: the salt is
+    // still in the cupboard. The oats' tick in that earlier week still does
+    // not travel — only the pantry's does.
+    expect((await listFor(fixture.alice, MONDAY)).checked).toEqual(["salt"]);
+    expect((await listFor(fixture.alice, NEXT_MONDAY)).checked).toEqual(["salt"]);
+
+    // Bob owns no pantry key "salt", and the widened read is scoped all the
+    // same: Alice's pantry is not his.
+    expect((await listFor(fixture.bob, MONDAY)).checked).toEqual([]);
+
+    // Unticked from THIS week, and gone from the week it was ticked in. A
+    // per-week delete would leave the older row answering for it.
+    await uncheckItem(fixture.alice.userId, MONDAY, "salt", { pantry: true });
+
+    expect((await listFor(fixture.alice, MONDAY)).checked).toEqual([]);
+    expect((await listFor(fixture.alice, FIXTURE_MONDAY)).checked).toEqual(["rolled oats"]);
   });
 
   it("removes an account's ticks when the account is reaped", async () => {

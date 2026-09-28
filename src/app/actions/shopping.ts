@@ -95,12 +95,21 @@ export async function setChecked({
   week,
   key,
   checked,
+  pantry = false,
 }: {
   /** Any date in the week being shopped for. Snapped to its Monday here. */
   week: CalendarDate;
   /** The line's normalised name. Re-normalised here regardless. */
   key: string;
   checked: boolean;
+  /**
+   * Whether the line is a pantry line, whose tick holds across weeks —
+   * FUEL-137. Taken from the client rather than re-derived, because deriving
+   * it means reading the library to answer a question the rendered line
+   * already answered; and what it can change is only which of this user's
+   * own rows an untick removes.
+   */
+  pantry?: boolean;
 }): Promise<CheckResult> {
   try {
     const session = await getSession();
@@ -128,7 +137,7 @@ export async function setChecked({
     if (!itemKey || itemKey.length > MAX_KEY) return FAILED;
 
     if (checked) await checkItem(session.userId, monday, itemKey);
-    else await uncheckItem(session.userId, monday, itemKey);
+    else await uncheckItem(session.userId, monday, itemKey, { pantry: pantry === true });
 
     // The list is server-rendered, and the row is optimistic until this lands.
     // Without it the screen would keep showing the optimistic answer with

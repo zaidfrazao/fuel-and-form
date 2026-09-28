@@ -1,10 +1,10 @@
 import "server-only";
 
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 
 import { addDays, type CalendarDate, startOfWeek, todayIn } from "@/lib/date";
 import { type Plan, resolveWeek } from "@/lib/resolve-plan";
-import { type ShoppingGroup, shoppingList } from "@/lib/shopping-list";
+import { normaliseKey, type ShoppingGroup, shoppingList } from "@/lib/shopping-list";
 import { getDb } from "../index";
 import * as schema from "../schema";
 import { scope } from "../scope";
@@ -33,9 +33,10 @@ import { scope } from "../scope";
  * exists so the grid can render an optimistic revert — and the whole meal
  * library for the picker. A shopping list has no cells to revert and no picker.
  *
- * So the week is resolved here from the same `Plan`, in one wave: five reads
- * that all depend on nothing but the `user_id` and the Monday, and two waits
- * total. The duplication is the dozen lines between the profile and
+ * So the week is resolved here from the same `Plan`, in one wave: four reads
+ * that all depend on nothing but the `user_id` and the Monday, and then the
+ * ticks — three waits total since FUEL-137, for the reason under the pantry
+ * heading below. The duplication is the dozen lines between the profile and
  * `resolveWeek`, and it buys a read that fetches exactly what the screen draws.
  *
  * ## The ingredient table is fetched whole
@@ -50,6 +51,21 @@ import { scope } from "../scope";
  *
  * The ticks ARE narrowed, to one week, because they accumulate without bound
  * as weeks pass and only one week's are ever rendered.
+ *
+ * ## Except the pantry's, and that costs a third wait — FUEL-137
+ *
+ * A pantry line is ticked for "I have this", which is not a fact about one
+ * week: salt bought in August is still in the cupboard in September. So a
+ * pantry key counts as ticked if ANY week holds a row for it, and unticking it
+ * clears every week (`uncheckItem`). No new table and no sentinel date in a
+ * column that means "the Monday of the week": the rows are ordinary weekly
+ * ticks, read more widely.
+ *
+ * Which keys are pantry keys is only known once the ingredients are in hand,
+ * so the ticks move out of the wave into a third wait. The alternative was
+ * restating `normaliseKey` in SQL to find them in a subquery — a second
+ * definition of identity, which is the one thing `shopping-list.ts` asks
+ * nobody to write.
  */
 
 /** What `/shopping` needs to render. */
@@ -61,7 +77,7 @@ export type ShoppingWeek = {
   /** The aggregated list, grouped by aisle. Empty when the week plans nothing. */
   groups: readonly ShoppingGroup[];
   /**
-   * The normalised names ticked off for this week.
+   * The normalised names ticked off for this week, and the pantry's from any.
    *
    * Keys, not rows: `shopping_checks` stores presence and nothing else that a
    * screen reads, so what crosses is the set the list is joined against. Sent
@@ -103,7 +119,7 @@ export async function loadShoppingWeek(
   const monday = startOfWeek(anchor ?? today);
   const sunday = addDays(monday, 6);
 
-  const [meals, template, overrides, ingredients, checks] = await Promise.all([
+  const [meals, template, overrides, ingredients] = await Promise.all([
     s.select(schema.meals),
     s.select(schema.planTemplateEntries),
     s.select(
@@ -114,8 +130,27 @@ export async function loadShoppingWeek(
       ),
     ),
     s.select(schema.mealIngredients),
-    s.select(schema.shoppingChecks, eq(schema.shoppingChecks.weekStart, monday)),
   ]);
+
+  // Every pantry key in the library, not only this week's: a key the week does
+  // not plan renders nowhere, so asking for it costs a row and decides nothing.
+  const pantryKeys = [
+    ...new Set(
+      ingredients
+        .filter((row) => row.pantry)
+        .map((row) => normaliseKey(row.shopName?.trim() || row.name)),
+    ),
+  ];
+
+  const checks = await s.select(
+    schema.shoppingChecks,
+    pantryKeys.length > 0
+      ? or(
+          eq(schema.shoppingChecks.weekStart, monday),
+          inArray(schema.shoppingChecks.itemKey, pantryKeys),
+        )
+      : eq(schema.shoppingChecks.weekStart, monday),
+  );
 
   const plan: Plan = {
     programStartDate: profile.programStartDate,
@@ -133,7 +168,8 @@ export async function loadShoppingWeek(
     // the template wherever one exists, so what reaches the aggregation is what
     // will actually be cooked.
     groups: shoppingList(resolveWeek(plan, monday), ingredients),
-    checked: checks.map((check) => check.itemKey),
+    // A pantry key ticked in two weeks arrives twice; the set is what crosses.
+    checked: [...new Set(checks.map((check) => check.itemKey))],
   };
 }
 
@@ -186,14 +222,20 @@ export async function uncheckItem(
   userId: string,
   weekStart: CalendarDate,
   itemKey: string,
+  { pantry = false }: { pantry?: boolean } = {},
 ): Promise<void> {
   const s = scope(userId, getDb());
 
+  // A pantry tick is read from any week, so it has to be removed from every
+  // week — deleting only this one would leave last month's row answering for
+  // it, and the box would spring back on the next render.
   await s.delete(
     schema.shoppingChecks,
-    and(
-      eq(schema.shoppingChecks.weekStart, weekStart),
-      eq(schema.shoppingChecks.itemKey, itemKey),
-    ),
+    pantry
+      ? eq(schema.shoppingChecks.itemKey, itemKey)
+      : and(
+          eq(schema.shoppingChecks.weekStart, weekStart),
+          eq(schema.shoppingChecks.itemKey, itemKey),
+        ),
   );
 }
