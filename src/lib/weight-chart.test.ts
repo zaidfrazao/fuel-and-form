@@ -811,6 +811,28 @@ describe("a window's chart", () => {
     expect(first.averageKg).not.toBe(first.weightKg);
   });
 
+  test("holds a first average that the week before the window pulled off the readings", () => {
+    // Thirty-one days at one weight, then thirty at another a long way below.
+    // A month's window holds only the lower run, but its first point averages
+    // six days of the higher one — so an axis built from the readings alone
+    // would put the line's left end off the top of the plate.
+    const step = Array.from({ length: 61 }, (_, index) => ({
+      date: new Date(Date.UTC(2026, 5, 1 + index)).toISOString().slice(0, 10),
+      weightKg: index <= 30 ? 90 : 80,
+    }));
+    const plot = chartGeometry(step, REFERENCES, CHART_SHAPE, "1M");
+
+    if (plot === null) throw new Error("Expected a plot");
+
+    expect(plot.smoothed).toBe(true);
+    expect(at(plot.points, 0).averageKg).toBeGreaterThan(88);
+
+    for (const point of plot.points) {
+      expect(point.averageY).toBeGreaterThanOrEqual(10);
+      expect(point.averageY).toBeLessThanOrEqual(PLOT_HEIGHT - 10);
+    }
+  });
+
   test("scales to its own readings, leaving off references it does not reach", () => {
     // LONG ends near 80.4 kg: a month of it is nowhere near 84.2 or 76.
     const plot = month();
