@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { DESTINATIONS, ROUTE_PATHS, resolveActive } from "@/lib/nav";
+import type { ShoppingWeek } from "@/lib/db/queries/shopping";
 
 /**
  * Can you get there from here — FUEL-62.
@@ -251,20 +252,21 @@ const WEEK = {
   templateDays: [DAY],
 };
 
-const SHOPPING = {
+// Typed, so a change to the list's shape fails here at compile time rather
+// than as seven render errors naming nothing about the fixture (FUEL-137).
+const SHOPPING: ShoppingWeek = {
   monday: MON,
   today: TUE,
   groups: [
     {
-      category: "meat",
+      section: "meat",
       lines: [
         {
           key: "beef mince",
           name: "Beef mince",
-          category: "meat",
-          grams: 300,
-          gramsPartial: false,
-          measures: [],
+          section: "meat",
+          amounts: [{ qty: 300, unit: "g" }],
+          partial: false,
           times: 2,
         },
       ],
