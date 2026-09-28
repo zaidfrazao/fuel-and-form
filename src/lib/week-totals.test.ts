@@ -229,9 +229,12 @@ describe("the average's basis — FUEL-138", () => {
     expect(leftOut).toEqual([]);
   });
 
-  test("counts slots by name, so two different three-slot days are both short", () => {
-    // Each day fills three, but the week uses four. A count compared with a
-    // count would call both complete.
+  test("measures a day against the week's slots, not against its own", () => {
+    // Each day fills three, but between them the week uses four, so each is
+    // one short. A day judged only by what it planned would call both complete.
+    // (Counting rather than naming the missing slots gives the same answer —
+    // a day's slots are always a subset of the week's — so that is not what
+    // this pins.)
     const { completeDays, days } = figures([
       day(MON, [planned("breakfast", OATS), planned("lunch", SALAD), planned("dinner", CHILLI)]),
       day(TUE, [planned("breakfast", OATS), planned("snack", SALAD), planned("dinner", CHILLI)]),
