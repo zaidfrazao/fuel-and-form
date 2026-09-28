@@ -15,7 +15,7 @@ import {
   weighInOn,
 } from "@/app/actions/weight";
 import type { CalendarDate } from "@/lib/date";
-import { figure } from "@/lib/format";
+import { figure, signed } from "@/lib/format";
 import { PAGE_FRAME_GRID } from "@/lib/frame";
 import { entryLabel } from "@/lib/now-display";
 import { HOVER_GROUND, HOVER_LIFT, POINTER } from "@/lib/pointer";
@@ -29,7 +29,7 @@ import {
 } from "@/lib/weigh-in";
 import type { Reading } from "@/lib/weight-chart";
 import { cn } from "@/lib/utils";
-import { type WeightStats, weightStats } from "@/lib/weight-stats";
+import { TRAILING_DAYS, type WeightStats, weightStats } from "@/lib/weight-stats";
 
 /**
  * `/weight` — the weigh-in history and the form that writes it. FUEL-34, P5.
@@ -260,7 +260,13 @@ function progressItems(
       meta: `of ${kilograms(journeyKg)}`,
     },
     {
-      label: "Rate",
+      // The rate's basis, stated — FUEL-139. Once the chart could draw a
+      // 7-day average and show a month or a year, "Rate" beside it no longer
+      // said which of those it was: it is neither, it is the slope through the
+      // last `TRAILING_DAYS`, and a reader comparing it with the line they are
+      // looking at has to know that. In the label, where it costs no line, not
+      // in the metadata beneath, which already carries the goal and wraps.
+      label: `${TRAILING_DAYS / 7}-week rate`,
       value: rate ? (
         <span className={rate.onPace ? "text-success" : undefined}>
           {ratePerWeek(rate.kgPerWeek)}
@@ -484,6 +490,35 @@ export function WeighIns({
 
   /** Weigh-ins that exist and are not listed — FUEL-84's "show earlier". */
   const unlisted = history.readings.length - history.rows.length;
+
+  /*
+   * Each row's change from the weigh-in before it — FUEL-139. Read off the
+   * READINGS, every one of them, rather than off the listed rows: the list is
+   * FUEL-84's window, and its last row's predecessor is usually the first one
+   * not listed. Newest first, so "before" is the next index.
+   *
+   * Rounded to the displayed decimal before it is signed, for `summarise`'s
+   * reason in weight-chart.tsx: a 40-gram change is a non-zero number that
+   * prints as "0", and `signed` would put a minus on it. `+ 0` turns the `-0`
+   * that rounding a small loss produces into the zero `signed` leaves unsigned.
+   *
+   * The oldest reading has no entry, and so no change: it is the first, and a
+   * "0" there would say it had been compared with something.
+   */
+  const changes = new Map(
+    history.readings.flatMap((reading, index) => {
+      const before = history.readings[index + 1];
+
+      return before
+        ? [
+            [
+              reading.date,
+              `${signed(Math.round((reading.weightKg - before.weightKg) * 10) / 10 + 0)} kg`,
+            ] as const,
+          ]
+        : [];
+    }),
+  );
 
   /*
    * Nothing has been weighed yet — and at ≥1272 that is a different SHAPE, not
@@ -743,9 +778,76 @@ export function WeighIns({
         </p>
       </div>
 
-      {/* The entry control, under the figures at the cap and under the reading
-          below it — row four, which is the second half of what the five rows
-          are for. `data-column` is on this rather than on Progress because a
+      {/*
+       * The trend, above the list it is a picture of — the arrangement
+       * `/training` uses for its dot grid and `recent-sessions` beneath it, and
+       * for the same reason: the graphic answers "how is it going" at a glance
+       * and the rows answer "what exactly happened".
+       *
+       * Above the form, since FUEL-139, and the reason it was below has been
+       * weighed rather than forgotten. It sat under the form "so a ~176px
+       * graphic never pushes the screen's one primary action out of thumb
+       * reach". That put a weekly action in the position of a screen that is
+       * read every day: the phone opened on a date box, a weight box and a
+       * note, and the trend — the thing a visit to `/weight` is for — started
+       * below them. A weigh-in is one action a week and one scroll; reading
+       * the trend is every visit. § Touch Targets asks that the primary be
+       * reachable, and it is, a scroll down, where Hevy and MacroFactor put
+       * theirs. At ≥1272 nothing moves: the grid places every section by row.
+       *
+       * The optimistic READINGS, so a logged weigh-in moves the line at the
+       * same moment it appears in the list. Not the listed rows: FUEL-35 asks
+       * for the full history by acceptance criterion and § Accessibility makes
+       * the chart table every point, so FUEL-84's window is the list's and not
+       * the chart's. `WeightChart` renders nothing at all when there are none,
+       * which is why this needs no gate of its own.
+       */}
+      <WeightChart
+        entries={history.readings}
+        today={today}
+        startWeightKg={startWeightKg}
+        targetWeightKg={targetWeightKg}
+        /* The trend, at the frame's span — the other half of the ruling above,
+           and "the complaint FUEL-76 fixed INSIDE the chart still standing
+           around it". Row two rather than beside anything: a chart 968px wide
+           has nothing to sit next to. The component draws a second shape for
+           this box; `weight-chart.ts` says why a wider one alone would not do. */
+        className="xl:col-start-1 xl:col-end-[-1] xl:row-start-2"
+      />
+
+      {/*
+       * The figures the chart is a picture of — FUEL-36, PRD § P5.
+       *
+       * Under the chart and above the form — FUEL-139 moved both over it. It
+       * puts the numbers next to the graphic that explains them — the
+       * trend line above IS the rate below, and a reader who wants to check one
+       * against the other should not have to scroll between them.
+       */}
+      {stats && (
+        /* First in the measure at the cap, where the chart above has taken the
+           reading's place at the top of the screen. Below it, unchanged: the
+           order in the DOM is the phone's. */
+        <section
+          className="flex flex-col gap-[14px] xl:col-start-1 xl:row-start-3"
+          data-row="progress"
+        >
+          <h2 className="text-micro uppercase text-text-secondary">Progress</h2>
+
+          {/* Four across on the measure — § Desktop, amended by FUEL-85: "the
+              four-macro grid, which this rule names out of scope, goes
+              four-across on a measure and stays 2×2 in an aside". These are
+              four figures on a 584px measure, which is the case that amendment
+              describes; `kv-grid.tsx` has taken a 4 since FUEL-86. */}
+          <KeyValueGrid
+            columns={4}
+            items={progressItems(stats, { startWeightKg, targetWeightKg, goalPaceKgPerWeek })}
+          />
+        </section>
+      )}
+
+      {/* The entry control, under the figures at every width — row four at the
+          cap, which is the second half of what the five rows are for, and
+          after the chart and Progress below it since FUEL-139. `data-column` is on this rather than on Progress because a
           history with one reading has no Progress to measure a column by. */}
       <section
         className="flex flex-col gap-[14px] xl:col-start-1 xl:row-start-4"
@@ -895,7 +997,14 @@ export function WeighIns({
               // parser refuses anything out of range regardless; this is the
               // typo class that never reaches it.
               maxLength={6}
-              placeholder="77.4"
+              // The latest reading, or nothing — FUEL-139. It was the literal
+              // "77.4": a number the reader never entered, sitting in the box
+              // as though it were theirs, and on the demo below the weight
+              // they had just logged. A placeholder in a figure's own field is
+              // read as a figure, so the only one worth showing is the last
+              // one they did enter — which is also the number a weekly
+              // weigh-in is compared with.
+              placeholder={latest ? figure(latest.weightKg) : undefined}
               aria-invalid={problem.weight ? true : undefined}
               aria-describedby={problem.weight ? "weigh-in-weight-error" : undefined}
               className={`${field} w-32 tabular-nums`}
@@ -1003,68 +1112,6 @@ export function WeighIns({
         </Button>
       </section>
 
-      {/*
-       * The trend, above the list it is a picture of — the arrangement
-       * `/training` uses for its dot grid and `recent-sessions` beneath it, and
-       * for the same reason: the graphic answers "how is it going" at a glance
-       * and the rows answer "what exactly happened".
-       *
-       * Below the form rather than above it, so a ~176px graphic never pushes
-       * the screen's one primary action out of thumb reach — § Touch Targets.
-       *
-       * The optimistic READINGS, so a logged weigh-in moves the line at the
-       * same moment it appears in the list. Not the listed rows: FUEL-35 asks
-       * for the full history by acceptance criterion and § Accessibility makes
-       * the chart table every point, so FUEL-84's window is the list's and not
-       * the chart's. `WeightChart` renders nothing at all when there are none,
-       * which is why this needs no gate of its own.
-       */}
-      <WeightChart
-        entries={history.readings}
-        today={today}
-        startWeightKg={startWeightKg}
-        targetWeightKg={targetWeightKg}
-        /* The trend, at the frame's span — the other half of the ruling above,
-           and "the complaint FUEL-76 fixed INSIDE the chart still standing
-           around it". Row two rather than beside anything: a chart 968px wide
-           has nothing to sit next to. The component draws a second shape for
-           this box; `weight-chart.ts` says why a wider one alone would not do. */
-        className="xl:col-start-1 xl:col-end-[-1] xl:row-start-2"
-      />
-
-      {/*
-       * The figures the chart is a picture of — FUEL-36, PRD § P5.
-       *
-       * Under the chart rather than under the headline, for the reason the
-       * chart itself is under the form: § Touch Targets keeps the screen's one
-       * primary action within thumb reach, and a grid pushed between the
-       * heading and "Log a weigh-in" would move it down by two more rows. It
-       * also puts the numbers next to the graphic that explains them — the
-       * trend line above IS the rate below, and a reader who wants to check one
-       * against the other should not have to scroll between them.
-       */}
-      {stats && (
-        /* First in the measure at the cap, where the chart above has taken the
-           reading's place at the top of the screen. Below it, unchanged: the
-           order in the DOM is the phone's. */
-        <section
-          className="flex flex-col gap-[14px] xl:col-start-1 xl:row-start-3"
-          data-row="progress"
-        >
-          <h2 className="text-micro uppercase text-text-secondary">Progress</h2>
-
-          {/* Four across on the measure — § Desktop, amended by FUEL-85: "the
-              four-macro grid, which this rule names out of scope, goes
-              four-across on a measure and stays 2×2 in an aside". These are
-              four figures on a 584px measure, which is the case that amendment
-              describes; `kv-grid.tsx` has taken a 4 since FUEL-86. */}
-          <KeyValueGrid
-            columns={4}
-            items={progressItems(stats, { startWeightKg, targetWeightKg, goalPaceKgPerWeek })}
-          />
-        </section>
-      )}
-
       {latest && (
         /*
          * The aside: "the record, and only the record" — § Desktop gives this
@@ -1122,14 +1169,23 @@ export function WeighIns({
                    */
                   className={`group flex min-h-[54px] min-w-0 flex-1 flex-col justify-center gap-1 py-3 text-left transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${HOVER_GROUND} ${POINTER}`}
                 >
+                  {/* § The row as a control (FUEL-108): the purpose in an
+                      `sr-only` prefix, never an `aria-label`, which would
+                      replace the row's figures and note as its name. */}
+                  <span className="sr-only">Edit </span>
                   <span className="flex items-baseline gap-2">
-                    <span className="text-value tabular-nums text-text-primary">
+                    {/* The mark that rests — FUEL-139, by FUEL-108's rule: the
+                        underline the app gives a link, on the row's title. The
+                        row was already the edit control and said so to nobody;
+                        a hover ground says nothing to a thumb. */}
+                    <span className="text-value tabular-nums text-text-primary underline decoration-text-tertiary underline-offset-4">
                       {kilograms(row.weightKg)}
                     </span>
                     <span
-                      className={`truncate text-slash text-text-tertiary ${HOVER_LIFT}`}
+                      className={`truncate text-slash tabular-nums text-text-tertiary ${HOVER_LIFT}`}
                     >
                       {entryLabel(row.date, today)}
+                      {changes.has(row.date) && ` · ${changes.get(row.date)}`}
                     </span>
                   </span>
                   {row.note && (
@@ -1142,27 +1198,38 @@ export function WeighIns({
                 </button>
 
                 {/*
-                 * § Touch Targets: "destructive controls never sit adjacent to
-                 * a frequently-tapped one". The frequently-tapped control on
-                 * this screen is the primary above — Log weigh-in — and it is a
-                 * whole section away. Within the row, the edit target and this
-                 * one are pushed to opposite edges by `justify-between` rather
-                 * than sitting side by side, and this one is § Buttons'
+                 * Only on the row being edited — FUEL-139. Every row carried
+                 * one until then: ten `error` links in a column, the loudest
+                 * thing on a screen that is mostly read, beside rows whose
+                 * EDIT had no mark at all. Deleting is a kind of editing, so it
+                 * appears where the edit is: the row the form is addressing,
+                 * which `aria-current` already marks, and which a tap on the row
+                 * is what makes. At rest that is today's row when today has a
+                 * reading — the form addresses today, and the "replaces" line
+                 * above Log already says so.
+                 *
+                 * In the row rather than in the form, and § Touch Targets is the
+                 * reason: "destructive controls never sit adjacent to a
+                 * frequently-tapped one", and the form's last control is Log
+                 * weigh-in. Here it is a section away from that, pushed to the
+                 * row's far edge by `justify-between`, and § Buttons'
                  * Destructive variant: no fill, `error` text, filled only
                  * inside the confirmation sheet below.
                  */}
+                {row.date === date && (
                 <Button
                   variant="destructive"
                   size="xs"
                   onClick={() => setConfirming(row.date)}
                   // The visible word is "Delete" for everyone; the name says
-                  // WHICH, because a list of seven identically-named buttons
-                  // tells a screen-reader user nothing about what they are
-                  // about to remove.
+                  // WHICH, because a bare "Delete" in a list tells a
+                  // screen-reader user nothing about what they are about to
+                  // remove.
                   aria-label={`Delete the weigh-in for ${entryLabel(row.date, today)}`}
                 >
                   Delete
                 </Button>
+                )}
               </li>
             ))}
           </ul>

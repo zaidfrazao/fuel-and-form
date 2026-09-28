@@ -390,6 +390,8 @@ describe("deleting an entry", () => {
 
     render(view());
 
+    // FUEL-139: a row's Delete is in its edit state, so the row is tapped first.
+    await user.click(screen.getByRole("button", { name: /^Edit ?80.1 kg/ }));
     await user.click(
       screen.getByRole("button", { name: "Delete the weigh-in for Thu 13 Aug" }),
     );
@@ -408,6 +410,8 @@ describe("deleting an entry", () => {
 
     render(view());
 
+    // FUEL-139: a row's Delete is in its edit state, so the row is tapped first.
+    await user.click(screen.getByRole("button", { name: /^Edit ?80.1 kg/ }));
     await user.click(
       screen.getByRole("button", { name: "Delete the weigh-in for Thu 13 Aug" }),
     );
@@ -426,6 +430,8 @@ describe("deleting an entry", () => {
 
     render(view());
 
+    // FUEL-139: a row's Delete is in its edit state, so the row is tapped first.
+    await user.click(screen.getByRole("button", { name: /^Edit ?80.1 kg/ }));
     await user.click(
       screen.getByRole("button", { name: "Delete the weigh-in for Thu 13 Aug" }),
     );
@@ -447,6 +453,8 @@ describe("deleting an entry", () => {
 
     render(view());
 
+    // FUEL-139: a row's Delete is in its edit state, so the row is tapped first.
+    await user.click(screen.getByRole("button", { name: /^Edit ?80.1 kg/ }));
     await user.click(
       screen.getByRole("button", { name: "Delete the weigh-in for Thu 13 Aug" }),
     );
@@ -462,8 +470,8 @@ describe("deleting an entry", () => {
     // § Touch Targets: "destructive controls never sit adjacent to a
     // frequently-tapped one". The frequently-tapped control here is the primary
     // — Log weigh-in — so the assertion is that no Delete shares a parent with
-    // it, and that each row's Delete is separated from the row's own edit
-    // target rather than sitting inside it.
+    // it, and that the row's Delete is separated from the row's own edit target
+    // rather than sitting inside it.
     render(view());
 
     const primary = screen.getByRole("button", { name: "Log weigh-in" });
@@ -474,14 +482,117 @@ describe("deleting an entry", () => {
     expect(within(form).queryAllByRole("button", { name: /^Delete/ })).toHaveLength(0);
     expect(within(form).getByRole("button", { name: "Log weigh-in" })).toBe(primary);
 
-    for (const row of rows()) {
-      const edit = within(row).getByRole("button", { name: /kg/ });
-      const remove = within(row).getByRole("button", { name: /^Delete the weigh-in/ });
+    const [row] = rows();
+    const edit = within(row as HTMLElement).getByRole("button", { name: /kg/ });
+    const remove = within(row as HTMLElement).getByRole("button", {
+      name: /^Delete the weigh-in/,
+    });
 
-      // Siblings, not nested: a delete inside the edit target would be a tap on
-      // one that could land on the other.
-      expect(edit.contains(remove)).toBe(false);
-    }
+    // Siblings, not nested: a delete inside the edit target would be a tap on
+    // one that could land on the other.
+    expect(edit.contains(remove)).toBe(false);
+  });
+
+  /*
+   * FUEL-139: ten red links in a column became one, on the row being edited.
+   * At rest that is today's — the form addresses today, and today has a
+   * reading — and tapping another row moves it there.
+   */
+  test("only the row being edited offers Delete", async () => {
+    const user = userEvent.setup();
+
+    render(view());
+
+    expect(screen.getAllByRole("button", { name: /^Delete the weigh-in/ })).toHaveLength(1);
+    expect(within(rows()[0] as HTMLElement).getByRole("button", { name: /^Delete/ })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /^Edit ?80.8 kg/ }));
+
+    const offered = screen.getAllByRole("button", { name: /^Delete the weigh-in/ });
+
+    expect(offered).toHaveLength(1);
+    expect(offered[0]?.getAttribute("aria-label")).toBe("Delete the weigh-in for Thu 6 Aug");
+  });
+
+  test("a date with no reading offers no Delete at all", () => {
+    render(view(ENTRIES.slice(1)));
+
+    expect(screen.queryAllByRole("button", { name: /^Delete/ })).toHaveLength(0);
+  });
+});
+
+describe("the history's rows (FUEL-139)", () => {
+  test("say what pressing them does, and keep their figures in the name", () => {
+    render(view());
+
+    const [first] = rows();
+
+    expect(within(first as HTMLElement).getByRole("button", { name: /^Edit/ }).textContent).toMatch(
+      /^Edit 79.3 kg/,
+    );
+  });
+
+  test("carry the change from the weigh-in before, signed with a true minus", () => {
+    render(view());
+
+    const text = rows().map((row) => row.textContent ?? "");
+
+    expect(text[0]).toContain(`Thu 20 Aug · −${0.8} kg`);
+    expect(text[1]).toContain(`Thu 13 Aug · −${0.7} kg`);
+  });
+
+  test("the oldest reading has no change, having nothing before it", () => {
+    render(view());
+
+    expect(rows()[2]?.textContent).not.toContain("·");
+  });
+
+  test("a gain carries a plus, and no change carries no sign", () => {
+    render(
+      view([
+        { date: "2026-08-20", weightKg: 80.1, note: null },
+        { date: "2026-08-13", weightKg: 80.1, note: null },
+        { date: "2026-08-06", weightKg: 79.3, note: null },
+      ]),
+    );
+
+    const text = rows().map((row) => row.textContent ?? "");
+
+    expect(text[0]).toContain(`Thu 20 Aug · ${0} kg`);
+    expect(text[1]).toContain(`Thu 13 Aug · +${0.8} kg`);
+  });
+
+  test("a change smaller than the scale shows is no change, not a signed zero", () => {
+    render(
+      view([
+        { date: "2026-08-20", weightKg: 80.06, note: null },
+        { date: "2026-08-13", weightKg: 80.1, note: null },
+      ]),
+    );
+
+    expect(rows()[0]?.textContent).toContain(`Thu 20 Aug · ${0} kg`);
+  });
+});
+
+describe("the rate (FUEL-139)", () => {
+  test("states its basis, beside a chart that can draw a week's average or a year", () => {
+    render(view());
+
+    expect(screen.getByText("4-week rate")).toBeTruthy();
+  });
+});
+
+describe("the weight placeholder (FUEL-139)", () => {
+  test("is the latest weigh-in, not an example", () => {
+    render(view());
+
+    expect(screen.getByLabelText("Weight").getAttribute("placeholder")).toBe(`${79.3}`);
+  });
+
+  test("is nothing at all before the first weigh-in", () => {
+    render(view([]));
+
+    expect(screen.getByLabelText("Weight").hasAttribute("placeholder")).toBe(false);
   });
 });
 
@@ -870,6 +981,9 @@ describe("the bounded history", () => {
     await user.click(screen.getByRole("button", { name: "Show earlier" }));
     await screen.findByRole("button", { name: new RegExp(`${OLDEST.weightKg} kg`) });
 
+    await user.click(
+      screen.getByRole("button", { name: new RegExp(`^Edit ?${OLDEST.weightKg} kg`) }),
+    );
     await user.click(
       // 2026-08-07, ten places outside the window and a Friday.
       screen.getByRole("button", { name: "Delete the weigh-in for Fri 7 Aug" }),
