@@ -55,11 +55,185 @@ export type Reading = {
   weightKg: number;
 };
 
-/** A reading, placed. */
-export type PlotPoint = Reading & { x: number; y: number };
+/**
+ * A reading, placed — with its 7-day average beside it, placed too (FUEL-139).
+ *
+ * The average travels on every point whether or not the chart draws it, because
+ * the readout and the data table report it either way: a reading is the scale's
+ * number on one morning, and the average is the figure the line says, so a
+ * reader scrubbing along a smoothed line is owed both.
+ */
+export type PlotPoint = Reading & {
+  x: number;
+  y: number;
+  /** The mean of every reading in the 7 days ending on this one. */
+  averageKg: number;
+  /** Where that average sits on the plate. */
+  averageY: number;
+};
 
 /** A horizontal rule at one weight — a gridline, the target, or the start. */
 export type Rule = { weightKg: number; y: number };
+
+/**
+ * How far back a chart looks — FUEL-139.
+ *
+ * `All` is the journey, the chart as FUEL-35 drew it. The others are windows
+ * ending on the latest reading, and they exist because a chart that always
+ * spans the whole history compresses the part a check-in is about: six months
+ * in, the last four weeks are a sixth of the plate.
+ *
+ * There is no `1W`. MacroFactor and Alma offer one, but they are apps weighed
+ * into daily; this one's cadence is PRD § P5's *weekly* weigh-in, and a week of
+ * that is one to three points — a window with no line worth drawing in it.
+ */
+export type RangeKey = "1M" | "3M" | "6M" | "1Y" | "All";
+
+/**
+ * Every window, shortest first, in days — the order the control draws them.
+ *
+ * Days rather than calendar months: a window is a span of the plate's own axis,
+ * which is days, and "1M" meaning 28 in February and 31 in March would make the
+ * same button draw a different amount of history depending on when it was
+ * pressed. The figures are a month, a quarter, a half and a year, rounded to
+ * whole days.
+ */
+export const RANGES: readonly { key: Exclude<RangeKey, "All">; days: number }[] = [
+  { key: "1M", days: 30 },
+  { key: "3M", days: 91 },
+  { key: "6M", days: 182 },
+  { key: "1Y", days: 365 },
+];
+
+/**
+ * The trailing average's window, in days, the reading itself included.
+ *
+ * PRD § P5: "a trailing average smooths daily noise if weigh-ins become more
+ * frequent than weekly". A calendar week rather than an exponential weighting,
+ * though an EWMA is what the trend-weight apps draw: this one has to be NAMED on
+ * the screen, and "7-day average" is a figure a reader can check against the
+ * history list by hand. A smoothing constant is not.
+ */
+export const AVERAGE_DAYS = 7;
+
+/** The same week as a divisor, for the frequency test in `smoothed`. */
+const DAYS_PER_WEEK = 7;
+
+/**
+ * The windows worth offering for a history — FUEL-139.
+ *
+ * A window is offered only when it would cut something off. One that spans the
+ * whole history draws exactly what `All` draws, and two buttons that do the same
+ * thing are a question the reader has to answer to find out they are the same.
+ * `All` is always last and always there.
+ *
+ * @param readings in any order.
+ */
+export function availableRanges(readings: readonly Reading[]): RangeKey[] {
+  const dates = readings.map((reading) => reading.date).sort();
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+
+  const span = first !== undefined && last !== undefined ? daysBetween(first, last) : 0;
+
+  // `>=` because a window keeps readings LESS than its days old: a history
+  // spanning exactly 30 days has a reading on day 30 that "1M" leaves out.
+  return [...RANGES.filter(({ days }) => span >= days).map(({ key }) => key), "All"];
+}
+
+/**
+ * The window a chart opens on: three months once the history is longer than
+ * that, the whole of it until then.
+ *
+ * Three months is the ticket's number and a check-in's: the last dozen weekly
+ * readings, which is enough to see a trend and few enough that a week's change
+ * is still visible. Before the history reaches it, `All` IS three months or
+ * less, and choosing "3M" there would be a label for a window that cuts nothing.
+ */
+export function defaultRange(readings: readonly Reading[]): RangeKey {
+  return availableRanges(readings).includes("3M") ? "3M" : "All";
+}
+
+/**
+ * Whether a run of readings is denser than weekly, which is when PRD § P5 asks
+ * for the line to be smoothed.
+ *
+ * "More than one weigh-in per week" as arithmetic: n readings have n − 1 gaps,
+ * and the line is smoothed when those gaps average under a week. Exactly weekly
+ * is NOT smoothed — seven-day gaps put one reading in every trailing window,
+ * where the average of a reading is that reading, and the line would be the
+ * same line said a second time.
+ *
+ * Judged on what is VISIBLE, not on the history. A month of daily weigh-ins at
+ * the end of a year of weekly ones is noise in the window that shows it, and
+ * smoothing it only there is the point of asking per window.
+ *
+ * Handed the ends and the count rather than the run, because its one caller has
+ * already narrowed both ends — and a guard here for an empty run would be a
+ * branch no caller can reach. One reading falls out of the arithmetic: no gaps,
+ * a span of zero, and `0 > 0` is false.
+ */
+function smoothed(first: Reading, last: Reading, count: number): boolean {
+  return (count - 1) * DAYS_PER_WEEK > daysBetween(first.date, last.date);
+}
+
+/**
+ * Each reading's trailing average: the mean of every reading in the
+ * `AVERAGE_DAYS` ending on it, itself included.
+ *
+ * Over the WHOLE history rather than the visible window, so the first point of a
+ * one-month chart averages the week it actually followed instead of pretending
+ * the history began on the window's edge — which would make the left end of
+ * every window a raw reading and the line kink there for no reason in the data.
+ *
+ * Looks back at most `AVERAGE_DAYS - 1` readings, because `weight_logs` is
+ * unique on `(user_id, date)` and the screen's optimistic reducer drops a row
+ * sharing a date before it adds one: seven days hold at most seven readings.
+ * It scanned every earlier reading until the pre-submit review of FUEL-139,
+ * and that was quadratic in a render that runs on every pointer move — two
+ * years of daily weigh-ins took ~530ms per move across the two shapes. The
+ * date filter still applies inside the slice, so a sparse history averages
+ * only the readings that are actually in the week.
+ *
+ * Never divides by zero: the reading is in its own window, so every window
+ * holds at least one.
+ *
+ * @param ordered oldest first.
+ */
+export function withAverages<T extends Reading>(
+  ordered: readonly T[],
+): (T & { averageKg: number })[] {
+  return ordered.map((reading, index) => {
+    const week = ordered
+      .slice(Math.max(0, index - (AVERAGE_DAYS - 1)), index + 1)
+      .filter((earlier) => daysBetween(earlier.date, reading.date) < AVERAGE_DAYS);
+
+    return {
+      ...reading,
+      averageKg: round(week.reduce((total, earlier) => total + earlier.weightKg, 0) / week.length),
+    };
+  });
+}
+
+/**
+ * The readings a range shows: those LESS than its days before the newest, so
+ * "1M" is the thirty dates ending on the latest reading, that reading included.
+ *
+ * Ends on the latest reading rather than on today. A window ending today would
+ * open on an empty right-hand edge whenever the owner had not weighed in for a
+ * few days, and the latest reading is where the chart's one accent mark is and
+ * where every other shape of this chart already ends.
+ *
+ * @param ordered oldest first; returned in the same order.
+ */
+export function windowed<T extends Reading>(ordered: readonly T[], range: RangeKey): T[] {
+  const days = RANGES.find(({ key }) => key === range)?.days;
+  const newest = ordered[ordered.length - 1];
+
+  if (days === undefined || newest === undefined) return [...ordered];
+
+  return ordered.filter((reading) => daysBetween(reading.date, newest.date) < days);
+}
 
 export type ChartPlot = {
   /**
@@ -88,12 +262,33 @@ export type ChartPlot = {
   path: string | null;
   /** Unlabelled hairlines at round kilogram values — the plot's structure. */
   gridlines: Rule[];
-  /** The goal weight from `profiles.target_weight_kg`. Labelled. */
-  target: Rule;
-  /** The starting weight from `profiles.start_weight_kg`. Labelled. */
-  start: Rule;
+  /**
+   * The goal weight from `profiles.target_weight_kg`. Labelled.
+   *
+   * `null` when a window's axis does not reach it — FUEL-139. See `start`.
+   */
+  target: Rule | null;
+  /**
+   * The starting weight from `profiles.start_weight_kg`. Labelled.
+   *
+   * Always present on `All`, where the band between the two references is the
+   * journey and the axis is widened to hold it. A window is scaled to its own
+   * readings instead, and a reference outside that scale is left off rather
+   * than widening it: a month of readings 2kg apart, stretched to hold a target
+   * 13kg below them, is FUEL-139's complaint about the full history arriving by
+   * a second route. The table's caption still states both.
+   */
+  start: Rule | null;
   /** The weights the vertical axis spans, after widening. */
   domain: { lowKg: number; highKg: number };
+  /**
+   * Whether `path` is the 7-day average rather than the readings themselves —
+   * PRD § P5's "if weigh-ins become more frequent than weekly", judged on the
+   * points in view. When it is, the readings are drawn as dots beneath it.
+   */
+  smoothed: boolean;
+  /** The window these points are, for the summary and the table to name. */
+  range: RangeKey;
 };
 
 /**
@@ -314,6 +509,7 @@ export function chartGeometry(
   readings: readonly Reading[],
   references: { startWeightKg: number; targetWeightKg: number },
   shape: ChartShape = CHART_SHAPE,
+  range: RangeKey = "All",
 ): ChartPlot | null {
   const { left: LEFT, right: RIGHT, top: TOP, bottom: BOTTOM } = bounds(shape);
 
@@ -348,18 +544,28 @@ export function chartGeometry(
   // anything it can decide itself.
   const ordered = [...readings].sort((a, b) => (a.date < b.date ? -1 : 1));
 
-  const first = ordered[0];
-  const last = ordered[ordered.length - 1];
+  // Averaged before the window is cut — see `withAverages`.
+  const visible = windowed(withAverages(ordered), range);
+
+  const first = visible[0];
+  const last = visible[visible.length - 1];
 
   // Narrows for `noUncheckedIndexedAccess` as well as being the empty state —
   // dot-grid.tsx's `summarise` reads the same way, and one check that does both
-  // is one fewer place for the two to disagree about what "no data" means.
+  // is one fewer place for the two to disagree about what "no data" means. A
+  // non-empty history always has a non-empty window, since the newest reading
+  // is in every one of them.
   if (first === undefined || last === undefined) return null;
 
+  const smooth = smoothed(first, last, visible.length);
+
+  // `All` holds both references, which is FUEL-35's criterion and the journey
+  // band. A window holds what it draws — the readings, and the averages when
+  // they are the line — so its axis is its own. See `ChartPlot.start`.
   const { lowKg, highKg, gridKg } = niceDomain([
-    ...ordered.map((reading) => reading.weightKg),
-    references.startWeightKg,
-    references.targetWeightKg,
+    ...visible.map((reading) => reading.weightKg),
+    ...(smooth ? visible.map((reading) => reading.averageKg) : []),
+    ...(range === "All" ? [references.startWeightKg, references.targetWeightKg] : []),
   ]);
 
   // Guaranteed non-zero by `niceDomain`'s collapse guard, which is the only
@@ -377,31 +583,42 @@ export function chartGeometry(
   // latest, and putting it hard against the right would draw a chart that
   // implies a history running off the left of the plate. Centre says what is
   // true: one measurement, no trend yet.
-  const days = daysBetween(first.date, last.date);
+  const span = daysBetween(first.date, last.date);
   const x = (date: CalendarDate) =>
-    days === 0
+    span === 0
       ? round((LEFT + RIGHT) / 2)
-      : round(LEFT + (daysBetween(first.date, date) / days) * (RIGHT - LEFT));
+      : round(LEFT + (daysBetween(first.date, date) / span) * (RIGHT - LEFT));
 
-  const points = ordered.map((reading) => ({
+  const points = visible.map((reading) => ({
     ...reading,
     x: x(reading.date),
     y: y(reading.weightKg),
+    averageY: y(reading.averageKg),
   }));
+
+  // A reference is drawn when the axis reaches it. On `All` that is always,
+  // because the axis was built to; on a window it is whenever the readings
+  // happen to be near one, which late in a cut is the target.
+  const reference = (weightKg: number): Rule | null =>
+    weightKg >= lowKg && weightKg <= highKg ? { weightKg, y: y(weightKg) } : null;
 
   return {
     points,
     // Built from `last` rather than read back out of `points`, which is the
     // same coordinates through the same two functions without an index this
     // module would then have to prove is in range.
-    latest: { ...last, x: x(last.date), y: y(last.weightKg) },
+    latest: { ...last, x: x(last.date), y: y(last.weightKg), averageY: y(last.averageKg) },
     path:
       points.length > 1
-        ? points.map((point) => `${point.x},${point.y}`).join(" ")
+        ? points
+            .map((point) => `${point.x},${smooth ? point.averageY : point.y}`)
+            .join(" ")
         : null,
     gridlines: gridKg.map((weightKg) => ({ weightKg, y: y(weightKg) })),
-    target: { weightKg: references.targetWeightKg, y: y(references.targetWeightKg) },
-    start: { weightKg: references.startWeightKg, y: y(references.startWeightKg) },
+    target: reference(references.targetWeightKg),
+    start: reference(references.startWeightKg),
     domain: { lowKg, highKg },
+    smoothed: smooth,
+    range,
   };
 }

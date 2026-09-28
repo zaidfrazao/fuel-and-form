@@ -1,13 +1,21 @@
+"use client";
+
+import { type KeyboardEvent, type PointerEvent, useMemo, useState } from "react";
+
 import { figure } from "@/lib/format";
 import type { CalendarDate } from "@/lib/date";
 import { entryLabel } from "@/lib/now-display";
+import { FOCUS_RING, HOVER_LINK, POINTER } from "@/lib/pointer";
 import { cn } from "@/lib/utils";
 import {
+  availableRanges,
   CHART_SHAPE,
   CHART_SHAPE_WIDE,
   type ChartPlot,
   type ChartShape,
   chartGeometry,
+  defaultRange,
+  type RangeKey,
   type Reading,
 } from "@/lib/weight-chart";
 
@@ -57,16 +65,19 @@ import {
  * carry no meaning until an edge says where the top and the bottom were. The
  * amendment is recorded in the guide rather than only here.
  *
- * ## Rendered wherever its caller is
+ * ## A client component, since FUEL-139
  *
- * No `"use client"` and no hooks, but no `server-only` either. `weigh-ins.tsx`
- * is a client component holding the history in `useOptimistic`, and it passes
- * those optimistic rows straight through — so a weigh-in that has been logged
- * but not yet acknowledged moves the line at the same moment it appears in the
- * list beneath. A server-rendered chart would show the old trend beside the new
- * row, which § Feedback's "the UI reflecting the new state IS the confirmation"
- * rules out, and which reads as the chart being broken rather than as being
- * behind.
+ * It was renderable anywhere until then — no hooks, and no `server-only` —
+ * because `weigh-ins.tsx` holds the history in `useOptimistic` and passes those
+ * rows straight through, so a weigh-in logged but not yet acknowledged moves the
+ * line at the same moment it appears in the list beneath. A server-rendered
+ * chart would show the old trend beside the new row, which § Feedback's "the UI
+ * reflecting the new state IS the confirmation" rules out.
+ *
+ * The range and the readout are state, so it says `"use client"` outright now.
+ * Its one caller was already a client component, so nothing moved across the
+ * boundary; `/dev/weight-chart` renders it from a server page with props that
+ * serialise.
  */
 
 /**
@@ -86,6 +97,20 @@ const TREND_WIDTH = 2;
  */
 const LATEST_RADIUS = 4;
 const LATEST_RING = 2;
+
+/**
+ * A reading's dot under a smoothed line, in pixels — FUEL-139. Small enough that
+ * a month of daily weigh-ins on a 331px column (one per 10px) stays a row of
+ * dots rather than a second line, and big enough to be a mark at all.
+ */
+const READING_RADIUS = 1.5;
+
+/**
+ * The ring round a point being read, in pixels: outside the reading's dot and
+ * the trend's 2px, so it surrounds the point rather than covering it.
+ */
+const SELECTED_RADIUS = 6;
+const SELECTED_RING = 1.5;
 
 /**
  * Where a reference line's label sits relative to the line itself, in pixels.
@@ -163,6 +188,15 @@ function referenceLabels(
   start: ChartPlot["start"],
   target: ChartPlot["target"],
 ): { key: string; y: number; text: string }[] {
+  // A window's axis may reach one reference, or neither — FUEL-139. A rule
+  // that is not drawn has no label, and one alone has nothing to collide with.
+  if (start === null || target === null) {
+    return [
+      ...(start ? [{ key: "start", y: start.y, text: `Start ${figure(start.weightKg)}` }] : []),
+      ...(target ? [{ key: "target", y: target.y, text: `Target ${figure(target.weightKg)}` }] : []),
+    ];
+  }
+
   // Compared as DISPLAYED rather than as stored, and the gap between the two is
   // real: `weight_logs.weight_kg` is `numeric(5, 2)` while `figure` shows one
   // decimal, so a start of 76.04 against a target of 76.01 is two different
@@ -236,11 +270,24 @@ function pct(value: number, extent: number): string {
  *
  * Every number goes through `figure`, so the summary and the table below say a
  * reading the same way, and both say it the way the history list does.
+ *
+ * ## The references come from the profile, not the plot — FUEL-139
+ *
+ * A window may leave the start and target rules off (see `ChartPlot.start`),
+ * but the change from the starting weight is still what the line is part of, so
+ * the sentence takes the two figures from the caller rather than from whatever
+ * the plot happened to rule. What it adds for a window is the window's name, and
+ * for a smoothed line that the line is an average: a reader told "down 4 kg"
+ * about a line that is not the readings has been told about a different line.
  */
-function summarise(plot: ChartPlot, today: CalendarDate): string {
-  const { latest, points, start, target } = plot;
+function summarise(
+  plot: ChartPlot,
+  today: CalendarDate,
+  { startWeightKg, targetWeightKg }: { startWeightKg: number; targetWeightKg: number },
+): string {
+  const { latest, points, range, smoothed } = plot;
 
-  const change = latest.weightKg - start.weightKg;
+  const change = latest.weightKg - startWeightKg;
   // Rounded before it is judged, for `referenceLabels`' reason one sentence
   // over: the column holds two decimals and `figure` prints one, so a reading
   // 40 grams from the starting weight is a non-zero `change` that formats as
@@ -250,12 +297,14 @@ function summarise(plot: ChartPlot, today: CalendarDate): string {
   const first = points[0];
 
   return [
-    `Weight trend, ${points.length === 1 ? "1 weigh-in" : `${points.length} weigh-ins`}`,
+    `Weight trend${range === "All" ? "" : `, ${RANGE_NAMES[range]}`}, `,
+    points.length === 1 ? "1 weigh-in" : `${points.length} weigh-ins`,
     first && points.length > 1
       ? `, ${entryLabel(first.date, today)} to ${entryLabel(latest.date, today)}.`
       : ".",
+    smoothed ? " The line is the 7-day average." : "",
     ` Latest ${figure(latest.weightKg)} kg on ${entryLabel(latest.date, today)}.`,
-    ` Started at ${figure(start.weightKg)} kg, target ${figure(target.weightKg)} kg.`,
+    ` Started at ${figure(startWeightKg)} kg, target ${figure(targetWeightKg)} kg.`,
     // A true zero is a real outcome — a reading back at the starting weight —
     // and "up 0 kg" would be a sentence about a direction that did not happen.
     changeShown === figure(0)
@@ -263,6 +312,19 @@ function summarise(plot: ChartPlot, today: CalendarDate): string {
       : ` ${change < 0 ? "Down" : "Up"} ${changeShown} kg from the starting weight.`,
   ].join("");
 }
+
+/**
+ * Each window's name in words, for the summary, the table's caption and the
+ * control's accessible names. "3M" is a label for the eye, and a screen reader
+ * says it "three M".
+ */
+const RANGE_NAMES: Record<RangeKey, string> = {
+  "1M": "last month",
+  "3M": "last 3 months",
+  "6M": "last 6 months",
+  "1Y": "last year",
+  All: "all weigh-ins",
+};
 
 /**
  * The chart itself, at one shape — FUEL-78.
@@ -289,10 +351,23 @@ function Plot({
   shape,
   name,
   today,
+  label,
+  selected,
+  onSelect,
   className,
 }: {
   plot: ChartPlot;
   shape: ChartShape;
+  /** The summary, said once by `WeightChart` for both shapes. */
+  label: string;
+  /**
+   * The date the readout is reading, or `null` for the latest. A date rather
+   * than a point because the two shapes place the same reading at different
+   * coordinates, and each has to find its own.
+   */
+  selected: CalendarDate | null;
+  /** A point picked by pointer or touch, by date — or `null` when a mouse leaves. */
+  onSelect: (date: CalendarDate | null) => void;
   /**
    * Which of the two this is, for a test to scope to.
    *
@@ -306,7 +381,38 @@ function Plot({
   today: CalendarDate;
   className?: string;
 }) {
-  const { gridlines, latest, path, points, start, target } = plot;
+  const { gridlines, latest, path, points, smoothed, start, target } = plot;
+
+  // A pick from another window falls back to the latest: the range changed
+  // under it, and the readout says the latest in that case too.
+  const reading = points.find((point) => point.date === selected) ?? latest;
+
+  /*
+   * Picking a point — FUEL-139. The nearest reading by date, which on a line
+   * through time is the nearest by x: a reader pointing at a place on the line
+   * is asking about a day, and the height they happen to be pointing at is not
+   * part of the question.
+   *
+   * Measured against this box rather than the `<svg>`, because it is the same
+   * box (see `shrink-0` below) and it is the element the handlers are on. The
+   * pointer's offset becomes a viewBox unit by the same proportion `h-auto`
+   * scales the drawing by, so the comparison is made in the units `x` is in.
+   */
+  const pick = (event: PointerEvent<HTMLDivElement>) => {
+    const box = event.currentTarget.getBoundingClientRect();
+
+    // A box with no width is one that is not displayed — the other shape's,
+    // under `display: none`. Nothing could have been pointed at in it.
+    if (box.width === 0) return;
+
+    const at = ((event.clientX - box.left) / box.width) * shape.viewWidth;
+
+    const nearest = points.reduce((best, point) =>
+      Math.abs(point.x - at) < Math.abs(best.x - at) ? point : best,
+    );
+
+    onSelect(nearest.date);
+  };
 
   /*
    * The positioning context the overlay is stacked in. It takes its height from
@@ -325,10 +431,33 @@ function Plot({
    */
 
   return (
-    <div className={cn("relative shrink-0", className)} data-chart-shape={name}>
+    <div
+      className={cn("relative shrink-0", className)}
+      data-chart-shape={name}
+      /*
+       * Touch and pointer both, through one set of handlers. `pan-y` is what
+       * lets a thumb dragged across the chart read it while a thumb dragged
+       * down the screen still scrolls it: the browser keeps the vertical
+       * gesture and hands this element the horizontal one.
+       *
+       * A mouse clears its pick on leaving, so the readout returns to the
+       * latest reading the way a hover would. A finger does not: lifting it is
+       * how a touch reader gets to READ the value, and a readout that vanished
+       * the moment it was touched could only be read by someone who did not
+       * need it.
+       */
+      style={{ touchAction: "pan-y" }}
+      onPointerDown={pick}
+      onPointerMove={(event) => {
+        if (event.pointerType === "mouse" || event.buttons !== 0) pick(event);
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") onSelect(null);
+      }}
+    >
       <svg
         role="img"
-        aria-label={summarise(plot, today)}
+        aria-label={label}
         viewBox={`0 0 ${shape.viewWidth} ${shape.viewHeight}`}
         // Scales with the column at any width, which is what makes "legible at
         // 375px" a proportion fixed once in the viewBox rather than a
@@ -401,7 +530,9 @@ function Plot({
         {[
           { rule: start, name: "start" },
           { rule: target, name: "target" },
-        ].map(({ rule, name }) => (
+        ].map(({ rule, name }) =>
+          // A window's axis may not reach a reference — see `ChartPlot.start`.
+          rule === null ? null : (
           <line
             key={name}
             x1={0}
@@ -413,7 +544,8 @@ function Plot({
             strokeDasharray="3 3"
             vectorEffect="non-scaling-stroke"
           />
-        ))}
+          ),
+        )}
 
         {/* The trend. `fill="none"` is the criterion — no area fill, and there
             is no gradient anywhere in this file to go with it.
@@ -492,6 +624,47 @@ function Plot({
           </text>
         ))}
 
+        {/* The readings themselves, when the line is their average — FUEL-139.
+            PRD § P5 asks for the average to smooth the noise, not to hide it:
+            the dots are what the line was drawn through, so a reader can see
+            how far a morning sat from the week it belongs to.
+
+            `text-secondary`, not the trend's ink, so the line reads as the
+            figure and the dots as its evidence; and at 3px across, under
+            § Accessibility's 3:1 for a mark that carries meaning, which
+            `text-secondary` on `surface` clears. Not drawn for a weekly
+            history, where the line runs through every reading and a dot on
+            each would be a second drawing of the same thing. */}
+        {smoothed &&
+          points.map((point) => (
+            <circle
+              key={point.date}
+              cx={pct(point.x, shape.viewWidth)}
+              cy={pct(point.y, shape.viewHeight)}
+              r={READING_RADIUS}
+              fill="var(--text-secondary)"
+              className="weight-chart-reading"
+            />
+          ))}
+
+        {/* The point being read — FUEL-139. A ring in the trend's own ink, so
+            it is not a second accent (§ Rule 2 spends umber on the latest
+            reading alone), and drawn only away from the latest, whose disc
+            already marks it. No vertical rule to it: § Data Display's "no
+            vertical gridline, ever" holds for a cursor too, since it would be
+            the same edge the data does not have. */}
+        {reading.date !== latest.date && (
+          <circle
+            cx={pct(reading.x, shape.viewWidth)}
+            cy={pct(reading.y, shape.viewHeight)}
+            r={SELECTED_RADIUS}
+            fill="none"
+            stroke="var(--ink)"
+            strokeWidth={SELECTED_RING}
+            data-selected={reading.date}
+          />
+        )}
+
         {/* The one umber mark on the screen — § Rule 2: "umber marks the present
             moment and nothing else … the latest reading on the chart". No other
             point carries a marker, which is both the criterion and the reason
@@ -567,50 +740,188 @@ export function WeightChart({
   targetWeightKg: number;
   className?: string;
 }) {
-  const plot = chartGeometry(entries, { startWeightKg, targetWeightKg });
-
-  // § UI Copy Examples writes the empty state as "No weigh-ins yet. Your first
-  // entry starts the chart" — the guide's own sentence says there is no chart
-  // yet, and `/weight` already renders it above this. Drawing an empty ruled
-  // plate here would contradict the sentence and repeat it.
-  if (plot === null) return null;
-
-  const { domain, points, start, target, latest } = plot;
 
   /*
-   * The same readings, laid out in the frame's box — FUEL-78.
-   *
-   * `chartGeometry` is pure arithmetic over at most a few dozen rows, so
-   * running it twice is cheaper than any mechanism for avoiding it, and it is
-   * the only way to have both shapes' coordinates available to a server render
-   * that cannot know the viewport.
-   *
-   * Non-null by construction: it is the same readings and the same references
-   * that just produced `plot`, and `chartGeometry` returns null only for an
-   * empty history. The check is here because the type says it can be, and
-   * `?? plot` would silently draw the phone's coordinates in a 968px box.
+   * The window — FUEL-139. Chosen once, on the first render, from the history
+   * as it then was: three months once there are more than three. Held as the
+   * reader's CHOICE, and the window actually drawn is derived from it, because
+   * the history can change under it — a delete that takes the history back
+   * under a month would otherwise leave "1M" pressed on a control that no
+   * longer offers it.
    */
-  const widePlot = chartGeometry(entries, { startWeightKg, targetWeightKg }, CHART_SHAPE_WIDE);
+  const available = availableRanges(entries);
+  const [chosen, setChosen] = useState<RangeKey>(() => defaultRange(entries));
+  const range = available.includes(chosen) ? chosen : "All";
+
+  /** The reading picked by pointer, touch or key; `null` reads the latest. */
+  const [selected, setSelected] = useState<CalendarDate | null>(null);
+
+  /*
+   * Both shapes, computed once per history and window rather than per render.
+   * The readout is state here, so every pointer move re-renders this; without
+   * the memo each move re-ran the geometry for both shapes, which the
+   * pre-submit review of FUEL-139 measured at ~530ms on two years of daily
+   * weigh-ins before `withAverages` was bounded, and is still work a picked
+   * point has no reason to repeat.
+   *
+   * `widePlot` is the same readings laid out in the frame's box — FUEL-78.
+   * Running `chartGeometry` twice is the only way to have both shapes'
+   * coordinates for a render that cannot know the viewport. It is non-null
+   * whenever `plot` is: the same readings and references, and `chartGeometry`
+   * returns null only for an empty history. The check below is there because
+   * the type says it can be, and `?? plot` would silently draw the phone's
+   * coordinates in a 968px box.
+   */
+  const { references, plot, widePlot } = useMemo(() => {
+    const references = { startWeightKg, targetWeightKg };
+
+    return {
+      references,
+      plot: chartGeometry(entries, references, CHART_SHAPE, range),
+      widePlot: chartGeometry(entries, references, CHART_SHAPE_WIDE, range),
+    };
+  }, [entries, startWeightKg, targetWeightKg, range]);
+
+  if (plot === null) return null;
+
+  const { domain, points, smoothed, latest } = plot;
+
+
+  const reading = points.find((point) => point.date === selected) ?? latest;
+  const label = summarise(plot, today, references);
+
+  /*
+   * The keyboard's way to the same readout — FUEL-139. The ticket asks for
+   * touch and pointer; a control that only a pointer can drive fails
+   * § Accessibility for everyone else, so the arrows step through the readings
+   * and Home and End go to either end. The data table below says every value
+   * too, but a table is a way to READ the data, and this is the way to read
+   * the chart.
+   */
+  const step = (event: KeyboardEvent<HTMLDivElement>) => {
+    // By date, not by identity: `latest` is built beside `points` rather than
+    // read out of it, so `indexOf(latest)` is -1 and the first ArrowLeft from
+    // rest would jump to the oldest reading.
+    const index = points.findIndex((point) => point.date === reading.date);
+    const next = {
+      ArrowLeft: index - 1,
+      ArrowRight: index + 1,
+      Home: 0,
+      End: points.length - 1,
+    }[event.key];
+
+    if (next === undefined) return;
+
+    event.preventDefault();
+
+    const point = points[Math.min(Math.max(next, 0), points.length - 1)];
+
+    if (point) setSelected(point.date);
+  };
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      {/* Below the cap, where the chart has the measure and nothing else. */}
-      <Plot plot={plot} shape={CHART_SHAPE} name="measure" today={today} className="xl:hidden" />
+      {/*
+        The readout — FUEL-139. A line above the plate rather than a tooltip on
+        it: a tooltip at 375 sits under the finger that summoned it, and on the
+        latest reading it would hang off the right-hand edge. A line that is
+        always there never shifts the chart when it changes, and at rest it
+        says the latest, which is the reading this screen leads with.
 
-      {/* At it, where § Desktop gives it the frame. */}
-      {widePlot && (
+        `aria-live` so a keyboard reader hears each step. Polite, because a
+        pointer moving across the plate changes it many times a second and a
+        screen reader should say the one it settles on.
+      */}
+      <p aria-live="polite" className="text-slash tabular-nums text-text-secondary" data-chart-readout>
+        / {reading.date === latest.date && "Latest · "}
+        {entryLabel(reading.date, today)} · {figure(reading.weightKg)} kg
+        {smoothed && ` · 7-day avg ${figure(reading.averageKg)}`}
+      </p>
+
+      {/* The focus stop for the arrow keys. A group round the two shapes rather
+          than a `tabIndex` on either, since one of them is always
+          `display: none` and a focus stop inside it would be unreachable. */}
+      <div
+        role="group"
+        aria-label="Weight chart. Arrow keys read each weigh-in."
+        tabIndex={0}
+        onKeyDown={step}
+        className={cn("rounded-[14px]", FOCUS_RING)}
+      >
+        {/* Below the cap, where the chart has the measure and nothing else. */}
         <Plot
-          plot={widePlot}
-          shape={CHART_SHAPE_WIDE}
-          name="frame"
+          plot={plot}
+          shape={CHART_SHAPE}
+          name="measure"
           today={today}
-          className="hidden xl:block"
+          label={label}
+          selected={reading.date}
+          onSelect={setSelected}
+          className="xl:hidden"
         />
+
+        {/* At it, where § Desktop gives it the frame. */}
+        {widePlot && (
+          <Plot
+            plot={widePlot}
+            shape={CHART_SHAPE_WIDE}
+            name="frame"
+            today={today}
+            label={label}
+            selected={reading.date}
+            onSelect={setSelected}
+            className="hidden xl:block"
+          />
+        )}
+      </div>
+
+      {/*
+        The range — FUEL-139. Text buttons in a row, one pressed, and NOT tabs:
+        § Progressive Disclosure refuses "tabs within a screen", and what it
+        refuses is a switch between panels — a different thing to look at. This
+        is one graphic told how far back to look; nothing is hidden behind any
+        of these, and `All` is always one of them. `aria-pressed` on each, as
+        the theme toggle does, because a pressed button is what it is.
+
+        The pressed one is marked by weight rather than by colour, as
+        `BRAND_GUIDE.html` marks the current row of a list, and drops the
+        underline that says "press me". Not drawn at all for a history too
+        short to have a window worth offering: a control with one option is a
+        label pretending to be a choice.
+      */}
+      {available.length > 1 && (
+        <div role="group" aria-label="Range" className="flex flex-wrap gap-1">
+          {available.map((key) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={key === range}
+              onClick={() => {
+                setChosen(key);
+                setSelected(null);
+              }}
+              className={cn(
+                `min-h-11 min-w-11 rounded-sm px-2 text-slash ${POINTER} ${FOCUS_RING}`,
+                "transition-colors duration-150 ease-out",
+                key === range
+                  ? "font-semibold text-text-primary"
+                  : `text-text-secondary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK}`,
+              )}
+            >
+              {key}
+              <span className="sr-only">, {RANGE_NAMES[key]}</span>
+            </button>
+          ))}
+        </div>
       )}
 
       {/*
         § Accessibility — the summary above, and the data table here, because "a
         mark on a screen is not the data".
+
+        The window's readings rather than every one: the table describes the
+        picture, and the picture is a window. `All` is one press away for a
+        screen reader as for anyone.
 
         The block wrapper is load-bearing, and dot-grid.tsx records why: sr-only
         hides an element by shrinking it to 1px and clipping, but a
@@ -621,14 +932,15 @@ export function WeightChart({
       <div className="sr-only">
         <table>
           <caption>
-            Weigh-ins, oldest first. Started at {figure(start.weightKg)} kg, target{" "}
-            {figure(target.weightKg)} kg. Chart spans {figure(domain.lowKg)} to{" "}
-            {figure(domain.highKg)} kg.
+            Weigh-ins, {RANGE_NAMES[range]}, oldest first. Started at {figure(startWeightKg)} kg,
+            target {figure(targetWeightKg)} kg. Chart spans {figure(domain.lowKg)} to{" "}
+            {figure(domain.highKg)} kg.{smoothed && " The line is the 7-day average."}
           </caption>
           <thead>
             <tr>
               <th scope="col">Date</th>
               <th scope="col">Weight</th>
+              <th scope="col">7-day average</th>
               <th scope="col">Mark</th>
             </tr>
           </thead>
@@ -637,9 +949,10 @@ export function WeightChart({
               <tr key={point.date}>
                 <th scope="row">{entryLabel(point.date, today)}</th>
                 <td>{figure(point.weightKg)} kg</td>
-                {/* The third column is what the graphic encodes that the first
-                    two do not: which point is the one the umber dot is on. A
-                    table that omitted it would describe the data but not the
+                <td>{figure(point.averageKg)} kg</td>
+                {/* The fourth column is what the graphic encodes that the others
+                    do not: which point is the one the umber dot is on. A table
+                    that omitted it would describe the data but not the
                     picture. */}
                 <td>{point.date === latest.date ? "Latest reading" : "No mark"}</td>
               </tr>

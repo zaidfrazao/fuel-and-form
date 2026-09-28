@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 
 import { WeightChart } from "@/components/weight-chart";
@@ -66,6 +66,14 @@ function draw(entries: readonly Reading[] = HISTORY, references: References = {}
   result.container.querySelector('[data-chart-shape="frame"]')?.remove();
 
   return result;
+}
+
+/**
+ * Shows the whole history — FUEL-139. A history longer than three months opens
+ * on "3M", so a test about the journey's full span has to ask for it.
+ */
+function pressAll() {
+  fireEvent.click(screen.getByRole("button", { name: /^All/ }));
 }
 
 /** The profile's two figures, where a test needs them to be something else. */
@@ -222,6 +230,7 @@ describe("the adjacent data table", () => {
       { date: "2025-08-18", weightKg: 88 },
       { date: "2026-08-17", weightKg: 80.1 },
     ]);
+    pressAll();
 
     expect(
       within(screen.getByRole("table")).getAllByRole("rowheader")[0]?.textContent,
@@ -376,6 +385,7 @@ describe("the reference lines", () => {
       startWeightKg: 84.2,
       targetWeightKg: 84,
     });
+    pressAll();
 
     expect(screen.getByText("Start 84.2 · Target 84").tagName.toLowerCase()).toBe(
       "text",
@@ -788,5 +798,277 @@ describe("the two drawings", () => {
       expect(box?.querySelectorAll("circle")).toHaveLength(1);
       expect(box?.querySelectorAll("polyline")).toHaveLength(1);
     }
+  });
+});
+
+/**
+ * FUEL-139: the range, the smoothed line and the readout.
+ *
+ * `LONG` is weigh-ins every other day for 200 days — denser than weekly, so the
+ * line is the average, and long enough that every window but "1Y" is offered.
+ */
+const LONG: Reading[] = Array.from({ length: 101 }, (_, index) => {
+  const date = new Date(Date.UTC(2026, 1, 1 + index * 2));
+
+  return {
+    date: date.toISOString().slice(0, 10),
+    weightKg: Math.round((86 - index * 0.05 + (index % 2 === 0 ? 0.3 : -0.3)) * 100) / 100,
+  };
+});
+
+function rangeButton(name: string) {
+  return screen.getByRole("button", { name: new RegExp(`^${name},`) });
+}
+
+/**
+ * A readout's text, from a date and a figure — built rather than written out so
+ * the fixture's numbers are numbers here, as they are everywhere else in this
+ * file, and not strings the metrics scan has to be told are fictional.
+ */
+function line(date: string, weightKg: number) {
+  return `/ ${date} · ${weightKg} kg`;
+}
+
+function readout() {
+  return document.querySelector("[data-chart-readout]")?.textContent;
+}
+
+/**
+ * jsdom lays nothing out, so the measure's box is given a width here: 320px
+ * from x=0, which makes one CSS pixel one viewBox unit and a `clientX` the `x`
+ * a point is drawn at.
+ */
+function measureBox() {
+  const box = document.querySelector('[data-chart-shape="measure"]') as HTMLElement;
+
+  box.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, width: 320, height: 170, right: 320, bottom: 170 }) as DOMRect;
+
+  return box;
+}
+
+describe("the range", () => {
+  test("a history under a month has no range control at all", () => {
+    draw();
+
+    expect(screen.queryByRole("group", { name: "Range" })).toBeNull();
+  });
+
+  test("a long history offers the windows it can fill, and opens on three months", () => {
+    draw(LONG);
+
+    const buttons = within(screen.getByRole("group", { name: "Range" })).getAllByRole("button");
+
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      "1M, last month",
+      "3M, last 3 months",
+      "6M, last 6 months",
+      "All, all weigh-ins",
+    ]);
+    expect(rangeButton("3M").getAttribute("aria-pressed")).toBe("true");
+    expect(rangeButton("All").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  test("the table and the summary say the window being drawn", () => {
+    draw(LONG);
+
+    // 91 days ending on the latest, every other day: 46 readings.
+    expect(within(screen.getByRole("table")).getAllByRole("rowheader")).toHaveLength(46);
+    expect(screen.getByRole("img").getAttribute("aria-label")).toMatch(
+      /^Weight trend, last 3 months, 46 weigh-ins/,
+    );
+  });
+
+  test("pressing a window redraws the chart for it", () => {
+    draw(LONG);
+
+    fireEvent.click(rangeButton("1M"));
+
+    expect(rangeButton("1M").getAttribute("aria-pressed")).toBe("true");
+    expect(rangeButton("3M").getAttribute("aria-pressed")).toBe("false");
+    expect(within(screen.getByRole("table")).getAllByRole("rowheader")).toHaveLength(15);
+
+    pressAll();
+
+    expect(within(screen.getByRole("table")).getAllByRole("rowheader")).toHaveLength(101);
+    expect(screen.getByRole("img").getAttribute("aria-label")).toMatch(
+      /^Weight trend, 101 weigh-ins/,
+    );
+  });
+
+  test("a window leaves off the references it does not reach, and the caption keeps them", () => {
+    draw(LONG, { startWeightKg: 95, targetWeightKg: 70 });
+
+    expect(screen.queryByText(/^Start /)).toBeNull();
+    expect(screen.queryByText(/^Target /)).toBeNull();
+    expect(screen.getByRole("table").querySelector("caption")?.textContent).toContain(
+      `Started at ${95} kg, target ${70} kg`,
+    );
+
+    pressAll();
+
+    expect(screen.getByText("Start 95")).toBeTruthy();
+    expect(screen.getByText("Target 70")).toBeTruthy();
+  });
+
+  test("a window the history no longer fills falls back to All", () => {
+    const { rerender } = draw(LONG);
+
+    rerender(
+      <WeightChart
+        entries={HISTORY}
+        today={TODAY}
+        startWeightKg={START_KG}
+        targetWeightKg={TARGET_KG}
+      />,
+    );
+
+    expect(screen.queryByRole("group", { name: "Range" })).toBeNull();
+    expect(within(screen.getByRole("table")).getAllByRole("rowheader")).toHaveLength(4);
+  });
+});
+
+describe("the smoothed line", () => {
+  test("a history denser than weekly draws each reading as a dot under the average", () => {
+    const { container } = draw(LONG);
+
+    expect(container.querySelectorAll(".weight-chart-reading")).toHaveLength(46);
+    expect(screen.getByRole("img").getAttribute("aria-label")).toContain(
+      "The line is the 7-day average.",
+    );
+  });
+
+  test("a weekly history draws no dots, and says nothing about an average", () => {
+    const { container } = draw();
+
+    expect(container.querySelectorAll(".weight-chart-reading")).toHaveLength(0);
+    expect(screen.getByRole("img").getAttribute("aria-label")).not.toContain("average");
+  });
+});
+
+describe("the readout", () => {
+  test("reads the latest reading until another is picked", () => {
+    draw();
+
+    expect(readout()).toBe(line("Latest · Mon 17 Aug", 80.1));
+  });
+
+  test("names the 7-day average when the line is one", () => {
+    draw(LONG);
+
+    expect(readout()).toMatch(/^\/ Latest · .+ · \d+(\.\d)? kg · 7-day avg \d+(\.\d)?$/);
+  });
+
+  test("a touch reads the nearest reading, and it stays read when the finger lifts", () => {
+    const { container } = draw();
+    const box = measureBox();
+
+    // The first reading is at x=10; 30 is nearer it than the second, at ~110.
+    fireEvent.pointerDown(box, { clientX: 30, pointerType: "touch" });
+
+    expect(readout()).toBe(line("Mon 27 Jul", 82.4));
+    expect(container.querySelector("[data-selected]")?.getAttribute("data-selected")).toBe(
+      "2026-07-27",
+    );
+
+    fireEvent.pointerLeave(box, { pointerType: "touch" });
+
+    expect(readout()).toBe(line("Mon 27 Jul", 82.4));
+  });
+
+  test("a mouse reads as it moves, and lets go when it leaves", () => {
+    draw();
+    const box = measureBox();
+
+    fireEvent.pointerMove(box, { clientX: 115, pointerType: "mouse" });
+
+    expect(readout()).toBe(line("Mon 3 Aug", 81.6));
+
+    fireEvent.pointerLeave(box, { pointerType: "mouse" });
+
+    expect(readout()).toBe(line("Latest · Mon 17 Aug", 80.1));
+  });
+
+  test("a finger moving without being down does not pick", () => {
+    draw();
+    const box = measureBox();
+
+    fireEvent.pointerMove(box, { clientX: 30, pointerType: "touch", buttons: 0 });
+
+    expect(readout()).toBe(line("Latest · Mon 17 Aug", 80.1));
+
+    fireEvent.pointerMove(box, { clientX: 30, pointerType: "touch", buttons: 1 });
+
+    expect(readout()).toBe(line("Mon 27 Jul", 82.4));
+  });
+
+  test("a shape that is not displayed picks nothing", () => {
+    draw();
+    const box = document.querySelector('[data-chart-shape="measure"]') as HTMLElement;
+
+    // jsdom's own box: zero wide, as a `display: none` shape's is.
+    fireEvent.pointerDown(box, { clientX: 30, pointerType: "touch" });
+
+    expect(readout()).toBe(line("Latest · Mon 17 Aug", 80.1));
+  });
+
+  test("the latest reading carries no ring — its disc already marks it", () => {
+    const { container } = draw();
+
+    expect(container.querySelector("[data-selected]")).toBeNull();
+  });
+
+  test("the arrow keys step through the readings, and Home and End go to either end", () => {
+    draw();
+    const chart = screen.getByRole("group", { name: /Arrow keys read each weigh-in/ });
+
+    fireEvent.keyDown(chart, { key: "ArrowLeft" });
+    expect(readout()).toBe(line("Mon 10 Aug", 80.9));
+
+    fireEvent.keyDown(chart, { key: "Home" });
+    expect(readout()).toBe(line("Mon 27 Jul", 82.4));
+
+    // Held at the ends rather than wrapping or reading nothing.
+    fireEvent.keyDown(chart, { key: "ArrowLeft" });
+    expect(readout()).toBe(line("Mon 27 Jul", 82.4));
+
+    fireEvent.keyDown(chart, { key: "ArrowRight" });
+    expect(readout()).toBe(line("Mon 3 Aug", 81.6));
+
+    fireEvent.keyDown(chart, { key: "End" });
+    expect(readout()).toBe(line("Latest · Mon 17 Aug", 80.1));
+
+    fireEvent.keyDown(chart, { key: "ArrowRight" });
+    expect(readout()).toBe(line("Latest · Mon 17 Aug", 80.1));
+  });
+
+  test("other keys are left alone", () => {
+    draw();
+    const chart = screen.getByRole("group", { name: /Arrow keys read each weigh-in/ });
+
+    const event = fireEvent.keyDown(chart, { key: "Tab" });
+
+    expect(event).toBe(true);
+    expect(readout()).toBe(line("Latest · Mon 17 Aug", 80.1));
+  });
+
+  test("the chart is a focus stop", () => {
+    draw();
+
+    expect(
+      screen.getByRole("group", { name: /Arrow keys read each weigh-in/ }).getAttribute("tabindex"),
+    ).toBe("0");
+  });
+
+  test("changing the range returns the readout to the latest", () => {
+    draw(LONG);
+    const chart = screen.getByRole("group", { name: /Arrow keys read each weigh-in/ });
+
+    fireEvent.keyDown(chart, { key: "Home" });
+    expect(readout()).not.toContain("Latest");
+
+    fireEvent.click(rangeButton("1M"));
+
+    expect(readout()).toContain("Latest");
   });
 });
