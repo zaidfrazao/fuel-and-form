@@ -5,11 +5,16 @@ import {
   CHART_SHAPE,
   CHART_SHAPE_WIDE,
   type ChartPlot,
+  availableRanges,
   chartGeometry,
+  defaultRange,
   PLOT_HEIGHT,
   type Reading,
+  type Rule,
   VIEW_HEIGHT,
   VIEW_WIDTH,
+  windowed,
+  withAverages,
 } from "./weight-chart";
 
 /**
@@ -65,6 +70,13 @@ function at<T>(items: readonly T[], index: number): T {
   if (item === undefined) throw new Error(`No item at ${index}`);
 
   return item;
+}
+
+/** A reference the plot drew, or a failure that says it was left off. */
+function ruled(rule: Rule | null): Rule {
+  if (rule === null) throw new Error("Expected a ruled reference, got none");
+
+  return rule;
 }
 
 /** The plot, or a failure that says the chart was empty rather than `null.x`. */
@@ -134,8 +146,8 @@ describe("the single-data-point state", () => {
     const { start, target } = plotOf(ONE);
 
     for (const rule of [start, target]) {
-      expect(rule.y).toBeGreaterThanOrEqual(0);
-      expect(rule.y).toBeLessThanOrEqual(PLOT_HEIGHT);
+      expect(ruled(rule).y).toBeGreaterThanOrEqual(0);
+      expect(ruled(rule).y).toBeLessThanOrEqual(PLOT_HEIGHT);
     }
   });
 });
@@ -180,8 +192,8 @@ describe("a history that never moves", () => {
     });
 
     expect(domain.highKg).toBeGreaterThan(domain.lowKg);
-    expect(Number.isFinite(target.y)).toBe(true);
-    expect(Number.isFinite(start.y)).toBe(true);
+    expect(Number.isFinite(ruled(target).y)).toBe(true);
+    expect(Number.isFinite(ruled(start).y)).toBe(true);
 
     for (const point of points) expect(Number.isFinite(point.y)).toBe(true);
   });
@@ -210,15 +222,15 @@ describe("the vertical domain", () => {
   test("the target is inside the plate even when no reading is near it", () => {
     const { target } = plotOf(HISTORY);
 
-    expect(target.y).toBeGreaterThanOrEqual(0);
-    expect(target.y).toBeLessThanOrEqual(PLOT_HEIGHT);
+    expect(ruled(target).y).toBeGreaterThanOrEqual(0);
+    expect(ruled(target).y).toBeLessThanOrEqual(PLOT_HEIGHT);
   });
 
   test("the starting weight is inside the plate even when no reading reaches it", () => {
     const { start } = plotOf(HISTORY);
 
-    expect(start.y).toBeGreaterThanOrEqual(0);
-    expect(start.y).toBeLessThanOrEqual(PLOT_HEIGHT);
+    expect(ruled(start).y).toBeGreaterThanOrEqual(0);
+    expect(ruled(start).y).toBeLessThanOrEqual(PLOT_HEIGHT);
   });
 
   test("the domain spans every reading as well as both references", () => {
@@ -407,8 +419,8 @@ describe("the drawing surface", () => {
     }
 
     for (const rule of gridlines) {
-      expect(rule.y).toBeGreaterThanOrEqual(0);
-      expect(rule.y).toBeLessThanOrEqual(PLOT_HEIGHT);
+      expect(ruled(rule).y).toBeGreaterThanOrEqual(0);
+      expect(ruled(rule).y).toBeLessThanOrEqual(PLOT_HEIGHT);
     }
   });
 
@@ -523,8 +535,8 @@ describe("the two shapes", () => {
     }
 
     for (const rule of plot.gridlines) {
-      expect(rule.y).toBeGreaterThanOrEqual(0);
-      expect(rule.y).toBeLessThanOrEqual(CHART_SHAPE_WIDE.plotHeight);
+      expect(ruled(rule).y).toBeGreaterThanOrEqual(0);
+      expect(ruled(rule).y).toBeLessThanOrEqual(CHART_SHAPE_WIDE.plotHeight);
     }
   });
 
@@ -568,5 +580,276 @@ describe("the two shapes", () => {
     if (plot === null) throw new Error("one reading drew nothing");
 
     expect(plot.latest.x).toBe(CHART_SHAPE_WIDE.viewWidth / 2);
+  });
+});
+
+/**
+ * FUEL-139: the ranges, the 7-day average, and when the line is the average.
+ *
+ * The history below is the case the ticket was written about — weigh-ins three
+ * times a week, which PRD § P5 says should be smoothed — run long enough that
+ * every window is worth offering.
+ */
+function everyOtherDay(from: string, count: number, startKg: number): Reading[] {
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date(`${from}T00:00:00Z`);
+
+    date.setUTCDate(date.getUTCDate() + index * 2);
+
+    // A falling line with a sawtooth on it: the noise a trailing average is
+    // for, and a raw path that therefore differs from the averaged one.
+    return {
+      date: date.toISOString().slice(0, 10),
+      weightKg: Math.round((startKg - index * 0.05 + (index % 2 === 0 ? 0.4 : -0.4)) * 100) / 100,
+    };
+  });
+}
+
+/** 400 days of every-other-day readings: 201 of them, spanning 400 days. */
+const LONG = everyOtherDay("2025-08-01", 201, 90);
+
+describe("the ranges on offer", () => {
+  test("an empty history offers only All", () => {
+    expect(availableRanges([])).toEqual(["All"]);
+  });
+
+  test("a history shorter than a month offers only All", () => {
+    expect(availableRanges(HISTORY)).toEqual(["All"]);
+  });
+
+  test("a window is offered once the history spans its days, and not a day before", () => {
+    const month = [
+      { date: "2026-08-01", weightKg: 80 },
+      { date: "2026-08-31", weightKg: 79 },
+    ];
+    const shortOfIt = [
+      { date: "2026-08-02", weightKg: 80 },
+      { date: "2026-08-31", weightKg: 79 },
+    ];
+
+    expect(availableRanges(month)).toEqual(["1M", "All"]);
+    expect(availableRanges(shortOfIt)).toEqual(["All"]);
+  });
+
+  test("a long history offers every window, shortest first, and All last", () => {
+    expect(availableRanges(LONG)).toEqual(["1M", "3M", "6M", "1Y", "All"]);
+  });
+
+  test("the order the rows arrive in does not matter", () => {
+    expect(availableRanges([...LONG].reverse())).toEqual(availableRanges(LONG));
+  });
+
+  test("the chart opens on three months once there are more than three", () => {
+    expect(defaultRange(LONG)).toBe("3M");
+    expect(defaultRange(everyOtherDay("2026-01-01", 47, 85))).toBe("3M");
+  });
+
+  test("and on everything until then", () => {
+    expect(defaultRange(everyOtherDay("2026-01-01", 46, 85))).toBe("All");
+    expect(defaultRange(HISTORY)).toBe("All");
+  });
+});
+
+describe("the window", () => {
+  test("All is every reading", () => {
+    expect(windowed(LONG, "All")).toEqual(LONG);
+  });
+
+  test("an empty history has an empty window", () => {
+    expect(windowed([], "1M")).toEqual([]);
+  });
+
+  test("a window keeps the readings less than its days before the newest", () => {
+    const readings = [
+      { date: "2026-08-01", weightKg: 81 },
+      { date: "2026-08-02", weightKg: 80.8 },
+      { date: "2026-08-31", weightKg: 80 },
+    ];
+
+    // 30 days before the 31st is the 1st, which is out; the 2nd is 29, in.
+    expect(windowed(readings, "1M").map((reading) => reading.date)).toEqual([
+      "2026-08-02",
+      "2026-08-31",
+    ]);
+  });
+
+  test("each window keeps more than the one before it", () => {
+    const counts = (["1M", "3M", "6M", "1Y", "All"] as const).map(
+      (range) => windowed(LONG, range).length,
+    );
+
+    expect(counts).toEqual([...counts].sort((a, b) => a - b));
+    expect(new Set(counts).size).toBe(counts.length);
+  });
+});
+
+describe("the 7-day average", () => {
+  test("a lone reading is its own average", () => {
+    expect(withAverages([{ date: "2026-08-01", weightKg: 80.3 }])).toEqual([
+      { date: "2026-08-01", weightKg: 80.3, averageKg: 80.3 },
+    ]);
+  });
+
+  test("averages every reading in the seven days ending on it, and none older", () => {
+    const averaged = withAverages([
+      { date: "2026-08-01", weightKg: 90 },
+      // Seven days after the first: the 1st is out of this one's week.
+      { date: "2026-08-08", weightKg: 80 },
+      { date: "2026-08-09", weightKg: 81 },
+      // Six days after the 8th: the 8th is in, the 1st long gone.
+      { date: "2026-08-14", weightKg: 82 },
+    ]);
+
+    expect(averaged.map((reading) => reading.averageKg)).toEqual([90, 80, 80.5, 81]);
+  });
+
+  test("never looks forward", () => {
+    const averaged = withAverages([
+      { date: "2026-08-01", weightKg: 80 },
+      { date: "2026-08-02", weightKg: 90 },
+    ]);
+
+    expect(at(averaged, 0).averageKg).toBe(80);
+  });
+
+  test("keeps the reading it averages, and the caller's order", () => {
+    const averaged = withAverages(HISTORY);
+
+    expect(averaged.map(({ date, weightKg }) => ({ date, weightKg }))).toEqual(HISTORY);
+  });
+});
+
+describe("the line, smoothed", () => {
+  const dense = everyOtherDay("2026-07-01", 20, 82);
+
+  test("a history denser than weekly draws its average", () => {
+    const plot = plotOf(dense);
+
+    expect(plot.smoothed).toBe(true);
+    expect(plot.path).toBe(plot.points.map((point) => `${point.x},${point.averageY}`).join(" "));
+  });
+
+  test("the average is a different line from the readings", () => {
+    const plot = plotOf(dense);
+
+    expect(plot.path).not.toBe(plot.points.map((point) => `${point.x},${point.y}`).join(" "));
+  });
+
+  test("exactly weekly is not smoothed — the line is the readings", () => {
+    const plot = plotOf(HISTORY);
+
+    expect(plot.smoothed).toBe(false);
+    expect(plot.path).toBe(plot.points.map((point) => `${point.x},${point.y}`).join(" "));
+  });
+
+  test("one reading is not smoothed", () => {
+    expect(plotOf([{ date: "2026-08-01", weightKg: 80 }]).smoothed).toBe(false);
+  });
+
+  test("two readings six days apart are smoothed; seven apart are not", () => {
+    expect(
+      plotOf([
+        { date: "2026-08-01", weightKg: 80 },
+        { date: "2026-08-07", weightKg: 79 },
+      ]).smoothed,
+    ).toBe(true);
+    expect(
+      plotOf([
+        { date: "2026-08-01", weightKg: 80 },
+        { date: "2026-08-08", weightKg: 79 },
+      ]).smoothed,
+    ).toBe(false);
+  });
+
+  test("the averaged line stays inside the plate", () => {
+    const plot = plotOf(dense);
+
+    for (const point of plot.points) {
+      expect(point.averageY).toBeGreaterThan(0);
+      expect(point.averageY).toBeLessThan(PLOT_HEIGHT);
+    }
+  });
+
+  test("the latest point carries its own average's coordinate", () => {
+    const plot = plotOf(dense);
+
+    expect(plot.latest.averageY).toBe(at(plot.points, plot.points.length - 1).averageY);
+  });
+});
+
+describe("a window's chart", () => {
+  const month = () => {
+    const plot = chartGeometry(LONG, REFERENCES, CHART_SHAPE, "1M");
+
+    if (plot === null) throw new Error("Expected a plot");
+
+    return plot;
+  };
+
+  test("draws only the window's readings, and says which window it is", () => {
+    const plot = month();
+
+    expect(plot.range).toBe("1M");
+    expect(plot.points.map((point) => point.date)).toEqual(
+      windowed(LONG, "1M").map((reading) => reading.date),
+    );
+  });
+
+  test("spreads the window across the plate, first reading to latest", () => {
+    const plot = month();
+
+    expect(at(plot.points, 0).x).toBe(10);
+    expect(plot.latest.x).toBe(VIEW_WIDTH - 10);
+  });
+
+  test("its first point averages the week before the window, not an empty one", () => {
+    const plot = month();
+    const first = at(plot.points, 0);
+    const full = withAverages(LONG).find((reading) => reading.date === first.date);
+
+    expect(first.averageKg).toBe(full?.averageKg);
+    expect(first.averageKg).not.toBe(first.weightKg);
+  });
+
+  test("scales to its own readings, leaving off references it does not reach", () => {
+    // LONG ends near 80.4 kg: a month of it is nowhere near 84.2 or 76.
+    const plot = month();
+
+    expect(plot.start).toBeNull();
+    expect(plot.target).toBeNull();
+    expect(plot.domain.highKg - plot.domain.lowKg).toBeLessThan(5);
+  });
+
+  test("draws a reference its axis reaches", () => {
+    const plot = chartGeometry(
+      LONG,
+      { startWeightKg: 95, targetWeightKg: 80 },
+      CHART_SHAPE,
+      "1M",
+    );
+
+    expect(plot?.target?.weightKg).toBe(80);
+    expect(plot?.start).toBeNull();
+  });
+
+  test("a reference exactly on the axis's edge is drawn", () => {
+    const plot = month();
+    const edge = chartGeometry(
+      LONG,
+      { startWeightKg: plot.domain.highKg, targetWeightKg: plot.domain.lowKg },
+      CHART_SHAPE,
+      "1M",
+    );
+
+    expect(edge?.start?.y).toBe(10);
+    expect(edge?.target?.y).toBe(PLOT_HEIGHT - 10);
+  });
+
+  test("All still holds both references however far away they are", () => {
+    const plot = plotOf(LONG, { startWeightKg: 120, targetWeightKg: 60 });
+
+    expect(ruled(plot.start).weightKg).toBe(120);
+    expect(ruled(plot.target).weightKg).toBe(60);
+    expect(plot.range).toBe("All");
   });
 });
