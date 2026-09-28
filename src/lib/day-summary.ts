@@ -452,6 +452,12 @@ export function notLogged(
  * item the bar passed always has a row and never reaches the section. An item
  * logged from the section was passed by the clock, and the clock is still past
  * it.
+ *
+ * `minutesOfDay` is the render's, not the moment of the tap, so on a page left
+ * open across a window boundary the floor is stale by that much. The server
+ * decides on its own clock, and `refresh()` settles any difference within the
+ * round trip. A client clock would fix that and would be a second authority on
+ * what time it is, which this screen has deliberately never had.
  */
 export function undoRetreats(
   timeline: readonly ScheduledItem[],
