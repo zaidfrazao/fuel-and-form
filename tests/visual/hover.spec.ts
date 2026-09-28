@@ -94,7 +94,25 @@ const openMealPickerAndChoose = async (page: Page) => {
  * Nothing is deleted: the row's control opens this and the button inside it is
  * what removes anything, which is the two-step `weigh-ins.tsx` describes.
  */
+/**
+ * Puts the newest weigh-in into its edit state — FUEL-139, which moved Delete
+ * off every row and onto the one the form is addressing. At rest that is
+ * today's row, and the frozen demo day has no reading, so no row offers one
+ * until a row is tapped. Tapping only fills the form: nothing is written, so
+ * the shared demo fixture is left as every other project will photograph it.
+ */
+const editNewestWeighIn = async (page: Page) => {
+  await page
+    .getByRole("list", { name: "Weigh-ins" })
+    .getByRole("listitem")
+    .first()
+    .getByRole("button", { name: /^Edit/ })
+    .click();
+  await expect(page.getByRole("button", { name: /^Delete the weigh-in/ })).toBeVisible();
+};
+
 const openDeleteConfirmation = async (page: Page) => {
+  await editNewestWeighIn(page);
   await page.getByRole("button", { name: /^Delete the weigh-in/ }).first().click();
   await expect(page.getByRole("dialog")).toBeVisible();
 };
@@ -155,6 +173,7 @@ const SPECIMENS: readonly Specimen[] = [
   {
     name: "button-destructive",
     path: "/weight",
+    prepare: editNewestWeighIn,
     locate: (page) => variant(page, "destructive"),
   },
   {
@@ -166,9 +185,11 @@ const SPECIMENS: readonly Specimen[] = [
     name: "list-row",
     path: "/weight",
     /*
-     * The edit control, not the `<li>`. The row holds two targets — this and
-     * Delete beside it — and `weigh-ins.tsx` records why each grounds only what
-     * it activates rather than the pair grounding together.
+     * The edit control, not the `<li>`. The row being edited holds two
+     * targets — this and Delete beside it — and `weigh-ins.tsx` records why
+     * each grounds only what it activates rather than the pair grounding
+     * together. At rest, since FUEL-139, no row here has a Delete, so this is
+     * the row's full width.
      */
     locate: (page) =>
       page
