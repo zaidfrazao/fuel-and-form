@@ -189,7 +189,9 @@ Circuit A/B **alternate across sessions**, not by fixed weekday — Mon=A, Wed=B
 
 **Acceptance Criteria:**
 - [ ] Log a weigh-in with date, weight, and optional note; edit or delete any past entry
-- [ ] Line chart renders the full history, legible at 375px width
+- [ ] Line chart renders the full history under its `All` range, legible at 375px width; shorter windows (1M · 3M · 6M · 1Y) are offered once the history exceeds them, and the chart opens on 3M past three months (FUEL-139)
+- [ ] When weigh-ins are more frequent than weekly, the line is a 7-day trailing average and the readings remain visible beneath it (FUEL-139)
+- [ ] Any point's date and value can be read by touch, pointer and keyboard (FUEL-139)
 - [ ] Target line at the goal weight and starting weight are both visible on the chart
 - [ ] Progress displayed as kg lost, kg remaining, and % of the way to target
 - [ ] Current rate (kg/week over the trailing 4 weeks) shown against the configured goal pace
