@@ -297,14 +297,18 @@ function GridButton({
        * Protein beside the kcal — FUEL-138. PRD § P4 calls it "the binding
        * constraint", and until this line it appeared on the plan nowhere finer
        * than a day. It wraps under the kcal in a narrow column rather than
-       * truncating, the trade the rest of the cell already makes.
+       * truncating, the trade the rest of the cell already makes — and it
+       * wraps only at the dot. Each figure is `nowrap` with its unit, because
+       * measured at 1272 a free wrap left "455 KCAL · 34.5" with its "G" alone
+       * on the next line, and at 768 every cell broke before the dot.
        */}
       {cell.meal && (
         <span
           aria-hidden="true"
           className={`text-micro uppercase text-text-secondary tabular-nums ${HOVER_LIFT}`}
         >
-          {cell.meal.kcal} kcal · {figure(cell.meal.proteinG)} g
+          <span className="whitespace-nowrap">{cell.meal.kcal} kcal</span>{" "}
+          <span className="whitespace-nowrap">· {figure(cell.meal.proteinG)} g</span>
         </span>
       )}
     </button>
@@ -646,7 +650,7 @@ function WeekTable({ week, figures, slots, onOpen }: ShapeProps) {
      *
      * So the grid alone bleeds back out, exactly as the phone's full-bleed
      * scroller does — this is the same device at the other end of the scale.
-     * The header, the week nav and the totals keep the inset and stay aligned
+     * The header, the week nav and the average keep the inset and stay aligned
      * with the notice bands above them, which is what § Desktop requires of
      * them; only the table spans its full column. That is what makes "1272 is a
      * sum rather than a round number" true at the pixel instead of nearly.

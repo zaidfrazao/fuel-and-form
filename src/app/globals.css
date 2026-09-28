@@ -234,7 +234,7 @@
      bands take the same padding so their text lands on the same x as the content
      under them. Those are border-box columns, so the padding sits INSIDE the
      640 and the column a sentence occupies is 584. § Desktop chose that
-     deliberately and says so — "`/plan`'s heading, week nav and totals keep the
+     deliberately and says so — "`/plan`'s heading, week nav and average keep the
      inset and stay on the measure's x with the notice bands above them" — and
      `/plan`'s grid is the single element exempted, because it is "the only
      element on the screen that cannot be inset and still be right" (FUEL-71).
