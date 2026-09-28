@@ -1,4 +1,10 @@
-import { type CalendarDate, type DayOfWeek, dayOfWeek } from "./date";
+import {
+  type CalendarDate,
+  type DayOfWeek,
+  dayOfWeek,
+  parseTimeOfDay,
+  type TimeOfDay,
+} from "./date";
 import type { MealSlot } from "./db/schema";
 import { type PlanSource, SLOT_ORDER } from "./resolve-plan";
 import { weekdayName } from "./template-plan";
@@ -133,4 +139,45 @@ export function weekGrid<M>(
       }),
     };
   });
+}
+
+/**
+ * The slots in the order the day eats them — FUEL-138.
+ *
+ * `SLOT_ORDER` is the order a slot is NAMED in, and it puts `extra` last
+ * because it was the last slot added. `/` has never used it for the day: it
+ * orders the timeline by the clock, so the 06:45 coffee comes first, and `/plan`
+ * drawing the same day with the coffee after dinner was two answers to "what
+ * does my day look like". This takes `/`'s answer.
+ *
+ * The argument is `scheduleFor(profile).slotTimes` — the stored times already
+ * merged over the defaults — so the two screens read one set of times through
+ * one merge rather than this module re-deciding what a missing time means.
+ *
+ * The rows are one order for the whole week, because a slot's time is a
+ * profile setting rather than a per-date one: the grid's rows line up across
+ * seven days, and they can because every day eats in the same order.
+ *
+ * A slot with no time is `/`'s "anytime", and it goes after the timed ones in
+ * `SLOT_ORDER`'s order, as the Anytime list sits under the timeline. So does a
+ * time that will not parse: the stored column is free-shaped JSON, and a typo
+ * in it moving one row is a better answer than the plan failing to render.
+ * Ties keep `SLOT_ORDER`'s order, because `sort` is stable.
+ */
+export function slotOrder(
+  slotTimes: Readonly<Partial<Record<MealSlot, TimeOfDay>>>,
+): readonly MealSlot[] {
+  const minutes = (slot: MealSlot): number => {
+    const time = slotTimes[slot];
+
+    if (time === undefined) return Number.POSITIVE_INFINITY;
+
+    try {
+      return parseTimeOfDay(time);
+    } catch {
+      return Number.POSITIVE_INFINITY;
+    }
+  };
+
+  return [...SLOT_ORDER].sort((a, b) => minutes(a) - minutes(b));
 }

@@ -162,15 +162,19 @@ describe("the table", () => {
     // Seven day columns plus the pinned corner.
     expect(shape("wide").getAllByRole("columnheader")).toHaveLength(8);
 
-    // Five slot rows, whatever any one day plans.
+    // Five slot rows, whatever any one day plans — and the foot's totals row
+    // under them (FUEL-138).
     expect(
       shape("wide")
         .getAllByRole("rowheader")
         .map((th) => th.textContent),
-    ).toEqual(["Breakfast", "Lunch", "Snack", "Dinner", "Extra"]);
+    ).toEqual(["Breakfast", "Lunch", "Snack", "Dinner", "Extra", "Total"]);
 
     // Thirty-five cells, always — a day that plans one meal still has five.
-    expect(shape("wide").getAllByRole("cell")).toHaveLength(35);
+    // Counted in the body: the foot's seven totals are cells too.
+    const body = document.querySelector<HTMLElement>('[data-shape="wide"] tbody')!;
+
+    expect(within(body).getAllByRole("cell")).toHaveLength(35);
   });
 
   test("associates each cell with its day and slot for a screen reader", () => {
@@ -591,8 +595,8 @@ describe("the one umber mark", () => {
       ).toHaveLength(0);
     }
 
-    // And nothing outside either table takes one — the totals block below the
-    // grid is the one most likely to reach for it.
+    // And nothing outside either table takes one — the jump strip, which marks
+    // today too, is the one most likely to reach for it (FUEL-138).
     expect(container.querySelectorAll('[class*="text-accent"]')).toHaveLength(2);
   });
 
@@ -843,27 +847,51 @@ describe("repeat and revert", () => {
 });
 
 /**
- * The daily totals and the weekly average — FUEL-33.
+ * The daily totals and the weekly average — FUEL-33, moved by FUEL-138.
  *
  * The arithmetic is `lib/week-totals.test.ts`'s. What is asserted here is the
- * part only a rendered screen decides: that the figures are wired to the
- * OPTIMISTIC week rather than the props, so a swap moves them on the tap; that
- * a day with no plan reads as absent rather than as zero; and that the block
- * adds no second umber mark — which the count in § "the one umber mark" above
- * already enforces, from the other side.
+ * part only a rendered screen decides: that each day's figures sit WITH the day
+ * in both shapes — its heading stacked, its column's foot wide — rather than in
+ * a block at the bottom; that they are wired to the OPTIMISTIC week, so a swap
+ * moves them on the tap; that a day with no plan reads as absent rather than as
+ * zero; and that the average says what it is an average of.
  */
 describe("what the week comes to", () => {
-  /** The item for one label. `dt` takes no accessible name, so this is by text. */
-  const totalFor = (label: string) =>
-    screen.getByText(label, { selector: "dt" }).parentElement as HTMLElement;
+  /** A day's figures in the stacked shape: inside its own heading. */
+  const heading = (date: string) => document.getElementById(`day-${date}`)!;
 
-  test("every day carries its own kcal and protein", () => {
+  /** A day's figures in the wide shape: the foot cell under its column. */
+  const foot = (date: string) => {
+    const tfoot = document.querySelector<HTMLElement>('[data-shape="wide"] tfoot')!;
+
+    return within(tfoot).getAllByRole("cell")[WEEK.indexOf(date)]!;
+  };
+
+  const average = () => screen.getByRole("region", { name: "Weekly average" });
+
+  test("every day carries its own kcal and protein, in its heading and under its column", () => {
     grid();
 
     // Chilli for dinner, every day: 700 kcal and 45 g, seven times.
-    expect(totalFor("Mon 9 Mar").textContent).toContain("700 kcal");
-    expect(totalFor("Mon 9 Mar").textContent).toContain("45 g");
-    expect(totalFor("Sun 15 Mar").textContent).toContain("700 kcal");
+    for (const date of [WEEK[0]!, WEEK[6]!]) {
+      expect(heading(date).textContent).toContain("700 kcal");
+      expect(heading(date).textContent).toContain("45 g");
+      expect(foot(date).textContent).toContain("700 kcal");
+      expect(foot(date).textContent).toContain("45 g");
+    }
+
+    // The heading is the stacked shape's own, so the figure is inside the day's
+    // rowgroup rather than anywhere on the page.
+    expect(shape("stacked").getAllByRole("rowheader")).toContain(heading(WEEK[0]!));
+  });
+
+  test("the foot is the wide table's own, and its row says what it is", () => {
+    grid();
+
+    const tfoot = document.querySelector('[data-shape="wide"] tfoot')!;
+
+    expect(within(tfoot as HTMLElement).getByRole("rowheader").textContent).toBe("Total");
+    expect(within(tfoot as HTMLElement).getAllByRole("cell")).toHaveLength(7);
   });
 
   test("and the week states its average, and what it averaged over", () => {
@@ -871,24 +899,35 @@ describe("what the week comes to", () => {
 
     // The divisor is shown rather than implied — a figure the reader can check
     // is the difference between an average and an assertion.
-    expect(totalFor("Average").textContent).toContain("700 kcal");
-    expect(totalFor("Average").textContent).toContain("7 days");
+    expect(average().textContent).toContain("700 kcal");
+    expect(average().textContent).toContain("Of the 7 fully planned days.");
+    expect(average().textContent).not.toContain("left out");
   });
 
-  test("the divisor is joined in words, not in punctuation", () => {
+  test("the average sits above the grid, not after it", () => {
     grid();
 
-    // The dot separates the two figures for the eye. A screen reader announces
-    // it as "dot", which is noise in the one place this block is being explicit
-    // — so it is hidden and the join is said instead.
-    // Both decorative glyphs in the item — SlashMeta's leading "/" and this
-    // separator — are hidden, so the dot is looked up by its own text.
-    const hidden = [...totalFor("Average").querySelectorAll('[aria-hidden="true"]')].map(
-      (node) => node.textContent?.trim(),
-    );
+    // FUEL-138: at 375 the end of this screen is ~3,000px down, and a summary
+    // down there is one nobody reads.
+    const stacked = document.querySelector('[data-shape="stacked"]')!;
 
-    expect(hidden).toContain("·");
-    expect(totalFor("Average").textContent).toContain("over 7 days");
+    expect(
+      average().compareDocumentPosition(stacked) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  test("the figures are joined in words, not in punctuation", () => {
+    grid();
+
+    // The dot separates figures for the eye. A screen reader announces it as
+    // "dot", which is noise — so it is hidden and a comma said instead.
+    for (const node of [average(), heading(WEEK[0]!)]) {
+      const hidden = [...node.querySelectorAll('[aria-hidden="true"]')].map((each) =>
+        each.textContent?.trim(),
+      );
+
+      expect(hidden).toContain("·");
+    }
   });
 
   test("a swap moves the day and the average on the tap, not on the reload", async () => {
@@ -913,32 +952,160 @@ describe("what the week comes to", () => {
     // Awaited, not read synchronously: the optimistic value lands inside a
     // transition, and a `getBy` here passes uninstrumented and flakes under
     // coverage — the same race `findCell` exists for.
-    // Waited on the TOTAL rather than on the text "560 kcal" anywhere, which
-    // now appears in the cell as well and in both shapes of it — three matches
-    // for a figure this test cares about in exactly one place.
-    await waitFor(() =>
-      expect(totalFor("Tue 10 Mar").textContent).toContain("560 kcal"),
-    );
-    expect(totalFor("Average").textContent).toContain("680 kcal");
+    await waitFor(() => expect(foot(TUE).textContent).toContain("560 kcal"));
+    expect(heading(TUE).textContent).toContain("560 kcal");
+    expect(average().textContent).toContain("680 kcal");
 
     release();
   });
 
-  test("a day with nothing planned reads as absent, not as zero", () => {
+  test("a day with nothing planned reads as absent, not as zero, and is named as left out", () => {
     // § Materials, in figures rather than in a hatch: 0 kcal is a claim about
     // the day, and the true state of an unplanned one is that there is none.
     grid(template.map((day) => (day.date === "2026-03-15" ? { ...day, meals: [] } : day)));
 
-    expect(totalFor("Sun 15 Mar").textContent).toContain("—");
-    expect(totalFor("Sun 15 Mar").textContent).not.toContain("0 kcal");
+    for (const node of [heading("2026-03-15"), foot("2026-03-15")]) {
+      expect(node.textContent).toContain("—");
+      expect(node.textContent).not.toContain("0 kcal");
+    }
+
     // And it leaves the average alone rather than dragging it toward zero.
-    expect(totalFor("Average").textContent).toContain("700 kcal");
-    expect(totalFor("Average").textContent).toContain("6 days");
+    expect(average().textContent).toContain("700 kcal");
+    expect(average().textContent).toContain("Of the 6 fully planned days.");
+    expect(average().textContent).toContain("Sun 15 Mar is left out");
+  });
+
+  test("a half-planned day is flagged where it is, and left out of the average", () => {
+    // FUEL-138's weekend: every other day fills breakfast and dinner, Saturday
+    // and Sunday fill only breakfast. Averaged in, they would pull the week
+    // down by a dinner nobody had planned yet.
+    const breakfast = { slot: "breakfast" as const, meal: OATS, source: "template" as const, entryId: "b" };
+    const days = template.map((day) =>
+      day.date >= "2026-03-14"
+        ? { ...day, meals: [breakfast] }
+        : { ...day, meals: [breakfast, ...day.meals] },
+    );
+
+    grid(days, TUE, days);
+
+    expect(heading("2026-03-14").textContent).toContain("1 not planned");
+    expect(foot("2026-03-15").textContent).toContain("1 not planned");
+    expect(heading(TUE).textContent).not.toContain("not planned");
+
+    // Oats and chilli, 1,100 kcal, over the five full days.
+    expect(average().textContent).toContain("1,100 kcal");
+    expect(average().textContent).toContain("Of the 5 fully planned days.");
+    expect(average().textContent).toContain("Sat 14 Mar and Sun 15 Mar are left out");
+  });
+
+  test("a week with no complete day says so rather than averaging the fragments", () => {
+    const days = template.map((day) =>
+      day.date === TUE
+        ? {
+            ...day,
+            meals: [{ slot: "breakfast" as const, meal: OATS, source: "template" as const, entryId: "b" }],
+          }
+        : day,
+    );
+
+    // Tuesday plans breakfast only, and every other day dinner only: the week
+    // uses two slots and no day fills both.
+    grid(days, TUE, days);
+
+    expect(average().textContent).toContain("no average");
+    expect(average().textContent).not.toContain("kcal");
   });
 
   test("a week before the program starts averages nothing at all", () => {
     grid(WEEK.map((date) => ({ date, meals: [] })));
 
-    expect(screen.queryByText("Average", { selector: "dt" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Weekly average" })).toBeNull();
+    // Rendered, and empty — so the absence above is the average's, not the
+    // grid's failing to draw.
+    expect(shape("wide").getAllByRole("cell")).toHaveLength(35 + 7);
+  });
+});
+
+describe("the day strip — FUEL-138", () => {
+  const strip = () => screen.getByRole("navigation", { name: "Jump to a day" });
+
+  test("links every day to its heading in the stacked shape", () => {
+    grid();
+
+    const links = within(strip()).getAllByRole("link");
+
+    expect(links).toHaveLength(7);
+
+    for (const [index, link] of links.entries()) {
+      const target = document.getElementById(link.getAttribute("href")!.slice(1));
+
+      // The anchor exists, is the right day, and is in the shape the strip is
+      // drawn with — never in the wide table, which is hidden while it shows.
+      expect(target?.textContent).toContain(WEEK[index]!);
+      expect(shape("stacked").getAllByRole("rowheader")).toContain(target);
+    }
+  });
+
+  test("is drawn with the stacked shape only, and sticks", () => {
+    grid();
+
+    expect(strip().className).toContain("md:hidden");
+    expect(strip().className).toContain("sticky");
+    expect(strip().className).toContain("top-0");
+  });
+
+  test("marks today in words and weight, and keeps no selection", () => {
+    grid();
+
+    const today = within(strip()).getByRole("link", { name: "Tuesday, today" });
+
+    expect(today.className).toContain("font-bold");
+    expect(today.className).not.toContain("accent");
+    // Not a tab bar: no link claims to be the current one.
+    for (const link of within(strip()).getAllByRole("link")) {
+      expect(link.getAttribute("aria-current")).toBeNull();
+    }
+  });
+
+  test("a heading clears the strip when jumped to", () => {
+    grid();
+
+    expect(document.getElementById(`day-${TUE}`)?.className).toContain("scroll-mt-");
+  });
+});
+
+describe("the slot rows — FUEL-138", () => {
+  test("follow the order they are handed, in both shapes", () => {
+    render(
+      <WeekGrid
+        today={TUE}
+        days={template}
+        templateDays={template}
+        meals={LIBRARY}
+        target={TARGET}
+        slots={["extra", "breakfast", "snack", "lunch", "dinner"]}
+      />,
+    );
+
+    expect(
+      shape("wide")
+        .getAllByRole("rowheader")
+        .map((th) => th.textContent),
+    ).toEqual(["Extra", "Breakfast", "Snack", "Lunch", "Dinner", "Total"]);
+
+    // Stacked: the first slot row under Monday's heading.
+    const monday = document.getElementById(`day-${WEEK[0]}`)!.closest("tbody")!;
+    const slots = within(monday)
+      .getAllByRole("rowheader")
+      .slice(1)
+      .map((th) => th.textContent);
+
+    expect(slots).toEqual(["Extra", "Breakfast", "Snack", "Lunch", "Dinner"]);
+  });
+
+  test("each cell carries its protein beside its kcal", () => {
+    grid();
+
+    expect(cell(/Mon 9 Mar dinner/).textContent).toContain("700 kcal · 45 g");
   });
 });

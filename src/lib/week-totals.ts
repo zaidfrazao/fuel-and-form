@@ -28,7 +28,7 @@ import type { GridColumn } from "./week-grid";
  * `weekGrid` was handed — so the P4 criterion is satisfied through them rather
  * than around them, and there is still no cached sum anywhere to invalidate.
  *
- * ## The divisor is planned days, not seven
+ * ## The divisor is complete days, not seven — and not planned days either
  *
  * A week can honestly contain days with nothing on them: `resolveSlot` returns
  * nothing at all for a date before `programStartDate`, and a template need not
@@ -36,10 +36,23 @@ import type { GridColumn } from "./week-grid";
  * not exist — three planned days of 2,000 kcal average to 857, which is not
  * what any of them looked like and not a figure to steer a week by.
  *
- * So the divisor is the number of days with something planned, and
- * `plannedDays` is returned alongside the average for the view to show. A
- * divisor the reader can see is a figure they can check; a hidden one reads as
- * a bug the first time a partial week makes it look wrong.
+ * FUEL-33 fixed that by dividing by the days with ANYTHING planned, and
+ * FUEL-138 found the same fault one step in. The demo's weekend plans
+ * breakfast and a coffee and leaves lunch, snack and dinner open, so each
+ * totals 725 kcal, and averaging those in put the week at 1,365 against a
+ * 1,780 target — a gap made of slots nobody had filled yet rather than of the
+ * plan falling short. A half-planned day is not a small day; it is a day the
+ * figures cannot speak for.
+ *
+ * So the divisor is the **complete** days: those that fill every slot the week
+ * uses. "In use" is read off the week itself — a slot planned on any of the
+ * seven days — rather than from a list of slots someone decided are required,
+ * because a reader who never plans a snack has not left seven snacks
+ * unplanned, and a fixed list would drop every one of their days. The days
+ * left out are returned by date, so the view can name them rather than let the
+ * divisor speak for itself: a basis the reader can see is a figure they can
+ * check, and a hidden one reads as a bug the first time a partial week makes
+ * it look wrong.
  *
  * ## Pure, and generic over the meal
  *
@@ -58,23 +71,31 @@ export type DayFigures = {
    *
    * Not `totals.kcal > 0`: a day whose only meal is untracked totals zero and
    * is still a planned day, and a zero-calorie plan is a plan. This is what
-   * decides the average's divisor, and what separates "nothing here" from "we
-   * cannot say" in the view.
+   * separates "nothing here" from "we cannot say" in the view, and a day must
+   * be planned to be averaged at all.
    */
   planned: boolean;
+  /**
+   * How many of the week's in-use slots this day leaves empty. Zero is a
+   * complete day, and only a complete day is averaged. An unplanned day counts
+   * every in-use slot — it is the same fact, at its largest.
+   */
+  unplannedSlots: number;
 };
 
-/** The week, day by day, with the average of the days that have a plan. */
+/** The week, day by day, with the average of its complete days. */
 export type WeekFigures = {
   days: readonly DayFigures[];
-  /** `null` when no day in the week has a plan — there is no mean of nothing. */
+  /** `null` when no day in the week is complete — there is no mean of nothing. */
   average: MacroTotals | null;
   /** The average's divisor, for the view to state rather than imply. */
-  plannedDays: number;
+  completeDays: number;
+  /** The days the average leaves out, in week order, for the view to name. */
+  leftOut: readonly CalendarDate[];
 };
 
 /**
- * Total each column, then average the ones that hold a plan.
+ * Total each column, then average the ones that fill every slot in use.
  *
  * The days come back in the order they arrived, which `weekGrid` has already
  * left Monday-first. Ordering them again here would be a second copy of a
@@ -83,6 +104,15 @@ export type WeekFigures = {
 export function weekTotals<M extends MacroBearing>(
   columns: readonly GridColumn<M>[],
 ): WeekFigures {
+  // The slots the week uses: planned on at least one day. A set of slot names
+  // rather than a count, so two days that each fill a different three slots
+  // are both short of the week's four rather than both "three of three".
+  const inUse = new Set(
+    columns.flatMap((column) =>
+      column.cells.flatMap((cell) => (cell.meal ? [cell.slot] : [])),
+    ),
+  );
+
   const days = columns.map((column) => {
     // `flatMap` over a filter-then-map so the null cells drop and the type
     // narrows in one pass — `summariseDay` wants meals, not maybes.
@@ -90,18 +120,25 @@ export function weekTotals<M extends MacroBearing>(
       cell.meal ? [{ slot: cell.slot, meal: cell.meal }] : [],
     );
 
+    const filled = new Set(planned.map((entry) => entry.slot));
+
     return {
       date: column.date,
       totals: summariseDay(planned),
       planned: planned.length > 0,
+      unplannedSlots: [...inUse].filter((slot) => !filled.has(slot)).length,
     };
   });
 
-  const counted = days.filter((day) => day.planned);
+  // `planned` as well as zero unplanned slots: in a week with nothing planned
+  // at all, no slot is in use, and every empty day would otherwise be
+  // vacuously complete and averaged as a day of nothing.
+  const counted = days.filter((day) => day.planned && day.unplannedSlots === 0);
 
   return {
     days,
-    plannedDays: counted.length,
+    completeDays: counted.length,
+    leftOut: days.filter((day) => !counted.includes(day)).map((day) => day.date),
     average: counted.length === 0 ? null : mean(counted),
   };
 }

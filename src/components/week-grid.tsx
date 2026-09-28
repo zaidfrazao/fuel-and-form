@@ -5,15 +5,16 @@ import { type CSSProperties, startTransition, useOptimistic, useState } from "re
 import { repeatFromDate, revertOnDate, swapOnDate } from "@/app/actions/plan";
 import { SwapSheet, type SwappableMeal } from "@/components/swap-sheet";
 import { Button } from "@/components/ui/button";
-import { WeekTotals } from "@/components/week-totals";
+import { DayFigure, WeekAverage } from "@/components/week-totals";
 import { addDays, type CalendarDate } from "@/lib/date";
 import type { MealSlot } from "@/lib/db/schema";
+import { figure } from "@/lib/format";
 import type { MacroTarget } from "@/lib/macros";
 import { dayLabel, slotLabel } from "@/lib/now-display";
-import { HOVER_GROUND, HOVER_LIFT, HOVER_RING, POINTER } from "@/lib/pointer";
+import { FOCUS_RING, HOVER_GROUND, HOVER_LIFT, HOVER_RING, POINTER } from "@/lib/pointer";
 import { SLOT_ORDER } from "@/lib/resolve-plan";
 import { type GridCell, type GridColumn, type PlannedDay, weekGrid } from "@/lib/week-grid";
-import { weekTotals } from "@/lib/week-totals";
+import { type WeekFigures, weekTotals } from "@/lib/week-totals";
 
 /**
  * The weekly grid — PRD § P2's "7-day × slot table showing the resolved plan",
@@ -292,12 +293,18 @@ function GridButton({
         {cell.meal ? cell.meal.name : "Not planned"}
       </span>
 
+      {/*
+       * Protein beside the kcal — FUEL-138. PRD § P4 calls it "the binding
+       * constraint", and until this line it appeared on the plan nowhere finer
+       * than a day. It wraps under the kcal in a narrow column rather than
+       * truncating, the trade the rest of the cell already makes.
+       */}
       {cell.meal && (
         <span
           aria-hidden="true"
           className={`text-micro uppercase text-text-secondary tabular-nums ${HOVER_LIFT}`}
         >
-          {cell.meal.kcal} kcal
+          {cell.meal.kcal} kcal · {figure(cell.meal.proteinG)} g
         </span>
       )}
     </button>
@@ -309,6 +316,69 @@ type WeekColumns = readonly GridColumn<GridMeal>[];
 
 /** Opening the sheet — the one thing a cell does, in either shape. */
 type OpenCell = (cell: Cell) => void;
+
+/** What both shapes are handed: the week, its figures, the row order, the tap. */
+type ShapeProps = {
+  week: WeekColumns;
+  figures: WeekFigures;
+  slots: readonly MealSlot[];
+  onOpen: OpenCell;
+};
+
+/** The anchor a day heading carries and the jump strip links to. */
+const dayAnchor = (date: CalendarDate) => `day-${date}`;
+
+/**
+ * The jump strip — FUEL-138, below 768px only.
+ *
+ * Stacked, the week is ~3,000px and Friday is ~1,700px down, with nothing but
+ * a thumb to get there. This is seven links to the seven day headings, sticky
+ * at the top of the viewport so any day is one tap from anywhere on the page.
+ *
+ * ## Links, not tabs
+ *
+ * § Progressive Disclosure bans tabs within a screen, and this is the nearest
+ * thing to one the screen could grow, so what makes it not one is stated. A
+ * tab SELECTS: it shows one panel and hides the others, and its active state
+ * says which. These move the page and hide nothing — every day stays on the
+ * page, and the strip keeps no selection. There is deliberately no scroll-spy
+ * highlight: a strip that lit the day in view would be a tab bar drawn over an
+ * anchor list, and it would read as one.
+ *
+ * Today is marked by weight and in words, not in umber — the one accent is
+ * today's day heading below, and § The Four Rules allows one per screen.
+ *
+ * Only the stacked shape carries the anchors, and the strip is `md:hidden`
+ * with it, so no link ever points at a heading in the shape that is not drawn.
+ */
+function DayStrip({ week }: { week: WeekColumns }) {
+  return (
+    <nav
+      aria-label="Jump to a day"
+      className="sticky top-0 z-10 -mx-[22px] border-b border-border bg-background px-[22px] md:hidden"
+    >
+      <ul className="grid grid-cols-7">
+        {week.map((day) => (
+          <li key={day.date}>
+            <a
+              href={`#${dayAnchor(day.date)}`}
+              className={`flex min-h-11 flex-col items-center justify-center text-micro uppercase tabular-nums ${POINTER} ${HOVER_GROUND} ${FOCUS_RING} ${
+                day.isToday ? "font-bold text-text-primary" : "text-text-secondary"
+              }`}
+            >
+              <span aria-hidden="true">{day.name.slice(0, 3)}</span>
+              <span aria-hidden="true">{Number(day.date.slice(8))}</span>
+              <span className="sr-only">
+                {day.name}
+                {day.isToday ? ", today" : ""}
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
 
 /** The caption, written once because both tables are the same table. */
 const CAPTION = "The week’s plan, by day and meal slot. Swapped meals are marked.";
@@ -364,7 +434,7 @@ function DayName({ day, marked }: { day: GridColumn<GridMeal>; marked: boolean }
  * and the layout would shift from day to day. Fixed, the slot column is 72px on
  * every row of every section, and the meal column takes the rest.
  */
-function WeekStack({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
+function WeekStack({ week, figures, slots, onOpen }: ShapeProps) {
   return (
     <table
       // Both shapes carry the same caption, because a reader is only ever
@@ -410,26 +480,43 @@ function WeekStack({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
         <col />
       </colgroup>
 
-      {week.map((day) => (
+      {week.map((day, index) => (
         // One `tbody` per day. The grouping is the point: it is what gives the
         // day heading a `rowgroup` to scope over, so the five rows beneath it
         // are its rows rather than merely the next five.
         <tbody key={day.date}>
           <tr>
+            {/*
+             * The day's figures ride in its heading — FUEL-138. They were a
+             * block at the foot of the page, ~2,500px from Monday; here they
+             * are the first thing under the day's name. Inside the `th` rather
+             * than a cell beside it, because the heading spans both columns and
+             * a second cell would have nowhere to go.
+             *
+             * `scroll-mt` clears the sticky strip, so a jump lands the heading
+             * under it rather than behind it. 56px is the strip's 44px row, its
+             * hairline, and some air.
+             */}
             <th
+              id={dayAnchor(day.date)}
               scope="rowgroup"
               colSpan={2}
-              className={`border-b pt-5 pb-1.5 text-micro uppercase ${
+              className={`scroll-mt-14 border-b pt-5 pb-1.5 text-micro uppercase ${
                 day.isToday
                   ? "border-accent text-accent"
                   : "border-text-tertiary text-text-secondary"
               }`}
             >
-              <DayName day={day} marked />
+              <span className="flex flex-wrap items-baseline justify-between gap-x-3">
+                <DayName day={day} marked />
+                {figures.days[index] && (
+                  <DayFigure day={figures.days[index]} inline className="normal-case" />
+                )}
+              </span>
             </th>
           </tr>
 
-          {SLOT_ORDER.map((slot) => (
+          {slots.map((slot) => (
             <tr key={slot}>
               <th
                 scope="row"
@@ -509,7 +596,7 @@ function WeekStack({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
  *     tiles only — the one fill permitted outside sheets", the other being
  *     `Tile`). The brand permission and the mechanic want the same pixel.
  */
-function WeekTable({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
+function WeekTable({ week, figures, slots, onOpen }: ShapeProps) {
   return (
     /*
      * `relative` is load-bearing and was missing until FUEL-65. An `overflow`
@@ -651,7 +738,7 @@ function WeekTable({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
         </thead>
 
         <tbody>
-          {SLOT_ORDER.map((slot) => (
+          {slots.map((slot) => (
             <tr key={slot}>
               <th
                 scope="row"
@@ -675,6 +762,30 @@ function WeekTable({ week, onOpen }: { week: WeekColumns; onOpen: OpenCell }) {
             </tr>
           ))}
         </tbody>
+
+        {/*
+         * Each day's total, under its own column — FUEL-138. They were a
+         * three-column grid under this table, so Monday's figure sat under
+         * nothing in particular. A `<tfoot>` is the table's own place for it:
+         * the row header says what the row is, and `scope="col"` above already
+         * says whose column each figure is in.
+         */}
+        <tfoot>
+          <tr>
+            <th
+              scope="row"
+              className="sticky left-0 z-10 bg-surface px-2.5 py-2 align-top text-micro font-semibold uppercase break-words text-text-secondary"
+            >
+              Total
+            </th>
+
+            {week.map((day, index) => (
+              <td key={day.date} className="border-l border-border px-2.5 py-2 align-top">
+                {figures.days[index] && <DayFigure day={figures.days[index]} />}
+              </td>
+            ))}
+          </tr>
+        </tfoot>
       </table>
     </div>
   );
@@ -686,6 +797,7 @@ export function WeekGrid({
   templateDays,
   meals,
   target,
+  slots = SLOT_ORDER,
 }: {
   /** Today in the profile's timezone — the one umber column. */
   today: CalendarDate;
@@ -697,6 +809,11 @@ export function WeekGrid({
   meals: readonly GridMeal[];
   /** The four target figures, so the sheet can preview a signed delta. */
   target: MacroTarget;
+  /**
+   * The rows, in the order the day eats them — `slotOrder` over the profile's
+   * times, FUEL-138. Defaults to `SLOT_ORDER` for a caller with no profile.
+   */
+  slots?: readonly MealSlot[];
 }) {
   const [pending, move] = useOptimistic<Pending, Attempt>(new Map(), applyMove);
   const [failure, setFailure] = useState<Attempt | null>(null);
@@ -802,8 +919,16 @@ export function WeekGrid({
     });
   }
 
+  // Totalled from `week` rather than from `days`, so the figures carry the
+  // pending swap the cells are already showing. Totalling on the server would
+  // print the week as it was until revalidation lands — a stale number beside
+  // a changed cell, which is the one thing these figures must never be.
+  const figures = weekTotals(week);
+
   return (
     <div className="flex flex-col gap-[14px]">
+      <WeekAverage figures={figures} />
+
       {/*
        * § Feedback: "inline banner at the point of action, value reverted, 'Try
        * again'. Never a modal." The point of action is the grid — the sheet has
@@ -821,6 +946,8 @@ export function WeekGrid({
           </Button>
         </div>
       )}
+
+      <DayStrip week={week} />
 
       {/*
        * Two shapes, one week — § The Week, Two Ways.
@@ -840,15 +967,8 @@ export function WeekGrid({
        * `setEditing` and `act` with the visible ones, so the two shapes cannot
        * disagree about what is in a slot: there is one state, drawn twice.
        */}
-      <WeekStack week={week} onOpen={setEditing} />
-      <WeekTable week={week} onOpen={setEditing} />
-
-      {/* Totalled from `week` rather than from `days`, so the figures carry the
-          pending swap the cells above are already showing. Passing the props
-          through to the server and totalling there would print the week as it
-          was until revalidation lands — a stale number under a changed grid,
-          which is the one thing this block must never be. */}
-      <WeekTotals figures={weekTotals(week)} />
+      <WeekStack week={week} figures={figures} slots={slots} onOpen={setEditing} />
+      <WeekTable week={week} figures={figures} slots={slots} onOpen={setEditing} />
 
       {editing && (
         <SwapSheet
