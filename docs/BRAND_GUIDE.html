@@ -171,6 +171,9 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--pg-accent); out
   background-image: repeating-linear-gradient(-45deg, var(--text-3) 0 1px, transparent 1px 3px);
   box-shadow: inset 0 0 0 1px var(--text-3); }
 .tick.next { height: 9px; top: 22px; width: 1px; background: var(--text-3); }
+/* Passed with nothing recorded — FUEL-131. The resolved marks' height, the
+   skip's outline, and nothing inside it: height says where, fill says what. */
+.tick.open { height: 15px; background: transparent; box-shadow: inset 0 0 0 1px var(--text-3); }
 .now-mark { position: absolute; top: 12px; width: 2px; height: 23px; background: var(--accent);
   transform: translateX(-50%); }
 .now-pill { position: absolute; top: 38px; transform: translateX(-50%); background: var(--accent);
@@ -189,6 +192,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--pg-accent); out
 .lg-skip { width: 5px; height: 11px; border-radius: 1px; box-shadow: inset 0 0 0 1px var(--text-3);
   background-image: repeating-linear-gradient(-45deg, var(--text-3) 0 1px, transparent 1px 3px); }
 .lg-next { width: 1px; height: 11px; background: var(--text-3); }
+.lg-open { width: 5px; height: 11px; border-radius: 1px; box-shadow: inset 0 0 0 1px var(--text-3); }
 
 /* ---------- DOT GRID (signature, multi-week) ---------- */
 .dots { display: grid; grid-template-columns: repeat(7, 1fr); gap: 9px; max-width: 240px; }
@@ -896,7 +900,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
               <span class="tick done" style="left:0%"></span>
               <span class="tick done" style="left:6.3%"></span>
               <span class="tick done" style="left:28.1%"></span>
-              <span class="tick done" style="left:43.8%"></span>
+              <span class="tick open" style="left:43.8%"></span>
               <span class="tick skip" style="left:62.5%"></span>
               <span class="tick done" style="left:71.9%"></span>
               <span class="tick next" style="left:81.3%"></span>
@@ -910,14 +914,17 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                 <span style="left:75%;visibility:hidden">18</span><span style="left:100%">22</span>
               </div>
             </div>
-            <div class="legend" style="margin-top:8px;">
+            <!-- 16px, not 8: a fourth entry (FUEL-131) reaches under the NOW
+                 pill, which hangs below the ruler's box. -->
+            <div class="legend" style="margin-top:16px;">
               <i><span class="lg-done"></span>Logged</i>
               <i><span class="lg-skip"></span>Skipped</i>
+              <i><span class="lg-open"></span>Not logged</i>
               <i><span class="lg-next"></span>Upcoming</i>
             </div>
           </div>
         </div>
-        <p>Eight slots across a 06:00–22:00 span. Filled bars are logged, hatched are skipped, hairlines are still to come. The umber tick and pill mark the present, and a scale label the pill would touch is not drawn — here the 18. The whole day's shape in 40px of vertical space — and it answers “where am I?” before a single word is read.</p>
+        <p>Eight slots across a 06:00–22:00 span. Filled bars are logged, hatched are skipped, hollow bars were passed with nothing recorded (FUEL-131), hairlines are still to come. The umber tick and pill mark the present, and a scale label the pill would touch is not drawn — here the 18. The whole day's shape in 40px of vertical space — and it answers “where am I?” before a single word is read.</p>
       </div>
 
       <div class="item">
@@ -1740,7 +1747,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
       <div class="dcell">
         <!-- ===== D1 · RIGHT NOW ===== -->
         <div class="dstage">
-          <div class="ui dframe" data-mode="light" role="img" aria-label="Right Now at 1272: the two notice bands full-bleed with their text at the measure&#39;s edge, the navigation as a left rail, a folio line and the day ruler across the frame, Greek Yogurt and Berries with its four figures, its actions and the Anytime list in the measure, and the day&#39;s totals and the day&#39;s items in the second column">
+          <div class="ui dframe" data-mode="light" role="img" aria-label="Right Now at 1272: the two notice bands full-bleed with their text at the measure&#39;s edge, the navigation as a left rail, a folio line and the day ruler across the frame, Greek Yogurt and Berries with its four figures, its actions, lunch offered back under Not logged, and the Anytime list in the measure, and the day&#39;s totals and the day&#39;s items in the second column">
 <div class="dband">
             <div>
               <p>Demo session — your changes are temporary. <a href="#">View the source.</a></p>
@@ -1775,7 +1782,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                 <span class="tick done" style="left:0%"></span>
                 <span class="tick done" style="left:6.3%"></span>
                 <span class="tick done" style="left:28.1%"></span>
-                <span class="tick done" style="left:43.8%"></span>
+                <span class="tick open" style="left:43.8%"></span>
                 <span class="now-mark" style="left:62.5%"></span>
                 <span class="now-pill" style="left:62.5%">NOW</span>
                 <span class="tick next" style="left:81.3%"></span>
@@ -1818,6 +1825,17 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                     <button class="btn btn-secondary auto" type="button">Skip</button>
                   </div>
 
+                  <!-- What the day walked past with nothing recorded — FUEL-131.
+                       Lunch's window closed at 16:00 with no tap, so it is offered
+                       back, above Anytime, with the bar's two answers as
+                       secondaries. 54px: the controls are 44. -->
+                  <div class="blk">
+                    <span class="u-micro">Not logged</span>
+                    <div class="list">
+                      <div class="row" style="min-height:54px;padding:5px 0;gap:12px;"><span class="row-trail" style="font-variant-numeric:tabular-nums;">12:30</span><div class="row-main" style="flex:1;"><span class="row-title">Ciabatta Roll</span></div><span style="display:flex;gap:8px;"><button class="btn btn-secondary auto" type="button" style="font-size:13px;min-height:44px;">Log</button><button class="btn btn-secondary auto" type="button" style="font-size:13px;min-height:44px;">Skip</button></span></div>
+                    </div>
+                  </div>
+
                   <!-- The things done from this screen today, under the action
                        row rather than at the foot of the aside — FUEL-115. The
                        aside is the record and the day around it, and at 1366×768
@@ -1857,7 +1875,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                       <div class="row" style="min-height:44px;padding:10px 0;"><div class="row-main"><span class="row-title" style="color:var(--text-2);">Coffee + MCT oil</span></div><span class="status done">Eaten</span></div>
                       <div class="row" style="min-height:44px;padding:10px 0;"><div class="row-main"><span class="row-title" style="color:var(--text-2);">Overnight Oats</span></div><span class="status done">Eaten</span></div>
                       <div class="row" style="min-height:44px;padding:10px 0;"><div class="row-main"><span class="row-title" style="color:var(--text-2);">Bodyweight Circuit A</span></div><span class="status done">Done</span></div>
-                      <div class="row" style="min-height:44px;padding:10px 0;"><div class="row-main"><span class="row-title" style="color:var(--text-2);">Ciabatta Roll</span></div><span class="status done">Eaten</span></div>
+                      <div class="row" style="min-height:44px;padding:10px 0;"><div class="row-main"><span class="row-title" style="color:var(--text-2);">Ciabatta Roll</span></div><span class="row-trail">12:30</span></div>
                       <div class="row" style="min-height:44px;padding:10px 0;"><div class="row-main"><span class="row-title">Greek Yogurt + Berries</span></div><span class="status done">Now</span></div>
                       <div class="row" style="min-height:44px;padding:10px 0;"><div class="row-main"><span class="row-title">Lemon-Garlic Baked Fish</span></div><span class="row-trail">19:00</span></div>
                     </div>
@@ -1871,7 +1889,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
         <div class="cap">
           <span class="tagline">P1 · / · light</span>
           <h3>Right Now</h3>
-          <p>Redrawn (FUEL-85). <b>One job per zone.</b> The header says where we are in the day &mdash; a folio line and the ruler at the day&rsquo;s width, closed by the ruler&rsquo;s own hairline. The measure keeps the subject and nothing arrives before it. The aside answers the question the desktop reader actually came with: the day against target and every item with its status. <b>Amended (FUEL-115):</b> the Anytime list moved from the foot of the aside to the measure, under the actions. The walks are things done from this screen today, and at the aside&rsquo;s foot the second one was below a 768 fold. The first version of this frame put four figures with progress bars across the top; a progress bar is not in this system, and it buried the subject under three things that all wanted reading first.</p>
+          <p>Redrawn (FUEL-85). <b>One job per zone.</b> The header says where we are in the day &mdash; a folio line and the ruler at the day&rsquo;s width, closed by the ruler&rsquo;s own hairline. The measure keeps the subject and nothing arrives before it. The aside answers the question the desktop reader actually came with: the day against target and every item with its status. <b>Amended (FUEL-115):</b> the Anytime list moved from the foot of the aside to the measure, under the actions. The walks are things done from this screen today, and at the aside&rsquo;s foot the second one was below a 768 fold. <b>Amended (FUEL-131):</b> lunch passed with nothing recorded, so the ruler draws it hollow, <i>The day</i> keeps its time, and <i>Not logged</i> offers it back above Anytime with a Log and a Skip. It stays until one is tapped. The first version of this frame put four figures with progress bars across the top; a progress bar is not in this system, and it buried the subject under three things that all wanted reading first.</p>
         </div>
       </div>
 

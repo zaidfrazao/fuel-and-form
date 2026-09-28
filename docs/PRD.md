@@ -76,6 +76,8 @@ Listed in build priority order. P1–P5 are the weekend's non-negotiables; P6–
 
 Resolution uses **configurable time windows with manual advance**. Each slot has a start time; the active slot is the one whose window contains the current time. A "skip / next" control moves to the following item when I'm off-schedule, so the view is never wrong for longer than one tap.
 
+A window that closes on its own advances the card too, with no tap and nothing recorded. **An item passed that way stays on `/` until it is answered (FUEL-131):** it is listed under *Not logged*, above the upcoming items, with a log and a skip on each. It is never marked on my behalf, and the day ruler never calls it upcoming.
+
 Default windows (**confirmed — Open Question 3, FUEL-21**). These are defaults, not the contract: every one is editable in settings, and a slot cleared there has no window at all.
 
 | Slot | Window | |
