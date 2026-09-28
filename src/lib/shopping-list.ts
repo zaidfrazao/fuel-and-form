@@ -263,12 +263,18 @@ function rowAmount(row: ShoppingIngredient): ShoppingAmount | null {
 /**
  * Fold one ingredient row into its line, creating the line if it is the first.
  *
- * Section and display name are taken from whichever row arrives first and are
- * not revisited. Two rows that name one ingredient but disagree about its aisle
- * or its pantry flag is a data problem with no correct resolution here —
+ * The aisle and display name are taken from whichever row arrives first and
+ * are not revisited. Two rows that name one ingredient but disagree about its
+ * aisle is a data problem with no correct resolution here —
  * `shopping-list.test.ts` holds the seed to agreeing — and first-seen at least
  * makes the answer deterministic rather than dependent on the order Postgres
  * happened to return.
+ *
+ * The pantry flag is the exception: ANY row carrying it makes the line a
+ * pantry line, whichever order the rows arrive in. That is the rule
+ * `loadShoppingWeek` reads ticks by — a key is a pantry key if any row says
+ * so — and a first-seen rule here would let the two disagree about one line,
+ * drawing it in an aisle while its tick was read from every week.
  */
 function fold(tally: Tally | undefined, key: string, row: ShoppingIngredient): Tally {
   const line: Tally = tally ?? {
@@ -281,6 +287,14 @@ function fold(tally: Tally | undefined, key: string, row: ShoppingIngredient): T
   };
 
   line.times += 1;
+
+  // A later pantry row promotes the line, and drops what the aisle rows before
+  // it had summed: the pantry prints no amount, so there is nothing to keep.
+  if (row.pantry && line.section !== PANTRY) {
+    line.section = PANTRY;
+    line.amounts.clear();
+    line.partial = false;
+  }
 
   // Nothing is summed for the pantry: a line saying 7 tsp of olive oil is an
   // amount nobody buys, and the question the pantry asks is only "is there

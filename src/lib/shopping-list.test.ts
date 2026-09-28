@@ -589,26 +589,32 @@ describe("the pantry", () => {
     ]);
   });
 
-  it("takes the pantry flag from the first row seen, like the aisle", () => {
-    // Deterministic rather than right — the seed test above keeps the data
-    // from disagreeing. A pantry line stays amount-free even when a later row
-    // without the flag carries one.
+  it("makes a line a pantry line if any row says so, in either order", () => {
+    // The query reads a key's ticks from every week when ANY row is flagged,
+    // so the fold must shelve it by the same rule — or one line is drawn in an
+    // aisle while its tick behaves like the pantry's.
     const pantryFirst = [
       ingredient("chilli", "Honey", null, "dry goods", { pantry: true }),
       ingredient("curry", "Honey", null, "dry goods", { shopQty: 1 }),
     ];
+    // Aisle rows first, one counted and one not: by the time the pantry row
+    // arrives the line holds an amount AND a partial flag, and the promotion
+    // has to drop both — a pantry line prints neither a figure nor a "+".
     const aisleFirst = [
       ingredient("chilli", "Honey", null, "dry goods", { shopQty: 1 }),
+      ingredient("oats", "Honey", null, "dry goods"),
       ingredient("curry", "Honey", null, "dry goods", { pantry: true }),
     ];
-    const both = [day(MON, [chilli, curry])];
+    const all = [day(MON, [chilli, oats, curry])];
 
-    expect(find(both, "Honey", pantryFirst)).toMatchObject({ section: PANTRY, amounts: [] });
-    expect(find(both, "Honey", aisleFirst)).toMatchObject({
-      section: "dry goods",
-      amounts: ["1 ×"],
-      partial: true,
-    });
+    for (const rows of [pantryFirst, aisleFirst]) {
+      expect(find(all, "Honey", rows)).toMatchObject({
+        section: PANTRY,
+        amounts: [],
+        partial: false,
+        times: rows.length,
+      });
+    }
   });
 });
 
