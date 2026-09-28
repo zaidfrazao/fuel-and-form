@@ -186,9 +186,14 @@ function smoothed(first: Reading, last: Reading, count: number): boolean {
  * the history began on the window's edge — which would make the left end of
  * every window a raw reading and the line kink there for no reason in the data.
  *
- * Quadratic, and deliberately: a history is a few hundred rows at most (one a
- * day for a year is 365), and a running-sum version is a second piece of
- * arithmetic to get right for no measurable gain.
+ * Looks back at most `AVERAGE_DAYS - 1` readings, because `weight_logs` is
+ * unique on `(user_id, date)` and the screen's optimistic reducer drops a row
+ * sharing a date before it adds one: seven days hold at most seven readings.
+ * It scanned every earlier reading until the pre-submit review of FUEL-139,
+ * and that was quadratic in a render that runs on every pointer move — two
+ * years of daily weigh-ins took ~530ms per move across the two shapes. The
+ * date filter still applies inside the slice, so a sparse history averages
+ * only the readings that are actually in the week.
  *
  * Never divides by zero: the reading is in its own window, so every window
  * holds at least one.
@@ -200,7 +205,7 @@ export function withAverages<T extends Reading>(
 ): (T & { averageKg: number })[] {
   return ordered.map((reading, index) => {
     const week = ordered
-      .slice(0, index + 1)
+      .slice(Math.max(0, index - (AVERAGE_DAYS - 1)), index + 1)
       .filter((earlier) => daysBetween(earlier.date, reading.date) < AVERAGE_DAYS);
 
     return {

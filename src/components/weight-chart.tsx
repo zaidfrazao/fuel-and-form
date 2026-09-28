@@ -1,6 +1,6 @@
 "use client";
 
-import { type KeyboardEvent, type PointerEvent, useState } from "react";
+import { type KeyboardEvent, type PointerEvent, useMemo, useState } from "react";
 
 import { figure } from "@/lib/format";
 import type { CalendarDate } from "@/lib/date";
@@ -740,7 +740,6 @@ export function WeightChart({
   targetWeightKg: number;
   className?: string;
 }) {
-  const references = { startWeightKg, targetWeightKg };
 
   /*
    * The window — FUEL-139. Chosen once, on the first render, from the history
@@ -757,26 +756,36 @@ export function WeightChart({
   /** The reading picked by pointer, touch or key; `null` reads the latest. */
   const [selected, setSelected] = useState<CalendarDate | null>(null);
 
-  const plot = chartGeometry(entries, references, CHART_SHAPE, range);
+  /*
+   * Both shapes, computed once per history and window rather than per render.
+   * The readout is state here, so every pointer move re-renders this; without
+   * the memo each move re-ran the geometry for both shapes, which the
+   * pre-submit review of FUEL-139 measured at ~530ms on two years of daily
+   * weigh-ins before `withAverages` was bounded, and is still work a picked
+   * point has no reason to repeat.
+   *
+   * `widePlot` is the same readings laid out in the frame's box — FUEL-78.
+   * Running `chartGeometry` twice is the only way to have both shapes'
+   * coordinates for a render that cannot know the viewport. It is non-null
+   * whenever `plot` is: the same readings and references, and `chartGeometry`
+   * returns null only for an empty history. The check below is there because
+   * the type says it can be, and `?? plot` would silently draw the phone's
+   * coordinates in a 968px box.
+   */
+  const { references, plot, widePlot } = useMemo(() => {
+    const references = { startWeightKg, targetWeightKg };
+
+    return {
+      references,
+      plot: chartGeometry(entries, references, CHART_SHAPE, range),
+      widePlot: chartGeometry(entries, references, CHART_SHAPE_WIDE, range),
+    };
+  }, [entries, startWeightKg, targetWeightKg, range]);
 
   if (plot === null) return null;
 
   const { domain, points, smoothed, latest } = plot;
 
-  /*
-   * The same readings, laid out in the frame's box — FUEL-78.
-   *
-   * `chartGeometry` is pure arithmetic over at most a few hundred rows, so
-   * running it twice is cheaper than any mechanism for avoiding it, and it is
-   * the only way to have both shapes' coordinates available to a render that
-   * cannot know the viewport.
-   *
-   * Non-null by construction: it is the same readings and the same references
-   * that just produced `plot`, and `chartGeometry` returns null only for an
-   * empty history. The check is here because the type says it can be, and
-   * `?? plot` would silently draw the phone's coordinates in a 968px box.
-   */
-  const widePlot = chartGeometry(entries, references, CHART_SHAPE_WIDE, range);
 
   const reading = points.find((point) => point.date === selected) ?? latest;
   const label = summarise(plot, today, references);
