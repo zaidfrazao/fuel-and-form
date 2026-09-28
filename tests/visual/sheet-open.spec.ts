@@ -62,6 +62,33 @@ test("swap-sheet", async ({ page }) => {
   // rather than quietly rewriting the baseline into a picture of the screen
   // behind it on the next `--update-snapshots`.
   await expect(page.getByRole("dialog")).toBeVisible();
+
+  /*
+   * With a pick made — FUEL-135. The state the mock draws, and the one the
+   * ticket was about: the chosen tile ink and ringed, the planned one stone and
+   * marked `Current`, and the footer's figures moved to the swap being
+   * considered. Unpicked, this photographed a grid with no ink in it and a
+   * disabled confirm, which is the sheet asking rather than the sheet answered.
+   *
+   * The first tile that is not the planned one, found by its word rather than
+   * by position, so a fixture that reordered its library still picks a real
+   * swap. Picking writes nothing (§ Feedback), so this cannot disturb the one
+   * demo every project shares.
+   */
+  const dialog = page.getByRole("dialog");
+  await dialog
+    .getByRole("group", { name: /^Meals for/ })
+    .getByRole("button")
+    .filter({ hasNotText: "Current" })
+    .first()
+    .click();
+  await expect(dialog.getByRole("button", { name: "Swap", exact: true })).toBeEnabled();
+
+  // The click leaves the pointer on the tile, and § Desktop's hover would be
+  // photographed as the tile's rest state. The corner is the scrim, which has
+  // no hover to draw.
+  await page.mouse.move(0, 0);
+
   await page.evaluate(() => document.fonts.ready);
 
   await expect(page).toHaveScreenshot("swap-sheet.png");
