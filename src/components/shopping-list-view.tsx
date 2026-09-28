@@ -7,7 +7,7 @@ import { setChecked } from "@/app/actions/shopping";
 import type { CalendarDate } from "@/lib/date";
 import { PAGE_COLUMNS_2, PAGE_COLUMN_FLOW, PAGE_COLUMN_GROUP } from "@/lib/frame";
 import { HOVER_GROUND, HOVER_LIFT, POINTER } from "@/lib/pointer";
-import type { ShoppingGroup, ShoppingLine } from "@/lib/shopping-list";
+import { PANTRY, type ShoppingGroup, type ShoppingLine } from "@/lib/shopping-list";
 import { quantity, shoppingText } from "@/lib/shopping-text";
 import { cn } from "@/lib/utils";
 
@@ -38,8 +38,11 @@ import { cn } from "@/lib/utils";
  * list means the answer is always internally consistent.
  */
 
-/** A tick, or its removal — what one tap asks for. */
-type Attempt = { key: string; checked: boolean };
+/**
+ * A tick, or its removal — what one tap asks for. `pantry` rides along because
+ * a pantry untick clears every week's row, not one (FUEL-137).
+ */
+type Attempt = { key: string; checked: boolean; pantry: boolean };
 
 /**
  * The ticked keys, with one attempt applied.
@@ -149,7 +152,13 @@ function Row({
           type="checkbox"
           className="peer sr-only"
           checked={checked}
-          onChange={(event) => onToggle({ key: line.key, checked: event.target.checked })}
+          onChange={(event) =>
+            onToggle({
+              key: line.key,
+              checked: event.target.checked,
+              pantry: line.section === PANTRY,
+            })
+          }
         />
 
         {/*
@@ -194,8 +203,8 @@ function Row({
          *
          * The amount was `shrink-0` with no bound, and until FUEL-65 that was
          * all it was — including when the AMOUNT was the long one.
-         * `shopping-text.ts` composes household measures onto the weight, so
-         * these run to "800g · 2/3–3/4 cup, or a small handful", and a span that
+         * `shopping-text.ts` composed household measures onto the weight, so
+         * these ran to "800g · 2/3–3/4 cup, or a small handful", and a span that
          * refuses to shrink simply left the row: measured at 375px, four lines
          * reached 487px and the whole page scrolled 112px sideways to follow
          * them. `max-w-[55%] truncate` stopped that, and the ellipsis was argued
@@ -387,7 +396,12 @@ export function ShoppingListView({
       // resolve, and an escaping rejection would revert the row with nothing on
       // screen to say why.
       try {
-        const result = await setChecked({ week, key: attempt.key, checked: attempt.checked });
+        const result = await setChecked({
+          week,
+          key: attempt.key,
+          checked: attempt.checked,
+          pantry: attempt.pantry,
+        });
 
         // The transition wrapper is not optional: React does not treat a state
         // update after an `await` as part of the transition it was started in,
@@ -401,8 +415,38 @@ export function ShoppingListView({
     });
   };
 
+  const lines = groups.flatMap((group) => group.lines);
+  const done = lines.filter((line) => ticked.has(line.key)).length;
+
   return (
     <div className="flex flex-col gap-7">
+      {/*
+       * Where you are in the shop, and the list in your pocket — FUEL-137.
+       *
+       * Both were missing from the top of a page that measured 3,918px at 375.
+       * The count is the list's own progress — ticked lines over lines, the
+       * pantry included, because a ticked pantry line is one you do not have
+       * to think about either — and it reads from the OPTIMISTIC set, so it
+       * moves on the frame of the tap like the row does.
+       *
+       * The copy button moved up with it. It sat under the list on the
+       * argument that a copy is of what has just been read, and that argument
+       * was about the ticks: the text is computed from the optimistic set
+       * wherever the button is drawn, so a copy taken straight after a tap
+       * still carries it. What the old place cost was the whole list's height
+       * between opening the screen and sending it to someone.
+       *
+       * Not a live region. The checkbox already announces its own change, and
+       * a count re-read on every tap of a run through the aisle is the same
+       * fact twice; the copy button's "Copied." is the page's one status.
+       */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-slash tabular-nums text-text-secondary">
+          {done} of {lines.length} ticked
+        </p>
+        <CopyButton text={shoppingText(groups, ticked)} />
+      </div>
+
       {/*
        * Aisles, not a scroll — § Desktop, amended by FUEL-85: "a list of
        * grouped items may flow into columns at ≥1272, with a group never split
@@ -419,7 +463,8 @@ export function ShoppingListView({
        * `PAGE_COLUMN_FLOW` on the one that was already here. It is not a group
        * and must not be flowed as one: in a two-column list it would land at
        * the foot of whichever column the balancer left room in, which is a
-       * copy button in the middle of the ingredients.
+       * copy button in the middle of the ingredients. (Above the list since
+       * FUEL-137, and the reasoning holds either end.)
        *
        * Below the cap the two boxes are a `flex flex-col gap-7` inside a
        * `flex flex-col gap-7`, which draws exactly what one of them drew — 28px
@@ -429,7 +474,7 @@ export function ShoppingListView({
       <div className={cn("flex flex-col gap-7", PAGE_COLUMN_FLOW, PAGE_COLUMNS_2)} data-column-flow>
         {groups.map((group) => (
           <section
-            key={group.category}
+            key={group.section}
             className={cn("flex flex-col gap-1", PAGE_COLUMN_GROUP, "xl:mb-7")}
           >
             {/*
@@ -440,8 +485,20 @@ export function ShoppingListView({
              * groups rather than competing with them.
              */}
             <h2 className="text-slash uppercase tracking-[0.16em] text-text-secondary">
-              {group.category}
+              {group.section}
             </h2>
+
+            {/*
+             * The one thing about the pantry that is not obvious from its
+             * name, said once where it applies (FUEL-137). Not collapsed: a
+             * group that opens and closes is an accordion, which § Progressive
+             * Disclosure refuses by name. Last is the whole of its demotion.
+             */}
+            {group.section === PANTRY && (
+              <p className="text-slash text-text-tertiary">
+                Staples. A tick here stays ticked from week to week.
+              </p>
+            )}
 
             <ul className="flex flex-col">
               {group.lines.map((line) => (
@@ -457,17 +514,6 @@ export function ShoppingListView({
           </section>
         ))}
       </div>
-
-      {/*
-       * Below the list rather than above it: the copy is of what has just been
-       * read, and § Progressive Disclosure's "one question per screen" makes
-       * the list the question. The text is computed from the OPTIMISTIC set, so
-       * a copy taken immediately after a tap carries the tick that tap made.
-       *
-       * Below BOTH columns at ≥1272, for the same reason — a control that acts
-       * on the whole list belongs under the whole list.
-       */}
-      <CopyButton text={shoppingText(groups, ticked)} />
     </div>
   );
 }

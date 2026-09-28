@@ -1,5 +1,5 @@
 import { figure } from "./format";
-import type { ShoppingGroup, ShoppingLine } from "./shopping-list";
+import type { ShoppingAmount, ShoppingGroup, ShoppingLine } from "./shopping-list";
 
 /**
  * How a shopping line reads, on the screen and in the clipboard — FUEL-45.
@@ -29,54 +29,76 @@ import type { ShoppingGroup, ShoppingLine } from "./shopping-list";
  * only that module's own types.
  */
 
+/** Quarters as the glyphs a recipe would print; anything finer is decimal. */
+const QUARTERS: Readonly<Record<number, string>> = { 0.25: "¼", 0.5: "½", 0.75: "¾" };
+
 /**
- * What one line asks the shop for — `300g`, `20g +`, `1 clove ×5`.
+ * A count as a shop reads it — `2¼`, `½`, `3`.
+ *
+ * Quarters because that is the grain the seed's counts come in: a half lemon,
+ * a quarter onion. Printed as the vulgar-fraction glyph rather than `2.25`,
+ * because nobody buys 2.25 onions and everybody knows what 2¼ asks for. Any
+ * other fraction falls through to `figure`, which is honest if unlovely — the
+ * seed has none today, and inventing a glyph for a third would be rounding.
+ */
+function count(qty: number): string {
+  const whole = Math.floor(qty);
+  const glyph = QUARTERS[qty - whole];
+
+  if (glyph) return whole > 0 ? `${whole}${glyph}` : glyph;
+
+  return figure(qty);
+}
+
+/**
+ * Units written straight onto the figure, as a label or a scale would: `660ml`.
+ * Every other unit is a counted thing — a clove, a slice — and takes a space
+ * and, above one, an `s`.
+ */
+const METRIC = new Set(["g", "kg", "ml", "l"]);
+
+/** One summed amount: `660ml`, `5 cloves`, `½ slice`, `4`. */
+function amount({ qty, unit }: ShoppingAmount): string {
+  if (unit === null) return count(qty);
+
+  if (METRIC.has(unit)) return `${figure(qty)}${unit}`;
+
+  return `${count(qty)} ${qty > 1 ? `${unit}s` : unit}`;
+}
+
+/**
+ * What one line asks the shop for — `300g`, `100g +`, `5 cloves`.
  *
  * ## Why the plus sign is not decoration
  *
- * `gramsPartial` says some contributing row carried no weight, and
+ * `partial` says some contributing row carried no amount, and
  * `shopping-list.ts` argues at length why printing the bare sum would be the
  * worst available answer: it understates the shop by an unknown amount while
  * looking exactly like a complete figure. The trailing `+` is the smallest
  * mark that turns "300g" into "at least 300g", and it is the reason the flag
  * exists at all.
  *
- * ## The three states, and why the last one is not "0g"
+ * ## Nothing to say is an empty string
  *
- * A line with no weight anywhere — salt to taste, a handful of spinach — prints
- * its measures alone. Not "0g +", which claims the shop needs none of it, and
- * not an empty string, which would leave a bare name that reads as an item
- * nobody finished typing. Where there is neither a weight nor a measure the
- * name IS the whole instruction, and an em dash would be an absence dressed up
- * as information.
+ * A line with no amount anywhere — fresh coriander, and every pantry line —
+ * prints no amount at all. Not "0g +", which claims the shop needs none of
+ * it; where there is no figure the name IS the whole instruction, and an em
+ * dash would be an absence dressed up as information.
  *
- * ## Occurrences are counted, never multiplied out
+ * ## Summed, never multiplied out — FUEL-137
  *
- * `1 clove ×5` rather than `5 cloves`. The measures are free text the recipes
- * wrote — "a big handful", "1/2–3/4 tsp", "to taste, generously" — and there is
- * no arithmetic that turns those into a quantity. Multiplying the ones that
- * happen to start with a digit would be right for cloves and wrong for
- * handfuls, and the reader cannot tell from the result which of the two they
- * are holding. A count is honest about being a count.
- *
- * A measure asked for exactly once carries no multiplier, because "×1" is a
- * count of one dressed as arithmetic.
+ * This used to print `1 clove ×5`, because the only data was the recipe's
+ * sentence and a sentence cannot be added up. The shop's own columns can, so
+ * the week reads `5 cloves` — one figure you can pick up, not arithmetic to do
+ * in the aisle. Two units on one line are joined with a plus rather than
+ * summed, which `shopping-list.ts` explains; the seed has no such line.
  */
 export function quantity(line: ShoppingLine): string {
-  const parts: string[] = [];
+  if (line.amounts.length === 0) return "";
 
-  if (line.grams !== null) {
-    parts.push(line.gramsPartial ? `${figure(line.grams)}g +` : `${figure(line.grams)}g`);
-  }
+  const figures = line.amounts.map(amount).join(" + ");
 
-  for (const measure of line.measures) {
-    parts.push(measure.times > 1 ? `${measure.text} ×${measure.times}` : measure.text);
-  }
-
-  // A middle dot rather than a comma: the parts are alternative ways of saying
-  // the same amount rather than a list of separate things to buy, and § Slash
-  // Metadata already uses a separator of this weight for exactly that reading.
-  return parts.join(" · ");
+  return line.partial ? `${figures} +` : figures;
 }
 
 /**
@@ -129,7 +151,7 @@ export function shoppingText(
   return groups
     .map((group) =>
       [
-        group.category.toUpperCase(),
+        group.section.toUpperCase(),
         ...group.lines.map((line) => textLine(line, checked.has(line.key))),
       ].join("\n"),
     )

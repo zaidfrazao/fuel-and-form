@@ -110,6 +110,10 @@ const ingredient = (id: string, sortOrder: number): MealIngredient => ({
   grams: 60,
   nonScaleMeasure: null,
   category: "grains",
+  shopName: null,
+  shopQty: null,
+  shopUnit: null,
+  pantry: false,
   sortOrder,
 });
 
