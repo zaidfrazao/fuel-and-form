@@ -18,17 +18,20 @@ export function PickerSpecimen({
   slot,
   date,
   currentMealId,
+  selectedMealId,
 }: {
   meals: readonly PickableMeal[];
   slot: MealSlot;
   date: string;
   currentMealId: string;
+  selectedMealId: string;
 }) {
   const [open, setOpen] = useState(false);
 
-  // Opens on the planned meal, which is also the ink tile — the state the mock
-  // draws, where the ring and the ink coincide before anything is tapped.
-  const [selected, setSelected] = useState<string>(currentMealId);
+  // Opens with a pick already made, on a meal other than the planned one — the
+  // state the mock draws: the chosen tile ink and ringed, the planned one stone
+  // and marked `Current` (FUEL-135).
+  const [selected, setSelected] = useState<string>(selectedMealId);
 
   return (
     <>

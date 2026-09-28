@@ -263,6 +263,7 @@ export function MacroGrid({
   calories = "actual",
   columns,
   tinted,
+  binding,
   className,
 }: {
   /** What the day comes to — planned, previewed or logged; the grid does not care. */
@@ -291,6 +292,17 @@ export function MacroGrid({
    * tone works through `color` rather than `opacity`.
    */
   tinted?: boolean;
+  /**
+   * Calories and protein only — the swap sheet's footer (FUEL-135).
+   *
+   * The two figures that bind a day: kcal is the one an overage is coloured
+   * on, and protein the one § Typography emphasises by weight. The footer has room
+   * for a row, not a grid, and it answers "what does this do to my day" while
+   * the full four stay in the panel above. A slice of this grid rather than a
+   * second one, so the footer and the panel cannot disagree about a figure or
+   * about which overage is red.
+   */
+  binding?: boolean;
   className?: string;
 }) {
   const delta = deltaFromTarget(totals, target);
@@ -361,7 +373,7 @@ export function MacroGrid({
     // are `minmax(0, 1fr)` tracks, so they hold their width whatever lands in
     // them; the figures then hold their own alignment inside those tracks.
     <KeyValueGrid
-      items={items}
+      items={binding ? items.slice(0, 2) : items}
       columns={columns}
       tinted={tinted}
       className={cn("tabular-nums", className)}

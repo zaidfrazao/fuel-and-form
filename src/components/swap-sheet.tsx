@@ -31,6 +31,21 @@ import type { CalendarDate } from "@/lib/date";
  * never after it" is an ORDER, so it is pinned by a test that reads document
  * position rather than by one that finds both elements on the screen.
  *
+ * ## The confirm is pinned, and carries the two figures with it — FUEL-135
+ *
+ * Order alone was not enough. At 375×812 the sheet was 969px of content in a
+ * 690px viewport, and after a tap the Swap button sat 947px down with the
+ * panel only just peeking at the bottom edge: the cost was shown before the
+ * confirm, and neither was on screen. So the confirm moves into the sheet's
+ * pinned footer, and above it — still before it — go calories and protein,
+ * the two figures a swap is judged on. The four-figure panel stays in the
+ * scrolling body above, for anyone who wants fat and carbs; the footer is its
+ * binding slice from the same `MacroGrid`, so the two cannot disagree.
+ *
+ * The footer's figures are the live region now, since they are the ones that
+ * are always on screen. One region only: announcing both would read every
+ * tap's calories twice.
+ *
  * ## The preview costs no round trip, and no `Plan` crosses the wire
  *
  * The obvious implementation asks the server what the day would total. It is
@@ -71,7 +86,7 @@ import type { CalendarDate } from "@/lib/date";
  * A meal already planned for today, as the resolved view carries it.
  *
  * `PlannedMacros` plus the meal's id, which totalling does not need and the
- * picker does: the meal currently in the slot is the sheet's ink anchor, and it
+ * picker does: the meal currently in the slot is marked `Current`, and it
  * is identified by id rather than by position. `ResolvedMeal` satisfies this as
  * it stands, so `right-now.tsx` passes its resolved items through unchanged.
  */
@@ -313,8 +328,8 @@ export function SwapSheet({
 
   const selected = meals.find((meal) => meal.id === selectedId);
 
-  // What is planned for the slot right now — the ink anchor in the picker, and
-  // the meal a confirm would displace.
+  // What is planned for the slot right now — `Current` in the picker, the zero
+  // its tiles' deltas count from, and the meal a confirm would displace.
   const current = planned.find((item) => item.slot === slot)?.meal;
 
   const totals = selected ? previewOf(planned, slot, selected) : summariseDay(planned);
@@ -374,21 +389,68 @@ export function SwapSheet({
       currentMealId={current?.id}
       selectedMealId={selectedId}
       onSelect={setSelectedId}
+      footer={
+        <>
+          {/*
+           * Labelled as a region and marked live, because the numbers change
+           * without the focus moving: a sighted user sees the figures update
+           * under the tile they just tapped, and without this a screen-reader
+           * user would tap through the whole library hearing nothing about the
+           * cost of any of it — which is the entire question the sheet exists
+           * to answer.
+           *
+           * `polite` rather than `assertive`: it should be spoken after the
+           * tile's own selected state, not cut across it.
+           */}
+          <div
+            role="region"
+            aria-live="polite"
+            aria-label={selected ? "Day totals after the swap" : "Day totals"}
+          >
+            <MacroGrid totals={totals} target={target} binding />
+          </div>
+
+          {/*
+           * The one primary action in the sheet — § Buttons, ink fill.
+           *
+           * Disabled until a tile is chosen, because there is no swap to confirm
+           * before then. Disabled rather than absent for the reason FUEL-18 gave
+           * the Swap button itself: a control that silently does nothing when
+           * tapped is worse than one that says it cannot be used yet.
+           */}
+          <Button type="button" className="w-full" disabled={!selected} onClick={confirm}>
+            Swap
+          </Button>
+
+          {/*
+           * Beneath the confirm — FUEL-24's criterion and the mock's order — so
+           * pinned with it: a repeat is the same pick applied to more days, and
+           * leaving it in the scroll would put the one decision's two answers
+           * a screen apart. Only when the caller has somewhere to send it.
+           * Disabled until a tile is chosen for the same reason the confirm
+           * is: there is no meal to push forward yet, and a control that
+           * silently does nothing when tapped is worse than one that says it
+           * cannot be used yet.
+           */}
+          {onRepeat && (
+            <RepeatRow
+              days={days}
+              onDays={setDays}
+              onRepeat={repeat}
+              disabled={!selected}
+            />
+          )}
+        </>
+      }
     >
       <div className="flex flex-col gap-5 border-t border-border pt-5">
         {/*
-         * Labelled as a region and marked live, because the numbers change
-         * without the focus moving: a sighted user sees the grid update under
-         * the tile they just tapped, and without this a screen-reader user
-         * would tap through the whole library hearing nothing about the cost of
-         * any of it — which is the entire question the sheet exists to answer.
-         *
-         * `polite` rather than `assertive`: it should be spoken after the
-         * tile's own selected state, not cut across it.
+         * The whole day, all four figures — the detail behind the footer's two.
+         * Not live: the footer speaks for both.
          */}
         <div
-          aria-live="polite"
-          aria-label={selected ? "Day totals after the swap" : "Day totals"}
+          role="region"
+          aria-label={selected ? "Full day totals after the swap" : "Full day totals"}
           // The tint — FUEL-32's acceptance criterion, and the argument for it
           // is in the docblock's § One umber element.
           //
@@ -430,37 +492,11 @@ export function SwapSheet({
         </div>
 
         {/*
-         * The one primary action in the sheet — § Buttons, ink fill.
-         *
-         * Disabled until a tile is chosen, because there is no swap to confirm
-         * before then. Disabled rather than absent for the reason FUEL-18 gave
-         * the Swap button itself: a control that silently does nothing when
-         * tapped is worse than one that says it cannot be used yet.
-         */}
-        <Button type="button" className="w-full" disabled={!selected} onClick={confirm}>
-          Swap
-        </Button>
-
-        {/*
-         * Beneath the confirm, and only when the caller has somewhere to send
-         * it. Disabled until a tile is chosen for the same reason the confirm
-         * is: there is no meal to push forward yet, and a control that silently
-         * does nothing when tapped is worse than one that says it cannot be
-         * used yet.
-         */}
-        {onRepeat && (
-          <RepeatRow
-            days={days}
-            onDays={setDays}
-            onRepeat={repeat}
-            disabled={!selected}
-          />
-        )}
-
-        {/*
-         * § Buttons gives Revert the Text variant by name. Last in the sheet
+         * § Buttons gives Revert the Text variant by name. Last in the body
          * and never disabled: it is the one control here that acts on what is
-         * already true rather than on what has been chosen.
+         * already true rather than on what has been chosen — which is also why
+         * it is not pinned with the confirm (FUEL-135). The footer holds the
+         * answers to the question the tiles ask; this one declines the question.
          *
          * Not the destructive variant. § Buttons reserves that for Delete and
          * discard, and a revert destroys nothing — the template entry it

@@ -77,9 +77,12 @@ function Harness({
   // over it. Done through React rather than by calling `.remove()` on the node,
   // which React then fails to remove itself at cleanup.
   hideTrigger = false,
+  // Nothing chosen on opening, as in the swap sheet — which, since FUEL-135,
+  // is also what decides whether any tile is ink.
+  initialSelected = null,
   ...rest
-}: Overrides & { initialOpen?: boolean; hideTrigger?: boolean }) {
-  const [selected, setSelected] = useState<string | null>(currentMealId ?? null);
+}: Overrides & { initialOpen?: boolean; hideTrigger?: boolean; initialSelected?: string | null }) {
+  const [selected, setSelected] = useState<string | null>(initialSelected);
   const [open, setOpen] = useState(initialOpen);
 
   return (
@@ -107,7 +110,13 @@ function Harness({
   );
 }
 
-function Picker(overrides: Overrides & { initialOpen?: boolean; hideTrigger?: boolean } = {}) {
+function Picker(
+  overrides: Overrides & {
+    initialOpen?: boolean;
+    hideTrigger?: boolean;
+    initialSelected?: string | null;
+  } = {},
+) {
   return render(<Harness {...overrides} />);
 }
 
@@ -176,56 +185,125 @@ describe("the candidate list", () => {
 });
 
 describe("materials", () => {
-  test("draws exactly one ink tile, and it is the planned meal", () => {
+  // FUEL-135. Ink follows the SELECTION, as `BRAND_GUIDE.html`'s swap frame
+  // draws it (`tile ink sel` on the chosen meal, the planned one stone). Until
+  // then ink marked the planned meal, and the incumbent read as the choice.
+  const ink = () => tiles().filter((element) => element.className.includes("bg-ink"));
+
+  test("draws no ink tile before anything is chosen", () => {
     Picker({ currentMealId: CHILLI.id });
 
-    const ink = tiles().filter((element) => element.className.includes("bg-ink"));
+    expect(ink()).toHaveLength(0);
 
-    expect(ink).toHaveLength(1);
-    expect(ink[0]?.textContent).toContain("Smoked Paprika Chilli");
-
-    // Everything else is stone. Neither material is a border or a shadow —
+    // Everything is stone. Neither material is a border or a shadow —
     // § Materials allows only the two fills.
-    for (const element of tiles()) {
-      const isInk = element.className.includes("bg-ink");
-      expect(element.className.includes("bg-surface")).toBe(!isInk);
-    }
+    for (const element of tiles()) expect(element.className).toContain("bg-surface");
   });
 
-  test("keeps one ink tile when the planned meal is not among the candidates", () => {
-    // The planned meal has been archived since it was planned, so it is not a
-    // candidate. Without the fallback there would be no ink tile at all.
-    Picker({ currentMealId: RETIRED.id });
-
-    expect(tiles().filter((element) => element.className.includes("bg-ink"))).toHaveLength(1);
-    expect(tiles()[0]?.className).toContain("bg-ink");
-  });
-
-  test("the ink tile stays ink as the selection moves", async () => {
+  test("draws the chosen tile in ink, and only that one", async () => {
     const user = userEvent.setup();
     Picker({ currentMealId: CHICKEN.id });
 
     await user.click(tile(/Chorizo Stew/));
 
-    const ink = tiles().filter((element) => element.className.includes("bg-ink"));
+    expect(ink()).toHaveLength(1);
+    expect(ink()[0]?.textContent).toContain("Butterbean & Chorizo Stew");
 
-    expect(ink).toHaveLength(1);
-    expect(ink[0]?.textContent).toContain("Harissa Chicken & Rice");
+    // And the ink moves with the selection rather than staying where it was.
+    await user.click(tile(/Smoked Paprika Chilli/));
+
+    expect(ink()).toHaveLength(1);
+    expect(ink()[0]?.textContent).toContain("Smoked Paprika Chilli");
+  });
+
+  test("leaves the planned meal stone, marked by a word", () => {
+    Picker({ currentMealId: CHICKEN.id });
+
+    const current = tile(/Harissa/);
+
+    expect(current.className).toContain("bg-surface");
+    expect(current.style.boxShadow).toBe("");
+    expect(current.textContent).toContain("Current");
+
+    // The word is the planned meal's alone.
+    const marked = tiles().filter((element) => element.textContent?.includes("Current"));
+    expect(marked).toEqual([current]);
+  });
+
+  test("the planned meal takes ink like any other when it is chosen", async () => {
+    // Choosing the incumbent is a real answer — it prices the day as it
+    // stands — so it is drawn as a choice, and keeps its word beside the ink.
+    const user = userEvent.setup();
+    Picker({ currentMealId: CHICKEN.id });
+
+    await user.click(tile(/Harissa/));
+
+    expect(ink()).toEqual([tile(/Harissa/)]);
+    expect(tile(/Harissa/).textContent).toContain("Current");
+  });
+});
+
+describe("what each tile says it would change — FUEL-135", () => {
+  const LIGHT = meal("d4", "Miso Salmon with Greens", "dinner", { kcal: 420, proteinG: 46 });
+  const HEAVY = meal("d5", "Steak, Chips & Peppercorn", "dinner", { kcal: 1265, proteinG: 52 });
+
+  test("counts from the planned meal, signed", () => {
+    // CHICKEN is the fixture's 500 kcal and 40g of protein.
+    Picker({ meals: [CHICKEN, LIGHT, HEAVY], currentMealId: CHICKEN.id });
+
+    expect(tile(/Steak/).textContent).toContain("+765 kcal · +12 P");
+    // A minus SIGN, from `signed`, not a hyphen.
+    expect(tile(/Miso Salmon/).textContent).toContain("−80 kcal · +6 P");
+  });
+
+  test("says `0`, not nothing, for a meal with the same figures", () => {
+    Picker({ meals: [CHICKEN, STEW], currentMealId: CHICKEN.id });
+
+    expect(tile(/Chorizo Stew/).textContent).toContain("0 kcal · 0 P");
+  });
+
+  test("counts from the planned meal even when the filter hides it", async () => {
+    // The incumbent is a breakfast in a dinner slot: filtered out of the
+    // default view, and still the zero the dinners count from.
+    const BREAKFAST_IN_DINNER = meal("b9", "Big Breakfast", "breakfast", { kcal: 900, proteinG: 40 });
+
+    Picker({ meals: [BREAKFAST_IN_DINNER, CHICKEN], currentMealId: BREAKFAST_IN_DINNER.id });
+
+    expect(tile(/Harissa/).textContent).toContain("−400 kcal · 0 P");
+  });
+
+  test("falls back to absolute figures with nothing to count from", () => {
+    // An empty slot: the template leaves it open and this pick fills it.
+    Picker({ meals: [CHICKEN, HEAVY], currentMealId: null });
+
+    expect(tile(/Harissa/).textContent).toContain("500 kcal · P 40");
+    expect(tile(/Steak/).textContent).toContain("1265 kcal · P 52");
+  });
+
+  test("falls back to absolute figures when the planned meal is untracked", () => {
+    // An untracked meal's figures are not a day's figures, so a delta from
+    // them would be a number about nothing.
+    const FLEXIBLE = { ...meal("x1", "Flexible dinner", "dinner", { kcal: 0, proteinG: 0 }), isUntracked: true };
+
+    Picker({ meals: [FLEXIBLE, CHICKEN], currentMealId: FLEXIBLE.id });
+
+    expect(tile(/Harissa/).textContent).toContain("500 kcal · P 40");
   });
 });
 
 describe("selection", () => {
-  test("is a 1.5px accent inset ring, and never a fill", async () => {
+  test("is a 1.5px accent inset ring, over the ink", async () => {
     const user = userEvent.setup();
-    Picker({ currentMealId: CHICKEN.id });
+    Picker({ currentMealId: CHICKEN.id, initialSelected: CHICKEN.id });
 
     await user.click(tile(/Chorizo Stew/));
 
     const chosen = tile(/Chorizo Stew/);
 
     expect(chosen.style.boxShadow).toBe("inset 0 0 0 1.5px var(--accent)");
-    // The material is untouched — a stone tile stays stone under the ring.
-    expect(chosen.className).toContain("bg-surface");
+    // The ring is never an accent FILL: the tile's ground is ink, the ring is
+    // drawn over it, and umber stays the one element it always was.
+    expect(chosen.className).toContain("bg-ink");
     expect(chosen.className).not.toContain("bg-accent");
 
     // And the ring left the tile it was on.
@@ -233,7 +311,7 @@ describe("selection", () => {
   });
 
   test("every tile is a toggle, not just the chosen one", () => {
-    Picker({ currentMealId: CHICKEN.id });
+    Picker({ currentMealId: CHICKEN.id, initialSelected: CHICKEN.id });
 
     expect(tile(/Harissa/).getAttribute("aria-pressed")).toBe("true");
 
