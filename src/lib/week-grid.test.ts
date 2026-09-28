@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import { SLOT_ORDER } from "./resolve-plan";
-import { type PlannedDay, weekGrid } from "./week-grid";
+import { type PlannedDay, slotOrder, weekGrid } from "./week-grid";
 
 /**
  * The weekly grid's shaping — FUEL-28.
@@ -127,5 +127,53 @@ describe("weekGrid", () => {
     // Rendering a column headed "Invalid Date" that then sorts wrong is the
     // failure this prevents. `dayOfWeek` is what refuses.
     expect(() => weekGrid([day("2026-3-9")], MON)).toThrow();
+  });
+});
+
+describe("slotOrder — FUEL-138", () => {
+  test("orders the slots by the clock, so an early extra comes first", () => {
+    // The demo's routine: coffee at 06:45, before breakfast. `SLOT_ORDER` puts
+    // it last, and `/` puts it first.
+    expect(
+      slotOrder({
+        extra: "06:45",
+        breakfast: "07:30",
+        snack: "10:30",
+        lunch: "12:30",
+        dinner: "18:30",
+      }),
+    ).toEqual(["extra", "breakfast", "snack", "lunch", "dinner"]);
+  });
+
+  test("puts a slot with no time after the timed ones, as / puts it under Anytime", () => {
+    expect(slotOrder({ dinner: "18:30", breakfast: "07:30" })).toEqual([
+      "breakfast",
+      "dinner",
+      "lunch",
+      "snack",
+      "extra",
+    ]);
+  });
+
+  test("keeps SLOT_ORDER between slots that share a time", () => {
+    expect(
+      slotOrder({
+        breakfast: "08:00",
+        lunch: "08:00",
+        snack: "08:00",
+        dinner: "08:00",
+        extra: "08:00",
+      }),
+    ).toEqual([...SLOT_ORDER]);
+  });
+
+  test("treats a time that will not parse as no time, rather than failing the plan", () => {
+    expect(slotOrder({ extra: "6am", breakfast: "07:30" })).toEqual([
+      "breakfast",
+      "lunch",
+      "snack",
+      "dinner",
+      "extra",
+    ]);
   });
 });

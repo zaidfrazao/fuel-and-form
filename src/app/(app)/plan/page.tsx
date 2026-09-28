@@ -13,7 +13,9 @@ import type { Meal } from "@/lib/db/schema";
 import { FRAME_MEASURE_AND_ASIDE, PAGE_BAND_SPAN, PAGE_PROSE } from "@/lib/frame";
 import { weekFolio, weekLabel } from "@/lib/now-display";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
+import { scheduleFor } from "@/lib/resolve-now";
 import { cn } from "@/lib/utils";
+import { slotOrder } from "@/lib/week-grid";
 import { requestedWeek } from "@/lib/week-param";
 
 /**
@@ -208,7 +210,7 @@ export default async function PlanPage({
      *
      * The resolution is not here, and the reason it is not is worth the line.
      * This screen KEEPS the page's gutters, because its header, week nav and
-     * totals have to stay on the measure's x with the notice bands above them —
+     * average have to stay on the measure's x with the notice bands above them —
      * § Desktop's whole argument. It is the grid alone that cannot afford to pay
      * the 28px twice, so the grid alone bleeds back out of it (`lg:-mx-7`, in
      * `week-grid.tsx`), which is the same full-bleed device the phone already
@@ -308,6 +310,14 @@ export default async function PlanPage({
             })),
           }))}
           meals={plan.meals.map(narrow)}
+          // The rows in the order `/` draws the day — by the profile's slot
+          // times, through the same merge `/` reads them through (FUEL-138).
+          slots={slotOrder(
+            scheduleFor({
+              timeZone: plan.profile.timezone,
+              slotTimes: plan.profile.slotTimes,
+            }).slotTimes,
+          )}
           target={{
             targetKcal: plan.profile.targetKcal,
             targetProteinG: plan.profile.targetProteinG,

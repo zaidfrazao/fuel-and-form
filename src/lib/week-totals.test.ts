@@ -122,7 +122,7 @@ describe("the average", () => {
     // Three days of 2,000 kcal average to 2,000. Divided by seven they average
     // to 857 — a figure describing no day that exists, on a first program week
     // or any week the template leaves partly empty.
-    const { average, plannedDays } = figures([
+    const { average, completeDays } = figures([
       day(MON, [planned("breakfast", OATS), planned("dinner", CHILLI)]),
       day(TUE, [planned("breakfast", OATS), planned("dinner", CHILLI)]),
       day(WED, [planned("breakfast", OATS), planned("dinner", CHILLI)]),
@@ -132,7 +132,7 @@ describe("the average", () => {
       day("2026-03-15"),
     ]);
 
-    expect(plannedDays).toBe(3);
+    expect(completeDays).toBe(3);
     expect(average?.kcal).toBe(1100);
   });
 
@@ -146,16 +146,16 @@ describe("the average", () => {
   });
 
   test("keeps one decimal, the precision the figures went in with", () => {
-    // 130 g of protein over three days. Unrounded this is 43.333333333333336,
+    // 100 g of protein over three days. Unrounded this is 33.333333333333336,
     // which is a claim to precision the meals never had and a number no column
     // in the schema could hold.
     const { average } = figures([
-      day(MON, [planned("breakfast", OATS), planned("lunch", SALAD)]),
-      day(TUE, [planned("breakfast", OATS)]),
-      day(WED, [planned("breakfast", OATS), planned("lunch", SALAD)]),
+      day(MON, [planned("breakfast", OATS)]),
+      day(TUE, [planned("breakfast", SALAD)]),
+      day(WED, [planned("breakfast", CHILLI)]),
     ]);
 
-    expect(average?.proteinG).toBe(43.3);
+    expect(average?.proteinG).toBe(33.3);
   });
 
   test("keeps calories whole, which is how every other screen prints them", () => {
@@ -181,16 +181,87 @@ describe("the average", () => {
   test("is nothing at all when no day has a plan", () => {
     // A week before the program starts. `null` rather than zero: there is no
     // mean of nothing, and 0 kcal would read as a week planned to starve.
-    const { average, plannedDays } = figures([day(MON), day(TUE), day(WED)]);
+    const { average, completeDays, leftOut } = figures([day(MON), day(TUE), day(WED)]);
 
     expect(average).toBeNull();
-    expect(plannedDays).toBe(0);
+    expect(completeDays).toBe(0);
+    // No slot is in use, so every empty day fills "all" of none. Averaging
+    // those would be the zero this test exists to refuse.
+    expect(leftOut).toEqual([MON, TUE, WED]);
   });
 
   test("counts a single planned day as itself", () => {
-    const { average, plannedDays } = figures([day(MON, [planned("dinner", CHILLI)]), day(TUE)]);
+    const { average, completeDays } = figures([day(MON, [planned("dinner", CHILLI)]), day(TUE)]);
 
-    expect(plannedDays).toBe(1);
+    expect(completeDays).toBe(1);
     expect(average?.kcal).toBe(700);
+  });
+});
+
+describe("the average's basis — FUEL-138", () => {
+  test("leaves out a day that fills fewer slots than the week uses, and names it", () => {
+    // The demo's weekend, in miniature: the weekdays fill three slots, the
+    // weekend fills one of them. Averaged in, TUE's 400 kcal would pull the
+    // week to 1,233 — a figure made of the slots nobody filled.
+    const full = [planned("breakfast", OATS), planned("lunch", SALAD), planned("dinner", CHILLI)];
+
+    const { average, completeDays, leftOut, days } = figures([
+      day(MON, full),
+      day(TUE, [planned("breakfast", OATS)]),
+      day(WED, full),
+    ]);
+
+    expect(completeDays).toBe(2);
+    expect(leftOut).toEqual([TUE]);
+    expect(average?.kcal).toBe(1650);
+    expect(days.map((entry) => entry.unplannedSlots)).toEqual([0, 2, 0]);
+  });
+
+  test("reads the slots in use off the week, so a slot never planned is not missing", () => {
+    // No snack and no extra on any day. A fixed list of five required slots
+    // would leave out every one of these days and print no average at all.
+    const { completeDays, leftOut } = figures([
+      day(MON, [planned("breakfast", OATS), planned("dinner", CHILLI)]),
+      day(TUE, [planned("breakfast", SALAD), planned("dinner", CHILLI)]),
+    ]);
+
+    expect(completeDays).toBe(2);
+    expect(leftOut).toEqual([]);
+  });
+
+  test("measures a day against the week's slots, not against its own", () => {
+    // Each day fills three, but between them the week uses four, so each is
+    // one short. A day judged only by what it planned would call both complete.
+    // (Counting rather than naming the missing slots gives the same answer —
+    // a day's slots are always a subset of the week's — so that is not what
+    // this pins.)
+    const { completeDays, days } = figures([
+      day(MON, [planned("breakfast", OATS), planned("lunch", SALAD), planned("dinner", CHILLI)]),
+      day(TUE, [planned("breakfast", OATS), planned("snack", SALAD), planned("dinner", CHILLI)]),
+    ]);
+
+    expect(completeDays).toBe(0);
+    expect(days.map((entry) => entry.unplannedSlots)).toEqual([1, 1]);
+  });
+
+  test("an unplanned day is short every slot in use", () => {
+    const { days, leftOut } = figures([
+      day(MON, [planned("breakfast", OATS), planned("dinner", CHILLI)]),
+      day(TUE),
+    ]);
+
+    expect(days[1]?.unplannedSlots).toBe(2);
+    expect(leftOut).toEqual([TUE]);
+  });
+
+  test("an untracked meal fills its slot, so its day still counts", () => {
+    // It adds nothing to the figures, and it is still a meal in the slot —
+    // leaving the day out would be dropping it for having been eaten off-plan.
+    const { completeDays } = figures([
+      day(MON, [planned("breakfast", OATS), planned("lunch", SALAD)]),
+      day(TUE, [planned("breakfast", OATS), planned("lunch", FLEXIBLE)]),
+    ]);
+
+    expect(completeDays).toBe(2);
   });
 });

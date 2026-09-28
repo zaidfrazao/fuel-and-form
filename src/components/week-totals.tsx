@@ -1,52 +1,33 @@
-import { KeyValueGrid, type KeyValueItem, SlashMeta } from "@/components/kv-grid";
 import { figure } from "@/lib/format";
 import { dayLabel } from "@/lib/now-display";
-import type { WeekFigures } from "@/lib/week-totals";
+import { cn } from "@/lib/utils";
+import type { DayFigures, WeekFigures } from "@/lib/week-totals";
 
 /**
- * The week's daily figures and its average, under the grid (FUEL-33).
+ * The week's figures, drawn where they belong — FUEL-33, moved by FUEL-138.
  *
- * ## A key/value grid, not a chart
+ * ## Why this is no longer one block under the grid
  *
- * Seven days of two figures is exactly the shape § Key/Value Grid describes —
- * "micro label above, Value below, optional Slash metadata beneath", three
- * columns "when the figures are short", and these are four characters. A chart
- * would spend the width on an axis in order to say less precisely what eight
- * numbers say exactly, and the reader's question here is "what does Thursday
- * come to", which a bar answers only by being measured against a scale.
+ * FUEL-33 drew the seven days and the average as a three-column key/value grid
+ * under the table, and argued it was "the only cross-day comparison left on a
+ * phone". FUEL-138 measured what that cost: at 375 the block sat at the foot of
+ * a 3,020px page, so Monday's total was ~2,500px from Monday; at ≥768 it was a
+ * 3/3/2 grid under a seven-column table, so Monday's figure was not under
+ * Monday. PRD § P4's "week view shows daily kcal and protein" was met in the
+ * letter and missed in the reading.
  *
- * Eight items over three columns lands 3/3/2, which puts the average in the
- * last cell of the last row. That is where a summary belongs — it reads after
- * the days it summarises rather than before them.
- *
- * ## What it became on a phone, without changing
- *
- * FUEL-81 turned the week ninety degrees below 768px, and this block did not
- * move: it was never inside the grid's scroller, so its width budget is the
- * same three ~110px columns it always had at 375px.
- *
- * Its JOB changed, though. Stacked, the grid can no longer be read across days
- * — comparing Tuesday against Thursday means scrolling — and § The Week, Two
- * Ways names that as the trade the phone shape makes. This is where the trade
- * is partly repaid: seven days of kcal and protein, side by side, in one glance.
- * It is the only cross-day comparison left on a phone, which is an argument for
- * keeping it exactly as it is rather than folding it into the day sections.
+ * So the block is split along the line the reader asks the question on. A
+ * day's figures go WITH the day — `DayFigure`, drawn in the stacked shape's day
+ * heading and in the wide shape's `<tfoot>` — and the week's figure goes above
+ * the grid, where a summary of a 3,000px page can be seen without scrolling to
+ * the end of it (`WeekAverage`).
  *
  * ## No umber here
  *
- * Today's column in the table above takes the screen's one accent (§ The Four
- * Rules), and this block does not get a second one however naturally the eye
- * would look for today in it. `week-grid.test.tsx` counts the accents on the
- * screen rather than spot-checking them, so this is enforced rather than
- * merely intended.
- *
- * ## Why the units are hidden and the header carries them
- *
- * The value is a bare figure because a date is already in the label: "2,140
- * kcal" at 22px does not fit a third of a 375px screen, and wrapping the unit
- * onto its own line would read as another number. The header names the two
- * figures once for the eye, and each value carries its unit in `sr-only` text
- * for a reader who arrives at a single `dd` with the header long behind them.
+ * Today's heading takes the screen's one accent (§ The Four Rules), and nothing
+ * here takes a second one however naturally the eye would look for today in
+ * it. `week-grid.test.tsx` counts the accents per shape rather than
+ * spot-checking them, so this is enforced rather than merely intended.
  */
 
 /**
@@ -59,77 +40,142 @@ import type { WeekFigures } from "@/lib/week-totals";
  */
 const NOTHING = "—";
 
-function dayItem(day: WeekFigures["days"][number]): KeyValueItem {
+/**
+ * One day's kcal and protein, and how many of the week's slots it leaves open.
+ *
+ * The units are visible here, unlike FUEL-33's bare figures: that block had a
+ * header to name them once, and a figure in a day heading or a table foot has
+ * no header of its own. A reader arriving at one cell should not have to go
+ * and find out which number is which.
+ *
+ * The open-slot count is words rather than a tint, because § Accessibility
+ * does not let a fact live in a hue alone, and it is the reason the day is
+ * missing from the average above — so it is said where the day is.
+ *
+ * `inline` puts it on one line for the stacked shape's heading; otherwise each
+ * figure takes its own line, which is what an 87px column at 768 can hold.
+ */
+export function DayFigure({
+  day,
+  inline = false,
+  className,
+}: {
+  day: DayFigures;
+  inline?: boolean;
+  className?: string;
+}) {
   if (!day.planned) {
-    return {
-      label: dayLabel(day.date),
-      value: (
-        <>
-          <span aria-hidden="true">{NOTHING}</span>
-          <span className="sr-only">Not planned</span>
-        </>
-      ),
-    };
+    return (
+      <span className={cn("text-slash text-text-tertiary", className)}>
+        <span aria-hidden="true">{NOTHING}</span>
+        <span className="sr-only">Not planned</span>
+      </span>
+    );
   }
 
-  return {
-    label: dayLabel(day.date),
-    value: (
-      <>
-        {figure(day.totals.kcal)}
-        <span className="sr-only"> kcal</span>
-      </>
-    ),
-    meta: (
-      <>
+  const open = day.unplannedSlots > 0 && (
+    <span className="text-text-tertiary">
+      {day.unplannedSlots} not planned
+    </span>
+  );
+
+  // The middle dot is a separator for the eye and punctuation to a screen
+  // reader, which reads it aloud as "dot". Hidden, and a comma said instead.
+  const dot = (
+    <>
+      <span aria-hidden="true"> · </span>
+      <span className="sr-only">, </span>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <span className={cn("text-slash tabular-nums text-text-secondary", className)}>
+        <span className="text-text-primary">{figure(day.totals.kcal)} kcal</span>
+        {dot}
         {figure(day.totals.proteinG)} g<span className="sr-only"> protein</span>
-      </>
-    ),
-  };
-}
-
-export function WeekTotals({ figures }: { figures: WeekFigures }) {
-  const items: KeyValueItem[] = figures.days.map(dayItem);
-
-  // Suppressed rather than dashed when there is nothing to average: a row of
-  // seven dashes has already said the week is empty, and an eighth would be
-  // the block insisting on it.
-  if (figures.average) {
-    items.push({
-      label: "Average",
-      emphasis: true,
-      value: (
-        <>
-          {figure(figures.average.kcal)}
-          <span className="sr-only"> kcal</span>
-        </>
-      ),
-      meta: (
-        <>
-          {figure(figures.average.proteinG)} g<span className="sr-only"> protein</span>
-          {/* The middle dot is a separator for the eye and punctuation to a
-              screen reader, which reads it aloud as "dot" — noise in the one
-              place the block is trying to be explicit. Hidden, and the join it
-              stands for said in words instead. `SlashMeta` hides its own "/"
-              for the same reason. */}
-          <span aria-hidden="true"> · </span>
-          <span className="sr-only"> over </span>
-          {figures.plannedDays} {figures.plannedDays === 1 ? "day" : "days"}
-        </>
-      ),
-    });
+        {open && (
+          <>
+            {dot}
+            {open}
+          </>
+        )}
+      </span>
+    );
   }
 
   return (
-    <section aria-labelledby="week-totals" className="flex flex-col gap-[14px]">
-      <header className="flex flex-wrap items-baseline gap-x-2">
-        <h2 id="week-totals" className="text-micro uppercase text-text-secondary">
-          Daily totals
-        </h2>
-        {/* The units, once, for the eye — every value below is a bare figure. */}
-        <SlashMeta>kcal, then protein</SlashMeta>
-      </header>
-      <KeyValueGrid items={items} columns={3} className="tabular-nums" />
+    <span
+      className={cn(
+        "flex flex-col gap-0.5 text-slash tabular-nums text-text-secondary",
+        className,
+      )}
+    >
+      <span className="font-semibold text-text-primary">
+        {figure(day.totals.kcal)} kcal
+      </span>
+      <span>
+        {figure(day.totals.proteinG)} g<span className="sr-only"> protein</span>
+      </span>
+      {open}
+    </span>
+  );
+}
+
+/** "Sat 27 Jun and Sun 28 Jun" — the days the average leaves out, by name. */
+const LIST = new Intl.ListFormat("en-GB", { style: "long", type: "conjunction" });
+
+/**
+ * The week's average, and what it is an average OF — FUEL-138.
+ *
+ * `lib/week-totals.ts` decides the basis: the days that fill every slot the
+ * week uses. This says so, in words, every time — the divisor and the days it
+ * left out by name — because FUEL-138's first complaint was an average whose
+ * basis could only be reverse-engineered, and one that could be read as the
+ * plan falling 400 kcal short when it was really two half-planned days.
+ *
+ * Above the grid rather than after it. FUEL-33 put the summary last, "after
+ * the days it summarises", which is a reading order that works on a page one
+ * screen tall; at 375 the end of this one is 3,000px down.
+ *
+ * Nothing at all when the week plans nothing: the grid's hatch has already
+ * said the week is empty, and a line insisting on it would be noise.
+ */
+export function WeekAverage({ figures }: { figures: WeekFigures }) {
+  if (!figures.days.some((day) => day.planned)) return null;
+
+  const leftOut = LIST.format(figures.leftOut.map((date) => dayLabel(date)));
+
+  return (
+    <section aria-labelledby="week-average" className="flex flex-col gap-[3px]">
+      <h2 id="week-average" className="text-micro uppercase text-text-secondary">
+        Weekly average
+      </h2>
+
+      {figures.average ? (
+        <>
+          <p className="text-value tabular-nums text-text-primary">
+            {figure(figures.average.kcal)}
+            <span className="text-slash text-text-secondary"> kcal</span>
+            <span aria-hidden="true" className="text-text-tertiary">
+              {" · "}
+            </span>
+            <span className="sr-only">, </span>
+            {figure(figures.average.proteinG)}
+            <span className="text-slash text-text-secondary"> g protein</span>
+          </p>
+          <p className="text-slash text-text-secondary">
+            Of the {figures.completeDays} fully planned{" "}
+            {figures.completeDays === 1 ? "day" : "days"}.
+            {figures.leftOut.length > 0 &&
+              ` ${leftOut} ${figures.leftOut.length === 1 ? "is" : "are"} left out: not every slot is planned.`}
+          </p>
+        </>
+      ) : (
+        <p className="text-slash text-text-secondary">
+          No day this week has every slot planned yet, so there is no average.
+        </p>
+      )}
     </section>
   );
 }

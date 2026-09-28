@@ -333,6 +333,22 @@ table.weekstack tbody tr.slot:last-child td { border-bottom: 0; }
 table.weekstack td .kcal { display: block; font-size: 9.5px; font-weight: 700;
   letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); margin-top: 2px; }
 table.weekstack td.sw { color: var(--accent); font-weight: 600; }
+/* FUEL-138: the day's figures ride in its heading, right-aligned, in the
+   heading's own colour but not its case — a figure is not a label. */
+table.weekstack .dayhead th .dtot { float: right; font-size: 11px; font-weight: 500;
+  letter-spacing: 0; text-transform: none; color: var(--text-2); }
+table.weekstack .dayhead th .dtot .open { color: var(--text-3); }
+/* FUEL-138: the jump strip — seven anchors, sticky at the top below 768px.
+   Links, not tabs: nothing is selected, and today is weight, not umber. */
+.daystrip { display: grid; grid-template-columns: repeat(7, 1fr); margin: 0 -22px;
+  padding: 0 22px; border-bottom: 1px solid var(--border); }
+.daystrip a { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 44px; font-size: 9.5px; font-weight: 600; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--text-2); text-decoration: none; }
+.daystrip a.today { font-weight: 800; color: var(--text); }
+/* FUEL-138: the average, above the grid, with its basis in words. */
+.wavg { display: flex; flex-direction: column; gap: 3px; }
+.wavg .u-val small { font-size: 12.5px; font-weight: 500; letter-spacing: 0; color: var(--text-2); }
 table.weekstack td.flex { color: var(--text-3); }
 table.week { border-collapse: collapse; font-size: 12.5px; width: 100%; letter-spacing: -.005em; }
 table.week th, table.week td { border-bottom: 1px solid var(--border); padding: 9px 9px;
@@ -578,6 +594,11 @@ table.week.fixed .slotcol { width: 100px; }
 table.week td .kcal { display: block; font-size: 9.5px; font-weight: 700;
   letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); margin-top: 3px; }
 table.week td.sw .kcal { color: var(--accent); }
+/* FUEL-138: each day's total under its own column, in the table's foot. */
+table.week tfoot th, table.week tfoot td { border-bottom: 0; border-top: 1px solid var(--border); }
+table.week tfoot td { font-size: 11px; color: var(--text-2); }
+table.week tfoot td b { display: block; font-size: 12.5px; font-weight: 600; color: var(--text); }
+table.week tfoot td .open { display: block; color: var(--text-3); }
 
 /* ---------- the frame's own measurements, drawn ---------- */
 .gridruler { display: flex; align-items: stretch; height: 46px; }
@@ -1575,26 +1596,36 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
 
               <div class="u-title" style="font-size:34px;">Week 32</div>
 
+              <div class="wavg">
+                <span class="u-micro">Weekly average</span>
+                <span class="u-val">1,871 <small>kcal</small> &middot; <span class="em">118.2</span> <small>g protein</small></span>
+                <span class="u-slash">Of the 6 fully planned days. Wed 12 Aug is left out: not every slot is planned.</span>
+              </div>
+
+              <nav class="daystrip" aria-label="Jump to a day">
+                <a class="today">Mon<span>10</span></a><a>Tue<span>11</span></a><a>Wed<span>12</span></a><a>Thu<span>13</span></a><a>Fri<span>14</span></a><a>Sat<span>15</span></a><a>Sun<span>16</span></a>
+              </nav>
+
               <table class="weekstack">
                 <caption class="vh">The week&rsquo;s plan, by day and meal slot. Swapped meals are marked.</caption>
                 <tbody>
-                  <tr class="dayhead now"><th scope="rowgroup" colspan="2">Mon 10 Aug &middot; Today</th></tr>
-                  <tr class="slot"><th scope="row">Break</th><td>Overnight Oats &mdash; Cinnamon Apple<span class="kcal">412 kcal</span></td></tr>
-                  <tr class="slot"><th scope="row">Snack</th><td>Greek Yoghurt &amp; Honey<span class="kcal">180 kcal</span></td></tr>
-                  <tr class="slot"><th scope="row">Lunch</th><td>Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal</span></td></tr>
+                  <tr class="dayhead now"><th scope="rowgroup" colspan="2">Mon 10 Aug &middot; Today<span class="dtot">2,052 kcal &middot; 121 g</span></th></tr>
+                  <tr class="slot"><th scope="row">Break</th><td>Overnight Oats &mdash; Cinnamon Apple<span class="kcal">412 kcal &middot; 30 g</span></td></tr>
+                  <tr class="slot"><th scope="row">Snack</th><td>Greek Yoghurt &amp; Honey<span class="kcal">180 kcal &middot; 18 g</span></td></tr>
+                  <tr class="slot"><th scope="row">Lunch</th><td>Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal &middot; 27 g</span></td></tr>
                   <tr class="slot"><th scope="row">Train</th><td>Circuit A</td></tr>
-                  <tr class="slot"><th scope="row">Dinner</th><td>Steak with Garlic Butter, Chips &amp; Peppercorn Sauce<span class="kcal">820 kcal</span></td></tr>
+                  <tr class="slot"><th scope="row">Dinner</th><td>Steak with Garlic Butter, Chips &amp; Peppercorn Sauce<span class="kcal">820 kcal &middot; 46 g</span></td></tr>
                 </tbody>
                 <tbody>
-                  <tr class="dayhead"><th scope="rowgroup" colspan="2">Tue 11 Aug</th></tr>
-                  <tr class="slot"><th scope="row">Break</th><td>Overnight Oats &mdash; Vanilla Berry<span class="kcal">399 kcal</span></td></tr>
-                  <tr class="slot"><th scope="row">Snack</th><td>Greek Yoghurt &amp; Honey<span class="kcal">180 kcal</span></td></tr>
-                  <tr class="slot"><th scope="row">Lunch</th><td>Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal</span></td></tr>
+                  <tr class="dayhead"><th scope="rowgroup" colspan="2">Tue 11 Aug<span class="dtot">1,830 kcal &middot; 119 g</span></th></tr>
+                  <tr class="slot"><th scope="row">Break</th><td>Overnight Oats &mdash; Vanilla Berry<span class="kcal">399 kcal &middot; 31 g</span></td></tr>
+                  <tr class="slot"><th scope="row">Snack</th><td>Greek Yoghurt &amp; Honey<span class="kcal">180 kcal &middot; 18 g</span></td></tr>
+                  <tr class="slot"><th scope="row">Lunch</th><td>Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal &middot; 27 g</span></td></tr>
                   <tr class="slot"><th scope="row">Train</th><td>Intervals</td></tr>
-                  <tr class="slot"><th scope="row">Dinner</th><td class="sw">Smoky Paprika Chicken &amp; Rice &middot; Swapped<span class="kcal">611 kcal</span></td></tr>
+                  <tr class="slot"><th scope="row">Dinner</th><td class="sw">Smoky Paprika Chicken &amp; Rice &middot; Swapped<span class="kcal">611 kcal &middot; 43 g</span></td></tr>
                 </tbody>
                 <tbody>
-                  <tr class="dayhead"><th scope="rowgroup" colspan="2">Wed 12 Aug</th></tr>
+                  <tr class="dayhead"><th scope="rowgroup" colspan="2">Wed 12 Aug<span class="dtot">1,432 kcal &middot; 86 g &middot; <span class="open">1 not planned</span></span></th></tr>
                   <tr class="slot"><th scope="row">Break</th><td class="flex" style="background-image:repeating-linear-gradient(-45deg,var(--border) 0 1px,transparent 1px 5px);">Not planned</td></tr>
                 </tbody>
               </table>
@@ -1614,12 +1645,6 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                 </div>
               </div>
 
-              <div class="kv three">
-                <div class="kvi"><span class="u-micro">Avg kcal</span><span class="u-val">1,772</span></div>
-                <div class="kvi"><span class="u-micro">Avg protein</span><span class="u-val em">148</span></div>
-                <div class="kvi"><span class="u-micro">Swaps</span><span class="u-val">1</span></div>
-              </div>
-
               <nav class="tabbar" aria-label="Primary">
                 <div class="tabpill">
                   <span class="tabitem" role="img" aria-label="Now"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></span>
@@ -1634,7 +1659,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
         <div class="cap">
           <span class="tagline">P2 · /plan · dark · 375px</span>
           <h3>Weekly plan</h3>
-          <p>Below 768px the week turns ninety degrees: seven day sections, stacked, scrolling the way a phone already scrolls. Meal names run to fifty characters and are never clipped, which is the reason the seven-column shape is the desktop&rsquo;s alone &mdash; see &sect; The Week, Two Ways. Still one real table: the day is a row-group header, the slot a row header. Today&rsquo;s day heading is the one umber mark; unplanned slots are hatched.</p>
+          <p>Below 768px the week turns ninety degrees: seven day sections, stacked, scrolling the way a phone already scrolls. Meal names run to fifty characters and are never clipped, which is the reason the seven-column shape is the desktop&rsquo;s alone &mdash; see &sect; The Week, Two Ways. Still one real table: the day is a row-group header, the slot a row header. Today&rsquo;s day heading is the one umber mark; unplanned slots are hatched. <b>FUEL-138:</b> each day heading carries that day&rsquo;s kcal and protein, and says how many of the week&rsquo;s slots it leaves open; the weekly average sits above the week with its basis in words; and a strip of seven anchors, sticky at the top, reaches any day in one tap. The strip selects nothing and marks today by weight, not umber.</p>
         </div>
       </div>
 
@@ -2472,6 +2497,12 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
               <!-- 1024px, drawn to the pixel: 100 + 7 × 132, the second number
                    derived rather than stated. The measure and the aside
                    spanned, no scroller, and the seventh day present. -->
+              <div class="wavg" style="max-width:640px;">
+                <span class="u-micro">Weekly average</span>
+                <span class="u-val">1,871 <small>kcal</small> &middot; <span class="em">118.2</span> <small>g protein</small></span>
+                <span class="u-slash">Of the 6 fully planned days. Wed 12 Aug is left out: not every slot is planned.</span>
+              </div>
+
               <table class="week fixed">
                 <caption class="vh">The week&rsquo;s plan, by day and meal slot. Swapped meals are marked.</caption>
                 <!-- The seven day columns declare nothing; the fixed table divides
@@ -2481,12 +2512,16 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                   <tr><th scope="col" class="slotcol"></th><th scope="col" class="now">Mon 10</th><th scope="col">Tue 11</th><th scope="col">Wed 12</th><th scope="col">Thu 13</th><th scope="col">Fri 14</th><th scope="col">Sat 15</th><th scope="col">Sun 16</th></tr>
                 </thead>
                 <tbody>
-                  <tr><th scope="row" class="slotcol">Break</th><td class="wcell">Overnight Oats — Cinnamon Apple<span class="kcal">412 kcal</span></td><td class="wcell">Overnight Oats — Vanilla Berry<span class="kcal">399 kcal</span></td><td class="wcell flex">Not planned</td><td class="wcell">Overnight Oats — Cinnamon Apple<span class="kcal">412 kcal</span></td><td class="wcell">Overnight Oats — Vanilla Berry<span class="kcal">399 kcal</span></td><td class="wcell">Overnight Oats — Cinnamon Apple<span class="kcal">412 kcal</span></td><td class="wcell">Overnight Oats — Vanilla Berry<span class="kcal">399 kcal</span></td></tr>
-                  <tr><th scope="row" class="slotcol">Snack</th><td class="wcell">Greek Yoghurt &amp; Honey<span class="kcal">180 kcal</span></td><td class="wcell">Greek Yoghurt &amp; Honey<span class="kcal">180 kcal</span></td><td class="wcell">Greek Yoghurt &amp; Honey<span class="kcal">180 kcal</span></td><td class="wcell">Greek Yoghurt &amp; Honey<span class="kcal">180 kcal</span></td><td class="wcell">Greek Yoghurt &amp; Honey<span class="kcal">180 kcal</span></td><td class="wcell">Greek Yoghurt &amp; Honey<span class="kcal">180 kcal</span></td><td class="wcell">Greek Yoghurt &amp; Honey<span class="kcal">180 kcal</span></td></tr>
-                  <tr><th scope="row" class="slotcol">Lunch</th><td class="wcell">Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal</span></td><td class="wcell">Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal</span></td><td class="wcell">Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal</span></td><td class="wcell">Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal</span></td><td class="wcell">Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal</span></td><td class="wcell">Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal</span></td><td class="wcell">Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal</span></td></tr>
+                  <tr><th scope="row" class="slotcol">Break</th><td class="wcell">Overnight Oats — Cinnamon Apple<span class="kcal">412 kcal &middot; 30 g</span></td><td class="wcell">Overnight Oats — Vanilla Berry<span class="kcal">399 kcal &middot; 31 g</span></td><td class="wcell flex">Not planned</td><td class="wcell">Overnight Oats — Cinnamon Apple<span class="kcal">412 kcal &middot; 30 g</span></td><td class="wcell">Overnight Oats — Vanilla Berry<span class="kcal">399 kcal &middot; 31 g</span></td><td class="wcell">Overnight Oats — Cinnamon Apple<span class="kcal">412 kcal &middot; 30 g</span></td><td class="wcell">Overnight Oats — Vanilla Berry<span class="kcal">399 kcal &middot; 31 g</span></td></tr>
+                  <tr><th scope="row" class="slotcol">Snack</th><td class="wcell">Greek Yoghurt &amp; Honey<span class="kcal">180 kcal &middot; 18 g</span></td><td class="wcell">Greek Yoghurt &amp; Honey<span class="kcal">180 kcal &middot; 18 g</span></td><td class="wcell">Greek Yoghurt &amp; Honey<span class="kcal">180 kcal &middot; 18 g</span></td><td class="wcell">Greek Yoghurt &amp; Honey<span class="kcal">180 kcal &middot; 18 g</span></td><td class="wcell">Greek Yoghurt &amp; Honey<span class="kcal">180 kcal &middot; 18 g</span></td><td class="wcell">Greek Yoghurt &amp; Honey<span class="kcal">180 kcal &middot; 18 g</span></td><td class="wcell">Greek Yoghurt &amp; Honey<span class="kcal">180 kcal &middot; 18 g</span></td></tr>
+                  <tr><th scope="row" class="slotcol">Lunch</th><td class="wcell">Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal &middot; 27 g</span></td><td class="wcell">Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal &middot; 27 g</span></td><td class="wcell">Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal &middot; 27 g</span></td><td class="wcell">Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal &middot; 27 g</span></td><td class="wcell">Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal &middot; 27 g</span></td><td class="wcell">Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal &middot; 27 g</span></td><td class="wcell">Roasted Red Pepper &amp; Provolone Ciabatta Roll<span class="kcal">640 kcal &middot; 27 g</span></td></tr>
                   <tr><th scope="row" class="slotcol">Train</th><td class="wcell">Circuit A</td><td class="wcell">Intervals</td><td class="wcell">Circuit B</td><td class="wcell">Intervals</td><td class="wcell">Circuit A</td><td class="wcell">Walk</td><td class="wcell">Walk</td></tr>
-                  <tr><th scope="row" class="slotcol">Dinner</th><td class="wcell">Steak with Garlic Butter, Chips &amp; Peppercorn Sauce<span class="kcal">820 kcal</span></td><td class="wcell sw">Smoky Paprika Chicken &amp; Rice · Swapped<span class="kcal">611 kcal</span></td><td class="wcell">Chilli con Carne<span class="kcal">612 kcal</span></td><td class="wcell">Chicken &amp; Rice<span class="kcal">591 kcal</span></td><td class="wcell">Beef Mince &amp; Potato<span class="kcal">648 kcal</span></td><td class="wcell">Chilli con Carne<span class="kcal">612 kcal</span></td><td class="wcell">Chicken &amp; Rice<span class="kcal">591 kcal</span></td></tr>
+                  <tr><th scope="row" class="slotcol">Dinner</th><td class="wcell">Steak with Garlic Butter, Chips &amp; Peppercorn Sauce<span class="kcal">820 kcal &middot; 46 g</span></td><td class="wcell sw">Smoky Paprika Chicken &amp; Rice · Swapped<span class="kcal">611 kcal &middot; 43 g</span></td><td class="wcell">Chilli con Carne<span class="kcal">612 kcal &middot; 41 g</span></td><td class="wcell">Chicken &amp; Rice<span class="kcal">591 kcal &middot; 44 g</span></td><td class="wcell">Beef Mince &amp; Potato<span class="kcal">648 kcal &middot; 38 g</span></td><td class="wcell">Chilli con Carne<span class="kcal">612 kcal &middot; 41 g</span></td><td class="wcell">Chicken &amp; Rice<span class="kcal">591 kcal &middot; 44 g</span></td></tr>
                 </tbody>
+                <!-- FUEL-138: each day's total under its own column. -->
+                <tfoot>
+                  <tr><th scope="row" class="slotcol">Total</th><td><b>2,052 kcal</b>121 g</td><td><b>1,830 kcal</b>119 g</td><td><b>1,432 kcal</b>86 g<span class="open">1 not planned</span></td><td><b>1,823 kcal</b>119 g</td><td><b>1,867 kcal</b>114 g</td><td><b>1,844 kcal</b>116 g</td><td><b>1,810 kcal</b>120 g</td></tr>
+                </tfoot>
               </table>
 
               <div class="legend">
@@ -2503,12 +2538,6 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                   <button class="btn btn-text" type="button" style="width:auto;font-size:15px;">Revert</button>
                 </div>
               </div>
-
-              <div class="kv three" style="max-width:640px;">
-                <div class="kvi"><span class="u-micro">Avg kcal</span><span class="u-val">1,772</span></div>
-                <div class="kvi"><span class="u-micro">Avg protein</span><span class="u-val em">148</span></div>
-                <div class="kvi"><span class="u-micro">Swaps</span><span class="u-val">1</span></div>
-              </div>
             </div>
           </div>
           </div>
@@ -2516,7 +2545,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
         <div class="cap">
           <span class="tagline">P2 · /plan · dark · 1024px</span>
           <h3>Weekly plan</h3>
-          <p>The one screen where the extra width goes to the content rather than beside it. The measure and the aside are spanned, and the table is drawn to exactly that 1024: a <b>100px slot column and seven 132px day columns</b>, the second number divided out rather than stated. Fixed columns with a <code>colgroup</code>, not minimums &mdash; a width set on an auto table is a floor the longest meal name grows past, which is how a 1023px table ended up scrolling at 1920. The day columns declare nothing and share what is left, so below this width they narrow instead of the week losing days. The names wrap inside their column, which &sect; The Week, Two Ways already specifies, and the seventh day is present at every width.</p>
+          <p>The one screen where the extra width goes to the content rather than beside it. The measure and the aside are spanned, and the table is drawn to exactly that 1024: a <b>100px slot column and seven 132px day columns</b>, the second number divided out rather than stated. Fixed columns with a <code>colgroup</code>, not minimums &mdash; a width set on an auto table is a floor the longest meal name grows past, which is how a 1023px table ended up scrolling at 1920. The day columns declare nothing and share what is left, so below this width they narrow instead of the week losing days. The names wrap inside their column, which &sect; The Week, Two Ways already specifies, and the seventh day is present at every width. <b>FUEL-138:</b> each day&rsquo;s kcal and protein sit in the table&rsquo;s <code>&lt;tfoot&gt;</code>, under that day&rsquo;s column, and a day that leaves one of the week&rsquo;s slots open says so there. The weekly average is above the table, on the measure, and states its basis: the days that fill every slot the week uses. Each cell carries its protein beside its kcal.</p>
         </div>
       </div>
 
