@@ -30,6 +30,19 @@ import type { SeedMeal } from "./types";
  *    list silently omits the jalapenos the recipe tells you to buy. Naming them
  *    is the honest encoding available.
  *
+ * 3. **The shop's reading sits beside the kitchen's (FUEL-137).** `name` and
+ *    `nonScaleMeasure` are what the recipe says, prep note and all. `shopName`
+ *    (only where it differs), `shopQty` and `shopUnit` are what the shopping
+ *    list buys and sums: garlic is `shopQty: 1, shopUnit: "clove"` whatever
+ *    the recipe does to it. Ranges take the midpoint as grams do, except a
+ *    discrete item you cannot buy half of — naan "1–2" is 2. Tablespoons of
+ *    butter and yoghurt are converted at 15g, and the optional handful of
+ *    grated cheese at 20g — the only places a measure is turned into a
+ *    weight, because the list sums them against rows that were weighed. `pantry: true` marks a staple kept in (salt, oils, dried spices,
+ *    sauces), which the list shelves last and never gives an amount. Every
+ *    change here is a change to what `drizzle/0017` back-filled —
+ *    `shop-backfill.test.ts` says so when they drift.
+ *
  * `grams` is null wherever the recipe gives no weight — "salt and pepper to
  * taste", "1 clove garlic". The column was made nullable for precisely this, and
  * inventing a number to fill it would be worse than the gap.
