@@ -98,7 +98,7 @@ export function TargetsForm({
 }: {
   /** Field name → the stored value as text. */
   values: Record<string, string>;
-  /** Computed on the server — see `supportedTimezones`. */
+  /** Computed on the server — see `timezoneOptions`. */
   timezones: string[];
 }) {
   const [state, action, pending] = useActionState<TargetsState, FormData>(

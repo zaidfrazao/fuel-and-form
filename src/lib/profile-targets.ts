@@ -148,15 +148,15 @@ function parseInteger(value: unknown, min: number, max: number): number | undefi
 }
 
 /**
- * The zones the form offers, and the only ones it accepts.
+ * The zones the form offers.
  *
- * `Intl`'s own list, so the select and the refusal cannot disagree. `UTC` is
- * added because some ICU builds leave it out of the list while every one of them
- * accepts it — and a profile set to UTC must be able to save without moving.
+ * `Intl`'s own list, plus `UTC`, which some ICU builds leave out of the list
+ * while every one of them accepts it.
  *
  * Computed on the SERVER and handed to the form as a prop. A browser's ICU is
- * not the server's, and a list built on both sides would be a hydration
- * mismatch the first time they differed by one zone.
+ * not the server's — one lists `Europe/Kyiv` where another still lists
+ * `Europe/Kiev` — and a list built on both sides would be a hydration mismatch
+ * the first time they differed by one zone.
  */
 export function supportedTimezones(): string[] {
   const zones = Intl.supportedValuesOf("timeZone");
@@ -164,19 +164,45 @@ export function supportedTimezones(): string[] {
   return zones.includes("UTC") ? zones : [...zones, "UTC"].sort();
 }
 
+/**
+ * The options for a profile whose zone is `stored` — the list, with the stored
+ * zone added if the list lacks it.
+ *
+ * The select is controlled, and a controlled select whose value matches no
+ * option draws its FIRST option. Without this, a profile stored under an alias
+ * the runtime's list spells differently would show `Africa/Abidjan`, and a save
+ * that changed only the calories would quietly move the whole account there.
+ */
+export function timezoneOptions(stored: string): string[] {
+  const zones = supportedTimezones();
+
+  return zones.includes(stored) ? zones : [...zones, stored].sort();
+}
+
+/**
+ * A zone `Intl` can resolve, in its canonical spelling — or `undefined`.
+ *
+ * Validity is `Intl`'s, not membership of the list above: the list is one
+ * ICU's opinion of the canonical names, and an alias it omits (`Europe/Kiev`,
+ * `US/Eastern`) still resolves everywhere `todayIn` runs. Canonicalised so
+ * `europe/london` is stored the way every other reader spells it.
+ */
+export function canonicalTimezone(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: value.trim() }).resolvedOptions()
+      .timeZone;
+  } catch {
+    return undefined;
+  }
+}
+
 const MACRO_MESSAGE = `Enter grams from 0 to ${MAX_MACRO_G}.`;
 const WEIGHT_MESSAGE = `Enter a weight in kg between ${MIN_KG} and ${MAX_KG}, like 76.5.`;
 
-/**
- * Reads the submitted form. Nothing reaches the row unless every field passes.
- *
- * `timezones` is the list to accept, passed in rather than read here so a test
- * can hold it still; the action passes `supportedTimezones()`.
- */
-export function parseProfileTargets(
-  form: FormData,
-  timezones: readonly string[],
-): TargetsParseResult {
+/** Reads the submitted form. Nothing reaches the row unless every field passes. */
+export function parseProfileTargets(form: FormData): TargetsParseResult {
   const errors: TargetErrors = {};
   const field = (name: string) => form.get(name);
 
@@ -216,8 +242,7 @@ export function parseProfileTargets(
     errors[TARGET_FIELD.height] = `Enter a whole number of cm from ${MIN_HEIGHT_CM} to ${MAX_HEIGHT_CM}.`;
   }
 
-  const zone = field(TARGET_FIELD.timezone);
-  const timezone = typeof zone === "string" && timezones.includes(zone) ? zone : undefined;
+  const timezone = canonicalTimezone(field(TARGET_FIELD.timezone));
   if (timezone === undefined) errors[TARGET_FIELD.timezone] = "Choose a timezone from the list.";
 
   if (

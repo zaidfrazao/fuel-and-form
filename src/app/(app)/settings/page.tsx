@@ -8,7 +8,7 @@ import { getSession } from "@/lib/auth/session";
 import { loadSettings } from "@/lib/db/queries/profile";
 import { PAGE_COLUMN_BASE, PAGE_FRAME_GRID } from "@/lib/frame";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
-import { supportedTimezones, targetFields } from "@/lib/profile-targets";
+import { targetFields, timezoneOptions } from "@/lib/profile-targets";
 import { scheduleFields } from "@/lib/slot-times";
 import { cn } from "@/lib/utils";
 import { PushForm } from "./push-form";
@@ -88,9 +88,12 @@ export default async function SettingsPage() {
             />
             {/* FUEL-136. In the measure, beneath the times: § Settings' "a
                 form you fill in", and the second one. The zone list is built
-                here, on the server, so it cannot differ from the one the action
-                checks against — see `supportedTimezones`. */}
-            <TargetsForm values={targetFields(settings.targets)} timezones={supportedTimezones()} />
+                here, on the server, and always carries the stored zone — see
+                `timezoneOptions`. */}
+            <TargetsForm
+              values={targetFields(settings.targets)}
+              timezones={timezoneOptions(settings.targets.timezone)}
+            />
           </>
         ) : (
           <p className="text-body text-text-secondary">

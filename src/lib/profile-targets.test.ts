@@ -8,10 +8,12 @@ import {
   MIN_PACE_KG,
   parseProfileTargets,
   type ProfileTargets,
+  canonicalTimezone,
   supportedTimezones,
   TARGET_FIELD,
   targetFields,
   targetsChanged,
+  timezoneOptions,
 } from "./profile-targets";
 import { demoProfile } from "./seed/persona";
 import { MAX_HEIGHT_CM, MIN_HEIGHT_CM } from "./steps";
@@ -41,8 +43,6 @@ const SAM: ProfileTargets = {
   timezone: persona.timezone,
 };
 
-const ZONES = ["Europe/London", "America/New_York", "UTC"];
-
 function form(fields: Record<string, string>): FormData {
   const data = new FormData();
 
@@ -63,7 +63,7 @@ const errorsOf = (result: ReturnType<typeof parseProfileTargets>) => {
 
 describe("parseProfileTargets", () => {
   it("round-trips the stored values through the form", () => {
-    expect(parseProfileTargets(form(targetFields(SAM)), ZONES)).toEqual({
+    expect(parseProfileTargets(form(targetFields(SAM)))).toEqual({
       ok: true,
       update: SAM,
     });
@@ -71,32 +71,28 @@ describe("parseProfileTargets", () => {
 
   it("reads a comma as the decimal separator, like a weigh-in", () => {
     const result = parseProfileTargets(
-      withField(TARGET_FIELD.goalWeight, String(SAM.targetWeightKg + 0.5).replace(".", ",")),
-      ZONES,
-    );
+      withField(TARGET_FIELD.goalWeight, String(SAM.targetWeightKg + 0.5).replace(".", ",")));
 
     expect(result.ok && result.update.targetWeightKg).toBe(SAM.targetWeightKg + 0.5);
   });
 
   it("trims whitespace around a value", () => {
     const result = parseProfileTargets(
-      withField(TARGET_FIELD.kcal, ` ${SAM.targetKcal} `),
-      ZONES,
-    );
+      withField(TARGET_FIELD.kcal, ` ${SAM.targetKcal} `));
 
     expect(result.ok && result.update.targetKcal).toBe(SAM.targetKcal);
   });
 
   it("rounds a macro to one decimal and the pace to two, as the columns hold them", () => {
-    const macro = parseProfileTargets(withField(TARGET_FIELD.protein, "10.26"), ZONES);
-    const pace = parseProfileTargets(withField(TARGET_FIELD.pace, "0.456"), ZONES);
+    const macro = parseProfileTargets(withField(TARGET_FIELD.protein, "10.26"));
+    const pace = parseProfileTargets(withField(TARGET_FIELD.pace, "0.456"));
 
     expect(macro.ok && macro.update.targetProteinG).toBe(10.3);
     expect(pace.ok && pace.update.goalPaceKgPerWeek).toBe(0.46);
   });
 
   it("accepts a macro target of zero", () => {
-    const result = parseProfileTargets(withField(TARGET_FIELD.carb, "0"), ZONES);
+    const result = parseProfileTargets(withField(TARGET_FIELD.carb, "0"));
 
     expect(result.ok && result.update.targetCarbG).toBe(0);
   });
@@ -118,8 +114,8 @@ describe("parseProfileTargets", () => {
     [TARGET_FIELD.height, String(MIN_HEIGHT_CM), String(MIN_HEIGHT_CM - 1)],
     [TARGET_FIELD.height, String(MAX_HEIGHT_CM), String(MAX_HEIGHT_CM + 1)],
   ])("%s accepts %s and refuses %s", (name, inside, outside) => {
-    expect(parseProfileTargets(withField(name, inside), ZONES).ok).toBe(true);
-    expect(Object.keys(errorsOf(parseProfileTargets(withField(name, outside), ZONES)))).toEqual([
+    expect(parseProfileTargets(withField(name, inside)).ok).toBe(true);
+    expect(Object.keys(errorsOf(parseProfileTargets(withField(name, outside))))).toEqual([
       name,
     ]);
   });
@@ -132,32 +128,40 @@ describe("parseProfileTargets", () => {
     ["both separators", "1.234,5"],
     ["words", "lots"],
   ])("refuses %s in a decimal field", (_label, value) => {
-    expect(errorsOf(parseProfileTargets(withField(TARGET_FIELD.protein, value), ZONES))).toHaveProperty(
+    expect(errorsOf(parseProfileTargets(withField(TARGET_FIELD.protein, value)))).toHaveProperty(
       TARGET_FIELD.protein,
     );
   });
 
   it("refuses a fraction where the column is an integer, rather than truncating it", () => {
     expect(
-      errorsOf(parseProfileTargets(withField(TARGET_FIELD.height, `${SAM.heightCm}.5`), ZONES)),
+      errorsOf(parseProfileTargets(withField(TARGET_FIELD.height, `${SAM.heightCm}.5`))),
     ).toHaveProperty(TARGET_FIELD.height);
     expect(
-      errorsOf(parseProfileTargets(withField(TARGET_FIELD.kcal, `${SAM.targetKcal},0`), ZONES)),
+      errorsOf(parseProfileTargets(withField(TARGET_FIELD.kcal, `${SAM.targetKcal},0`))),
     ).toHaveProperty(TARGET_FIELD.kcal);
   });
 
-  it("refuses a timezone that is not on the list, however plausible", () => {
-    expect(
-      errorsOf(parseProfileTargets(withField(TARGET_FIELD.timezone, "Europe/Paris"), ZONES)),
-    ).toHaveProperty(TARGET_FIELD.timezone);
-    expect(parseProfileTargets(withField(TARGET_FIELD.timezone, "UTC"), ZONES).ok).toBe(true);
+  it("stores a zone in Intl's canonical spelling", () => {
+    const result = parseProfileTargets(withField(TARGET_FIELD.timezone, "europe/london"));
+
+    expect(result.ok && result.update.timezone).toBe("Europe/London");
   });
+
+  it.each([["an unknown zone", "Nope/Zone"], ["blank", ""], ["an offset", "+02:00x"]])(
+    "refuses %s",
+    (_label, value) => {
+      expect(errorsOf(parseProfileTargets(withField(TARGET_FIELD.timezone, value)))).toHaveProperty(
+        TARGET_FIELD.timezone,
+      );
+    },
+  );
 
   it("refuses a missing field — a POST that leaves one out does not keep the old value", () => {
     const fields = targetFields(SAM);
     delete fields[TARGET_FIELD.pace];
 
-    expect(Object.keys(errorsOf(parseProfileTargets(form(fields), ZONES)))).toEqual([
+    expect(Object.keys(errorsOf(parseProfileTargets(form(fields))))).toEqual([
       TARGET_FIELD.pace,
     ]);
   });
@@ -165,9 +169,7 @@ describe("parseProfileTargets", () => {
   it("reports every bad field at once, not the first", () => {
     const errors = errorsOf(
       parseProfileTargets(
-        form({ ...targetFields(SAM), [TARGET_FIELD.kcal]: "", [TARGET_FIELD.height]: "" }),
-        ZONES,
-      ),
+        form({ ...targetFields(SAM), [TARGET_FIELD.kcal]: "", [TARGET_FIELD.height]: "" })),
     );
 
     expect(Object.keys(errors).sort()).toEqual([TARGET_FIELD.kcal, TARGET_FIELD.height].sort());
@@ -179,7 +181,7 @@ describe("parseProfileTargets", () => {
    */
   it("accepts a goal weight equal to the start weight", () => {
     expect(
-      parseProfileTargets(withField(TARGET_FIELD.goalWeight, String(SAM.startWeightKg)), ZONES).ok,
+      parseProfileTargets(withField(TARGET_FIELD.goalWeight, String(SAM.startWeightKg))).ok,
     ).toBe(true);
   });
 });
@@ -191,6 +193,38 @@ describe("supportedTimezones", () => {
     expect(zones).toContain(SAM.timezone);
     expect(zones).toContain("UTC");
     expect(zones).toEqual([...zones].sort());
+  });
+});
+
+describe("timezoneOptions", () => {
+  /*
+   * The select is controlled, and a controlled select whose value matches no
+   * option draws its first — so a stored zone missing from this runtime's list
+   * would be shown, and saved, as some other zone entirely.
+   */
+  it("adds a stored zone the list does not carry, and keeps the list sorted", () => {
+    const alias = supportedTimezones().includes("US/Eastern") ? "Etc/Unlisted" : "US/Eastern";
+    const options = timezoneOptions(alias);
+
+    expect(options).toContain(alias);
+    expect(options).toEqual([...options].sort());
+  });
+
+  it("does not duplicate a zone the list already carries", () => {
+    const options = timezoneOptions(SAM.timezone);
+
+    expect(options.filter((zone) => zone === SAM.timezone)).toHaveLength(1);
+  });
+});
+
+describe("canonicalTimezone", () => {
+  it("accepts an alias the runtime's list may omit, so a stored alias still saves", () => {
+    expect(canonicalTimezone("US/Eastern")).toBeDefined();
+  });
+
+  it("refuses what Intl cannot resolve", () => {
+    expect(canonicalTimezone("Nope/Zone")).toBeUndefined();
+    expect(canonicalTimezone(undefined)).toBeUndefined();
   });
 });
 

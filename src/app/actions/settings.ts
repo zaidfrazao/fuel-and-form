@@ -4,11 +4,7 @@ import { refresh } from "next/cache";
 
 import { getSession } from "@/lib/auth/session";
 import { saveSchedule, saveTargets } from "@/lib/db/queries/profile";
-import {
-  parseProfileTargets,
-  supportedTimezones,
-  type TargetErrors,
-} from "@/lib/profile-targets";
+import { parseProfileTargets, type TargetErrors } from "@/lib/profile-targets";
 import { parseSlotTimes, type SlotTimeErrors } from "@/lib/slot-times";
 
 /**
@@ -123,7 +119,7 @@ export async function saveProfileTargets(
 
     if (!session) return TARGETS_FAILED;
 
-    const parsed = parseProfileTargets(form, supportedTimezones());
+    const parsed = parseProfileTargets(form);
 
     if (!parsed.ok) return { status: "invalid", errors: parsed.errors };
 
