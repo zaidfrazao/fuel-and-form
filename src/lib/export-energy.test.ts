@@ -384,6 +384,15 @@ const WEEK: WeekExportInput = {
   sets: SETS,
   weighIns: [WEIGHT_LOG],
   startWeightKg: profile.startWeightKg,
+  targets: {
+    targetKcal: profile.targetKcal,
+    targetProteinG: profile.targetProteinG,
+    targetFatG: profile.targetFatG,
+    targetCarbG: profile.targetCarbG,
+    targetWeightKg: profile.targetWeightKg,
+    goalPaceKgPerWeek: profile.goalPaceKgPerWeek,
+    changedOn: profile.targetsChangedOn,
+  },
 };
 
 const csv = buildWeekCsv(WEEK);

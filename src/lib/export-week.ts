@@ -57,7 +57,7 @@ import type { TrainingDay } from "./resolve-training";
  * cell produces a column a spreadsheet cannot pivot, sum or chart — which is the
  * one thing the assistant opens this file to do.
  *
- * A five-line preamble comes first. `week` and `dates` name the seven days;
+ * A preamble comes first. `week` and `dates` name the seven days;
  * `timezone` is there because a bare column of dates is not readable without it
  * — "2026-08-17" is a day only in some zone, and the JSON export makes the same
  * claim by putting the timezone on `account` rather than leaving it inside
@@ -301,6 +301,25 @@ export type WeekExportInput = {
   /** `profiles.start_weight_kg` — `nearestWeight`'s fallback, for an account
    * that has never stepped on the scale. */
   startWeightKg: number;
+  /**
+   * The targets in force when the file was made, and the date they last moved
+   * — FUEL-136.
+   *
+   * CURRENT, not the week's. The app keeps one set of targets and a date, not a
+   * history, so a week before a recalibration is printed beside the targets
+   * that replaced its own. `targets_changed_on` is what lets the reader see
+   * that: a date after the week's Sunday says these are not the figures the
+   * week was planned against. `null` is never changed in the app.
+   */
+  targets: {
+    targetKcal: number;
+    targetProteinG: number;
+    targetFatG: number;
+    targetCarbG: number;
+    targetWeightKg: number;
+    goalPaceKgPerWeek: number;
+    changedOn: CalendarDate | null;
+  };
 };
 
 /**
@@ -700,6 +719,17 @@ export function buildWeekCsv(input: WeekExportInput): string {
     // imported from there rather than respelled here.
     ["est_burn_is", BURN_SEMANTICS],
     ["exported_at", input.exportedAt.toISOString()],
+    // FUEL-136. The targets the assistant would otherwise have to remember,
+    // and the date that says whether this week was planned against them. One
+    // labelled line each rather than a row of four, because a preamble line is
+    // read by name and a bare row of numbers is not.
+    ["target_kcal", cell(input.targets.targetKcal)],
+    ["target_protein_g", cell(input.targets.targetProteinG)],
+    ["target_fat_g", cell(input.targets.targetFatG)],
+    ["target_carb_g", cell(input.targets.targetCarbG)],
+    ["target_weight_kg", cell(input.targets.targetWeightKg)],
+    ["goal_pace_kg_per_week", cell(input.targets.goalPaceKgPerWeek)],
+    ["targets_changed_on", input.targets.changedOn ?? ""],
 
     [],
     ["weight"],

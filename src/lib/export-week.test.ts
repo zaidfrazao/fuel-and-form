@@ -317,6 +317,16 @@ function input(over: Partial<WeekExportInput> = {}): WeekExportInput {
     // PROFILE field. The weigh-in case below uses one of that script's
     // separate fixture values — the two lists mean different things.
     startWeightKg: 84.2,
+    // The persona's targets, for the same reason. FUEL-136.
+    targets: {
+      targetKcal: 1780,
+      targetProteinG: 148,
+      targetFatG: 50,
+      targetCarbG: 185,
+      targetWeightKg: 76,
+      goalPaceKgPerWeek: 0.5,
+      changedOn: null,
+    },
     ...over,
   };
 }
@@ -409,6 +419,15 @@ describe("the whole document", () => {
         // only in the README — `plannedIs` in the JSON export is the same move.
         "est_burn_is,estimated-not-measured",
         "exported_at,2026-08-21T09:30:00.000Z",
+        // FUEL-136: the targets in force at export, and when they last moved
+        // — blank here, never changed in the app.
+        "target_kcal,1780",
+        "target_protein_g,148",
+        "target_fat_g,50",
+        "target_carb_g,185",
+        "target_weight_kg,76",
+        "goal_pace_kg_per_week,0.5",
+        "targets_changed_on,",
         "",
         "weight",
         "date,weight_kg,note",
@@ -441,6 +460,18 @@ describe("the whole document", () => {
     );
   });
 
+  test("dates a recalibration, so a week can be read against the right targets", () => {
+    // FUEL-136. The targets are the CURRENT ones; a change dated after this
+    // week's Sunday is the file saying so.
+    const csv = buildWeekCsv(
+      input({
+        targets: { ...input().targets, changedOn: "2026-08-25" },
+      }),
+    );
+
+    expect(lines(csv)).toContain("targets_changed_on,2026-08-25");
+  });
+
   test("writes every section for a week with nothing in it", () => {
     // A header with no rows says "nothing was recorded". A missing section is
     // indistinguishable from a broken export by the person opening the file.
@@ -452,6 +483,13 @@ describe("the whole document", () => {
       "timezone,Europe/London",
       "est_burn_is,estimated-not-measured",
       "exported_at,2026-08-21T09:30:00.000Z",
+      "target_kcal,1780",
+      "target_protein_g,148",
+      "target_fat_g,50",
+      "target_carb_g,185",
+      "target_weight_kg,76",
+      "goal_pace_kg_per_week,0.5",
+      "targets_changed_on,",
       "",
       "weight",
       "date,weight_kg,note",
