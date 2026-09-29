@@ -72,7 +72,7 @@ const CASES: { pathname: string; note: string }[] = [
   },
   {
     pathname: "/settings",
-    note: "Level 2 → Now. Parented to the root, and the sidebar foot below still does not claim to be current.",
+    note: "Level 2 under Now, but lights no slot: Settings is not Now's content (FUEL-140). Above 1024px the sidebar foot takes the mark instead; below it, nothing is lit.",
   },
   {
     pathname: "/dev/nav-shell",
