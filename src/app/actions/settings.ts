@@ -3,7 +3,12 @@
 import { refresh } from "next/cache";
 
 import { getSession } from "@/lib/auth/session";
-import { saveSchedule } from "@/lib/db/queries/profile";
+import { saveSchedule, saveTargets } from "@/lib/db/queries/profile";
+import {
+  parseProfileTargets,
+  supportedTimezones,
+  type TargetErrors,
+} from "@/lib/profile-targets";
 import { parseSlotTimes, type SlotTimeErrors } from "@/lib/slot-times";
 
 /**
@@ -81,5 +86,58 @@ export async function saveSlotTimes(
     console.error("Could not save the slot times.", error);
 
     return FAILED;
+  }
+}
+
+/**
+ * What the targets form renders — the same four states as `SettingsState`, with
+ * the targets' own error map. A second type rather than a union of error maps,
+ * so neither form can be handed the other's field names.
+ */
+export type TargetsState =
+  | { status: "saved"; at: number }
+  | { status: "invalid"; errors: TargetErrors }
+  | { status: "failed" }
+  | undefined;
+
+const TARGETS_FAILED: TargetsState = { status: "failed" };
+
+/**
+ * Saving the targets, the weights, the pace, the height and the zone — FUEL-136.
+ *
+ * `saveSlotTimes`' contract in every respect: the session is resolved here, the
+ * values are parsed before anything touches the row, the write is scoped, and
+ * nothing throws. A demo visitor rewrites their own profile or none.
+ *
+ * A separate action and a separate form, because the two halves fail
+ * separately. One action would mean a mistyped slot time refusing a new kcal
+ * target the person had typed correctly, with the error half a screen away from
+ * the field they were looking at.
+ */
+export async function saveProfileTargets(
+  _previous: TargetsState,
+  form: FormData,
+): Promise<TargetsState> {
+  try {
+    const session = await getSession();
+
+    if (!session) return TARGETS_FAILED;
+
+    const parsed = parseProfileTargets(form, supportedTimezones());
+
+    if (!parsed.ok) return { status: "invalid", errors: parsed.errors };
+
+    if (!(await saveTargets(session.userId, parsed.update))) return TARGETS_FAILED;
+
+    // "Effective immediately on /, /plan and /weight" — the ticket's first
+    // criterion. All three are dynamic and read the profile per request, so
+    // the next render of any of them is against the row just written.
+    refresh();
+
+    return { status: "saved", at: Date.now() };
+  } catch (error) {
+    console.error("Could not save the targets.", error);
+
+    return TARGETS_FAILED;
   }
 }

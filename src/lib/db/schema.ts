@@ -425,6 +425,25 @@ export const profiles = pgTable(
      * every screen at once — and here the database can hold the line itself.
      */
     walkReminderAt: text("walk_reminder_at").default("19:00"),
+
+    /**
+     * The user's date when the targets last moved — FUEL-136.
+     *
+     * A recalibration rewrites the targets in place, so a week before it and a
+     * week after it are judged by different numbers and nothing else in the
+     * schema says so. This is the minimum that lets the week export state which
+     * side of a change a week sits on; a full history table was the alternative
+     * and costs a table on every demo provisioned for a question asked every
+     * couple of months.
+     *
+     * `null` means never changed in the app — the seed's targets still stand.
+     * A calendar date in `timezone`, not a timestamp, because it is compared
+     * with the week's dates and a week is a run of dates.
+     *
+     * Set by `profile-targets.ts`'s `targetsChanged`: the macros, the goal
+     * weight and the pace, and not the start weight, height or zone.
+     */
+    targetsChangedOn: calendarDate("targets_changed_on"),
   },
   () => [
     check(

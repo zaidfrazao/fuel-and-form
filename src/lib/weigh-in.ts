@@ -153,7 +153,7 @@ export function narrowWeighIn(entry: WeighInRow): WeighInRow {
  * refusing it here means the range check never has to explain itself for a
  * string nobody types on purpose.
  */
-const DECIMAL = /^\d+(?:[.,]\d+)?$/;
+export const DECIMAL = /^\d+(?:[.,]\d+)?$/;
 
 /**
  * The scale reading as it will be stored, or `undefined` for one that will not.
