@@ -33,6 +33,7 @@ import {
   STATUS_LABEL,
   theDay,
   undoRetreats,
+  undoTarget,
 } from "@/lib/day-summary";
 import type { WorkoutExercise } from "@/lib/db/schema";
 import {
@@ -836,7 +837,12 @@ function Actions({
    */
   at?: keyof typeof ACTION_BAR_AT;
   item?: ScheduledItem;
-  undoable: boolean;
+  /**
+   * The line Undo takes back, or nothing to undo — FUEL-142. Before it this was
+   * a boolean, and the control said `Undo` with no object: after a set logged
+   * on `/training` it was offered here for a session the screen never named.
+   */
+  undoable: LoggedEntry | undefined;
   failure: Attempt | null;
   onAct: (attempt: Attempt) => void;
   onSwap: () => void;
@@ -941,13 +947,27 @@ function Actions({
         {undoable && (
           <div className={cn("flex items-center gap-4", ACTION_BAR_PRIMARY)}>
             <Button variant="link" onClick={() => onAct({ kind: "undo" })}>
-              Undo
+              {undoLabel(undoable)}
             </Button>
           </div>
         )}
       </div>
     </div>
   );
+}
+
+/**
+ * What Undo says it takes back — FUEL-142.
+ *
+ * The object, always, and the verb only when it was a skip: `Undo · Lunch`
+ * takes back the log, `Undo skip · Lunch` the refusal. The two read differently
+ * because undoing them does different things to the day — a skip taken back
+ * puts the item back to do, an eaten meal taken back takes it off the totals —
+ * and a reader choosing whether to tap should not have to remember which of
+ * the two they last did. The middle dot is § Slash Metadata's separator.
+ */
+function undoLabel(entry: LoggedEntry): string {
+  return `${entry.status === "skipped" ? "Undo skip" : "Undo"} · ${entry.name}`;
 }
 
 /**
@@ -1205,11 +1225,13 @@ function applyMove(
 
   if (move.kind === "undone") {
     const retreats = undoRetreats(timeline, current.position, current.entries, minutesOfDay);
+    const target = undoTarget(current.entries);
 
     return {
       ...current,
       position: current.position - (retreats ? 1 : 0),
-      entries: current.entries.slice(0, -1),
+      // The entry the server deletes, not the last line — `undoTarget`.
+      entries: current.entries.filter((entry) => entry !== target),
     };
   }
 
@@ -1517,7 +1539,7 @@ export function RightNow({
        * way on the server, so a day whose only log is the walk offers no Undo
        * here AND has none to give if one were asked for.
        */
-      undoable={progress.entries.some((entry) => !entry.walk)}
+      undoable={undoTarget(progress.entries)}
       failure={failure}
       onAct={act}
       onSwap={() => setPicking(true)}

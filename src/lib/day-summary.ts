@@ -468,9 +468,26 @@ export function undoRetreats(
   if (position <= clockIndex(timeline, minutesOfDay)) return false;
 
   const behind = timeline[position - 1];
-  const last = entries.filter((entry) => !entry.walk).at(-1);
+  const last = undoTarget(entries);
 
   if (!behind || !last) return false;
 
   return last.kind === behind.kind && last.name === itemName(behind);
+}
+
+/**
+ * The entry `/`'s Undo takes back — FUEL-142.
+ *
+ * The last line that is not the walk's, because `undoLastLog` takes the latest
+ * row over the day's logs with the walk's taken out, and `dayLog` orders these
+ * by the same `logged_at`. One declaration for the three things that have to
+ * agree on it: the control's words, the optimistic pop, and `undoRetreats`.
+ *
+ * Before FUEL-142 the pop was `entries.slice(0, -1)`, which is the last line
+ * whatever it is — so a walk logged after the bar's last tap had its own line
+ * taken out of the day while the server deleted a different row, for as long as
+ * the round trip took.
+ */
+export function undoTarget(entries: readonly LoggedEntry[]): LoggedEntry | undefined {
+  return entries.filter((entry) => !entry.walk).at(-1);
 }
