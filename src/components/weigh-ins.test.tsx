@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -140,6 +140,21 @@ beforeEach(() => {
 });
 
 describe("logging a weigh-in", () => {
+  test("says the date in the app's words beside the picker — FUEL-142", async () => {
+    // The native field draws `08/20/2026` on an en-US phone; every other date
+    // in the app is `Thu 20 Aug`. The words follow the picker, and a field
+    // cleared to nothing says nothing rather than a stale day.
+    render(view([]));
+
+    expect(dateBox().parentElement?.textContent).toBe("/ Thu 20 Aug");
+
+    fireEvent.change(dateBox(), { target: { value: "2026-08-17" } });
+    expect(dateBox().parentElement?.textContent).toBe("/ Mon 17 Aug");
+
+    fireEvent.change(dateBox(), { target: { value: "" } });
+    expect(dateBox().parentElement?.textContent).toBe("");
+  });
+
   test("takes a date, a weight and an optional note", async () => {
     const user = userEvent.setup();
 

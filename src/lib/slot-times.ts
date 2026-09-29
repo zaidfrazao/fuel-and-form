@@ -127,13 +127,38 @@ const REMINDER_MALFORMED =
 function readTime(value: FormDataEntryValue | null): TimeOfDay | null | undefined {
   if (typeof value !== "string") return undefined;
 
-  // A native `<input type="time">` submits '' when cleared, and trimming means
-  // a field holding only spaces reads as cleared too rather than as malformed.
+  // A cleared field submits '', and trimming means a field holding only spaces
+  // reads as cleared too rather than as malformed.
   const trimmed = value.trim();
 
   if (trimmed === "") return null;
 
-  return /^([01]\d|2[0-3]):([0-5]\d)$/.test(trimmed) ? trimmed : undefined;
+  return typedTime(trimmed);
+}
+
+/**
+ * A typed time as 'HH:MM', or `undefined` if it is not one — FUEL-142.
+ *
+ * The settings fields are text now, not `type="time"`: a native time input
+ * draws in the browser's locale, which put `04:00 PM` on the one screen where
+ * the app writes `16:00` everywhere else. Without the picker to pad and
+ * punctuate, what a thumb types is taken too — `7:10`, `0710`, `710` and
+ * `07.10` are all 07:10 — and what is STORED is still only ever 'HH:MM'.
+ *
+ * Exported for the form, which tidies a field to this on blur so the row shows
+ * what will be saved. The action is still where it is decided: a hand-rolled
+ * POST comes through `readTime` and never meets the form.
+ */
+export function typedTime(value: string): TimeOfDay | undefined {
+  const match = /^(\d{1,2})[:.]?(\d{2})$/.exec(value.trim());
+
+  if (!match) return undefined;
+
+  const [hours, minutes] = [Number(match[1]), Number(match[2])];
+
+  if (hours > 23 || minutes > 59) return undefined;
+
+  return `${String(hours).padStart(2, "0")}:${match[2]}`;
 }
 
 /**

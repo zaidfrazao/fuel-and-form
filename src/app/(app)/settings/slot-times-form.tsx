@@ -6,7 +6,7 @@ import { saveSlotTimes, type SettingsState } from "@/app/actions/settings";
 import { ACTION_BAR_PRIMARY } from "@/components/action-bar";
 import { Button } from "@/components/ui/button";
 import { slotLabel } from "@/lib/now-display";
-import { REMINDER_FIELD, slotField, workoutField } from "@/lib/slot-times";
+import { REMINDER_FIELD, slotField, typedTime, workoutField } from "@/lib/slot-times";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,10 +23,15 @@ import { cn } from "@/lib/utils";
  *
  * ## Why the rows are in this order
  *
- * The order of the day, and FIXED. Sorting by the current values would reshuffle
- * the list while someone was typing in it — the row you are editing sliding
- * under the cursor as you change the hour, which is the one moment a settings
- * list must hold still.
+ * The order of the day, as the SAVED times give it, and then FIXED — FUEL-142.
+ * `inDayOrder` sorts once, when the form mounts. Sorting by the current values
+ * would reshuffle the list while someone was typing in it — the row you are
+ * editing sliding under the cursor as you change the hour, which is the one
+ * moment a settings list must hold still.
+ *
+ * Before FUEL-142 "the order of the day" was this file's declaration order,
+ * which is the SEED's day: an owner whose snack is at 16:00 and lunch at 12:30
+ * read Snack above Lunch, on the screen where the times are the subject.
  */
 
 /**
@@ -37,15 +42,67 @@ import { cn } from "@/lib/utils";
  * The metadata is what the label alone does not say: `Extra` is the coffee, and
  * the two session types are what the A/B rotation alternates between.
  */
-export const ROWS: { name: string; label: string; meta: string }[] = [
-  { name: slotField("extra"), label: slotLabel("extra"), meta: "Coffee and MCT oil" },
-  { name: workoutField("circuit"), label: "Circuit", meta: "Circuit A and B" },
-  { name: workoutField("intervals"), label: "Intervals", meta: "Skipping and core" },
-  { name: slotField("breakfast"), label: slotLabel("breakfast"), meta: "Morning routine" },
-  { name: slotField("snack"), label: slotLabel("snack"), meta: "Around the walk" },
-  { name: slotField("lunch"), label: slotLabel("lunch"), meta: "Lunch break" },
-  { name: slotField("dinner"), label: slotLabel("dinner"), meta: "Evening" },
+type Row = { name: string; label: string; meta: string; kind: "meal" | "workout" };
+
+export const ROWS: readonly Row[] = [
+  { name: slotField("extra"), label: slotLabel("extra"), meta: "Coffee and MCT oil", kind: "meal" },
+  { name: workoutField("circuit"), label: "Circuit", meta: "Circuit A and B", kind: "workout" },
+  { name: workoutField("intervals"), label: "Intervals", meta: "Skipping and core", kind: "workout" },
+  { name: slotField("breakfast"), label: slotLabel("breakfast"), meta: "Morning routine", kind: "meal" },
+  { name: slotField("snack"), label: slotLabel("snack"), meta: "Around the walk", kind: "meal" },
+  { name: slotField("lunch"), label: slotLabel("lunch"), meta: "Lunch break", kind: "meal" },
+  { name: slotField("dinner"), label: slotLabel("dinner"), meta: "Evening", kind: "meal" },
 ];
+
+/**
+ * The rows in the order `/` draws the day — FUEL-142.
+ *
+ * By the clock; a tie goes to the meal, which is how `buildTimeline` breaks one;
+ * and anything left the same after that keeps its place in `ROWS`. A row with
+ * no time sorts last, because on `/` it is not in the day at all — it is in
+ * Anytime, below it. `'HH:MM'` is zero-padded, so the strings sort as times.
+ */
+export function inDayOrder(values: Record<string, string>): Row[] {
+  const rank = (row: Row) => values[row.name] || "~";
+
+  return [...ROWS].sort((a, b) => {
+    if (rank(a) !== rank(b)) return rank(a) < rank(b) ? -1 : 1;
+
+    if (a.kind !== b.kind) return a.kind === "meal" ? -1 : 1;
+
+    return ROWS.indexOf(a) - ROWS.indexOf(b);
+  });
+}
+
+/**
+ * What every time field on this form is — FUEL-142. One spelling for the eight
+ * fields, so the reminder cannot become the one row still drawing `PM`.
+ *
+ * `w-24` because a text input's intrinsic width is ~20 characters and this one
+ * holds five; the native time input sized itself. `placeholder` shows on a
+ * cleared field, which reads `HH:MM` — the format, not a value — and so still
+ * says what the row's own `/` line says blank means.
+ */
+const TIME_FIELD = {
+  type: "text",
+  inputMode: "numeric",
+  autoComplete: "off",
+  maxLength: 5,
+  placeholder: "HH:MM",
+  className:
+    "h-11 w-24 shrink-0 rounded-md border border-border bg-surface px-3 text-body tabular-nums text-text-primary outline-none placeholder:text-text-tertiary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background aria-invalid:border-destructive",
+} as const;
+
+/**
+ * The field as it will be saved, once the thumb has left it — `730` becomes
+ * `07:30`. Left as typed when it is not a time: the refusal on save names it,
+ * and silently clearing it would lose what was typed.
+ */
+function tidied(times: Record<string, string>, name: string): Record<string, string> {
+  const tidy = typedTime(times[name] ?? "");
+
+  return tidy === undefined || tidy === times[name] ? times : { ...times, [name]: tidy };
+}
 
 export function SlotTimesForm({
   values,
@@ -75,6 +132,9 @@ export function SlotTimesForm({
    * fight whatever is being typed.
    */
   const [times, setTimes] = useState(values);
+  // Once, from the saved times, and never again while the form is mounted — see
+  // "Why the rows are in this order" above.
+  const [rows] = useState(() => inDayOrder(values));
 
   const errors = state?.status === "invalid" ? state.errors : {};
   const reminderError = errors[REMINDER_FIELD];
@@ -89,7 +149,7 @@ export function SlotTimesForm({
       </div>
 
       <ul className="flex flex-col">
-        {ROWS.map(({ name, label, meta }) => {
+        {rows.map(({ name, label, meta }) => {
           const error = errors[name];
 
           return (
@@ -111,23 +171,25 @@ export function SlotTimesForm({
                 ) : null}
               </div>
 
+              {/*
+               * Text, not `type="time"` — FUEL-142. A native time input draws in
+               * the browser's or the OS's locale, so an en-US phone read
+               * `04:00 PM` here and `16:00` on every other screen, and no
+               * attribute reliably moves it. `inputMode="numeric"` keeps the
+               * keypad the native field gave a thumb; `typedTime` reads what it
+               * types.
+               */}
               <input
                 id={name}
                 name={name}
-                type="time"
-                // The acceptance criterion's `inputmode`. `type="time"` gives
-                // the native picker — a wheel on iOS, a spinner elsewhere — and
-                // `inputMode` is what a browser without one falls back to: a
-                // numeric keypad rather than a full keyboard for a field that
-                // only ever holds digits and a colon.
-                inputMode="numeric"
+                {...TIME_FIELD}
                 value={times[name] ?? ""}
                 onChange={(event) =>
                   setTimes((current) => ({ ...current, [name]: event.target.value }))
                 }
+                onBlur={() => setTimes((current) => tidied(current, name))}
                 aria-invalid={error ? true : undefined}
                 aria-describedby={error ? `${name}-error` : undefined}
-                className="h-11 shrink-0 rounded-md border border-border bg-surface px-3 text-body tabular-nums text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background aria-invalid:border-destructive"
               />
             </li>
           );
@@ -178,15 +240,14 @@ export function SlotTimesForm({
           <input
             id={REMINDER_FIELD}
             name={REMINDER_FIELD}
-            type="time"
-            inputMode="numeric"
+            {...TIME_FIELD}
             value={times[REMINDER_FIELD] ?? ""}
             onChange={(event) =>
               setTimes((current) => ({ ...current, [REMINDER_FIELD]: event.target.value }))
             }
+            onBlur={() => setTimes((current) => tidied(current, REMINDER_FIELD))}
             aria-invalid={reminderError ? true : undefined}
             aria-describedby={reminderError ? `${REMINDER_FIELD}-error` : undefined}
-            className="h-11 shrink-0 rounded-md border border-border bg-surface px-3 text-body tabular-nums text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background aria-invalid:border-destructive"
           />
         </div>
       </div>

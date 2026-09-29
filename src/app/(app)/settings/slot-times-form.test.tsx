@@ -105,6 +105,63 @@ describe("the rows", () => {
   });
 });
 
+describe("the order of the rows — FUEL-142", () => {
+  /** The walkthrough's schedule: snack at 16:00, lunch at 12:30. */
+  const WALKTHROUGH: Record<string, string> = {
+    ...VALUES,
+    [slotField("extra")]: "06:45",
+    [workoutField("circuit")]: "06:30",
+    [workoutField("intervals")]: "06:30",
+    [slotField("breakfast")]: "07:10",
+    [slotField("snack")]: "16:00",
+    [slotField("lunch")]: "12:30",
+    [slotField("dinner")]: "19:00",
+  };
+
+  const labels = () =>
+    screen.getAllByRole("listitem").map((li) => li.querySelector("label")?.textContent);
+
+  it("follows the saved times, as `/` draws the day", () => {
+    renderForm(WALKTHROUGH);
+
+    expect(labels()).toEqual([
+      "Circuit",
+      "Intervals",
+      "Extra",
+      "Breakfast",
+      "Lunch",
+      "Snack",
+      "Dinner",
+    ]);
+  });
+
+  it("gives a tie to the meal, as the timeline does", () => {
+    // Breakfast and not Extra: Breakfast is declared AFTER the two sessions, so
+    // only the meal-first rule can put it ahead of them.
+    renderForm({ ...WALKTHROUGH, [slotField("breakfast")]: "06:30" });
+
+    expect(labels().slice(0, 3)).toEqual(["Breakfast", "Circuit", "Intervals"]);
+  });
+
+  it("puts a slot with no time last, where `/` puts it in Anytime", () => {
+    renderForm({ ...WALKTHROUGH, [workoutField("circuit")]: "" });
+
+    expect(labels().at(-1)).toBe("Circuit");
+  });
+
+  it("does not move a row while its time is being typed", async () => {
+    const user = userEvent.setup();
+
+    renderForm(WALKTHROUGH);
+    const before = labels();
+
+    await user.clear(field("Dinner"));
+    await user.type(field("Dinner"), "05:00");
+
+    expect(labels()).toEqual(before);
+  });
+});
+
 describe("the initial values", () => {
   it("shows the default for a slot that was never configured", () => {
     // Not blank. The default is the time actually in force, and an empty field
@@ -292,11 +349,38 @@ describe("time entry", () => {
   it("sets inputmode on every field — the acceptance criterion", () => {
     renderForm();
 
-    for (const row of ROWS) {
-      const input = field(row.label);
+    for (const label of [...ROWS.map((row) => row.label), "Remind at"]) {
+      const input = field(label);
 
-      expect(input.type).toBe("time");
+      // Text, not `time` — FUEL-142. A native time field draws `04:00 PM` on a
+      // 12-hour locale, on the one screen where every time is the subject.
+      expect(input.type).toBe("text");
       expect(input.getAttribute("inputmode")).toBe("numeric");
     }
+  });
+
+  it("shows a typed time as it will be saved once the field is left", async () => {
+    const user = userEvent.setup();
+
+    renderForm();
+
+    await user.clear(field("Lunch"));
+    await user.type(field("Lunch"), "730");
+    await user.tab();
+
+    expect(field("Lunch").value).toBe("07:30");
+  });
+
+  it("leaves what was typed alone when it is not a time", async () => {
+    // The refusal on save names it; clearing it would lose the typing.
+    const user = userEvent.setup();
+
+    renderForm();
+
+    await user.clear(field("Remind at"));
+    await user.type(field("Remind at"), "7pm");
+    await user.tab();
+
+    expect(field("Remind at").value).toBe("7pm");
   });
 });

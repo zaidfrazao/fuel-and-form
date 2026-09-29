@@ -859,112 +859,129 @@ export function WeighIns({
           <label htmlFor="weigh-in-date" className="text-slash text-text-secondary">
             Date
           </label>
-          <input
-            id="weigh-in-date"
-            type="date"
-            value={date}
-            onChange={(event) => {
-              const next = event.target.value;
+          {/*
+           * The date in the app's words beside the browser's — FUEL-142. A
+           * native date input draws in the browser's locale, `09/28/2026` on an
+           * en-US phone against `Mon 28 Sept` everywhere else, and no attribute
+           * reliably moves it. It stays native because its calendar is the right
+           * control for picking a day on a phone; what changes is that the row
+           * also says the date the way every other screen does, as the weight
+           * box beside it says `kg`. Hidden from the tree, because the input
+           * already announces the date it holds.
+           */}
+          <span className="flex items-center gap-2">
+            <input
+              id="weigh-in-date"
+              type="date"
+              value={date}
+              onChange={(event) => {
+                const next = event.target.value;
 
-              address(next);
-              setProblem({});
+                address(next);
+                setProblem({});
 
-              /*
-               * The date is the address, so changing it changes which weigh-in
-               * the form is editing — and the fields follow it. Without this,
-               * moving to a date that already has a reading would leave the
-               * previous one's number in the box, one tap away from
-               * overwriting a measurement with a different day's.
-               */
-              const row = history.rows.find((entry) => entry.date === next);
+                /*
+                 * The date is the address, so changing it changes which weigh-in
+                 * the form is editing — and the fields follow it. Without this,
+                 * moving to a date that already has a reading would leave the
+                 * previous one's number in the box, one tap away from
+                 * overwriting a measurement with a different day's.
+                 */
+                const row = history.rows.find((entry) => entry.date === next);
 
-              if (row) {
-                setWeight(String(row.weightKg));
-                setNote(row.note ?? "");
-
-                return;
-              }
-
-              /*
-               * FUEL-84: a date can now name a weigh-in the LIST has not
-               * loaded. The reading is here either way — the chart holds every
-               * one — so the weight prefills from it and the "replaces" line
-               * below is right whether or not the row is listed.
-               *
-               * The note is not here, and `recordWeighIn` sets the note on
-               * every write. An empty box saved over a real note would lose it
-               * with nothing on the screen having said so, which is the one
-               * failure a bounded list could introduce that the unbounded one
-               * could not. So it is fetched rather than assumed.
-               *
-               * A date with no weigh-in at all clears both fields rather than
-               * leaving them: the form is then empty, which is what "this date
-               * has nothing" should look like.
-               */
-              const unloaded = history.readings.find((entry) => entry.date === next);
-
-              setWeight(unloaded ? String(unloaded.weightKg) : "");
-              setNote("");
-
-              if (!unloaded) return;
-
-              startLoading(async () => {
-                const result = await weighInOn({ date: next });
-
-                if (!result.ok) {
-                  // Said in the date's own error slot, because it is about the
-                  // date the form is pointed at — and as a warning rather than
-                  // a block: replacing the entry may well be the intention, and
-                  // `log` checks the date itself regardless.
-                  setProblem((current) => ({
-                    ...current,
-                    date: "Couldn’t load this entry’s note. Logging now would replace it.",
-                  }));
+                if (row) {
+                  setWeight(String(row.weightKg));
+                  setNote(row.note ?? "");
 
                   return;
                 }
 
-                // Two ways the answer can arrive too late to be wanted: the
-                // form has moved to another date, or the reader has started
-                // writing a note of their own on this one. Neither is a note
-                // this fetch may overwrite.
-                if (addressed.current === next && !noteTouched.current) {
-                  setNote(result.entry?.note ?? "");
-                }
-              });
-            }}
-            // Today in the USER's zone, not the browser's. It is what stops a
-            // future weigh-in by accident; `lib/weigh-in.ts` is what stops one
-            // on purpose, since an input attribute is only a suggestion to a
-            // browser.
-            max={today}
-            aria-invalid={problem.date ? true : undefined}
-            aria-describedby={problem.date ? "weigh-in-date-error" : undefined}
-            /*
-             * Its own width rather than the column's — FUEL-74.
-             *
-             * A date is a fixed-length value, not prose. Every other control in
-             * this app that holds one already says so by its size: Weight below
-             * is `w-32`, and `/settings`' seven time inputs are `shrink-0`
-             * against their labels. This field was the last one taking the
-             * measure's width for a value that can never use it, and it did so
-             * by omission — `field` carries no width, so the parent's
-             * `flex-col` stretch decided it.
-             *
-             * 176px is measured rather than chosen. The control's intrinsic
-             * width at § Typography's 17px body is 165px, and 176 is the scale
-             * step above it: enough headroom that a locale spelling the
-             * placeholder differently does not clip, without the width being a
-             * number this file invented. An explicit width rather than `w-fit`
-             * because the intrinsic one is the browser's, and a zero-tolerance
-             * baseline should not rest on something a Chromium release may
-             * revise.
-             *
-             * `h-11` is untouched, so § Touch Targets' 44×44 minimum holds —
-             * the box is 176×44.
-             */
-            className={`${field} w-44`}
-          />
+                /*
+                 * FUEL-84: a date can now name a weigh-in the LIST has not
+                 * loaded. The reading is here either way — the chart holds every
+                 * one — so the weight prefills from it and the "replaces" line
+                 * below is right whether or not the row is listed.
+                 *
+                 * The note is not here, and `recordWeighIn` sets the note on
+                 * every write. An empty box saved over a real note would lose it
+                 * with nothing on the screen having said so, which is the one
+                 * failure a bounded list could introduce that the unbounded one
+                 * could not. So it is fetched rather than assumed.
+                 *
+                 * A date with no weigh-in at all clears both fields rather than
+                 * leaving them: the form is then empty, which is what "this date
+                 * has nothing" should look like.
+                 */
+                const unloaded = history.readings.find((entry) => entry.date === next);
+
+                setWeight(unloaded ? String(unloaded.weightKg) : "");
+                setNote("");
+
+                if (!unloaded) return;
+
+                startLoading(async () => {
+                  const result = await weighInOn({ date: next });
+
+                  if (!result.ok) {
+                    // Said in the date's own error slot, because it is about the
+                    // date the form is pointed at — and as a warning rather than
+                    // a block: replacing the entry may well be the intention, and
+                    // `log` checks the date itself regardless.
+                    setProblem((current) => ({
+                      ...current,
+                      date: "Couldn’t load this entry’s note. Logging now would replace it.",
+                    }));
+
+                    return;
+                  }
+
+                  // Two ways the answer can arrive too late to be wanted: the
+                  // form has moved to another date, or the reader has started
+                  // writing a note of their own on this one. Neither is a note
+                  // this fetch may overwrite.
+                  if (addressed.current === next && !noteTouched.current) {
+                    setNote(result.entry?.note ?? "");
+                  }
+                });
+              }}
+              // Today in the USER's zone, not the browser's. It is what stops a
+              // future weigh-in by accident; `lib/weigh-in.ts` is what stops one
+              // on purpose, since an input attribute is only a suggestion to a
+              // browser.
+              max={today}
+              aria-invalid={problem.date ? true : undefined}
+              aria-describedby={problem.date ? "weigh-in-date-error" : undefined}
+              /*
+               * Its own width rather than the column's — FUEL-74.
+               *
+               * A date is a fixed-length value, not prose. Every other control in
+               * this app that holds one already says so by its size: Weight below
+               * is `w-32`, and `/settings`' seven time inputs are `shrink-0`
+               * against their labels. This field was the last one taking the
+               * measure's width for a value that can never use it, and it did so
+               * by omission — `field` carries no width, so the parent's
+               * `flex-col` stretch decided it.
+               *
+               * 176px is measured rather than chosen. The control's intrinsic
+               * width at § Typography's 17px body is 165px, and 176 is the scale
+               * step above it: enough headroom that a locale spelling the
+               * placeholder differently does not clip, without the width being a
+               * number this file invented. An explicit width rather than `w-fit`
+               * because the intrinsic one is the browser's, and a zero-tolerance
+               * baseline should not rest on something a Chromium release may
+               * revise.
+               *
+               * `h-11` is untouched, so § Touch Targets' 44×44 minimum holds —
+               * the box is 176×44.
+               */
+              className={`${field} w-44`}
+            />
+            {date && (
+              <span aria-hidden className="text-slash text-text-tertiary">
+                / {entryLabel(date, today)}
+              </span>
+            )}
+          </span>
           {problem.date && (
             <span id="weigh-in-date-error" role="alert" className="text-slash text-error">
               {problem.date}

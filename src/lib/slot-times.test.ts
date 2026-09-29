@@ -108,8 +108,12 @@ describe("parseSlotTimes", () => {
 
   it.each([
     ["7am", "words"],
-    ["7:30", "an unpadded hour"],
+    ["7", "an hour with no minutes"],
+    ["7:3", "a one-digit minute"],
+    ["07300", "five digits"],
     ["24:00", "an hour past the end of the day"],
+    ["2400", "the same, unpunctuated"],
+    ["0760", "a minute past the end of the hour, unpunctuated"],
     ["23:60", "a minute past the end of the hour"],
     ["07:30:00", "seconds"],
     ["-1:00", "a negative hour"],
@@ -119,6 +123,21 @@ describe("parseSlotTimes", () => {
     const result = parseSlotTimes(form({ [slotField("lunch")]: value }));
 
     expect(result.ok).toBe(false);
+  });
+
+  // FUEL-142: a text field has no picker to pad and punctuate for it, so what
+  // a thumb types is read — and what is stored is still only ever 'HH:MM'.
+  it.each([
+    ["7:30", "an unpadded hour"],
+    ["0730", "no separator"],
+    ["730", "no separator, unpadded"],
+    ["07.30", "a dot for the colon"],
+    [" 07:30 ", "surrounding space"],
+  ])("reads %j as 07:30 — %s", (value) => {
+    const update = ok(parseSlotTimes(form({ [slotField("lunch")]: value })));
+
+    expect(update.slotTimes.lunch).toBe("07:30");
+    expect(() => parseTimeOfDay(update.slotTimes.lunch!)).not.toThrow();
   });
 
   it("refuses a non-string field, which is a hand-rolled POST", () => {
@@ -156,7 +175,13 @@ describe("parseSlotTimes", () => {
   it("validates workout fields as strictly as slot fields", () => {
     // Asserted separately because the two loops are separate code. A relaxed
     // workout branch would be just as fatal on `/` as a relaxed slot one.
-    expect(parseSlotTimes(form({ [workoutField("intervals")]: "6:30" })).ok).toBe(false);
+    expect(parseSlotTimes(form({ [workoutField("intervals")]: "6:3" })).ok).toBe(false);
+  });
+
+  it("stores a workout's typed time in the same 'HH:MM' as a slot's", () => {
+    const update = ok(parseSlotTimes(form({ [workoutField("intervals")]: "6:30" })));
+
+    expect(update.workoutTimes.intervals).toBe("06:30");
   });
 
   it("ignores a workout type settings does not offer", () => {
