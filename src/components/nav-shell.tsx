@@ -96,8 +96,9 @@ export function NavShell({
    *
    * A prop rather than a `usePathname()` call inside, for three reasons. It
    * keeps the component renderable on the server, so the shell is in the first
-   * HTML rather than appearing after hydration. It lets the specimen show all
-   * five active states on one page, which a component reading the real URL
+   * HTML rather than appearing after hydration. It lets the specimen show every
+   * route's state on one page — each slot lit, the sidebar foot lit, and
+   * nothing lit — which a component reading the real URL
    * cannot do. And it leaves FUEL-58 free to decide where the pathname comes
    * from — Next 16 makes `usePathname` suspend under `cacheComponents`, which
    * is not enabled here today but would turn an invisible choice into a build
