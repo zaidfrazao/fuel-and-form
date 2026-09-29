@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+import { demoProfile } from "@/lib/seed/persona";
+
 /**
  * `/settings` — the route, not the form.
  *
@@ -15,22 +17,25 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
  * gate if something checks the closed side.
  */
 
-const { redirect, getSession, loadSchedule } = vi.hoisted(() => ({
+const { redirect, getSession, loadSettings } = vi.hoisted(() => ({
   redirect: vi.fn((path: string) => {
     // The real `redirect` throws, which is what terminates the render. A mock
     // that only recorded the call would let the page run on with no session.
     throw new Error(`NEXT_REDIRECT:${path}`);
   }),
   getSession: vi.fn(),
-  loadSchedule: vi.fn(),
+  loadSettings: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("@/lib/auth/session", () => ({ getSession }));
-vi.mock("@/lib/db/queries/profile", () => ({ loadSchedule }));
+vi.mock("@/lib/db/queries/profile", () => ({ loadSettings }));
 // The form is a client component importing a "use server" module, which cannot
 // be imported under jsdom. The same reason `/weight`'s test mocks its actions.
-vi.mock("@/app/actions/settings", () => ({ saveSlotTimes: vi.fn() }));
+vi.mock("@/app/actions/settings", () => ({
+  saveSlotTimes: vi.fn(),
+  saveProfileTargets: vi.fn(),
+}));
 // FUEL-47's control, for the same reason one line up — and one more of its own:
 // its actions reach `queries/push.ts`, which is `server-only`, so importing the
 // page at all fails to collect without this.
@@ -43,16 +48,34 @@ const { default: SettingsPage } = await import("./page");
 
 const SESSION = { userId: "11111111-2222-3333-4444-555555555555", kind: "owner" as const };
 
-const SCHEDULE = {
-  slotTimes: { breakfast: "07:30" },
-  workoutTimes: { circuit: "06:30" },
-  timezone: "Europe/London",
+// The persona's figures, read off `demoProfile` rather than written out — the
+// same rule every FUEL-136 fixture follows, so no figure here is anyone's.
+const PERSONA = demoProfile(new Date("2026-06-17T12:00:00Z"));
+
+const SETTINGS = {
+  schedule: {
+    slotTimes: { breakfast: "07:30" },
+    workoutTimes: { circuit: "06:30" },
+    timezone: "Europe/London",
+    walkReminderAt: "19:00",
+  },
+  targets: {
+    targetKcal: PERSONA.targetKcal,
+    targetProteinG: PERSONA.targetProteinG,
+    targetFatG: PERSONA.targetFatG,
+    targetCarbG: PERSONA.targetCarbG,
+    startWeightKg: PERSONA.startWeightKg,
+    targetWeightKg: PERSONA.targetWeightKg,
+    goalPaceKgPerWeek: PERSONA.goalPaceKgPerWeek,
+    heightCm: PERSONA.heightCm,
+    timezone: "Europe/London",
+  },
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
   getSession.mockResolvedValue(SESSION);
-  loadSchedule.mockResolvedValue(SCHEDULE);
+  loadSettings.mockResolvedValue(SETTINGS);
 });
 
 describe("the up-link", () => {
@@ -142,7 +165,7 @@ describe("the export link", () => {
     // The route answers 404 in this state. An offered link that reliably fails
     // is worse than no link, and § Tone of Voice would rather say nothing than
     // promise something that does not work.
-    loadSchedule.mockResolvedValue(undefined);
+    loadSettings.mockResolvedValue(undefined);
 
     render(await SettingsPage());
 
@@ -203,7 +226,7 @@ describe("the push control", () => {
     // it checks for one itself. Asserted because the neighbouring section IS
     // gated, and copying that gate here would be the easy mistake.
     vi.stubEnv(KEY, "BExamplePublicKey");
-    loadSchedule.mockResolvedValue(undefined);
+    loadSettings.mockResolvedValue(undefined);
 
     render(await SettingsPage());
 
@@ -217,7 +240,7 @@ describe("the route itself", () => {
 
     await expect(SettingsPage()).rejects.toThrow("NEXT_REDIRECT:/login");
 
-    expect(loadSchedule).not.toHaveBeenCalled();
+    expect(loadSettings).not.toHaveBeenCalled();
   });
 });
 
@@ -225,7 +248,8 @@ describe("the two columns", () => {
   /**
    * § Desktop, amended by FUEL-85: `/settings` is "**the form and the
    * not-form**. Slot times, the walk reminder and Save are a form you fill in
-   * and take the measure; notify, the template link, the plan link, export and
+   * and take the measure, and so are the targets beneath them with their own
+   * Save (FUEL-136); notify, the template link, the plan link, export and
    * sign out are links you follow and take the aside."
    *
    * What is tested here is the GROUPING — which section is in which column —
@@ -247,6 +271,8 @@ describe("the two columns", () => {
       "measure",
     );
     expect(columnOf(screen.getByRole("heading", { name: "Slot times" }))).toBe("measure");
+    expect(columnOf(screen.getByRole("heading", { name: "Daily targets" }))).toBe("measure");
+    expect(columnOf(screen.getByRole("button", { name: "Save targets" }))).toBe("measure");
   });
 
   test("the links you follow are in the aside", async () => {

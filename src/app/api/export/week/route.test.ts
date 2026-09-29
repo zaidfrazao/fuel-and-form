@@ -69,6 +69,15 @@ const PAYLOAD: WeekExportPayload = {
     sets: [],
     weighIns: [],
     startWeightKg: 80,
+    targets: {
+      targetKcal: 1780,
+      targetProteinG: 148,
+      targetFatG: 50,
+      targetCarbG: 185,
+      targetWeightKg: 76,
+      goalPaceKgPerWeek: 0.5,
+      changedOn: null,
+    },
   },
 };
 

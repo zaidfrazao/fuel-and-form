@@ -164,6 +164,7 @@ const profile: Profile = {
   programStartDate: "2026-06-01",
   timezone: "Europe/London",
   walkReminderAt: "19:00",
+  targetsChangedOn: null,
 };
 
 const OATS: Meal = {
@@ -383,6 +384,15 @@ const WEEK: WeekExportInput = {
   sets: SETS,
   weighIns: [WEIGHT_LOG],
   startWeightKg: profile.startWeightKg,
+  targets: {
+    targetKcal: profile.targetKcal,
+    targetProteinG: profile.targetProteinG,
+    targetFatG: profile.targetFatG,
+    targetCarbG: profile.targetCarbG,
+    targetWeightKg: profile.targetWeightKg,
+    goalPaceKgPerWeek: profile.goalPaceKgPerWeek,
+    changedOn: profile.targetsChangedOn,
+  },
 };
 
 const csv = buildWeekCsv(WEEK);

@@ -5,13 +5,15 @@ import { redirect } from "next/navigation";
 import { PageMain } from "@/components/page-main";
 import { UpLink } from "@/components/up-link";
 import { getSession } from "@/lib/auth/session";
-import { loadSchedule } from "@/lib/db/queries/profile";
+import { loadSettings } from "@/lib/db/queries/profile";
 import { PAGE_COLUMN_BASE, PAGE_FRAME_GRID } from "@/lib/frame";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
+import { targetFields, timezoneOptions } from "@/lib/profile-targets";
 import { scheduleFields } from "@/lib/slot-times";
 import { cn } from "@/lib/utils";
 import { PushForm } from "./push-form";
 import { SlotTimesForm } from "./slot-times-form";
+import { TargetsForm } from "./targets-form";
 
 /**
  * `/settings` — the slot times, editable. PRD § P1's last acceptance criterion.
@@ -24,9 +26,9 @@ import { SlotTimesForm } from "./slot-times-form";
  *
  * The reasoning `page.tsx` and `login/page.tsx` both set out: a check in a
  * layout does not stop nested segments or Server Actions from running, so it
- * belongs next to the data. `loadSchedule` is the next line, and it is scoped to
- * the session's user. The Server Action behind the form resolves the session
- * again for itself, because it is separately reachable.
+ * belongs next to the data. `loadSettings` is the next line, and it is scoped to
+ * the session's user. The Server Actions behind the forms resolve the session
+ * again for themselves, because they are separately reachable.
  */
 
 export const metadata: Metadata = {
@@ -39,7 +41,7 @@ export default async function SettingsPage() {
 
   if (!session) redirect("/login");
 
-  const schedule = await loadSchedule(session.userId);
+  const settings = await loadSettings(session.userId);
 
   return (
     <PageMain className={cn("gap-7 py-8", PAGE_FRAME_GRID, "xl:grid-rows-[auto]")}>
@@ -78,11 +80,25 @@ export default async function SettingsPage() {
             Voice asks an empty state to describe what will appear. Settings
             cannot create one: a profile carries height, weight and macro targets
             it has no values for. */}
-        {schedule ? (
-          <SlotTimesForm values={scheduleFields(schedule)} timezone={schedule.timezone} />
+        {settings ? (
+          <>
+            <SlotTimesForm
+              values={scheduleFields(settings.schedule)}
+              timezone={settings.schedule.timezone}
+            />
+            {/* FUEL-136. In the measure, beneath the times: § Settings' "a
+                form you fill in", and the second one. The zone list is built
+                here, on the server, and always carries the stored zone — see
+                `timezoneOptions`. */}
+            <TargetsForm
+              values={targetFields(settings.targets)}
+              timezones={timezoneOptions(settings.targets.timezone)}
+            />
+          </>
         ) : (
           <p className="text-body text-text-secondary">
-            Slot times appear here once a profile exists for this account.
+            Slot times and targets appear here once a profile exists for this
+            account.
           </p>
         )}
       </div>
@@ -145,7 +161,7 @@ export default async function SettingsPage() {
          * component deciding that for itself would ship the whole control to the
          * browser to render nothing.
          *
-         * Not gated on `schedule`, unlike the export below. A subscription needs
+         * Not gated on `settings`, unlike the export below. A subscription needs
          * no profile: it is a row against a user id, and the scheduled job is what
          * needs a timezone — which it checks for itself.
          */}
@@ -230,7 +246,7 @@ export default async function SettingsPage() {
          * timezone, so no date to name a file with. A link that reliably fails is
          * worse than no link.
          */}
-        {schedule && (
+        {settings && (
           <section className="flex flex-col gap-2 border-t border-border pt-5">
             <a
               href="/api/export"

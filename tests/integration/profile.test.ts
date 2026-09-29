@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { getDb } from "@/lib/db";
-import { loadSchedule, saveSchedule } from "@/lib/db/queries/profile";
+import {
+  loadSchedule,
+  loadSettings,
+  saveSchedule,
+  saveTargets,
+} from "@/lib/db/queries/profile";
+import type { ProfileTargets } from "@/lib/profile-targets";
 import * as schema from "@/lib/db/schema";
 import { scope } from "@/lib/db/scope";
+import { demoProfile } from "@/lib/seed/persona";
 
 import { testDatabaseUrl } from "./env";
 import { type Fixture, seedFixture } from "./fixtures";
@@ -128,6 +135,83 @@ describe.skipIf(!configured)("the profile schedule, scoped", () => {
 
       expect(saved).toBe(false);
       expect(await loadSchedule(fixture.bob.userId)).toBeUndefined();
+    });
+  });
+  /*
+   * FUEL-136. The persona's figures as the update, so every value written here
+   * is one the metrics scan already accepts — and they differ from the
+   * fixture's in every target, so a save of them is a recalibration.
+   */
+  describe("saveTargets", () => {
+    const persona = demoProfile(new Date("2026-06-17T12:00:00Z"));
+
+    const SAM: ProfileTargets = {
+      targetKcal: persona.targetKcal,
+      targetProteinG: persona.targetProteinG,
+      targetFatG: persona.targetFatG,
+      targetCarbG: persona.targetCarbG,
+      startWeightKg: persona.startWeightKg,
+      targetWeightKg: persona.targetWeightKg,
+      goalPaceKgPerWeek: persona.goalPaceKgPerWeek,
+      heightCm: persona.heightCm,
+      timezone: persona.timezone,
+    };
+
+    // 12:30 UTC on the 20th: still the 20th in London, already 00:30 on the
+    // 21st in Auckland (NZST, before its DST starts on the 27th). The two zones
+    // disagree about the date, which is what proves it is taken in the zone
+    // being saved.
+    const NOW = new Date("2026-09-20T12:30:00Z");
+
+    async function changedOn(userId: string) {
+      const row = await scope(userId, getDb()).selectOne(schema.profiles);
+
+      return row?.targetsChangedOn;
+    }
+
+    it("writes every field, and reads back through loadSettings unchanged", async () => {
+      expect(await saveTargets(fixture.alice.userId, SAM, NOW)).toBe(true);
+
+      expect((await loadSettings(fixture.alice.userId))?.targets).toEqual(SAM);
+    });
+
+    it("dates a recalibration in the zone being saved", async () => {
+      await saveTargets(fixture.alice.userId, { ...SAM, timezone: "Pacific/Auckland" }, NOW);
+
+      expect(await changedOn(fixture.alice.userId)).toBe("2026-09-21");
+    });
+
+    it("leaves the date alone when no target moved", async () => {
+      await saveTargets(fixture.alice.userId, SAM, NOW);
+
+      // A week later: only the height and the start weight change.
+      await saveTargets(
+        fixture.alice.userId,
+        { ...SAM, heightCm: SAM.heightCm + 1, startWeightKg: SAM.startWeightKg + 1 },
+        new Date("2026-09-27T12:00:00Z"),
+      );
+
+      expect(await changedOn(fixture.alice.userId)).toBe("2026-09-20");
+    });
+
+    it("is null until the app changes a target", async () => {
+      expect(await changedOn(fixture.alice.userId)).toBeNull();
+    });
+
+    it("leaves every other user's profile untouched", async () => {
+      const before = await loadSettings(fixture.alice.userId);
+
+      await saveTargets(fixture.bob.userId, SAM, NOW);
+
+      expect(await loadSettings(fixture.alice.userId)).toEqual(before);
+      expect(await changedOn(fixture.alice.userId)).toBeNull();
+    });
+
+    it("reports false for a user with no profile rather than creating one", async () => {
+      await scope(fixture.bob.userId, getDb()).delete(schema.profiles);
+
+      expect(await saveTargets(fixture.bob.userId, SAM, NOW)).toBe(false);
+      expect(await loadSettings(fixture.bob.userId)).toBeUndefined();
     });
   });
 });

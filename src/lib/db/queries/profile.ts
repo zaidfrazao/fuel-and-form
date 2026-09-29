@@ -1,5 +1,7 @@
 import "server-only";
 
+import { todayIn } from "@/lib/date";
+import { type ProfileTargets, targetsChanged } from "@/lib/profile-targets";
 import type { SlotTimesUpdate } from "@/lib/slot-times";
 import { getDb } from "../index";
 import * as schema from "../schema";
@@ -57,6 +59,48 @@ export async function loadSchedule(userId: string): Promise<ProfileSchedule | un
   };
 }
 
+/** What `/settings` renders from — both forms, from one read (FUEL-136). */
+export type ProfileSettings = {
+  schedule: ProfileSchedule;
+  targets: ProfileTargets;
+};
+
+/**
+ * The schedule and the targets together.
+ *
+ * One `selectOne` for both forms, on `walkReminderAt`'s reasoning above: the
+ * screen already has the row in hand, and a second load for the other half of
+ * it would be a second round trip to read the same row. `loadSchedule` stays
+ * for the callers that want only the times.
+ */
+export async function loadSettings(userId: string): Promise<ProfileSettings | undefined> {
+  const s = scope(userId, getDb());
+
+  const profile = await s.selectOne(schema.profiles);
+
+  if (!profile) return undefined;
+
+  return {
+    schedule: {
+      slotTimes: profile.slotTimes,
+      workoutTimes: profile.workoutTimes,
+      timezone: profile.timezone,
+      walkReminderAt: profile.walkReminderAt,
+    },
+    targets: {
+      targetKcal: profile.targetKcal,
+      targetProteinG: profile.targetProteinG,
+      targetFatG: profile.targetFatG,
+      targetCarbG: profile.targetCarbG,
+      startWeightKg: profile.startWeightKg,
+      targetWeightKg: profile.targetWeightKg,
+      goalPaceKgPerWeek: profile.goalPaceKgPerWeek,
+      heightCm: profile.heightCm,
+      timezone: profile.timezone,
+    },
+  };
+}
+
 /**
  * Writes the submitted times, merged over what is already stored.
  *
@@ -109,6 +153,46 @@ export async function saveSchedule(
       update.walkReminderAt === undefined
         ? profile.walkReminderAt
         : update.walkReminderAt,
+  });
+
+  return rows.length > 0;
+}
+
+/**
+ * Writes the targets, the weights, the pace, the height and the zone —
+ * FUEL-136's one write.
+ *
+ * Replaced rather than merged, unlike the schedule: these are scalar columns,
+ * every one of them is on the form, and `parseProfileTargets` refuses a
+ * submission missing any. There is nothing a form could know less about.
+ *
+ * ## `targets_changed_on` moves only when a target does
+ *
+ * Read-then-write for that reason alone — the comparison needs the old values.
+ * A save that changes only the height, or re-saves what was there, leaves the
+ * date where it was: a week is not judged by a different number because the
+ * form was submitted. The date is today in the zone being SAVED, since that is
+ * the zone every later week is dated in.
+ *
+ * `false` means no profile row, for `saveSchedule`'s reason: settings does not
+ * invent the slot times and the program start a profile also needs.
+ */
+export async function saveTargets(
+  userId: string,
+  update: ProfileTargets,
+  now: Date = new Date(),
+): Promise<boolean> {
+  const s = scope(userId, getDb());
+
+  const profile = await s.selectOne(schema.profiles);
+
+  if (!profile) return false;
+
+  const rows = await s.update(schema.profiles, {
+    ...update,
+    targetsChangedOn: targetsChanged(profile, update)
+      ? todayIn(update.timezone, now)
+      : profile.targetsChangedOn,
   });
 
   return rows.length > 0;

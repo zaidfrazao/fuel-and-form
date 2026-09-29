@@ -648,6 +648,8 @@ restores a uuid pointing at nothing.
 Dates are `YYYY-MM-DD` in the account's timezone. Instants — `createdAt`,
 `loggedAt`, `checkedAt`, `exportedAt` — are ISO 8601 in UTC. `profile` is an
 object rather than an array because `profiles` holds exactly one row per user.
+Its `targetsChangedOn` is the date the targets last moved on `/settings`
+(FUEL-136), or `null` if they never have.
 
 `shoppingChecks` is the odd one, and it is here deliberately. `itemKey` is not
 an id but a normalised ingredient NAME — the shop name since FUEL-137, so
@@ -802,7 +804,7 @@ downloads of one week overwrite rather than accumulate.
 
 #### The shape
 
-A five-line preamble, then four sections separated by blank lines. The file is
+A twelve-line preamble, then four sections separated by blank lines. The file is
 deliberately ragged — four tables, four different column counts, which P6 allows
 as "one section or file each" and every spreadsheet imports.
 
@@ -816,6 +818,13 @@ dates,2026-08-17,2026-08-23
 timezone,Europe/London
 est_burn_is,estimated-not-measured
 exported_at,2026-08-21T09:30:00.000Z
+target_kcal,1780
+target_protein_g,148
+target_fat_g,50
+target_carb_g,185
+target_weight_kg,76
+goal_pace_kg_per_week,0.5
+targets_changed_on,
 
 weight
 date,weight_kg,note
@@ -842,6 +851,14 @@ date,slot,planned,swapped_with,actual,status,kcal,protein_g,fat_g,carb_g,note
 
 The preamble carries the timezone because a column of bare dates is not
 readable without one — `2026-08-17` is a day only in some zone.
+
+It carries the targets too (FUEL-136), because they can now be changed on
+`/settings` and the assistant should not have to remember which ones are
+current. They are the targets **at export**, not the week's: the app keeps one
+set and a date rather than a history. `targets_changed_on` is that date, in the
+profile's zone — blank if the targets have never been changed in the app. A
+date after the week's Sunday means the week was planned against earlier
+figures than the ones printed above it.
 
 #### The columns that need explaining
 

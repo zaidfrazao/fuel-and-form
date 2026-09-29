@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { DESTINATIONS, isRailFootCurrent, ROUTE_PATHS, resolveActive } from "@/lib/nav";
 import type { ShoppingWeek } from "@/lib/db/queries/shopping";
+import { demoProfile } from "@/lib/seed/persona";
 
 /**
  * Can you get there from here — FUEL-62.
@@ -78,7 +79,7 @@ const {
   loadTraining,
   loadWeighIns,
   loadShoppingWeek,
-  loadSchedule,
+  loadSettings,
 } = vi.hoisted(() => ({
   nav: { pathname: "/" },
   redirect: vi.fn((path: string) => {
@@ -95,7 +96,7 @@ const {
   loadTraining: vi.fn(),
   loadWeighIns: vi.fn(),
   loadShoppingWeek: vi.fn(),
-  loadSchedule: vi.fn(),
+  loadSettings: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ redirect, usePathname: () => nav.pathname }));
@@ -107,7 +108,7 @@ vi.mock("@/lib/db/queries/template", () => ({ loadTemplate }));
 vi.mock("@/lib/db/queries/training", () => ({ loadTraining }));
 vi.mock("@/lib/db/queries/weight", () => ({ loadWeighIns }));
 vi.mock("@/lib/db/queries/shopping", () => ({ loadShoppingWeek }));
-vi.mock("@/lib/db/queries/profile", () => ({ loadSchedule }));
+vi.mock("@/lib/db/queries/profile", () => ({ loadSettings }));
 
 // The client components each screen renders import "use server" modules, which
 // cannot be imported under jsdom. Every per-screen test file mocks its own; this
@@ -139,7 +140,10 @@ vi.mock("@/app/actions/training", () => ({
 }));
 vi.mock("@/app/actions/weight", () => ({ logWeighIn: vi.fn(), deleteWeighIn: vi.fn() }));
 vi.mock("@/app/actions/shopping", () => ({ setChecked: vi.fn() }));
-vi.mock("@/app/actions/settings", () => ({ saveSlotTimes: vi.fn() }));
+vi.mock("@/app/actions/settings", () => ({
+  saveSlotTimes: vi.fn(),
+  saveProfileTargets: vi.fn(),
+}));
 vi.mock("@/app/actions/push", () => ({
   subscribeToWalkReminder: vi.fn(),
   unsubscribeFromWalkReminder: vi.fn(),
@@ -317,10 +321,28 @@ const WEIGHT = {
   goalPaceKgPerWeek: 0.5,
 };
 
-const SCHEDULE = {
-  slotTimes: { breakfast: "07:30" },
-  workoutTimes: { circuit: "06:30" },
-  timezone: "Europe/London",
+// The persona's figures, read off `demoProfile` rather than written out — the
+// same rule every FUEL-136 fixture follows, so no figure here is anyone's.
+const PERSONA = demoProfile(new Date("2026-06-17T12:00:00Z"));
+
+const SETTINGS = {
+  schedule: {
+    slotTimes: { breakfast: "07:30" },
+    workoutTimes: { circuit: "06:30" },
+    timezone: "Europe/London",
+    walkReminderAt: "19:00",
+  },
+  targets: {
+    targetKcal: PERSONA.targetKcal,
+    targetProteinG: PERSONA.targetProteinG,
+    targetFatG: PERSONA.targetFatG,
+    targetCarbG: PERSONA.targetCarbG,
+    startWeightKg: PERSONA.startWeightKg,
+    targetWeightKg: PERSONA.targetWeightKg,
+    goalPaceKgPerWeek: PERSONA.goalPaceKgPerWeek,
+    heightCm: PERSONA.heightCm,
+    timezone: "Europe/London",
+  },
 };
 
 /* -------------------------------------------------------------------------- */
@@ -422,7 +444,7 @@ beforeEach(() => {
   loadTraining.mockResolvedValue(TRAINING);
   loadWeighIns.mockResolvedValue(WEIGHT);
   loadShoppingWeek.mockResolvedValue(SHOPPING);
-  loadSchedule.mockResolvedValue(SCHEDULE);
+  loadSettings.mockResolvedValue(SETTINGS);
 });
 
 /* -------------------------------------------------------------------------- */

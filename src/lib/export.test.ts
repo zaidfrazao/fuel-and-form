@@ -86,6 +86,7 @@ const profile: Profile = {
   programStartDate: "2026-06-01",
   timezone: "Europe/London",
   walkReminderAt: "19:00",
+  targetsChangedOn: null,
 };
 
 const meal = (id: string, name: string): Meal => ({
@@ -1337,6 +1338,15 @@ describe("the two exports agree", () => {
       sets: [],
       weighIns: [],
       startWeightKg: 80,
+      targets: {
+        targetKcal: profile.targetKcal,
+        targetProteinG: profile.targetProteinG,
+        targetFatG: profile.targetFatG,
+        targetCarbG: profile.targetCarbG,
+        targetWeightKg: profile.targetWeightKg,
+        goalPaceKgPerWeek: profile.goalPaceKgPerWeek,
+        changedOn: profile.targetsChangedOn,
+      },
     });
 
     const lines = csv.split("\n");

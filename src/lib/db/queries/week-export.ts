@@ -273,6 +273,15 @@ export async function loadWeekExport(
       // and a `null` boundary is simply a week with nothing before or after it.
       weighIns: [weightLogs, weighInBefore ?? [], weighInAfter ?? []].flat(),
       startWeightKg: profile.startWeightKg,
+      targets: {
+        targetKcal: profile.targetKcal,
+        targetProteinG: profile.targetProteinG,
+        targetFatG: profile.targetFatG,
+        targetCarbG: profile.targetCarbG,
+        targetWeightKg: profile.targetWeightKg,
+        goalPaceKgPerWeek: profile.goalPaceKgPerWeek,
+        changedOn: profile.targetsChangedOn,
+      },
     },
   };
 }
