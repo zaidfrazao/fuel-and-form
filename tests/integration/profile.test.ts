@@ -157,9 +157,11 @@ describe.skipIf(!configured)("the profile schedule, scoped", () => {
       timezone: persona.timezone,
     };
 
-    // 23:30 UTC on the 20th is already the 21st in Auckland, which is what
-    // proves the date is taken in the zone being saved.
-    const NOW = new Date("2026-09-20T23:30:00Z");
+    // 12:30 UTC on the 20th: still the 20th in London, already 00:30 on the
+    // 21st in Auckland (NZST, before its DST starts on the 27th). The two zones
+    // disagree about the date, which is what proves it is taken in the zone
+    // being saved.
+    const NOW = new Date("2026-09-20T12:30:00Z");
 
     async function changedOn(userId: string) {
       const row = await scope(userId, getDb()).selectOne(schema.profiles);
