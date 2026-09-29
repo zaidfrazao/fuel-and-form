@@ -248,7 +248,8 @@ describe("the two columns", () => {
   /**
    * § Desktop, amended by FUEL-85: `/settings` is "**the form and the
    * not-form**. Slot times, the walk reminder and Save are a form you fill in
-   * and take the measure; notify, the template link, the plan link, export and
+   * and take the measure, and so are the targets beneath them with their own
+   * Save (FUEL-136); notify, the template link, the plan link, export and
    * sign out are links you follow and take the aside."
    *
    * What is tested here is the GROUPING — which section is in which column —
@@ -270,6 +271,8 @@ describe("the two columns", () => {
       "measure",
     );
     expect(columnOf(screen.getByRole("heading", { name: "Slot times" }))).toBe("measure");
+    expect(columnOf(screen.getByRole("heading", { name: "Daily targets" }))).toBe("measure");
+    expect(columnOf(screen.getByRole("button", { name: "Save targets" }))).toBe("measure");
   });
 
   test("the links you follow are in the aside", async () => {
