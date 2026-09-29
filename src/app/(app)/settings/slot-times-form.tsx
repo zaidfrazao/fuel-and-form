@@ -82,8 +82,8 @@ export function SlotTimesForm({
   return (
     <form action={action} className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <h2 className="text-label text-text-secondary">Slot times</h2>
-        <p className="text-caption text-text-tertiary">
+        <h2 className="text-micro uppercase text-text-secondary">Slot times</h2>
+        <p className="text-slash text-text-tertiary">
           / {timezone} · clear a time to log that item whenever
         </p>
       </div>
@@ -101,11 +101,11 @@ export function SlotTimesForm({
                 <label htmlFor={name} className="text-body text-text-primary">
                   {label}
                 </label>
-                <span className="text-caption text-text-tertiary">/ {meta}</span>
+                <span className="text-slash text-text-tertiary">/ {meta}</span>
 
                 {error ? (
                   // `role="alert"` so the refusal is heard rather than found.
-                  <span id={`${name}-error`} role="alert" className="text-caption text-error">
+                  <span id={`${name}-error`} role="alert" className="text-slash text-error">
                     {error}
                   </span>
                 ) : null}
@@ -151,8 +151,8 @@ export function SlotTimesForm({
        */}
       <div className="flex flex-col gap-4 border-t border-border pt-5">
         <div className="flex flex-col gap-1">
-          <h2 className="text-label text-text-secondary">Walk reminder</h2>
-          <p className="text-caption text-text-tertiary">
+          <h2 className="text-micro uppercase text-text-secondary">Walk reminder</h2>
+          <p className="text-slash text-text-tertiary">
             / a banner on every screen from this time, if the walk is not logged
           </p>
         </div>
@@ -162,13 +162,13 @@ export function SlotTimesForm({
             <label htmlFor={REMINDER_FIELD} className="text-body text-text-primary">
               Remind at
             </label>
-            <span className="text-caption text-text-tertiary">/ blank for no reminder</span>
+            <span className="text-slash text-text-tertiary">/ blank for no reminder</span>
 
             {reminderError ? (
               <span
                 id={`${REMINDER_FIELD}-error`}
                 role="alert"
-                className="text-caption text-error"
+                className="text-slash text-error"
               >
                 {reminderError}
               </span>
@@ -219,7 +219,7 @@ export function SlotTimesForm({
             modal. § Voice reports rather than congratulates — "Saved." and not
             "Nice one!". `aria-live` rather than `role="alert"` for the success
             case, which is confirmation and should not interrupt. */}
-        <p aria-live="polite" className="min-h-5 text-caption text-text-secondary">
+        <p aria-live="polite" className="min-h-5 text-slash text-text-secondary">
           {state?.status === "saved" ? "Saved. The Right Now view uses these times now." : null}
           {state?.status === "invalid" ? "Nothing was saved — check the times above." : null}
           {state?.status === "failed" ? "Could not save. Try again." : null}
