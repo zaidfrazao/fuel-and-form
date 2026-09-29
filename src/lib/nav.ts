@@ -19,8 +19,8 @@
  * and `/shopping` is the counter-example that kills it — it is a level-2 screen
  * parented to `/plan` while keeping a flat URL, because the list is addressed by
  * week through `?week=` rather than nested inside one. A prefix match would find
- * no destination for it and light nothing. `/settings` is the same shape under
- * `/`.
+ * no destination for it and light nothing. `/settings` is parented to `/`,
+ * whose URL is a prefix of every route — and lights no slot at all (FUEL-140).
  *
  * So every route is listed, and a route that is not listed resolves to `null`.
  */
@@ -59,8 +59,12 @@ export const DESTINATIONS: readonly Destination[] = [
  * at two, so there is no case where that inference is wrong.
  */
 type Route = {
-  /** Whose slot this route lights in the shell. */
-  destination: DestinationId;
+  /**
+   * Whose slot this route lights in the shell, or `null` for a route that is in
+   * the hierarchy but lights none — `/settings`, and only it. Not the same
+   * `null` as a path missing from the table: that one has no parent either.
+   */
+  destination: DestinationId | null;
   /**
    * The one name this route has, from the table's Destination column.
    *
@@ -92,12 +96,20 @@ type Route = {
  * § Navigation answers directly: "a link is not a parent."
  *
  * `destination` is still the question the shell asks. A level-1 route lights
- * itself; a level-2 route lights its parent, which is what makes
- * `/plan/template` and `/shopping` both light Plan, and `/settings` light Now.
- * For every route here that is `parent`'s destination, but the two fields are
- * not the same thing and are not derived from one another — `destination` is
- * about which slot glows, `parent` is about where "up" goes, and only the first
- * survives a hypothetical level-3 route.
+ * itself; a level-2 route that is its parent's content lights its parent, which
+ * is what makes `/plan/template` and `/shopping` both light Plan. `/settings` is
+ * the exception and the reason the two fields are not derived from one another:
+ * its parent is `/`, but it lights no slot at all. `destination` is about which
+ * slot glows, `parent` is about where "up" goes.
+ *
+ * Why `/settings` lights nothing (FUEL-140). It used to light Now, on the
+ * reading that a level-2 route always lights its parent — and on `/settings`
+ * the shell then told you, in ink and in `aria-current`, that you were on `/`.
+ * The template and the shopping list are Plan content, so Plan glowing over
+ * them is true; Settings is configuration, and nothing on it is the day.
+ * § Navigation: "Settings is configuration" and it is "In the shell: No". So no
+ * slot glows, and the one element in the landmark that IS Settings — the
+ * sidebar's foot link — carries the mark instead. See `isRailFootCurrent`.
  *
  * `/login` and `/dev/*` are deliberately absent rather than mapped to `null`
  * entries: § Navigation places them outside the hierarchy rather than at level 1
@@ -136,7 +148,7 @@ const ROUTES = new Map<string, Route>([
     { destination: "plan", name: "Weekly template", parent: "/plan" },
   ],
   ["/shopping", { destination: "plan", name: "Shopping list", parent: "/plan" }],
-  ["/settings", { destination: "now", name: "Settings", parent: "/" }],
+  ["/settings", { destination: null, name: "Settings", parent: "/" }],
 ]);
 
 /**
@@ -180,11 +192,12 @@ function normalise(pathname: string): string {
 }
 
 /**
- * Which destination's slot the given path lights, or `null` for a path outside
- * the hierarchy.
+ * Which destination's slot the given path lights, or `null` when it lights
+ * none — `/settings`, or a path outside the hierarchy.
  *
  * `null` is a real answer and the shell renders it — four inactive items and no
- * active one. It is what `/login` and `/dev/*` get, and it is also what a route
+ * active one. It is what `/settings` gets on purpose (see `ROUTES`), what
+ * `/login` and `/dev/*` get, and it is also what a route
  * added later and not added here gets. That last case is a silent-ish failure,
  * and it is the honest one: lighting a neighbouring slot because its URL happens
  * to be a prefix would assert a parent that FUEL-56 never assigned. A new route
@@ -198,6 +211,25 @@ function normalise(pathname: string): string {
  */
 export function resolveActive(pathname: string): DestinationId | null {
   return ROUTES.get(normalise(pathname))?.destination ?? null;
+}
+
+/**
+ * Whether the given path is the one the sidebar's foot link points at — so that
+ * link, rather than a slot, is what the shell marks current.
+ *
+ * The href is the table's own key, not a second spelling of it: the foot link
+ * renders `RAIL_FOOT_HREF` and this reads the same constant, so the link and the
+ * question asked about it cannot drift apart. `normalise` for the reason
+ * `resolveActive` uses it.
+ *
+ * At most one element in the landmark is ever current, and this is why: the
+ * foot's route is the one route whose `destination` is `null`, so when this is
+ * true no slot is lit. `nav.test.ts` asserts that pairing over the whole table.
+ */
+export const RAIL_FOOT_HREF = "/settings";
+
+export function isRailFootCurrent(pathname: string): boolean {
+  return normalise(pathname) === RAIL_FOOT_HREF;
 }
 
 /**

@@ -1,7 +1,13 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { DESTINATIONS, type DestinationId, resolveActive } from "@/lib/nav";
+import {
+  DESTINATIONS,
+  type DestinationId,
+  isRailFootCurrent,
+  RAIL_FOOT_HREF,
+  resolveActive,
+} from "@/lib/nav";
 import { HOVER_FILL, HOVER_GROUND, HOVER_LINK } from "@/lib/pointer";
 import { cn } from "@/lib/utils";
 
@@ -104,6 +110,7 @@ export function NavShell({
   className?: string;
 }) {
   const active = resolveActive(pathname);
+  const footIsCurrent = isRailFootCurrent(pathname);
 
   return (
     /*
@@ -213,8 +220,13 @@ export function NavShell({
                  * Plan and Plan is what carries `aria-current`. That is the
                  * section the user is in, and `lib/nav.ts` holds the table that
                  * decides it. The alternative — marking only exact matches —
-                 * would leave `/shopping`, `/plan/template` and `/settings` with
-                 * a visually active item that announces nothing.
+                 * would leave `/shopping` and `/plan/template` with a visually
+                 * active item that announces nothing. `/settings` lights no slot
+                 * at all (FUEL-140); the sidebar foot below carries its mark.
+                 *
+                 * The fill and this attribute read the one `isActive`, so they
+                 * cannot disagree — `reachability.test.tsx` asserts that on every
+                 * route rather than trusting it.
                  */
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
@@ -316,11 +328,19 @@ export function NavShell({
        * sidebar has room the pill does not, so the same link can sit here
        * without making the four into five.
        *
-       * No `aria-current` even when the user is on `/settings`. The destination
-       * is what this landmark reports, and `lib/nav.ts` parents `/settings` to
-       * `/` — so Now carries the mark and this link does not. Two elements
-       * claiming to be the current page in one landmark is worse than the small
-       * imprecision of the one that does.
+       * Current on `/settings`, and then the only thing in the landmark that
+       * is (FUEL-140). This used to defer to Now, on the reading that a level-2
+       * route lights its parent — which on `/settings` had the shell saying, in
+       * ink and in `aria-current`, that you were on `/`. `lib/nav.ts` now gives
+       * `/settings` no slot, so this link can take the mark without making two
+       * claims in one landmark. Below 1024px the foot is `display: none`, so the
+       * phone shows four inactive items: honest, since Settings is not in the
+       * pill, and the up-link's "‹ Now" still says where it sits.
+       *
+       * The current state is a change of register, not an `ink` fill: the text
+       * goes to `text-primary` and loses its underline, the way a link stops
+       * looking like a link once it is where you are. A fill would draw it as a
+       * fifth destination, which is the thing the foot exists not to be.
        *
        * The register — 12.5px tertiary underlined — is the one the Settings link
        * at the foot of `/` already uses, so this reads as the same kind of thing
@@ -330,7 +350,8 @@ export function NavShell({
        */}
       <div className="hidden lg:mt-4 lg:block lg:border-t lg:border-border lg:pt-4">
         <Link
-          href="/settings"
+          href={RAIL_FOOT_HREF}
+          aria-current={footIsCurrent ? "page" : undefined}
           /*
            * `/`'s foot links set this register in `text-tertiary`. The text
            * colour is raised to `text-secondary` here for the contrast reason in
@@ -338,7 +359,10 @@ export function NavShell({
            * still read as the same kind of link.
            */
           className={cn(
-            "text-slash text-text-secondary underline decoration-text-tertiary underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            "text-slash underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            footIsCurrent
+              ? "text-text-primary no-underline"
+              : "text-text-secondary underline decoration-text-tertiary",
             // The mock draws this one by name — `.railfoot a:hover` takes the
             // same colour change as `.lnk:hover`, which is what HOVER_LINK is.
             HOVER_LINK,

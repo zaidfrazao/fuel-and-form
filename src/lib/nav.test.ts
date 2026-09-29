@@ -3,8 +3,11 @@ import { describe, expect, test } from "vitest";
 import {
   DESTINATIONS,
   type DestinationId,
+  isRailFootCurrent,
+  RAIL_FOOT_HREF,
   resolveActive,
   resolveParent,
+  ROUTE_PATHS,
 } from "@/lib/nav";
 
 /**
@@ -50,17 +53,17 @@ describe("DESTINATIONS", () => {
 describe("resolveActive", () => {
   /*
    * Every row of § Navigation's route table, level-1 and level-2 together. The
-   * level-2 rows are the ones with something to say: each resolves to its
-   * parent's slot rather than to nothing.
+   * level-2 rows are the ones with something to say: the two that are Plan's
+   * content resolve to Plan, and `/settings` resolves to no slot (FUEL-140).
    */
-  const table: [route: string, active: DestinationId, level: 1 | 2][] = [
+  const table: [route: string, active: DestinationId | null, level: 1 | 2][] = [
     ["/", "now", 1],
     ["/plan", "plan", 1],
     ["/training", "training", 1],
     ["/weight", "weight", 1],
     ["/plan/template", "plan", 2],
     ["/shopping", "plan", 2],
-    ["/settings", "now", 2],
+    ["/settings", null, 2],
   ];
 
   test.each(table)("%s lights %s (level %i)", (route, active) => {
@@ -79,9 +82,15 @@ describe("resolveActive", () => {
     expect(resolveActive("/shopping")).toBe("plan");
   });
 
-  /* `/settings` is parented to `/`, whose URL is a prefix of every route. */
-  test("resolves the route parented to the root", () => {
-    expect(resolveActive("/settings")).toBe("now");
+  /*
+   * `/settings` is parented to `/`, whose URL is a prefix of every route — and
+   * it lights no slot. FUEL-140: lighting Now told the user they were on `/`.
+   * Its parent is untouched; that is `resolveParent`'s question, below.
+   */
+  test("lights no slot for the route parented to the root", () => {
+    expect(resolveActive("/settings")).toBeNull();
+    expect(resolveActive("/settings/")).toBeNull();
+    expect(resolveParent("/settings")).toEqual({ href: "/", label: "Now" });
   });
 
   /*
@@ -265,11 +274,20 @@ describe("resolveParent", () => {
    * sidebar and the up-link start disagreeing — which is exactly the state
    * `/plan/template` was in before FUEL-59, with the sidebar saying Plan and
    * the header saying Settings.
+   *
+   * One named exception since FUEL-140: `/settings` lights no slot, because
+   * Settings is not Now's content, and the sidebar's foot is current instead.
+   * The exception is the foot's route and only it — any other level-2 route
+   * that stopped lighting its parent still fails here.
    */
   test.each(table)(
-    "%s lights the same destination its parent does",
+    "%s lights the same destination its parent does, or is the rail foot",
     (route, parentHref) => {
-      expect(resolveActive(route)).toBe(resolveActive(parentHref));
+      if (isRailFootCurrent(route)) {
+        expect(resolveActive(route)).toBeNull();
+      } else {
+        expect(resolveActive(route)).toBe(resolveActive(parentHref));
+      }
     },
   );
 
@@ -281,5 +299,36 @@ describe("resolveParent", () => {
   test("returns a bare pathname for the caller to append to", () => {
     expect(resolveParent("/shopping")?.href).toBe("/plan");
     expect(resolveParent("/shopping")?.href).not.toContain("?");
+  });
+});
+
+describe("isRailFootCurrent", () => {
+  test("is true on the foot's own route, trailing slash or not", () => {
+    expect(RAIL_FOOT_HREF).toBe("/settings");
+    expect(isRailFootCurrent("/settings")).toBe(true);
+    expect(isRailFootCurrent("/settings/")).toBe(true);
+  });
+
+  test.each(["/", "/plan", "/shopping", "/settings/extra", "/dev/nav-shell"])(
+    "is false on %s",
+    (route) => {
+      expect(isRailFootCurrent(route)).toBe(false);
+    },
+  );
+
+  /*
+   * The pairing that keeps the landmark to at most one current element: over
+   * the whole table, the foot is current exactly where no slot is lit — and
+   * nowhere else is a slot left unlit. A second `destination: null` row, or a
+   * foot that pointed at a lit route, fails here rather than as two
+   * `aria-current`s on a screen.
+   */
+  test("is current exactly where the table lights no slot", () => {
+    for (const route of ROUTE_PATHS) {
+      expect([route, isRailFootCurrent(route)]).toEqual([
+        route,
+        resolveActive(route) === null,
+      ]);
+    }
   });
 });

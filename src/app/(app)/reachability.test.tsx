@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import { DESTINATIONS, ROUTE_PATHS, resolveActive } from "@/lib/nav";
+import { DESTINATIONS, isRailFootCurrent, ROUTE_PATHS, resolveActive } from "@/lib/nav";
 import type { ShoppingWeek } from "@/lib/db/queries/shopping";
 
 /**
@@ -474,18 +474,41 @@ describe("the four destinations", () => {
      * leave every screen lighting Now and pass that other file completely.
      *
      * This is also where the level-2 routes earn their rows: `/shopping` and
-     * `/plan/template` light Plan, and `/settings` lights Now — the parent's
-     * slot, not their own, because that is the section the user is in.
+     * `/plan/template` light Plan, the parent's slot, because that is the
+     * section the user is in. `/settings` lights no slot and marks the
+     * sidebar's Settings link instead (FUEL-140) — it used to light Now, and
+     * the shell said "you are on `/`" while you were not.
      */
     await show(path);
 
     const current = shell()
       .getAllByRole("link")
-      .filter((link) => link.getAttribute("aria-current") === "page");
+      .filter((link) => link.getAttribute("aria-current") === "page")
+      .map((link) => link.getAttribute("href"));
 
-    const expected = DESTINATIONS.find((d) => d.id === resolveActive(path));
+    const expected = isRailFootCurrent(path)
+      ? ["/settings"]
+      : [DESTINATIONS.find((d) => d.id === resolveActive(path))!.href];
 
-    expect(current.map((link) => link.getAttribute("aria-label"))).toEqual([expected!.label]);
+    expect(current).toEqual(expected);
+  });
+
+  test.each([...ROUTE_PATHS])("look current exactly where they say so, on %s", async (path) => {
+    /*
+     * FUEL-140's second criterion: `aria-current` agrees with the visual state
+     * on every route. The two are one flag in `nav-shell.tsx` today, and this is
+     * what keeps them one: a slot looks current by its `ink` fill, the foot by
+     * losing its underline, and each must carry the attribute if and only if it
+     * wears the look. jsdom has no stylesheet, so the look is read from the
+     * class list — the same classes the stylesheet would read.
+     */
+    await show(path);
+
+    for (const link of shell().getAllByRole("link")) {
+      const says = link.getAttribute("aria-current") === "page";
+      const looks = /\b(bg-ink|no-underline)\b/.test(link.className);
+      expect([link.getAttribute("href"), looks]).toEqual([link.getAttribute("href"), says]);
+    }
   });
 
   test.each([...ROUTE_PATHS])("are carried by exactly one landmark on %s", async (path) => {

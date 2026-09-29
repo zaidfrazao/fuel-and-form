@@ -146,7 +146,6 @@ describe("aria-current", () => {
   test.each([
     ["/shopping", "Plan"],
     ["/plan/template", "Plan"],
-    ["/settings", "Now"],
   ])("%s marks its level-1 parent, %s", (pathname, label) => {
     render(<NavShell pathname={pathname} />);
 
@@ -154,8 +153,22 @@ describe("aria-current", () => {
   });
 
   /*
-   * Exactly one, always. Two elements claiming to be the current page in one
-   * landmark is the failure mode the Settings foot link was kept clear of.
+   * FUEL-140. `/settings` used to mark Now, so the shell said "you are on `/`"
+   * while you were not. No slot is current; the foot link is (below).
+   */
+  test("/settings marks no destination", () => {
+    render(<NavShell pathname="/settings" />);
+
+    const slots = within(screen.getByRole("list"))
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("aria-current") === "page");
+    expect(slots).toHaveLength(0);
+  });
+
+  /*
+   * Exactly one, always — the foot link counted in. Two elements claiming to be
+   * the current page in one landmark is the failure mode `/settings` has to
+   * steer between, now that the foot can claim it too.
    */
   test("is never on more than one item", () => {
     for (const pathname of ["/", "/plan", "/shopping", "/settings", "/weight"]) {
@@ -193,17 +206,31 @@ describe("the sidebar foot", () => {
   });
 
   /*
-   * Not even when the user is on `/settings`. The landmark reports which
-   * DESTINATION you are in, and `/settings` is parented to `/`, so Now carries
-   * the mark. The alternative is two current-page claims in one landmark.
+   * FUEL-140: on `/settings` the foot is the current page — it is the one
+   * element in the landmark that IS Settings, and no slot is lit to compete.
+   * The visual state comes from the same flag: `text-primary`, no underline.
    */
-  test("never claims to be the current page", () => {
+  test("is the current page on /settings, and looks it", () => {
     render(<NavShell pathname="/settings" />);
 
-    expect(
-      screen.getByRole("link", { name: "Settings" }).getAttribute("aria-current"),
-    ).toBeNull();
+    const foot = screen.getByRole("link", { name: "Settings" });
+    expect(foot.getAttribute("aria-current")).toBe("page");
+    expect(foot.className).toMatch(/\btext-text-primary\b/);
+    expect(foot.className).toMatch(/\bno-underline\b/);
+    expect(foot.className).not.toMatch(/\btext-text-secondary\b/);
   });
+
+  test.each(["/", "/plan", "/shopping", "/plan/template", "/weight"])(
+    "is not current on %s, and does not look it",
+    (pathname) => {
+      render(<NavShell pathname={pathname} />);
+
+      const foot = screen.getByRole("link", { name: "Settings" });
+      expect(foot.getAttribute("aria-current")).toBeNull();
+      expect(foot.className).toMatch(/\btext-text-secondary\b/);
+      expect(foot.className).not.toMatch(/\bno-underline\b/);
+    },
+  );
 
   /*
    * The pill is four wide. Settings gave up its slot because "a slot is earned
