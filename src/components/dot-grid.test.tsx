@@ -415,3 +415,50 @@ describe("where a dot leads", () => {
     expect(plain.getByRole("table").textContent).toBe(table);
   });
 });
+
+describe("the key — FUEL-142", () => {
+  const WEEK: Week = [
+    { date: "2026-08-10", status: "done" },
+    { date: "2026-08-11", status: "partial" },
+    { date: "2026-08-12", status: "skipped" },
+    { date: "2026-08-15", status: "walk" },
+    { date: "2026-08-16", status: "none" },
+  ];
+
+  const key = (container: HTMLElement) => container.querySelector("ul[aria-hidden]")!;
+
+  test("names every status the grid draws, and nothing for today", () => {
+    const { container } = render(<DotGrid weeks={[WEEK]} today="2026-08-10" />);
+
+    expect([...key(container).querySelectorAll("li")].map((li) => li.textContent)).toEqual([
+      "Done",
+      "Partial",
+      "Skipped",
+      "Walk only",
+      "Not recorded",
+    ]);
+    // Today's umber is the screen's one accent; a swatch of it would be two.
+    expect(key(container).innerHTML).not.toContain("--accent");
+  });
+
+  test("is hidden from the tree, which already has every status in words", () => {
+    render(<DotGrid weeks={[WEEK]} />);
+
+    expect(screen.queryByText("Walk only", { selector: "li" })).not.toBeNull();
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+  });
+
+  test("draws each status exactly as the grid draws it", () => {
+    // A key whose mark differed from the dot would be explaining a mark the
+    // grid never makes. Compared on the rendered style, not on a class.
+    const { container } = render(<DotGrid weeks={[WEEK]} />);
+    const marks = [...key(container).querySelectorAll("li span span")].map((mark) =>
+      mark.getAttribute("style"),
+    );
+    const dots = [...container.querySelectorAll('[role="img"] .rounded-full')].map((dot) =>
+      dot.getAttribute("style"),
+    );
+
+    expect(marks).toEqual(dots);
+  });
+});

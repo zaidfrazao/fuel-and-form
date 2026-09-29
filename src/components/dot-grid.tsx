@@ -273,6 +273,44 @@ function summarise(rows: (Day | undefined)[][], today?: string): string {
     .join(" ");
 }
 
+/**
+ * The key — FUEL-142. Every status the grid can draw, in `summarise`'s order.
+ *
+ * Five and not the ticket's four, because the two small dots are two statuses:
+ * a walk is `text-tertiary` and an unrecorded day is `border`, the one pair on
+ * the graphic that differs by ink alone. Drawn through `dotStyle`, so the key
+ * is the grid's own marks and a restyle of one restyles the other.
+ *
+ * **Today is not in it.** Its dot is the screen's one umber element (§ The
+ * Four Rules #2), and a swatch of it here would be a second. Umber means
+ * "now" everywhere in the app, so the mark explains itself; and today keeps
+ * its status's geometry under the accent, which the key already covers.
+ *
+ * `aria-hidden`: the summary and the table below already say every status in
+ * words, and a key read aloud after them would be a third telling. The
+ * `.legend` pattern is `BRAND_GUIDE.html`'s, where it keys the day ruler and
+ * `/plan` — Micro, uppercase, `text-3`, the mark before the word.
+ */
+function Legend() {
+  return (
+    <ul aria-hidden className="mt-[6px] flex flex-wrap gap-x-4 gap-y-1">
+      {(["done", "partial", "skipped", "walk", "none"] as const).map((status) => (
+        <li
+          key={status}
+          className="inline-flex items-center gap-1.5 text-micro text-text-tertiary uppercase"
+        >
+          {/* The 11px cell the grid gives every dot, so a 4px mark sits on the
+              same centre line as an 11px one. */}
+          <span className="grid size-[11px] place-items-center">
+            <span className="rounded-full" style={dotStyle(status, false)} />
+          </span>
+          {STATUS_LABEL[status]}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function DotGrid({
   weeks,
   today,
@@ -406,6 +444,7 @@ export function DotGrid({
         </div>
       </div>
 
+      <Legend />
       {/* Brand Guide § Accessibility — each signature graphic carries an
           accessible summary *plus* an adjacent data table, because "a mark on a
           screen is not the data". Built from the same rows as the dots, so the
