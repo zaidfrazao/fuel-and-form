@@ -171,6 +171,18 @@ const ALLOWED = new Map([
       "components draw is visible to a reader and to the visual suite. A " +
       "per-walk value on a per-walk row; the seed computes no total.",
   ],
+  [
+    "lib/profile-targets.ts",
+    "Imports `MIN_HEIGHT_CM` and `MAX_HEIGHT_CM` and nothing else — FUEL-136. " +
+      "Settings refuses a height the estimate would refuse, so an accepted " +
+      "height can never silently turn a walk's step figure off. It reads the " +
+      "band; it computes no figure and adds nothing up.",
+  ],
+  [
+    "lib/profile-targets.test.ts",
+    "Asserts that band's two edges against the same two constants, so moving " +
+      "one moves the test with it.",
+  ],
   ["lib/steps.test.ts", "The module's own tests."],
 ]);
 
