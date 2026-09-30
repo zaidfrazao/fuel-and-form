@@ -111,7 +111,7 @@ describe("the order of the rows — FUEL-142", () => {
     ...VALUES,
     [slotField("extra")]: "06:45",
     [workoutField("circuit")]: "06:30",
-    [workoutField("intervals")]: "06:30",
+    [workoutField("kettlebell")]: "06:30",
     [slotField("breakfast")]: "07:10",
     [slotField("snack")]: "16:00",
     [slotField("lunch")]: "12:30",
@@ -126,7 +126,7 @@ describe("the order of the rows — FUEL-142", () => {
 
     expect(labels()).toEqual([
       "Circuit",
-      "Intervals",
+      "Kettlebell",
       "Extra",
       "Breakfast",
       "Lunch",
@@ -140,7 +140,7 @@ describe("the order of the rows — FUEL-142", () => {
     // only the meal-first rule can put it ahead of them.
     renderForm({ ...WALKTHROUGH, [slotField("breakfast")]: "06:30" });
 
-    expect(labels().slice(0, 3)).toEqual(["Breakfast", "Circuit", "Intervals"]);
+    expect(labels().slice(0, 3)).toEqual(["Breakfast", "Circuit", "Kettlebell"]);
   });
 
   it("puts a slot with no time last, where `/` puts it in Anytime", () => {

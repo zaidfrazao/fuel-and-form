@@ -47,7 +47,7 @@ type Row = { name: string; label: string; meta: string; kind: "meal" | "workout"
 export const ROWS: readonly Row[] = [
   { name: slotField("extra"), label: slotLabel("extra"), meta: "Coffee and MCT oil", kind: "meal" },
   { name: workoutField("circuit"), label: "Circuit", meta: "Circuit A and B", kind: "workout" },
-  { name: workoutField("intervals"), label: "Intervals", meta: "Skipping and core", kind: "workout" },
+  { name: workoutField("kettlebell"), label: "Kettlebell", meta: "Swings", kind: "workout" },
   { name: slotField("breakfast"), label: slotLabel("breakfast"), meta: "Morning routine", kind: "meal" },
   { name: slotField("snack"), label: slotLabel("snack"), meta: "Around the walk", kind: "meal" },
   { name: slotField("lunch"), label: slotLabel("lunch"), meta: "Lunch break", kind: "meal" },

@@ -130,7 +130,10 @@ export const DEFAULT_SLOT_TIMES: Readonly<Record<MealSlot, TimeOfDay>> = {
  */
 export const DEFAULT_WORKOUT_TIMES: Readonly<Record<string, TimeOfDay>> = {
   circuit: "06:30",
+  // Kept after FUEL-130 moved Tue/Thu off it, for a template row that still
+  // names an intervals workout; the kettlebell session takes its slot.
   intervals: "06:30",
+  kettlebell: "06:30",
 };
 
 /**

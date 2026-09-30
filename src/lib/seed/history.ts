@@ -397,6 +397,8 @@ const DURATION_MIN = {
   walk: { from: 15, spread: 11 },
   circuit: { from: 26, spread: 12 },
   intervals: { from: 20, spread: 10 },
+  // Warm-up, 75 swings in sets with a minute between them, cool-down — FUEL-130.
+  kettlebell: { from: 18, spread: 8 },
   other: { from: 25, spread: 15 },
 } as const;
 

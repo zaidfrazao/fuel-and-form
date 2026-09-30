@@ -130,6 +130,18 @@ export type Band = { low: number; high: number };
  * (5.0–8.0), rope-skipping intervals (8.0–12.0), and walking at an unknown pace
  * (2.8–4.3, the compendium's 3.2 km/h and 5.6 km/h figures — see
  * `WALK_PACE_POINTS` for why those two bound "an ordinary walk").
+ *
+ * `kettlebell` arrived with FUEL-130, when kettlebell swings took the Tue/Thu
+ * slot from the skipping session, and it is built the way `WALK_PACE_POINTS`
+ * builds a walk's: two of the compendium's own figures, not a point with an
+ * invented spread. The 2024 Adult Compendium gives the swing one value — 02058
+ * "Kettlebell swings", 9.8 — and a single value is not a range. Its nearest
+ * neighbour below is 02040 "Circuit training, including kettlebells, some
+ * aerobic movement with minimal rest, general, vigorous intensity", 7.5: the
+ * same bell, worked in the same rest-between-sets rhythm, less continuously. So
+ * 7.5–9.8. A session logged as `intervals` before the change keeps the rope's
+ * band — its workout row still says intervals, and a past session is costed as
+ * what it was.
  */
 /**
  * What a walk is costed at when its pace is not known — the fallback rung of
@@ -153,6 +165,7 @@ export const WALK_UNKNOWN_PACE_BAND: Band = { low: 2.8, high: 4.3 };
 export const MET_BANDS: Record<string, Band> = {
   circuit: { low: 5.0, high: 8.0 },
   intervals: { low: 8.0, high: 12.0 },
+  kettlebell: { low: 7.5, high: 9.8 },
   [WALK_TYPE]: WALK_UNKNOWN_PACE_BAND,
 };
 
