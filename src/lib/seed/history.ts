@@ -23,7 +23,7 @@ import type {
   workoutLogs,
 } from "@/lib/db/schema";
 import type { ScopedInsert } from "@/lib/db/scope";
-import { setKind, storedSet } from "@/lib/exercise-set";
+import { MAX_SET_INDEX, setKind, storedSet } from "@/lib/exercise-set";
 // § P11's storage rules, applied to the demo's own routes — FUEL-100. The
 // generator below produces a raw track and `storableRoute` is what truncates,
 // trims and caps it, so the demo goes through the same write path a real
@@ -783,6 +783,44 @@ function repsFor(low: number, high: number, setIndex: number, targetSets: number
 }
 
 /**
+ * The demo persona's kettlebell, in kg — FUEL-130.
+ *
+ * One bell for every session, and deliberately so: a demo whose load crept up
+ * week on week would be drawing the progression PRD § Non-Goals says this app
+ * does not do. It is the commonest first bell for the swing.
+ */
+const DEMO_BELL_KG = 16;
+
+/**
+ * A total split into sets, each within `low`–`high`, that add up to it exactly
+ * — FUEL-130's '75 swings, sets of 10–25'.
+ *
+ * Each set is drawn from the range, and the last is whatever is left. Two
+ * guards keep every set inside the prescription, which is `repsFor`'s rule
+ * ("a demo that shows sets under the prescribed minimum shows somebody failing
+ * it"): a remainder that fits in one set is taken whole, and a draw that would
+ * leave less than a set's minimum behind is shortened so it does not.
+ */
+export function totalSets(low: number, high: number, total: number, n: number): number[] {
+  const sets: number[] = [];
+  let remaining = total;
+
+  while (remaining > 0 && sets.length < MAX_SET_INDEX) {
+    let reps =
+      remaining <= high
+        ? remaining
+        : low + Math.floor(variation(n * SETS_PER_EXERCISE + sets.length, SALT.setReps) * (high - low + 1));
+
+    if (remaining - reps > 0 && remaining - reps < low) reps = remaining - low;
+
+    sets.push(reps);
+    remaining -= reps;
+  }
+
+  return sets;
+}
+
+/**
  * A plausible instant for a row that was written on `date` at `wallMinutes`.
  *
  * Built as UTC from the calendar date, which is approximate by up to an hour in
@@ -1164,7 +1202,31 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
         // `reps` was NOT NULL and a row here meant inventing a rep count for
         // something measured in seconds; now they log their seconds, which is
         // what keeps the demo from showing the bug that ticket fixed.
-        if (targetSets === null || low === null || high === null) return;
+        if (low === null || high === null) return;
+
+        // A total — the swings' 75 (FUEL-130) — is the one shape with no set
+        // count that still describes sets: however many it takes, each within
+        // the rep range, until the reps reach it. `totalSets` splits it.
+        if (exercise.targetTotalReps !== null && kind === "reps") {
+          totalSets(low, high, exercise.targetTotalReps, day * EXERCISES_PER_SESSION + exerciseIndex)
+            .forEach((reps, setIndex) => {
+              history.exerciseSets.push({
+                date,
+                workoutId: workout.id,
+                exerciseId: exercise.id,
+                setIndex: setIndex + 1,
+                ...storedSet(kind, reps),
+                loadKg: exercise.takesLoad ? DEMO_BELL_KG : null,
+                createdAt: loggedAt(date, wallMinutes - 60 + setNumber * SET_MINUTES),
+              });
+
+              setNumber += 1;
+            });
+
+          return;
+        }
+
+        if (targetSets === null) return;
 
         for (let setIndex = 0; setIndex < targetSets; setIndex += 1) {
           const n = (day * EXERCISES_PER_SESSION + exerciseIndex) * SETS_PER_EXERCISE + setIndex;

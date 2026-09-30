@@ -10,6 +10,7 @@ import type {
 } from "@/lib/db/schema";
 import { resolveTraining } from "@/lib/rotation";
 import { WORKING_SECTION, working } from "@/lib/section";
+import { MAX_SET_INDEX } from "@/lib/exercise-set";
 import { countPoints, distanceMetres, MAX_ROUTE_POINTS, TRIM_METRES } from "@/lib/route";
 import { PACE_TOLERANCE_KG, TRAILING_DAYS, weightStats } from "@/lib/weight-stats";
 
@@ -19,6 +20,7 @@ import {
   MEAL_LOG_WEEKS,
   ROUTE_HISTORY_WEEKS,
   SET_HISTORY_WEEKS,
+  totalSets,
 } from "./history";
 import { seedMeals } from "./meals";
 import { DEMO_TIMEZONE, demoProfile } from "./persona";
@@ -134,8 +136,8 @@ function seededLibrary() {
       mediaKind: exercise.mediaKind ?? null,
       mediaAlt: exercise.mediaAlt ?? null,
       mediaCredit: exercise.mediaCredit ?? null,
-      targetTotalReps: null,
-      takesLoad: false,
+      targetTotalReps: exercise.targetTotalReps ?? null,
+      takesLoad: exercise.takesLoad ?? false,
     })),
   );
 
@@ -887,13 +889,13 @@ describe("set history", () => {
 
     // FUEL-123. The planks, the side plank and the superman hold carry a
     // seconds target, and their sets are seconds; everything else is reps.
-    // Exactly one of the two, as `exercise_sets_one_unit` requires — and the
-    // skipping session, which has no target_sets at all, still declines for
-    // the reason workouts.ts gives.
+    // Exactly one of the two, as `exercise_sets_one_unit` requires. Every set
+    // is against a set count or, since FUEL-130, a total — an exercise with
+    // neither declines, for the reason workouts.ts gives about rounds.
     for (const set of exerciseSets) {
       const exercise = exerciseFor(input, set.exerciseId);
 
-      expect(exercise.targetSets).not.toBeNull();
+      expect(exercise.targetSets ?? exercise.targetTotalReps).not.toBeNull();
 
       if (exercise.targetSecondsLow !== null) {
         expect(set.reps ?? null).toBeNull();
@@ -931,7 +933,8 @@ describe("set history", () => {
 
       expect(value).toBeGreaterThanOrEqual(low!);
       expect(value).toBeLessThanOrEqual(high!);
-      expect(set.setIndex).toBeLessThanOrEqual(exercise.targetSets!);
+      // A total has no set count to stay under; the cap is the schema's.
+      expect(set.setIndex).toBeLessThanOrEqual(exercise.targetSets ?? MAX_SET_INDEX);
     }
   });
 
@@ -988,16 +991,24 @@ describe("set history", () => {
         input.workoutExercises.filter((row) => row.workoutId === log.workoutId),
       ).filter(
         (row) =>
-          row.targetSets !== null &&
+          (row.targetSets !== null || row.targetTotalReps !== null) &&
           (row.targetRepsLow !== null || row.targetSecondsLow !== null),
       );
 
       expect(new Set(sets.map((set) => set.exerciseId)).size).toBe(eligible.length);
 
       for (const exercise of eligible) {
-        expect(sets.filter((set) => set.exerciseId === exercise.id)).toHaveLength(
-          exercise.targetSets!,
-        );
+        const own = sets.filter((set) => set.exerciseId === exercise.id);
+
+        // Its full target: the set count, or — for a total (FUEL-130) — the
+        // reps adding up to it.
+        if (exercise.targetTotalReps !== null) {
+          expect(own.reduce((sum, set) => sum + (set.reps ?? 0), 0)).toBe(
+            exercise.targetTotalReps,
+          );
+        } else {
+          expect(own).toHaveLength(exercise.targetSets!);
+        }
       }
     }
   });
@@ -1348,5 +1359,53 @@ describe("more walks than there are logged hours", () => {
     for (const log of mondayWalks) {
       expect(log.loggedAt).toBeInstanceOf(Date);
     }
+  });
+});
+
+describe("the swings' sets — FUEL-130", () => {
+  it("splits a total into sets inside the range that add up to it exactly", () => {
+    for (let n = 0; n < 500; n += 1) {
+      const sets = totalSets(10, 25, 75, n);
+
+      expect(sets.reduce((sum, reps) => sum + reps, 0)).toBe(75);
+
+      for (const reps of sets) {
+        expect(reps).toBeGreaterThanOrEqual(10);
+        expect(reps).toBeLessThanOrEqual(25);
+      }
+    }
+  });
+
+  it.each(eachWeekday)("logs the demo's swings to 75, each set with the bell, %s", (date) => {
+    const input = provisionedOn(date);
+    const { exerciseSets, workoutLogs } = demoHistory(input);
+
+    const swings = exerciseSets.filter(
+      (set) => exerciseFor(input, set.exerciseId).name === "Kettlebell swings",
+    );
+
+    // Four weeks of Tue / Thu reach them, less the skipped ones.
+    expect(swings.length).toBeGreaterThan(0);
+
+    const bySession = new Map<string, number>();
+
+    for (const set of swings) {
+      expect(set.loadKg).toBeGreaterThan(0);
+      expect(set.seconds ?? null).toBeNull();
+
+      const key = `${set.date}#${set.workoutId}`;
+
+      bySession.set(key, (bySession.get(key) ?? 0) + (set.reps ?? 0));
+    }
+
+    for (const total of bySession.values()) expect(total).toBe(75);
+
+    // And no other exercise carries a load.
+    const others = exerciseSets.filter(
+      (set) => exerciseFor(input, set.exerciseId).name !== "Kettlebell swings",
+    );
+
+    expect(others.every((set) => (set.loadKg ?? null) === null)).toBe(true);
+    expect(workoutLogs.length).toBeGreaterThan(0);
   });
 });

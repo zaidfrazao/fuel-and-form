@@ -41,7 +41,7 @@ const ANCHOR = "2026-04-08"; // a Wednesday, five weeks and two days in
 
 const CIRCUIT_A = "Bodyweight Circuit A";
 const CIRCUIT_B = "Bodyweight Circuit B";
-const INTERVALS = "Skipping Intervals + Core";
+const KETTLEBELL = "Kettlebell Swings";
 /** Both walks, joined the way `dayFor` writes the label. */
 const WALKS = "Morning Walk · Afternoon Walk";
 
@@ -224,7 +224,7 @@ describe("the session is what the day is about", () => {
 
   it("labels each day with the workout the template resolved, alternation included", () => {
     expect(dayOn("2026-03-02").label).toBe(CIRCUIT_A);
-    expect(dayOn("2026-03-03").label).toBe(INTERVALS);
+    expect(dayOn("2026-03-03").label).toBe(KETTLEBELL);
     expect(dayOn("2026-03-04").label).toBe(CIRCUIT_B);
     // The second Monday, from the same entry as the first. A week is not the
     // cycle, and the grid's own labels have to say so.
@@ -444,5 +444,62 @@ describe("the week's standing", () => {
     const before = "2026-02-25"; // a Wednesday, the week before PROGRAM_START
 
     expect(weekStanding(adherenceWeeks(PLAN, [], before), before)).toBeNull();
+  });
+});
+
+describe("a schedule that changed — FUEL-130", () => {
+  // The owner's week as migration 0019 leaves it: the skipping session's Tue /
+  // Thu rows closed the day before the change, the swings' opened on it. A
+  // Tuesday before the change was skipping, and has to stay so.
+  const SKIPPING = "Skipping Intervals + Core";
+  const SKIPPING_ID = "workout-skipping-intervals-core";
+  const SWINGS_ID = idFor("kettlebell-swings");
+  const CHANGE = "2026-03-24"; // a Tuesday
+
+  const changed: TrainingPlan = {
+    ...PLAN,
+    workouts: [
+      ...WORKOUTS,
+      {
+        id: SKIPPING_ID,
+        userId: USER,
+        name: SKIPPING,
+        type: "intervals",
+        description: null,
+        rotationGroup: null,
+        rotationIndex: null,
+      },
+    ],
+    template: TEMPLATE.flatMap((entry) =>
+      entry.workoutId === SWINGS_ID
+        ? [
+            { ...entry, id: `${entry.id}-old`, workoutId: SKIPPING_ID, validUntil: "2026-03-23" },
+            { ...entry, validFrom: CHANGE },
+          ]
+        : [entry],
+    ),
+  };
+
+  const logs: SessionLog[] = [{ date: "2026-03-17", workoutId: SKIPPING_ID, status: "done" }];
+  const days = adherenceWeeks(changed, logs, ANCHOR).flat();
+  const on = (date: string) => days.find((day) => day.date === date)!;
+
+  it("keeps a Tuesday before the change on the skipping session, with its log", () => {
+    expect(on("2026-03-17")).toMatchObject({ label: SKIPPING, status: "done" });
+    expect(on("2026-03-19").label).toBe(SKIPPING);
+  });
+
+  it("puts the swings on the change date and after", () => {
+    expect(on(CHANGE).label).toBe(KETTLEBELL);
+    expect(on("2026-04-07").label).toBe(KETTLEBELL);
+  });
+
+  it("names the old session in Recent, not the new one", () => {
+    const recent = recentSessions(adherenceWeeks(changed, logs, ANCHOR), "2026-03-18");
+
+    expect(recent.find((row) => row.date === "2026-03-17")).toMatchObject({
+      label: SKIPPING,
+      status: "done",
+    });
   });
 });

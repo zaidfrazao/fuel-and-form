@@ -24,8 +24,9 @@ import { BODYWEIGHT_CIRCUIT, type SeedKey, type SeedPlanEntry, type SeedTraining
  *   is Chicken & Rice", and P2's worked example — "ran out of chicken → Tuesday
  *   becomes Chilli" — says the same thing from the other side.
  * - **Training** is pinned. workouts.ts:71 heads the circuits "Mon / Wed / Fri",
- *   :162 heads the skipping session "Tue / Thu", and its last section heads the
- *   walks "every day, including weekends — and TWICE" (FUEL-98).
+ *   the Tue / Thu section heads what was the skipping session and is kettlebell
+ *   swings since FUEL-130, and its last section heads the walks "every day,
+ *   including weekends — and TWICE" (FUEL-98).
  * - **The other four dinners are a reconstruction.** See the block on
  *   `WEEKDAY_DINNER` below for what corroborates it and how to correct it.
  *
@@ -151,7 +152,7 @@ export const seedPlanTemplate: readonly SeedPlanEntry[] = withSortOrder([
 /** Mon / Wed / Fri — workouts.ts:71. */
 const CIRCUIT_DAYS = [1, 3, 5] as const satisfies readonly DayOfWeek[];
 
-/** Tue / Thu — workouts.ts:162. */
+/** Tue / Thu — workouts.ts' kettlebell section (FUEL-130; skipping before it). */
 const CARDIO_DAYS = [2, 4] as const satisfies readonly DayOfWeek[];
 
 /**
@@ -195,7 +196,7 @@ export const seedTrainingTemplate: readonly SeedTrainingEntry[] = [
   })),
   ...CARDIO_DAYS.map((dayOfWeek) => ({
     dayOfWeek,
-    workoutKey: "skipping-intervals-core",
+    workoutKey: "kettlebell-swings",
     sortOrder: 0,
   })),
   ...ALL_DAYS.map((dayOfWeek) => ({
