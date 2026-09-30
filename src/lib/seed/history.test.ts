@@ -1409,3 +1409,39 @@ describe("the swings' sets — FUEL-130", () => {
     expect(workoutLogs.length).toBeGreaterThan(0);
   });
 });
+
+describe("the set history's two other shapes — FUEL-130", () => {
+  // `demoHistory` takes its library as input, so these are reachable with any
+  // library other than the shipped one. Each is the swings row altered once.
+  const altered = (change: Partial<WorkoutExercise>) => {
+    const input = provisionedOn(WEEK[0]!);
+
+    return {
+      input,
+      history: demoHistory({
+        ...input,
+        workoutExercises: input.workoutExercises.map((row) =>
+          row.name === "Kettlebell swings" ? { ...row, ...change } : row,
+        ),
+      }),
+    };
+  };
+
+  const swingSets = ({ input, history }: ReturnType<typeof altered>) =>
+    history.exerciseSets.filter(
+      (set) => exerciseFor(input, set.exerciseId).name === "Kettlebell swings",
+    );
+
+  it("writes a total's sets with no load when the exercise takes none", () => {
+    const sets = swingSets(altered({ takesLoad: false }));
+
+    expect(sets.length).toBeGreaterThan(0);
+    expect(sets.every((set) => set.loadKg === null)).toBe(true);
+  });
+
+  it("writes no sets for a rep range with neither a set count nor a total", () => {
+    // How many sets that range was performed for is nowhere in the row, so
+    // generating any would be a record of something nobody prescribed.
+    expect(swingSets(altered({ targetTotalReps: null }))).toEqual([]);
+  });
+});
