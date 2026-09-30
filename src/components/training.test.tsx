@@ -128,7 +128,9 @@ const CIRCUIT: TrainingItem = {
       targetRepsHigh: 12,
       targetSecondsLow: null,
       targetSecondsHigh: null,
+      targetTotalReps: null,
       media: null,
+      takesLoad: false,
     },
     {
       id: "e2",
@@ -141,7 +143,9 @@ const CIRCUIT: TrainingItem = {
       targetRepsHigh: 10,
       targetSecondsLow: null,
       targetSecondsHigh: null,
+      targetTotalReps: null,
       media: null,
+      takesLoad: false,
     },
     // Sets and no target of either unit. The third state a set row has to
     // draw, and the one a regex over "3 x 45s" would get wrong. It is what the
@@ -158,7 +162,9 @@ const CIRCUIT: TrainingItem = {
       targetRepsHigh: null,
       targetSecondsLow: null,
       targetSecondsHigh: null,
+      targetTotalReps: null,
       media: null,
+      takesLoad: false,
     },
   ],
   entry: null,
@@ -1324,7 +1330,9 @@ const TIMED_HOLD = {
   targetRepsHigh: null,
   targetSecondsLow: 30,
   targetSecondsHigh: 60,
+  targetTotalReps: null,
   media: null,
+  takesLoad: false,
 };
 
 /** A session of the timed hold alone, holding it until its sets are in. */
@@ -1901,6 +1909,7 @@ describe("the sets sub-list", () => {
       exerciseId: "e1",
       setIndex: 1,
       value: 12,
+      loadKg: null,
     });
   });
 
@@ -1924,6 +1933,7 @@ describe("the sets sub-list", () => {
       exerciseId: "e4",
       setIndex: 1,
       value: 30,
+      loadKg: null,
     });
   });
 
@@ -2301,7 +2311,9 @@ const SECTIONED: TrainingItem = {
       targetRepsHigh: null,
       targetSecondsLow: null,
       targetSecondsHigh: null,
+      targetTotalReps: null,
       media: null,
+      takesLoad: false,
     },
     ...CIRCUIT.exercises,
     {
@@ -2315,7 +2327,9 @@ const SECTIONED: TrainingItem = {
       targetRepsHigh: null,
       targetSecondsLow: null,
       targetSecondsHigh: null,
+      targetTotalReps: null,
       media: null,
+      takesLoad: false,
     },
   ],
 };
@@ -2383,7 +2397,9 @@ describe("a session with rows but no work", () => {
           targetRepsHigh: null,
           targetSecondsLow: null,
           targetSecondsHigh: null,
+          targetTotalReps: null,
           media: null,
+          takesLoad: false,
         },
       ],
       sets: [],
@@ -3829,6 +3845,7 @@ describe("the sets sheet", () => {
         exerciseId: "e1",
         setIndex: 3,
         value: 12,
+        loadKg: null,
       }),
     );
   });
@@ -4222,5 +4239,129 @@ describe("the recap of a recorded session — FUEL-128", () => {
 
     expect(phoneLists()).toHaveLength(1);
     expect(follows(record(), phoneList())).toBe(true);
+  });
+});
+
+/**
+ * FUEL-130 — a loaded exercise's set rows take a kg box beside the number.
+ *
+ * '75 swings — sets of 10–25, ~60 s rest, until 75', with the reps target
+ * transcribed and the total in its own column. Its sets carry kg.
+ */
+describe("a loaded exercise's kg — FUEL-130", () => {
+  const SWINGS = {
+    id: "e5",
+    name: "Kettlebell swings",
+    prescription: "75 swings — sets of 10–25, ~60 s rest, until 75",
+    section: WORKING_SECTION,
+    notes: null,
+    targetSets: null,
+    targetRepsLow: 10,
+    targetRepsHigh: 25,
+    targetSecondsLow: null,
+    targetSecondsHigh: null,
+    targetTotalReps: 75,
+    media: null,
+    takesLoad: true,
+  };
+
+  const loaded = (setIndex: number, value: number, loadKg: number | null) => ({
+    exerciseId: "e5",
+    setIndex,
+    value,
+    loadKg,
+  });
+
+  const swings = (
+    sets: ReturnType<typeof loaded>[] = [],
+    lastTime: ReturnType<typeof loaded>[] = [],
+  ) => [{ ...CIRCUIT, type: "kettlebell", exercises: [SWINGS], sets, lastTime }, WALK];
+
+  test("draws a kg box on a loaded row, and none on a bodyweight one", () => {
+    resumed();
+    const { unmount } = render(view({ sessions: swings() }));
+
+    expect(screen.getByLabelText("Set 1 kg")).toBeTruthy();
+
+    unmount();
+    render(view());
+
+    expect(screen.queryByLabelText("Set 1 kg")).toBeNull();
+  });
+
+  test("logs the typed kg, to a decimal, with the set", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: swings() }));
+    await user.type(screen.getByLabelText("Set 1 reps"), "20");
+    await user.type(screen.getByLabelText("Set 1 kg"), "13.6");
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    expect(logExerciseSet).toHaveBeenCalledWith(
+      expect.objectContaining({ exerciseId: "e5", setIndex: 1, value: 20, loadKg: 13.6 }),
+    );
+  });
+
+  test("offers the previous set's kg, and an empty box's tick logs it", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: swings([loaded(1, 20, 16)], [loaded(1, 15, 12)]) }));
+
+    // Set 2 offers this session's set 1, not last time's.
+    expect(screen.getByLabelText<HTMLInputElement>("Set 2 kg").placeholder).toBe("16");
+
+    await user.click(screen.getByRole("button", { name: "Log set 2" }));
+
+    expect(logExerciseSet).toHaveBeenCalledWith(
+      expect.objectContaining({ setIndex: 2, value: 10, loadKg: 16 }),
+    );
+  });
+
+  test("offers last time's kg on the first set", () => {
+    resumed();
+    render(view({ sessions: swings([], [loaded(1, 15, 12)]) }));
+
+    expect(screen.getByLabelText<HTMLInputElement>("Set 1 kg").placeholder).toBe("12");
+  });
+
+  test("holds the tick on a kg the column would refuse", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: swings() }));
+    await user.type(screen.getByLabelText("Set 1 kg"), "16.");
+
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Log set 1" }).disabled,
+    ).toBe(true);
+  });
+
+  test("corrects a logged set's kg when the box loses focus", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: swings([loaded(1, 20, 16)]) }));
+    const box = screen.getByLabelText<HTMLInputElement>("Set 1 kg");
+
+    expect(box.value).toBe("16");
+
+    await user.clear(box);
+    await user.type(box, "18");
+    await user.tab();
+
+    expect(logExerciseSet).toHaveBeenCalledWith(
+      expect.objectContaining({ setIndex: 1, value: 20, loadKg: 18 }),
+    );
+  });
+
+  test("keeps offering sets until the reps reach the total", () => {
+    resumed();
+    render(view({ sessions: swings([loaded(1, 25, 16), loaded(2, 25, 16)]) }));
+
+    // Two sets of 25 is 50 of 75: a third row, and the exercise is not done.
+    expect(screen.getByLabelText("Set 3 reps")).toBeTruthy();
+    expect(screen.queryByLabelText("Set 4 reps")).toBeNull();
   });
 });

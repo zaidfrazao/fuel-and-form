@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { PageMain } from "@/components/page-main";
-import { Training, type TrainingItem } from "@/components/training";
+import { type LoggedSetView, Training, type TrainingItem } from "@/components/training";
 import { getSession } from "@/lib/auth/session";
 import { type CalendarDate, parseCalendarDate } from "@/lib/date";
 import { routedLogIds } from "@/lib/db/queries/route";
@@ -99,8 +99,9 @@ function requestedDate(value: string | string[] | undefined): CalendarDate | nul
  * They are what an unlogged set row offers ("Target 8") and what decides how
  * many rows an exercise has, so they are drawn rather than merely known. The
  * sets themselves cross narrowed to three fields: `exercise_sets` also carries
- * a `user_id`, the id of the log it hangs off, a `created_at` and a dormant
- * `load_kg`, and the screen draws none of them.
+ * a `user_id`, the id of the log it hangs off and a `created_at`, and the
+ * screen draws none of them. `load_kg` crosses since FUEL-130, because a
+ * loaded exercise's set row draws it.
  */
 function narrow(
   session: TrainingSession,
@@ -132,6 +133,8 @@ function narrow(
       targetRepsHigh: exercise.targetRepsHigh,
       targetSecondsLow: exercise.targetSecondsLow,
       targetSecondsHigh: exercise.targetSecondsHigh,
+      targetTotalReps: exercise.targetTotalReps,
+      takesLoad: exercise.takesLoad,
       /*
        * Form media, resolved HERE and never on the client — § P10, FUEL-94.
        *
@@ -176,7 +179,7 @@ function narrow(
     sets: log
       ? sets
           .filter((set) => set.workoutLogId === log.id)
-          .map((set) => ({ exerciseId: set.exerciseId, setIndex: set.setIndex, value: setValue(set) }))
+          .map(setView)
       : [],
     /*
      * Last time's sets for this session's own exercises — FUEL-122. Narrowed
@@ -187,7 +190,21 @@ function narrow(
      */
     lastTime: previousSets
       .filter((set) => ids.has(set.exerciseId))
-      .map((set) => ({ exerciseId: set.exerciseId, setIndex: set.setIndex, value: setValue(set) })),
+      .map(setView),
+  };
+}
+
+/**
+ * One stored set as the screen draws it: the exercise, the ordinal, the number
+ * in whichever column holds it (FUEL-123), and its load (FUEL-130). Nothing
+ * else of the row crosses — not its log, its owner or when it was written.
+ */
+function setView(set: ExerciseSet): LoggedSetView {
+  return {
+    exerciseId: set.exerciseId,
+    setIndex: set.setIndex,
+    value: setValue(set),
+    loadKg: set.loadKg,
   };
 }
 

@@ -71,6 +71,7 @@ const WALK_ENTRY = "entry-daily-walk";
 
 const EXERCISE = "exercise-press-ups";
 const HOLD = "exercise-plank";
+const SWINGS = "exercise-swings";
 
 /** An exercise of the circuit, narrowed to what the resolver hands over. */
 const exercise = (id: string): WorkoutExercise => ({
@@ -128,6 +129,16 @@ const training = (): Training => ({
             targetRepsHigh: null,
             targetSecondsLow: 30,
             targetSecondsHigh: 60,
+          },
+          // A loaded exercise — FUEL-130. Its sets may carry kg.
+          {
+            ...exercise(SWINGS),
+            name: "Kettlebell swings",
+            targetSets: null,
+            targetRepsLow: 10,
+            targetRepsHigh: 25,
+            targetTotalReps: 75,
+            takesLoad: true,
           },
         ],
       },
@@ -395,8 +406,44 @@ describe("logging a set", () => {
       setIndex: 1,
       kind: "reps",
       value: 12,
+      loadKg: null,
     });
     expect(refresh).toHaveBeenCalled();
+  });
+
+  test("writes a loaded exercise's kg with the set — FUEL-130", async () => {
+    expect(
+      await logExerciseSet(logging({ exerciseId: SWINGS, value: 20, loadKg: "13.6" })),
+    ).toEqual({ ok: true });
+
+    expect(logSet).toHaveBeenCalledWith(
+      USER,
+      expect.objectContaining({ exerciseId: SWINGS, value: 20, loadKg: 13.6 }),
+    );
+  });
+
+  test("writes a loaded exercise's set with no kg as no load", async () => {
+    expect(await logExerciseSet(logging({ exerciseId: SWINGS, value: 20, loadKg: "" }))).toEqual({
+      ok: true,
+    });
+
+    expect(logSet).toHaveBeenCalledWith(USER, expect.objectContaining({ loadKg: null }));
+  });
+
+  test("refuses a load on an exercise that takes none", async () => {
+    expect(await logExerciseSet(logging({ loadKg: 40 }))).toEqual({ ok: false });
+    expect(logSet).not.toHaveBeenCalled();
+  });
+
+  test("refuses a malformed load before anything is fetched", async () => {
+    expect(await logExerciseSet(logging({ exerciseId: SWINGS, loadKg: "0" }))).toEqual({
+      ok: false,
+    });
+    expect(await logExerciseSet(logging({ exerciseId: SWINGS, loadKg: "16.125" }))).toEqual({
+      ok: false,
+    });
+    expect(loadTraining).not.toHaveBeenCalled();
+    expect(logSet).not.toHaveBeenCalled();
   });
 
   test("writes a timed exercise's number as seconds — FUEL-123", async () => {
