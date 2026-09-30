@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { demoProfile } from "@/lib/seed/persona";
@@ -281,6 +281,23 @@ describe("the two columns", () => {
     for (const name of ["Weekly template", "Plan", "Export everything"]) {
       expect(columnOf(screen.getByRole("link", { name })), name).toBe("aside");
     }
+  });
+
+  test("the appearance override is in the aside, last — FUEL-142", async () => {
+    // Brand Guide § Appearance Modes: "a manual override stored in settings".
+    // It existed and was mounted only on `/dev/*`.
+    const { container } = render(await SettingsPage());
+    const group = screen.getByRole("group", { name: "Appearance" });
+
+    expect(columnOf(group)).toBe("aside");
+    expect(
+      within(group)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["Light", "System", "Dark"]);
+    expect(
+      container.querySelector('[data-column="aside"]')?.lastElementChild?.contains(group),
+    ).toBe(true);
   });
 
   /*

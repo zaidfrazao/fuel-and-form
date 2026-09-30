@@ -9,6 +9,7 @@ import {
   pendingEntry,
   theDay,
   undoRetreats,
+  undoTarget,
 } from "@/lib/day-summary";
 import type { Meal, MealLog, Workout, WorkoutLog } from "@/lib/db/schema";
 import type { DayLogs } from "@/lib/log-intent";
@@ -588,5 +589,28 @@ describe("undoRetreats — FUEL-131", () => {
   test("has nothing to step back over at the start of the day, or with no log", () => {
     expect(undoRetreats(TIMELINE, 0, [entry("Overnight oats")], 0)).toBe(false);
     expect(undoRetreats(TIMELINE, 2, [], SIX_FORTY)).toBe(false);
+  });
+});
+
+describe("undoTarget — FUEL-142", () => {
+  const line = (id: string, walk = false): LoggedEntry => ({
+    id,
+    name: id,
+    kind: walk ? "workout" : "meal",
+    status: walk ? "done" : "eaten",
+    ...(walk ? { walk: true as const } : {}),
+  });
+
+  test("is the last line", () => {
+    expect(undoTarget([line("a"), line("b")])?.id).toBe("b");
+  });
+
+  test("passes over a walk logged after it, as undoLastLog does", () => {
+    expect(undoTarget([line("a"), line("walk", true)])?.id).toBe("a");
+  });
+
+  test("is nothing when the walk is all there is", () => {
+    expect(undoTarget([line("walk", true)])).toBeUndefined();
+    expect(undoTarget([])).toBeUndefined();
   });
 });

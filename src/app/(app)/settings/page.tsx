@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { PageMain } from "@/components/page-main";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { UpLink } from "@/components/up-link";
 import { getSession } from "@/lib/auth/session";
 import { loadSettings } from "@/lib/db/queries/profile";
@@ -286,6 +287,33 @@ export default async function SettingsPage() {
             </p>
           </section>
         )}
+
+        {/*
+         * The manual appearance override — FUEL-142, Brand Guide § Appearance
+         * Modes: "`prefers-color-scheme` with a manual override stored in
+         * settings". `ThemeToggle` has existed since FUEL-3 and until FUEL-142
+         * was mounted only on `/dev/*`, so the rule was built and unreachable.
+         *
+         * Last, because it is the one thing in this column about the device
+         * rather than the plan: the push control above is the reminder's second
+         * delivery and stays beside its time, and the two link groups are the
+         * plan's. The line says "this device" because it is — the store is
+         * next-themes' `localStorage`, and `theme-toggle.tsx` records that a
+         * server-persisted field moves only the read and the write.
+         *
+         * `self-start` so the segmented control keeps its own width: a flex
+         * column stretches an item, and a three-segment pill drawn 356px wide
+         * says nothing its content does not.
+         */}
+        <section className="flex flex-col gap-2 border-t border-border pt-5">
+          <h2 className="text-body text-text-primary">Appearance</h2>
+          <p className="text-slash text-text-secondary">
+            This device only. System follows its light or dark setting.
+          </p>
+          <div className="self-start pt-1">
+            <ThemeToggle />
+          </div>
+        </section>
       </div>
     </PageMain>
   );

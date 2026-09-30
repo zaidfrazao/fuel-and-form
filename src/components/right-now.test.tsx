@@ -461,6 +461,13 @@ const bar = (which?: "phone" | "desktop") => {
 const someLogs = (count: number) =>
   Array.from({ length: count }, (_, index) => entry({ id: `log-${index}` }));
 
+/**
+ * The bar's Undo, whatever it names — FUEL-142. A pattern and not the bare
+ * word, so every query that finds the control also refuses the objectless
+ * `Undo` the control said before. The `describe("undo")` block pins the words.
+ */
+const BAR_UNDO = /^Undo( skip)? · ./;
+
 /* -------------------------------------------------------------------------- */
 /* The active card                                                            */
 /* -------------------------------------------------------------------------- */
@@ -1258,7 +1265,7 @@ describe("the daily walk", () => {
     // wrote, and it wrote none of this — see `lib/walk.ts`.
     renderNow(active(0), EXERCISES, [entry({ id: "l1", name: "Daily walk", status: "done", walk: true })]);
 
-    expect(bar().queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(bar().queryByRole("button", { name: BAR_UNDO })).toBeNull();
   });
 
   test("still offers the bar's Undo for a meal logged beside the walk", () => {
@@ -1267,7 +1274,7 @@ describe("the daily walk", () => {
       entry({ id: "l2", name: "Daily walk", status: "done", walk: true }),
     ]);
 
-    expect(bar().getByRole("button", { name: "Undo" })).toBeDefined();
+    expect(bar().getByRole("button", { name: BAR_UNDO })).toBeDefined();
   });
 });
 
@@ -1757,7 +1764,7 @@ describe("the actions", () => {
     renderNow(active(3));
     await user.click(bar().getByRole("button", { name: "Log eaten" }));
 
-    await screen.findByRole("button", { name: "Undo" });
+    await screen.findByRole("button", { name: BAR_UNDO });
     const bars = document.querySelectorAll(".action-bar-fade");
 
     expect(bars).toHaveLength(1);
@@ -2121,13 +2128,13 @@ describe("undo", () => {
   test("is not offered when nothing has been logged today", () => {
     renderNow(active(0));
 
-    expect(bar().queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(bar().queryByRole("button", { name: BAR_UNDO })).toBeNull();
   });
 
   test("is offered from the action bar once something has been", () => {
     renderNow(active(1), EXERCISES, someLogs(1));
 
-    expect(bar().getByRole("button", { name: "Undo" })).toBeDefined();
+    expect(bar().getByRole("button", { name: BAR_UNDO })).toBeDefined();
   });
 
   test("appears as soon as a log is made, without waiting for the server", async () => {
@@ -2139,10 +2146,81 @@ describe("undo", () => {
 
     await userEvent.click(bar().getByRole("button", { name: "Log eaten" }));
 
-    await waitFor(() => expect(bar().getByRole("button", { name: "Undo" })).toBeDefined());
+    await waitFor(() => expect(bar().getByRole("button", { name: BAR_UNDO })).toBeDefined());
 
     pending.settle({ ok: true });
     await waitFor(() => expect(logItem).toHaveBeenCalledOnce());
+  });
+
+  test("names what it takes back — FUEL-142", () => {
+    renderNow(active(1), EXERCISES, someLogs(1));
+
+    expect(bar().getByRole("button", { name: "Undo · Overnight oats" })).toBeDefined();
+  });
+
+  test("says skip when what it takes back was a skip", () => {
+    renderNow(active(1), EXERCISES, [entry({ id: "l1", status: "skipped" })]);
+
+    expect(bar().getByRole("button", { name: "Undo skip · Overnight oats" })).toBeDefined();
+  });
+
+  test("names a session logged on /training the same way", () => {
+    // The walkthrough's case: a set logged on `/training` writes a partial
+    // session, and `/` offered an Undo that never said for what.
+    renderNow(active(1), EXERCISES, [
+      entry({ id: "l1", name: "Circuit B", kind: "workout", status: "partial" }),
+    ]);
+
+    expect(bar().getByRole("button", { name: "Undo · Circuit B" })).toBeDefined();
+  });
+
+  test("names the bar's last log and not a walk logged after it", () => {
+    // `undoLastLog` passes over the walk's rows, so naming the walk would be
+    // offering to take back something the tap will not touch.
+    renderNow(active(1), EXERCISES, [
+      entry({ id: "l1" }),
+      entry({ id: "l2", name: "Daily walk", kind: "workout", status: "done", walk: true }),
+    ]);
+
+    expect(bar().getByRole("button", { name: "Undo · Overnight oats" })).toBeDefined();
+  });
+
+  test("names the new log before the server has answered", async () => {
+    const pending = deferred<{ ok: boolean }>();
+
+    logItem.mockReturnValue(pending.promise);
+
+    renderNow(active(0));
+
+    await userEvent.click(bar().getByRole("button", { name: "Log eaten" }));
+
+    expect(await bar().findByRole("button", { name: "Undo · Overnight oats" })).toBeDefined();
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(logItem).toHaveBeenCalledOnce());
+  });
+
+  test("takes back the log it named, not a walk logged after it", async () => {
+    // Before FUEL-142 the optimistic pop was the LAST line, which here is the
+    // walk's — while the server deleted the oats. Held, so the optimistic
+    // value is what is on screen when it is read.
+    const pending = deferred<{ ok: boolean }>();
+
+    undoLastLog.mockReturnValue(pending.promise);
+
+    renderNow({ ...BASE, state: "day-complete" }, EXERCISES, [
+      entry({ id: "l1", name: "Chilli" }),
+      entry({ id: "l2", name: "Daily walk", kind: "workout", status: "done", walk: true }),
+    ]);
+
+    await userEvent.click(bar().getByRole("button", { name: "Undo · Chilli" }));
+
+    // Popping the walk's line would leave the Chilli on the stack, and the bar
+    // would still offer to take it back; popping the Chilli leaves nothing.
+    await waitFor(() => expect(bar().queryByRole("button", { name: BAR_UNDO })).toBeNull());
+
+    pending.settle({ ok: true });
+    await waitFor(() => expect(undoLastLog).toHaveBeenCalledOnce());
   });
 
   test("is reachable after the last item of the day, where the tap was made", () => {
@@ -2151,7 +2229,7 @@ describe("undo", () => {
     // state had no action bar for the undo to live in.
     renderNow({ ...BASE, state: "day-complete" }, EXERCISES, someLogs(1));
 
-    expect(bar().getByRole("button", { name: "Undo" })).toBeDefined();
+    expect(bar().getByRole("button", { name: BAR_UNDO })).toBeDefined();
   });
 
   test("steps the card back", async () => {
@@ -2163,7 +2241,7 @@ describe("undo", () => {
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chicken salad");
 
-    await userEvent.click(bar().getByRole("button", { name: "Undo" }));
+    await userEvent.click(bar().getByRole("button", { name: BAR_UNDO }));
 
     await waitFor(() =>
       expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Overnight oats"),
@@ -2178,7 +2256,7 @@ describe("undo", () => {
 
     renderNow(active(1), EXERCISES, someLogs(1));
 
-    await userEvent.click(bar().getByRole("button", { name: "Undo" }));
+    await userEvent.click(bar().getByRole("button", { name: BAR_UNDO }));
 
     expect((await bar().findByRole("alert")).textContent).toContain("Couldn’t undo that.");
   });
@@ -2188,7 +2266,7 @@ describe("undo", () => {
 
     renderNow(active(1), EXERCISES, someLogs(1));
 
-    await userEvent.click(bar().getByRole("button", { name: "Undo" }));
+    await userEvent.click(bar().getByRole("button", { name: BAR_UNDO }));
 
     const banner = await bar().findByRole("alert");
 
@@ -2347,7 +2425,7 @@ describe("what the day walked past — FUEL-131", () => {
     // still on breakfast, and the newest row is the coffee's.
     renderNow(morning(), EXERCISES, [entry({ id: "l1", name: "Coffee + MCT" })]);
 
-    await userEvent.click(bar().getByRole("button", { name: "Undo" }));
+    await userEvent.click(bar().getByRole("button", { name: BAR_UNDO }));
 
     await waitFor(() => expect(rows()).toHaveLength(2));
     expect(card()).toBe("Overnight oats");
@@ -2366,7 +2444,7 @@ describe("what the day walked past — FUEL-131", () => {
 
     expect(card()).toBe("Chicken salad");
 
-    await userEvent.click(bar().getByRole("button", { name: "Undo" }));
+    await userEvent.click(bar().getByRole("button", { name: BAR_UNDO }));
 
     await waitFor(() => expect(card()).toBe("Overnight oats"));
 
@@ -2386,7 +2464,7 @@ describe("what the day walked past — FUEL-131", () => {
     renderNow(morning());
 
     await userEvent.click(button("Log Coffee + MCT"));
-    await userEvent.click(await bar().findByRole("button", { name: "Undo" }));
+    await userEvent.click(await bar().findByRole("button", { name: BAR_UNDO }));
 
     await waitFor(() => expect(rows()).toHaveLength(2));
     expect(card()).toBe("Overnight oats");
