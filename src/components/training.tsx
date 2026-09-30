@@ -670,11 +670,14 @@ function SetList({
                   // number changed. An unlogged row committing on blur would
                   // mean tapping anywhere on the screen after typing a number
                   // recorded a set nobody confirmed.
-                  if (row.value === null || !entered || typed === row.value || loadRefused) {
-                    return;
-                  }
+                  if (row.value === null || !entered || typed === row.value) return;
 
-                  onLog(row.index, typed, exercise.takesLoad ? (kgTyped ?? null) : null);
+                  // A kg box mid-edit (`16.`) keeps the set's stored load rather
+                  // than holding the number hostage: the reps are corrected now,
+                  // and the kg box keeps its draft for the reader to finish.
+                  const load = kgTyped === undefined ? storedLoad : kgTyped;
+
+                  onLog(row.index, typed, exercise.takesLoad ? load : null);
                 }}
                 inputMode="numeric"
                 // As many digits as the unit's ceiling — three for `MAX_REPS`,

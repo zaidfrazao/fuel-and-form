@@ -4356,6 +4356,24 @@ describe("a loaded exercise's kg — FUEL-130", () => {
     );
   });
 
+  test("corrects a logged set's reps even while its kg box is mid-edit", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: swings([loaded(1, 20, 16)]) }));
+    await user.type(screen.getByLabelText("Set 1 kg"), ".");
+
+    const reps = screen.getByLabelText<HTMLInputElement>("Set 1 reps");
+
+    await user.clear(reps);
+    await user.type(reps, "22");
+    await user.tab();
+
+    expect(logExerciseSet).toHaveBeenCalledWith(
+      expect.objectContaining({ setIndex: 1, value: 22, loadKg: 16 }),
+    );
+  });
+
   test("keeps offering sets until the reps reach the total", () => {
     resumed();
     render(view({ sessions: swings([loaded(1, 25, 16), loaded(2, 25, 16)]) }));
