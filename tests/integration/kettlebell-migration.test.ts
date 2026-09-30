@@ -219,6 +219,26 @@ describe.skipIf(!configured)("the kettlebell data migration", () => {
     expect(training?.logs.find((log) => log.workoutId === skippingId)?.status).toBe("done");
   });
 
+  it("puts the swings, and only the swings, on the next Tuesday", async () => {
+    // What closing the skipping rows is FOR. The past is protected by the
+    // swings' `valid_from`; without the close, every Tuesday from today would
+    // hold both sessions.
+    const { userId } = fixture.alice;
+
+    await legacySkipping(userId);
+    await runMigration();
+
+    const next = new Date(`${today()}T12:00:00Z`);
+
+    do next.setUTCDate(next.getUTCDate() + 1);
+    while (next.getUTCDay() !== 2);
+
+    const training = await loadTraining(userId, next.toISOString().slice(0, 10), new Date());
+    const sessions = training?.day.sessions.filter((item) => item.kind === "session");
+
+    expect(sessions?.map((item) => item.workout.name)).toEqual([SWINGS]);
+  });
+
   it("keeps a past week's export on the skipping session, not an unplanned row", async () => {
     const { userId } = fixture.alice;
 
