@@ -946,8 +946,20 @@ function Actions({
             thumb that made it (§ Buttons, FUEL-109). */}
         {undoable && (
           <div className={cn("flex items-center gap-4", ACTION_BAR_PRIMARY)}>
-            <Button variant="link" onClick={() => onAct({ kind: "undo" })}>
-              {undoLabel(undoable)}
+            {/*
+             * `min-w-0 shrink` and a truncating span — FUEL-142. The label
+             * carries a meal's full name now, and the demo's longest is
+             * 56 characters: as a `shrink-0` nowrap button it drew 472px wide
+             * on a 375 screen and gave the page a sideways scroll. It gives
+             * way at the end of the NAME, where the verb has already been
+             * read, and the accessible name is still the whole string.
+             */}
+            <Button
+              variant="link"
+              className="min-w-0 shrink"
+              onClick={() => onAct({ kind: "undo" })}
+            >
+              <span className="truncate">{undoLabel(undoable)}</span>
             </Button>
           </div>
         )}
