@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { addDays, dayOfWeek } from "./date";
 import type { TrainingTemplateEntry, Workout } from "./db/schema";
 import {
+  activeOn,
   resolveTraining,
   rotationIndex,
   rotationWorkout,
@@ -74,6 +75,8 @@ function rotationEntry(day: number, group = CIRCUIT, sortOrder = 0): TrainingTem
     workoutId: null,
     rotationGroup: group,
     sortOrder,
+    validFrom: null,
+    validUntil: null,
   };
 }
 
@@ -87,6 +90,8 @@ function fixedEntry(day: number, workoutId: string, sortOrder = 0): TrainingTemp
     workoutId,
     rotationGroup: null,
     sortOrder,
+    validFrom: null,
+    validUntil: null,
   };
 }
 
@@ -492,6 +497,52 @@ describe("rotationIndex edges", () => {
     expect(() => resolveTraining(PLAN, "2026-02-30")).toThrow(/No such date/);
     expect(() => rotationIndex({ ...PLAN, programStartDate: "" }, CIRCUIT, PROGRAM_START)).toThrow(
       /Not a calendar date/,
+    );
+  });
+});
+
+describe("a template row's window — FUEL-130", () => {
+  // Tuesday 2026-03-03 onward. The skipping row closes the day before the swing
+  // row opens, which is how a change of schedule is written.
+  const TUESDAY = 2;
+  const SKIPPING = workout("skipping", { type: "intervals" });
+  const SWINGS = workout("swings", { type: "kettlebell" });
+  const CHANGE = "2026-03-17";
+
+  const closed = { ...fixedEntry(TUESDAY, SKIPPING.id), validUntil: "2026-03-16" };
+  const opened = { ...fixedEntry(TUESDAY, SWINGS.id), validFrom: CHANGE };
+  const plan: TrainingPlan = {
+    programStartDate: PROGRAM_START,
+    template: [closed, opened],
+    workouts: [SKIPPING, SWINGS],
+  };
+  const on = (date: string) => resolveTraining(plan, date).map((r) => r.workout.id);
+
+  it("is inclusive at both ends", () => {
+    expect(activeOn({ validFrom: CHANGE, validUntil: CHANGE }, CHANGE)).toBe(true);
+    expect(activeOn({ validFrom: CHANGE, validUntil: null }, "2026-03-16")).toBe(false);
+    expect(activeOn({ validFrom: null, validUntil: "2026-03-16" }, CHANGE)).toBe(false);
+    expect(activeOn({ validFrom: null, validUntil: null }, "1999-01-01")).toBe(true);
+  });
+
+  it("keeps a Tuesday before the change on the workout it had on the day", () => {
+    expect(on("2026-03-03")).toEqual(["skipping"]);
+    expect(on("2026-03-10")).toEqual(["skipping"]);
+  });
+
+  it("puts the new workout on the change date and every Tuesday after", () => {
+    expect(on(CHANGE)).toEqual(["swings"]);
+    expect(on("2026-09-29")).toEqual(["swings"]);
+  });
+
+  it("counts a rotation's days from the rows in force on the date", () => {
+    // A circuit Saturday that ended before the date is not a training day of
+    // the group on it, so it does not advance the count.
+    const ended = { ...rotationEntry(6), validUntil: "2026-03-01" };
+    const withEnded: TrainingPlan = { ...PLAN, template: [...PLAN.template, ended] };
+
+    expect(rotationIndex(withEnded, CIRCUIT, "2026-03-16")).toBe(
+      rotationIndex(PLAN, CIRCUIT, "2026-03-16"),
     );
   });
 });

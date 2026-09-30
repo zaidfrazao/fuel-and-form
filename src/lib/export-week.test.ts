@@ -165,6 +165,8 @@ function exercise(
     mediaKind: null,
     mediaAlt: null,
     mediaCredit: null,
+    targetTotalReps: null,
+    takesLoad: false,
     ...over,
   };
 }

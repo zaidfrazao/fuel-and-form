@@ -244,6 +244,8 @@ const EXERCISES = new Map<string, WorkoutExercise[]>([
       mediaKind: null,
       mediaAlt: null,
       mediaCredit: null,
+      targetTotalReps: null,
+      takesLoad: false,
     })),
   ],
 ]);

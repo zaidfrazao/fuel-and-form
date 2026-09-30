@@ -95,6 +95,8 @@ const EXERCISES = new Map<string, WorkoutExercise[]>(
       mediaKind: exercise.mediaKind ?? null,
       mediaAlt: exercise.mediaAlt ?? null,
       mediaCredit: exercise.mediaCredit ?? null,
+      targetTotalReps: null,
+      takesLoad: false,
     })),
   ]),
 );
@@ -106,6 +108,8 @@ const TEMPLATE: TrainingTemplateEntry[] = seedTrainingTemplate.map((entry, index
   workoutId: entry.workoutKey ? idFor(entry.workoutKey) : null,
   rotationGroup: entry.rotationGroup ?? null,
   sortOrder: entry.sortOrder ?? 0,
+  validFrom: null,
+  validUntil: null,
 }));
 
 const PLAN: TrainingPlan = {
@@ -232,6 +236,8 @@ describe("weekends", () => {
       workoutId: null,
       rotationGroup: "bodyweight-circuit",
       sortOrder: 0,
+      validFrom: null,
+      validUntil: null,
     };
 
     const plan = { ...PLAN, template: [saturdayCircuit, ...TEMPLATE] };
@@ -433,6 +439,8 @@ describe("`kind`", () => {
       workoutId: strength.id,
       rotationGroup: null,
       sortOrder: 0,
+      validFrom: null,
+      validUntil: null,
     };
 
     const plan: TrainingPlan = {

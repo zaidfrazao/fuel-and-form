@@ -108,6 +108,8 @@ function seededLibrary() {
       workoutId: entry.workoutKey ? (workoutIds.get(entry.workoutKey) ?? null) : null,
       rotationGroup: entry.rotationGroup ?? null,
       sortOrder: entry.sortOrder ?? 0,
+      validFrom: null,
+      validUntil: null,
     }),
   );
 
@@ -132,6 +134,8 @@ function seededLibrary() {
       mediaKind: exercise.mediaKind ?? null,
       mediaAlt: exercise.mediaAlt ?? null,
       mediaCredit: exercise.mediaCredit ?? null,
+      targetTotalReps: null,
+      takesLoad: false,
     })),
   );
 
@@ -1327,6 +1331,8 @@ describe("more walks than there are logged hours", () => {
         workoutId: walk.id,
         rotationGroup: null,
         sortOrder: 99,
+        validFrom: null,
+        validUntil: null,
       },
     ];
 

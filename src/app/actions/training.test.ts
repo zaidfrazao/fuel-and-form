@@ -91,6 +91,8 @@ const exercise = (id: string): WorkoutExercise => ({
   mediaKind: null,
   mediaAlt: null,
   mediaCredit: null,
+  targetTotalReps: null,
+  takesLoad: false,
 });
 
 const workout = (id: string, name: string, type: string): Workout => ({

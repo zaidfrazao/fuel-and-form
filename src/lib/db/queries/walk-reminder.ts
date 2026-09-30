@@ -4,6 +4,7 @@ import { and, eq, inArray } from "drizzle-orm";
 
 import { type CalendarDate, dayOfWeek, minutesOfDayIn, todayIn } from "@/lib/date";
 import { WALK_TYPE } from "@/lib/resolve-training";
+import { activeOn } from "@/lib/rotation";
 import { isReminderDue } from "@/lib/walk-reminder";
 import { getDb } from "../index";
 import * as schema from "../schema";
@@ -230,6 +231,9 @@ async function walksFor(
 
   return entries
     .flatMap((entry) => {
+      // A row outside its window schedules nothing on `date` (FUEL-130).
+      if (!activeOn(entry, date)) return [];
+
       const walk = entry.workoutId === null ? undefined : byId.get(entry.workoutId);
 
       return walk ? [{ entry, walk }] : [];

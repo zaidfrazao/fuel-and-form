@@ -51,6 +51,8 @@ const template: TrainingTemplateEntry[] = [1, 3, 5].map((dayOfWeek, index) => ({
   workoutId: null,
   rotationGroup: BODYWEIGHT_CIRCUIT,
   sortOrder: 0,
+  validFrom: null,
+  validUntil: null,
 }));
 
 const plan: TrainingPlan = {

@@ -64,6 +64,8 @@ const TEMPLATE: TrainingTemplateEntry[] = seedTrainingTemplate.map((entry, index
   workoutId: entry.workoutKey ? idFor(entry.workoutKey) : null,
   rotationGroup: entry.rotationGroup ?? null,
   sortOrder: entry.sortOrder ?? 0,
+  validFrom: null,
+  validUntil: null,
 }));
 
 const PLAN: TrainingPlan = {
