@@ -887,16 +887,6 @@ describe("the action bar", () => {
       "Skip",
       () => render(view({ date: YESTERDAY })),
     ],
-    [
-      "the session state",
-      "Mark done",
-      // FUEL-121: the session state names what its Skip acts on.
-      "Skip session",
-      () => {
-        resumed();
-        return render(view());
-      },
-    ],
   ])("takes `/`'s one row in %s — FUEL-109", (_state, primary, skip, draw) => {
     // § Buttons: "`/training`'s bar takes the same row, in both of its states."
     // Decided rather than inherited from a shared string: the primary leads and
@@ -912,6 +902,35 @@ describe("the action bar", () => {
     for (const secondary of inRow.slice(1)) {
       expect(secondary.className).toContain("flex-none");
       expect(secondary.className).not.toContain("flex-1");
+    }
+  });
+
+  test("is the stepping in the session state, with the way on as its primary — FUEL-132", async () => {
+    // The session state's row is no longer the three answers. Moving on is what
+    // the reader does a dozen times a session, and it was a Text link under the
+    // sets that the bar covered at 375×812. So Next exercise leads and takes the
+    // spare width, and Previous is the secondary beside it, once there is one.
+    const user = userEvent.setup();
+
+    resumed();
+    render(view());
+
+    const row = () =>
+      bar().getByRole("button", { name: /^Next exercise/ }).closest(".action-bar-fade > div")!;
+    const names = () => [...row().querySelectorAll("button")].map((b) => b.textContent);
+
+    expect(names()).toEqual(["Next exercise ›"]);
+    expect(bar().getByRole("button", { name: /^Next exercise/ }).className).toContain("flex-1");
+
+    await user.click(bar().getByRole("button", { name: /^Next exercise/ }));
+
+    expect(names()).toEqual(["‹ Previous", "Next exercise ›"]);
+    expect(bar().getByRole("button", { name: /^Previous exercise/ }).className).toContain(
+      "flex-none",
+    );
+    // None of the three answers is in the bar mid-session.
+    for (const answer of ["Mark done", "Partial", "Skip session"]) {
+      expect(bar().queryByRole("button", { name: answer })).toBeNull();
     }
   });
 });
@@ -1361,6 +1380,26 @@ const straight = (sets: ReturnType<typeof set>[] = []) => [
 /** In the session state on the first render, the way a reload arrives in it. */
 const resumed = () => window.localStorage.setItem(`fuel:training-session:${TODAY}`, "1");
 
+/**
+ * Ends the session state the way the reader now does — FUEL-132.
+ *
+ * The bar's primary is the way ON since this ticket, and every ending is behind
+ * the header's `Finish`, in a sheet holding the three answers. This walks that
+ * path, so a test about what an ending DOES is not also a test about where the
+ * button to it lives.
+ */
+const endSession = async (
+  user: ReturnType<typeof userEvent.setup>,
+  answer: "Mark done" | "Partial" | "Skip session",
+) => {
+  await user.click(screen.getByRole("button", { name: "Finish session" }));
+  await user.click(
+    within(screen.getByRole("dialog", { name: "Finish session" })).getByRole("button", {
+      name: answer,
+    }),
+  );
+};
+
 describe("entering and leaving the session state", () => {
   test("offers Start session on today, and Mark done on any other date", () => {
     // Brand Guide § Desktop's state table. "The primary changes because the
@@ -1429,14 +1468,14 @@ describe("entering and leaving the session state", () => {
     expect(bar().queryByRole("button", { name: "Start session" })).toBeNull();
   });
 
-  test("records the session and leaves when the primary is tapped", async () => {
-    // PRD § P10: "entered and left by the primary". Mark done is the session
-    // state's primary; it writes the status and returns to the plan state.
+  test("records the session and leaves when Mark done is answered", async () => {
+    // Mark done writes the status and returns to the plan state. Since FUEL-132
+    // it is reached through Finish anywhere but the last step.
     const user = userEvent.setup();
 
     render(view());
     await user.click(bar().getByRole("button", { name: "Start session" }));
-    await user.click(bar().getByRole("button", { name: "Mark done" }));
+    await endSession(user, "Mark done");
 
     expect(setSessionStatus).toHaveBeenCalledWith(
       expect.objectContaining({ status: "done", entryId: "entry-circuit" }),
@@ -1452,14 +1491,14 @@ describe("entering and leaving the session state", () => {
 
     render(view());
     await user.click(bar().getByRole("button", { name: "Start session" }));
-    await user.click(bar().getByRole("button", { name: "Partial" }));
+    await endSession(user, "Partial");
 
     expect(await list().findByRole("heading", { name: "Exercises" })).toBeTruthy();
 
-    // With nothing logged, Skip session records in one tap (FUEL-121): a
-    // session started by mistake has nothing to lose, and needs a way out.
+    // With nothing logged, Skip session records with no confirmation of its own
+    // (FUEL-121): a session started by mistake has nothing to lose.
     await user.click(bar().getByRole("button", { name: "Start session" }));
-    await user.click(bar().getByRole("button", { name: "Skip session" }));
+    await endSession(user, "Skip session");
 
     expect(setSessionStatus).toHaveBeenLastCalledWith(
       expect.objectContaining({ status: "skipped", entryId: "entry-circuit" }),
@@ -1484,7 +1523,9 @@ describe("entering and leaving the session state", () => {
     resumed();
     render(view());
 
-    const pinned = bar().getByRole("button", { name: "Mark done" }).closest(".action-bar-fade");
+    const pinned = bar()
+      .getByRole("button", { name: /^Next exercise/ })
+      .closest(".action-bar-fade");
 
     expect(pinned?.className).toBe(`${SESSION_ACTION_BAR} ${PAGE_SESSION_FOOT}`);
     expect(pinned?.className).not.toContain("lg:static");
@@ -1607,14 +1648,14 @@ describe("the session clock — FUEL-124", () => {
     expect(clock()).toBeNull();
   });
 
-  test.each(["Mark done", "Partial"])(
+  test.each(["Mark done", "Partial"] as const)(
     "%s with an empty duration records the elapsed minutes",
     async (button) => {
       const user = userEvent.setup();
       startedAt(T - (27 * 60 + 40) * 1000);
 
       render(view());
-      await user.click(bar().getByRole("button", { name: button }));
+      await endSession(user, button);
 
       expect(setSessionStatus).toHaveBeenCalledWith(
         expect.objectContaining({ durationMin: "28" }),
@@ -1635,7 +1676,7 @@ describe("the session clock — FUEL-124", () => {
     await user.type(screen.getByLabelText("Duration"), "40");
     await user.click(bar().getByRole("button", { name: "Start session" }));
     vi.setSystemTime(T + 28 * MIN);
-    await user.click(bar().getByRole("button", { name: "Mark done" }));
+    await endSession(user, "Mark done");
 
     expect(setSessionStatus).toHaveBeenCalledWith(
       expect.objectContaining({ durationMin: "40" }),
@@ -1647,7 +1688,7 @@ describe("the session clock — FUEL-124", () => {
     startedAt(T - 28 * MIN);
 
     render(view({ sessions: recorded({ status: "partial", note: null, durationMin: 15 }) }));
-    await user.click(bar().getByRole("button", { name: "Mark done" }));
+    await endSession(user, "Mark done");
 
     expect(setSessionStatus).toHaveBeenCalledWith(
       expect.objectContaining({ durationMin: "15" }),
@@ -1655,13 +1696,13 @@ describe("the session clock — FUEL-124", () => {
   });
 
   test("records no duration for a skip", async () => {
-    // Nothing logged, so Skip session records in one tap. A skipped session has
+    // Nothing logged, so Skip session records without asking. A skipped session has
     // no training time to put a number to.
     const user = userEvent.setup();
     startedAt(T - 28 * MIN);
 
     render(view());
-    await user.click(bar().getByRole("button", { name: "Skip session" }));
+    await endSession(user, "Skip session");
 
     expect(setSessionStatus).toHaveBeenCalledWith(
       expect.objectContaining({ status: "skipped", durationMin: "" }),
@@ -1676,7 +1717,7 @@ describe("the session clock — FUEL-124", () => {
 
     render(view());
     expect(clock()?.textContent).toBe("Elapsed 3:00:01");
-    await user.click(bar().getByRole("button", { name: "Mark done" }));
+    await endSession(user, "Mark done");
 
     expect(setSessionStatus).toHaveBeenCalledWith(
       expect.objectContaining({ durationMin: "" }),
@@ -1688,7 +1729,7 @@ describe("the session clock — FUEL-124", () => {
     resumed();
 
     render(view());
-    await user.click(bar().getByRole("button", { name: "Mark done" }));
+    await endSession(user, "Mark done");
 
     expect(setSessionStatus).toHaveBeenCalledWith(
       expect.objectContaining({ durationMin: "" }),
@@ -1700,7 +1741,7 @@ describe("the session clock — FUEL-124", () => {
     startedAt(T - 28 * MIN);
 
     const { rerender } = render(view());
-    await user.click(bar().getByRole("button", { name: "Mark done" }));
+    await endSession(user, "Mark done");
 
     // The server's answer, as the revalidated page hands it back.
     rerender(view({ sessions: recorded({ status: "done", note: null, durationMin: 28 }) }));
@@ -1725,7 +1766,7 @@ describe("Skip session, once a set is logged", () => {
     resumed();
 
     render(view({ sessions: withSets([set("e1", 1), set("e1", 2)]) }));
-    await user.click(bar().getByRole("button", { name: "Skip session" }));
+    await endSession(user, "Skip session");
 
     expect(dialog()).toBeTruthy();
     expect(within(dialog()).getByText(/2 sets are logged\. They’re kept,/)).toBeTruthy();
@@ -1738,7 +1779,7 @@ describe("Skip session, once a set is logged", () => {
     resumed();
 
     render(view({ sessions: withSets([set("e1", 1)]) }));
-    await user.click(bar().getByRole("button", { name: "Skip session" }));
+    await endSession(user, "Skip session");
 
     expect(within(dialog()).getByText(/1 set is logged\. It’s kept,/)).toBeTruthy();
   });
@@ -1748,7 +1789,7 @@ describe("Skip session, once a set is logged", () => {
     resumed();
 
     render(view({ sessions: withSets([set("e1", 1)]) }));
-    await user.click(bar().getByRole("button", { name: "Skip session" }));
+    await endSession(user, "Skip session");
     await user.click(within(dialog()).getByRole("button", { name: "Keep going" }));
 
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -1762,7 +1803,7 @@ describe("Skip session, once a set is logged", () => {
     resumed();
 
     render(view({ sessions: withSets([set("e1", 1)]) }));
-    await user.click(bar().getByRole("button", { name: "Skip session" }));
+    await endSession(user, "Skip session");
     await user.click(within(dialog()).getByRole("button", { name: "Record as skipped" }));
 
     expect(setSessionStatus).toHaveBeenCalledOnce();
@@ -1780,17 +1821,39 @@ describe("Skip session, once a set is logged", () => {
     resumed();
 
     render(view({ sessions: withSets([set("e1", 1)]) }));
-    await user.click(bar().getByRole("button", { name: "Skip session" }));
+    await endSession(user, "Skip session");
 
     const confirm = within(dialog()).getByRole("button", { name: "Record as skipped" });
     expect(confirm.getAttribute("data-variant")).toBe("destructive");
     expect(confirm.className).toContain("bg-destructive");
-    // And the bar's own Skip session stays a Secondary, the weight of Partial.
-    expect(
-      bar().getByRole("button", { name: "Skip session", hidden: true }).getAttribute(
-        "data-variant",
-      ),
-    ).toBe("secondary");
+  });
+
+  test("is a Secondary in the Finish sheet, the weight of Partial", async () => {
+    const user = userEvent.setup();
+    resumed();
+
+    render(view({ sessions: withSets([set("e1", 1)]) }));
+    await user.click(screen.getByRole("button", { name: "Finish session" }));
+
+    const finishing = within(screen.getByRole("dialog", { name: "Finish session" }));
+    expect(finishing.getByRole("button", { name: "Skip session" }).getAttribute("data-variant")).toBe(
+      "secondary",
+    );
+    expect(finishing.getByRole("button", { name: "Partial" }).getAttribute("data-variant")).toBe(
+      "secondary",
+    );
+  });
+
+  test("hands over from the Finish sheet rather than stacking on it", async () => {
+    // One sheet at a time, as the sets sheet hands over to the reference.
+    const user = userEvent.setup();
+    resumed();
+
+    render(view({ sessions: withSets([set("e1", 1)]) }));
+    await endSession(user, "Skip session");
+
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(dialog()).toBeTruthy();
   });
 
   test("does not reopen by itself when the state ended under it", async () => {
@@ -1801,7 +1864,7 @@ describe("Skip session, once a set is logged", () => {
     resumed();
 
     render(view({ sessions: withSets([set("e1", 1)]) }));
-    await user.click(bar().getByRole("button", { name: "Skip session" }));
+    await endSession(user, "Skip session");
     expect(dialog()).toBeTruthy();
 
     act(() => {
@@ -1813,7 +1876,7 @@ describe("Skip session, once a set is logged", () => {
     await user.click(bar().getByRole("button", { name: "Start session" }));
 
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(bar().getByRole("button", { name: "Skip session" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Finish session" })).toBeTruthy();
     expect(setSessionStatus).not.toHaveBeenCalled();
   });
 
@@ -1828,8 +1891,10 @@ describe("Skip session, once a set is logged", () => {
     expect(screen.queryByRole("button", { name: /^Skip$/ })).toBeNull();
   });
 
-  test("keeps aria-pressed on the recorded answer", () => {
-    // The three are one choice with three answers, in either state.
+  test("keeps aria-pressed on the recorded answer", async () => {
+    // The three are one choice with three answers, in either state — in the
+    // Finish sheet since FUEL-132.
+    const user = userEvent.setup();
     resumed();
 
     render(
@@ -1845,13 +1910,16 @@ describe("Skip session, once a set is logged", () => {
       }),
     );
 
-    expect(bar().getByRole("button", { name: "Skip session" }).getAttribute("aria-pressed")).toBe(
+    await user.click(screen.getByRole("button", { name: "Finish session" }));
+
+    const finishing = within(screen.getByRole("dialog", { name: "Finish session" }));
+    expect(finishing.getByRole("button", { name: "Skip session" }).getAttribute("aria-pressed")).toBe(
       "true",
     );
-    expect(bar().getByRole("button", { name: "Partial" }).getAttribute("aria-pressed")).toBe(
+    expect(finishing.getByRole("button", { name: "Partial" }).getAttribute("aria-pressed")).toBe(
       "false",
     );
-    expect(bar().getByRole("button", { name: "Mark done" }).getAttribute("aria-pressed")).toBe(
+    expect(finishing.getByRole("button", { name: "Mark done" }).getAttribute("aria-pressed")).toBe(
       "false",
     );
   });
@@ -2278,7 +2346,7 @@ describe("what the plan state says about sets", () => {
 
     resumed();
     render(view({ sessions: withSets([set("e1", 1)]) }));
-    await user.click(bar().getByRole("button", { name: "Mark done" }));
+    await endSession(user, "Mark done");
 
     // The plan state is the list, and the list still says what was performed.
     // Leaving the session state is a change of composition, not of record.
@@ -2720,27 +2788,29 @@ describe("the bookends as steps of the session — FUEL-125", () => {
     expect(step("Previous")).toBeTruthy();
   });
 
-  test("Mark done is available on a bookend, and is never required after it", async () => {
+  test("finishing is available on every step, and is never required after the work", async () => {
     const user = userEvent.setup();
 
-    // AC: "Mark done is available throughout." If the cool-down is part of the
-    // session, finishing has to be reachable DURING it and cannot be required
-    // before it. The bar is outside the measure's branch, so this pins a fact
-    // the structure already gives rather than one a change here would announce.
+    // FUEL-125's AC: "Mark done is available throughout." If the cool-down is
+    // part of the session, finishing has to be reachable DURING it and cannot be
+    // required before it. Since FUEL-132 that is the header's Finish on every
+    // step, and the bar's own Mark done on the last one.
     render(view({ sessions: [{ ...SECTIONED, sets: ALL_WORKING_SETS }, WALK] }));
     await user.click(bar().getByRole("button", { name: "Start session" }));
 
-    // In the work, with every set logged.
-    expect(bar().getByRole("button", { name: "Mark done" })).toBeTruthy();
+    // In the work, with every set logged: the way on leads, and finishing asks.
+    expect(screen.getByRole("button", { name: "Finish session" })).toBeTruthy();
+    expect(bar().queryByRole("button", { name: "Mark done" })).toBeNull();
 
     await user.click(step("Next"));
 
-    // And on the cool-down, which is the step this ticket puts AFTER the point
-    // the app used to call finished.
+    // And on the cool-down, which is the step FUEL-125 put AFTER the point the
+    // app used to call finished — the last step, so finishing is the way on.
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
       "Lower-body stretches",
     );
     expect(bar().getByRole("button", { name: "Mark done" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Finish session" })).toBeTruthy();
   });
 
   test("the accessible name says where the step goes, bookend or working row", async () => {
@@ -2830,7 +2900,7 @@ describe("the bookends as steps of the session — FUEL-125", () => {
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Joint prep");
 
-    await user.click(bar().getByRole("button", { name: "Mark done" }));
+    await endSession(user, "Mark done");
 
     // A session that has stopped keeps nobody's place in it. Entered again with
     // nothing logged, it opens at the warm-up — from the key being cleared, not
@@ -2866,7 +2936,7 @@ describe("the rest timer", () => {
     await user.click(bar().getByRole("button", { name: "Start session" }));
 
     const timer = screen.getByRole("button", { name: "1:30" });
-    const primary = bar().getByRole("button", { name: "Mark done" });
+    const primary = bar().getByRole("button", { name: /^Next exercise/ });
 
     expect(timer).toBeTruthy();
 
@@ -2902,7 +2972,7 @@ describe("the rest timer", () => {
     render(view());
     await user.click(bar().getByRole("button", { name: "Start session" }));
     await user.click(screen.getByRole("button", { name: "1:30" }));
-    await user.click(bar().getByRole("button", { name: "Mark done" }));
+    await endSession(user, "Mark done");
 
     // The bar goes back to the plan state's, and the timer's row goes with it.
     // The rest itself is not cancelled — nothing here writes to its key — but
@@ -3208,7 +3278,10 @@ describe("a circuit, round by round", () => {
 describe("a way past an exercise", () => {
   const MOVED = `fuel:training-moved:${TODAY}`;
   const subject = () => screen.getByRole("heading", { level: 1 }).textContent;
-  const steps = () => within(screen.getByRole("navigation", { name: "Exercises" }));
+  // The session bar since FUEL-132, which moved the steps out of the measure
+  // and made Next exercise its primary. By its attribute, because the bar is
+  // not a landmark and the header's Finish must not answer for it.
+  const steps = () => within(document.querySelector<HTMLElement>("[data-session-bar]")!);
 
   const nothingWritten = () => {
     expect(logExerciseSet).not.toHaveBeenCalled();
@@ -3268,7 +3341,7 @@ describe("a way past an exercise", () => {
     nothingWritten();
   });
 
-  test("offers no Previous on the first step and no Next on the last", () => {
+  test("offers no Previous on the first step, and Mark done instead of Next on the last", () => {
     resumed();
     render(view({ sessions: straight() }));
 
@@ -3282,9 +3355,29 @@ describe("a way past an exercise", () => {
     expect(subject()).toBe("Plank");
     expect(steps().queryByRole("button", { name: /^Next exercise/ })).toBeNull();
     expect(steps().getByRole("button", { name: "Previous exercise, Reverse lunges" })).toBeTruthy();
+    // FUEL-132: on the last step finishing IS the way on, so the primary is it.
+    expect(steps().getByRole("button", { name: "Mark done" })).toBeTruthy();
   });
 
-  test("keeps keyboard focus in the row when a press removes its own button", async () => {
+  test("keeps keyboard focus in the row when Previous removes itself", async () => {
+    // Back onto the first step, Previous is no longer drawn. Focus goes to the
+    // primary, which is always drawn, rather than to the top of the document.
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: straight() }));
+
+    await user.click(steps().getByRole("button", { name: "Next exercise, Reverse lunges" }));
+    await user.click(await steps().findByRole("button", { name: "Previous exercise, Press-ups" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Press-ups" })).toBeTruthy();
+    expect(steps().queryByRole("button", { name: /^Previous exercise/ })).toBeNull();
+    expect(document.activeElement).toBe(
+      steps().getByRole("button", { name: "Next exercise, Reverse lunges" }),
+    );
+  });
+
+  test("keeps keyboard focus on the primary when Next becomes Mark done", async () => {
     const user = userEvent.setup();
 
     resumed();
@@ -3297,9 +3390,9 @@ describe("a way past an exercise", () => {
 
     expect(await screen.findByRole("heading", { level: 1, name: "Plank" })).toBeTruthy();
     expect(steps().queryByRole("button", { name: /^Next exercise/ })).toBeNull();
-    expect(document.activeElement).toBe(
-      steps().getByRole("button", { name: "Previous exercise, Reverse lunges" }),
-    );
+    // Where the pointer is, which is where a tap on the same spot would land.
+    // Mark done is one tap on the last step by the ticket's own criterion.
+    expect(document.activeElement).toBe(steps().getByRole("button", { name: "Mark done" }));
   });
 
   test("never calls itself Skip", () => {
@@ -3307,7 +3400,12 @@ describe("a way past an exercise", () => {
     resumed();
     render(view({ sessions: straight([set("e1", 1)]) }));
 
-    for (const button of steps().getAllByRole("button")) {
+    // The stepping controls only: the bar also holds the rest timer's presets
+    // since FUEL-132, which name no step and carry no accessible name of their own.
+    const stepping = steps().getAllByRole("button", { name: /exercise/ });
+
+    expect(stepping.length).toBeGreaterThan(0);
+    for (const button of stepping) {
       expect(button.textContent).not.toMatch(/skip/i);
       expect(button.getAttribute("aria-label")).not.toMatch(/skip/i);
     }
@@ -3338,7 +3436,7 @@ describe("a way past an exercise", () => {
     resumed();
     render(view({ sessions: straight([set("e1", 1)]) }));
     await user.click(steps().getByRole("button", { name: "Next exercise, Reverse lunges" }));
-    await user.click(bar().getByRole("button", { name: "Partial" }));
+    await endSession(user, "Partial");
 
     expect(window.localStorage.getItem(MOVED)).toBeNull();
   });
@@ -4060,7 +4158,7 @@ describe("the recap of a recorded session — FUEL-128", () => {
     resumed();
     render(view({ sessions: withSets([set("e1", 1, 12), set("e1", 2, 11)]) }));
 
-    await user.click(bar().getByRole("button", { name: "Mark done" }));
+    await endSession(user, "Mark done");
 
     const list = await screen.findByRole("list", { name: "Sets" });
 
@@ -4381,5 +4479,209 @@ describe("a loaded exercise's kg — FUEL-130", () => {
     // Two sets of 25 is 50 of 75: a third row, and the exercise is not done.
     expect(screen.getByLabelText("Set 3 reps")).toBeTruthy();
     expect(screen.queryByLabelText("Set 4 reps")).toBeNull();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* FUEL-132 — the way on leads, finishing asks, and the session has a header   */
+/* -------------------------------------------------------------------------- */
+
+describe("the session state's hierarchy — FUEL-132", () => {
+  const KEY = `fuel:training-session:${TODAY}`;
+  const subject = () => screen.getByRole("heading", { level: 1 }).textContent;
+  const sessionBar = () => within(document.querySelector<HTMLElement>("[data-session-bar]")!);
+  const finishing = () => within(screen.getByRole("dialog", { name: "Finish session" }));
+
+  test("offers Mark done in the bar on the last step and on no other", async () => {
+    // The criterion: ending the session cannot be one tap on anything but the
+    // last step. Walked from the warm-up to the cool-down, every step in
+    // between, rather than sampled — the hazard was exercise 2 of 6.
+    const user = userEvent.setup();
+
+    render(view({ sessions: sectioned() }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    const seen: string[] = [];
+
+    while (sessionBar().queryByRole("button", { name: /^Next exercise/ })) {
+      seen.push(subject()!);
+      expect(sessionBar().queryByRole("button", { name: "Mark done" })).toBeNull();
+      await user.click(sessionBar().getByRole("button", { name: /^Next exercise/ }));
+    }
+
+    expect(seen[0]).toBe("Joint prep");
+    expect(seen.length).toBeGreaterThan(3);
+    expect(subject()).toBe("Lower-body stretches");
+    expect(sessionBar().getByRole("button", { name: "Mark done" })).toBeTruthy();
+
+    await user.click(sessionBar().getByRole("button", { name: "Mark done" }));
+
+    expect(setSessionStatus).toHaveBeenCalledWith(expect.objectContaining({ status: "done" }));
+  });
+
+  test("asks before finishing anywhere else, and says the session has more", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: withSets([set("e1", 1)]) }));
+    await user.click(screen.getByRole("button", { name: "Finish session" }));
+
+    // Opening the sheet records nothing: the answer is a second tap.
+    expect(setSessionStatus).not.toHaveBeenCalled();
+    expect(
+      finishing().getByText(/You’re on Reverse lunges, round 1, and the session has more after it\./),
+    ).toBeTruthy();
+
+    await user.click(finishing().getByRole("button", { name: "Keep going" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(subject()).toBe("Reverse lunges");
+    expect(setSessionStatus).not.toHaveBeenCalled();
+  });
+
+  test("does not say the session has more on its last step", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    window.localStorage.setItem(
+      `fuel:training-moved:${TODAY}`,
+      JSON.stringify({ passed: ["e1", "e2"], at: null }),
+    );
+    render(view({ sessions: straight() }));
+
+    expect(subject()).toBe("Plank");
+
+    await user.click(screen.getByRole("button", { name: "Finish session" }));
+
+    expect(finishing().queryByText(/has more after it/)).toBeNull();
+    expect(finishing().getByText(/Mark done if you did all of it/)).toBeTruthy();
+  });
+
+  test("draws the session's header in place of the date paginator", () => {
+    // Only today has a session state, so both of the paginator's links would
+    // leave it. The header band holds the session's own way out and ending.
+    resumed();
+    render(view());
+
+    expect(screen.queryByRole("navigation", { name: "Date" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Plan, leaving the session open" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Finish session" })).toBeTruthy();
+  });
+
+  test("keeps the paginator in the plan state", () => {
+    render(view());
+
+    expect(screen.getByRole("navigation", { name: "Date" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Finish session" })).toBeNull();
+  });
+
+  test("marks its bar for focus mode, and only in the session state", () => {
+    // globals.css hides the § Navigation pill below 1024 while this attribute
+    // is on the page. jsdom applies no stylesheet; the visual suite measures it.
+    const { unmount } = render(view());
+
+    expect(document.querySelector("[data-session-bar]")).toBeNull();
+
+    unmount();
+    resumed();
+    render(view());
+
+    expect(document.querySelectorAll("[data-session-bar]")).toHaveLength(1);
+  });
+
+  test("draws one strip segment per row, the current one by weight", async () => {
+    const user = userEvent.setup();
+
+    render(view({ sessions: sectioned() }));
+    await user.click(bar().getByRole("button", { name: "Start session" }));
+
+    const segments = () => [...document.querySelectorAll("[data-steps] > span")];
+
+    // Warm-up, three working rows, cool-down — rows, not rounds.
+    expect(segments()).toHaveLength(5);
+    expect(segments()[0]!.className).toContain("bg-text-primary");
+    expect(segments()[1]!.className).toContain("bg-border");
+
+    await user.click(step("Next"));
+
+    expect(subject()).toBe("Press-ups");
+    expect(segments()[0]!.className).toContain("bg-text-tertiary");
+    expect(segments()[1]!.className).toContain("bg-text-primary");
+    expect(segments()[2]!.className).toContain("bg-border");
+    // Decorative: the slash line says the position in words.
+    expect(document.querySelector("[data-steps]")?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  describe("stepping out with ‹ Plan", () => {
+    test("leaves the state without recording, keeping the start and the place", async () => {
+      const user = userEvent.setup();
+      const start = Date.now() - 10 * 60_000;
+
+      window.localStorage.setItem(KEY, String(start));
+      render(view({ sessions: sectioned() }));
+      // An instant with no stage opens in the work, on Press-ups.
+      await user.click(step("Next"));
+
+      expect(subject()).toBe("Reverse lunges");
+
+      await user.click(screen.getByRole("button", { name: "Plan, leaving the session open" }));
+
+      expect(await list().findByRole("heading", { name: "Exercises" })).toBeTruthy();
+      expect(setSessionStatus).not.toHaveBeenCalled();
+      expect(logExerciseSet).not.toHaveBeenCalled();
+      expect(window.localStorage.getItem(KEY)).toBe(String(-start));
+
+      await user.click(bar().getByRole("button", { name: "Resume session" }));
+
+      // Back on the step the reader left, on the clock they started.
+      expect(subject()).toBe("Reverse lunges");
+      expect(window.localStorage.getItem(KEY)).toBe(String(start));
+    });
+
+    test("starts afresh when there is nothing to resume", async () => {
+      // The legacy "1" has no start, so stepping out keeps nothing, and the
+      // primary is Start session again rather than a Resume that cannot.
+      const user = userEvent.setup();
+
+      resumed();
+      render(view());
+      await user.click(screen.getByRole("button", { name: "Plan, leaving the session open" }));
+
+      expect(window.localStorage.getItem(KEY)).toBeNull();
+      expect(bar().getByRole("button", { name: "Start session" })).toBeTruthy();
+    });
+
+    test("forgets the kept session once a status is answered from the plan state", async () => {
+      // A session stepped out of and then recorded has ended. Offering to
+      // RESUME it would contradict the answer just given.
+      const user = userEvent.setup();
+
+      window.localStorage.setItem(KEY, String(-(Date.now() - 60_000)));
+      window.localStorage.setItem(`fuel:training-stage:${TODAY}`, "u1");
+      render(view({ sessions: sectioned() }));
+
+      expect(bar().getByRole("button", { name: "Resume session" })).toBeTruthy();
+
+      await user.click(bar().getByRole("button", { name: "Partial" }));
+
+      expect(setSessionStatus).toHaveBeenCalledWith(expect.objectContaining({ status: "partial" }));
+      expect(window.localStorage.getItem(KEY)).toBeNull();
+      expect(window.localStorage.getItem(`fuel:training-stage:${TODAY}`)).toBeNull();
+      expect(await bar().findByRole("button", { name: "Start session" })).toBeTruthy();
+    });
+
+    test("keeps the kept session when only a note is saved", async () => {
+      // Saving a note is not an answer, so it ends nothing.
+      const user = userEvent.setup();
+      const kept = String(-(Date.now() - 60_000));
+
+      window.localStorage.setItem(KEY, kept);
+      render(view({ sessions: recorded({ status: "partial", note: null, durationMin: null }) }));
+      await user.type(screen.getByLabelText("Note"), "felt good");
+      await user.click(bar().getByRole("button", { name: "Save note" }));
+
+      expect(setSessionStatus).toHaveBeenCalled();
+      expect(window.localStorage.getItem(KEY)).toBe(kept);
+    });
   });
 });

@@ -1413,7 +1413,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
       <!-- ===== 4b · TRAINING, THE SESSION STATE (FUEL-90) ===== -->
       <div class="cell">
         <div class="stage">
-          <div class="ui device" data-mode="dark" role="img" aria-label="Training, the session state: Inverted rows promoted as the current exercise with three set rows beneath it, each carrying last time's reps, Previous and Next exercise under those, and a rest timer reading 1 minute 12 in the action bar above Mark done, with Partial and Skip session beneath it">
+          <div class="ui device" data-mode="dark" role="img" aria-label="Training, the session state: a session header with Plan on the left, a hairline step strip marking the fifth of nine rows, and Finish on the right; Inverted rows as the current exercise with three set rows beneath it, each carrying last time's reps; and an action bar at the foot of the screen holding a rest timer reading 1 minute 12 above Previous and the primary, Next exercise. No navigation pill: the session state hides it below 1024">
             <div class="statusbar"><span>17:48</span>
               <span class="glyphs" aria-hidden="true">
                 <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.7" y="5" width="3" height="6" rx="1"/><rect x="9.4" y="2.5" width="3" height="8.5" rx="1"/><rect x="14" y="0" width="3" height="11" rx="1"/></svg>
@@ -1421,12 +1421,16 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
               </span>
             </div>
             <div class="app">
-              <!-- The paginator, which is this screen's header at every width
-                   and in both states. It does not change when the state does. -->
-              <div class="topbar">
-                <span class="u-micro" style="color:var(--text-2);">&lsaquo; Prev</span>
-                <span class="u-micro" style="color:var(--text-3);">Wed 12 Aug · Today</span>
-                <span class="u-micro" style="color:var(--text-2);">Next &rsaquo;</span>
+              <!-- FUEL-132: the session's own header, in the paginator's slot
+                   and register. Only today has a session state, so the
+                   paginator's links could only leave it. Plan steps out
+                   without recording; Finish holds every ending, behind a
+                   sheet; between them, one hairline per row of the session,
+                   the current one by weight and no umber. -->
+              <div class="topbar" style="gap:16px;">
+                <span class="u-micro" style="color:var(--text);text-decoration:underline;text-underline-offset:4px;">&lsaquo; Plan</span>
+                <span aria-hidden="true" style="flex:1;display:flex;align-items:center;gap:4px;min-width:0;"><span style="flex:1;height:1px;background:var(--text-3);"></span><span style="flex:1;height:1px;background:var(--text-3);"></span><span style="flex:1;height:1px;background:var(--text-3);"></span><span style="flex:1;height:1px;background:var(--text-3);"></span><span style="flex:1;height:2px;background:var(--text);"></span><span style="flex:1;height:1px;background:var(--border);"></span><span style="flex:1;height:1px;background:var(--border);"></span><span style="flex:1;height:1px;background:var(--border);"></span><span style="flex:1;height:1px;background:var(--border);"></span></span>
+                <span class="u-micro" style="color:var(--text);text-decoration:underline;text-underline-offset:4px;">Finish</span>
               </div>
 
               <!-- The subject is the exercise, not the session. The eyebrow is
@@ -1457,13 +1461,6 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                   <div class="setrow"><span class="num-ix">02</span><span class="set-reps">8 reps<span class="set-last"> · 8 last time</span></span><span class="set-tick on"></span></div>
                   <div class="setrow"><span class="num-ix">03</span><span class="set-reps" style="color:var(--text-3);">Target 8 · 7 last time</span><span class="set-tick"></span></div>
                 </div>
-                <!-- FUEL-120: the way past an exercise, and back. Text buttons,
-                     Show form's weight, drawn only where there is a step that
-                     way. Never "Skip", which finishes the session. -->
-                <div style="display:flex;justify-content:space-between;">
-                  <button class="btn btn-text" type="button" style="width:auto;min-height:44px;padding:0;">&lsaquo; Previous exercise</button>
-                  <button class="btn btn-text" type="button" style="width:auto;min-height:44px;padding:0;">Next exercise &rsaquo;</button>
-                </div>
               </div>
 
               <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:4px;">
@@ -1476,25 +1473,18 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                   <span class="timerval">1:12</span>
                   <button class="btn btn-text" type="button" style="width:auto;min-height:0;padding:0;">Stop</button>
                 </div>
-                <!-- FUEL-121: Skip session names what it acts on, and asks
-                     once a set is logged. The label does not fit the row at
-                     375, so the pair wraps under Mark done, as § Buttons lets
-                     a row do where its labels stop fitting. -->
-                <div class="act-row" style="flex-wrap:wrap;">
-                  <button class="btn btn-primary" type="button" style="flex:1 1 100%;">Mark done</button>
-                  <button class="btn btn-secondary auto" type="button" style="padding:0 16px;">Partial</button>
-                  <button class="btn btn-secondary auto" type="button" style="padding:0 16px;">Skip session</button>
+                <!-- FUEL-132: the way on is the primary and the way back the
+                     secondary beside it. On the last step the primary reads
+                     Mark done; everywhere else, ending is the header's Finish.
+                     FUEL-120's steps, moved out from under the sets. -->
+                <div class="act-row">
+                  <button class="btn btn-secondary auto" type="button" style="padding:0 16px;">&lsaquo; Previous</button>
+                  <button class="btn btn-primary" type="button" style="flex:1;">Next exercise &rsaquo;</button>
                 </div>
               </div>
 
-              <nav class="tabbar" aria-label="Primary">
-                <div class="tabpill">
-                  <span class="tabitem active"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg><span class="lab">Now</span></span>
-                  <span class="tabitem" role="img" aria-label="Plan"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M9 4v-2M15 4v-2"/></svg></span>
-                  <span class="tabitem" role="img" aria-label="Weight"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 16.5l5-5 3.5 3.5 8.5-8.5"/><path d="M16 6.5h4.5V11"/></svg></span>
-                  <span class="tabitem" role="img" aria-label="More"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="5.5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18.5" cy="12" r="1.4"/></svg></span>
-                </div>
-              </nav>
+              <!-- FUEL-132: focus mode. No pill below 1024 in this state; the
+                   bar takes its strip, and Plan above is the way out. -->
             </div>
           </div>
         </div>
@@ -1503,7 +1493,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
           <h3>Training — the session state</h3>
           <p><b>The eighth screen, and the reason there is one.</b> &sect; P10 adds per-set entry, section headings, a form affordance and a rest timer to a list that already spent its window at five rows — a warm-up, six exercises and a cool-down is eight rows and three headings, which fits nowhere. So the screen splits by <i>what you are doing</i>: the whole list when you are planning, <b>the exercise you are on</b> when you are working. The alternative, sets expanding in place, is an accordion and &sect; Progressive Disclosure has banned those since long before this milestone.</p>
           <p>The subject is the exercise; the eyebrow carries the session and its group so nothing above repeats them. Sets are a <b>sub-list</b> &mdash; &sect; Lists&rsquo; 46px dense row, indented to the parent&rsquo;s content column, one level, never nested inside a row. <b>The timer is a row of the action bar</b>, in the slot &sect; Feedback gives the failure banner, so the bar is a column of at most three things rather than growing a fourth button. And this bar stays <b>sticky at every width</b>: FUEL-72 released the others on a claim about thumb targets, and a running readout that scrolls out of sight has failed at its only job. That exception is what re-opens &sect; The Scroll Edge, whose mask now follows the pinning rather than the breakpoint.</p>
-          <p><b>This frame is 764px tall</b> &mdash; one exercise, three sets, the form affordance and the timer &mdash; against the grouped plan state&rsquo;s 1290 and against <b>973px, which is what the plan state measured before &sect; P10 added anything to it at all</b>. A screen holding more of what you need in less height than the version that held less is the evidence the split was the right cut rather than a way of hiding the overflow. <b>A circuit is walked round by round since FUEL-119</b>, and the slash line says which: <b>Round 3 of 3</b>. Inverted rows with two sets done and the third open is round 3 exactly, so only the words changed. Squats&rsquo; set 1 is followed by push-ups&rsquo; set 1, not squats&rsquo; set 2, because both circuits are <i>three rounds, back to back</i>. The round is read off the logged set numbers like the exercise always was, so a reload still resumes where the data says. <b>Previous and Next exercise sit under the sets since FUEL-120</b>, so an exercise finished short of its target no longer holds the screen until a set that did not happen is logged. They are Text buttons at Show form&rsquo;s weight, never called Skip, and drawn only where there is a step that way. The row adds 58px to this frame. <b>The third answer is Skip session since FUEL-121</b>, and it asks in a confirmation sheet once a set is logged, since here a bare Skip under a list of sets read as <i>skip this exercise</i> and recorded the whole day. The label does not fit the row at 375, so Partial and Skip session wrap beneath Mark done, and the controls go from 52px to 110. The pill still carries <b>More</b> in its fourth slot and draws Now as active, as every 375px frame in this file does: &sect; Navigation replaced More with Training as a route table, and these frames are left as drawn rather than half-corrected.</p>
+          <p><b>This frame is 764px tall</b> &mdash; one exercise, three sets, the form affordance and the timer &mdash; against the grouped plan state&rsquo;s 1290 and against <b>973px, which is what the plan state measured before &sect; P10 added anything to it at all</b>. A screen holding more of what you need in less height than the version that held less is the evidence the split was the right cut rather than a way of hiding the overflow. <b>A circuit is walked round by round since FUEL-119</b>, and the slash line says which: <b>Round 3 of 3</b>. Inverted rows with two sets done and the third open is round 3 exactly, so only the words changed. Squats&rsquo; set 1 is followed by push-ups&rsquo; set 1, not squats&rsquo; set 2, because both circuits are <i>three rounds, back to back</i>. The round is read off the logged set numbers like the exercise always was, so a reload still resumes where the data says. <b>Previous and Next exercise exist since FUEL-120</b>, so an exercise finished short of its target no longer holds the screen until a set that did not happen is logged. <b>Since FUEL-132 they are the bar, and Next exercise is the primary.</b> Moving on is what you do a dozen times a session. Mark done recorded the whole session from the largest button on every step, and the Text links under the sets were covered by the bar at 375&times;812. Mark done comes back as the primary on the <b>last</b> step only. Everywhere else, every ending (Mark done, Partial, and <b>Skip session</b>, which still asks once a set is logged, FUEL-121) is behind <b>Finish</b> in the header, which opens a sheet and names the step you are on. <b>The header replaces the paginator in this state</b>, at the paginator&rsquo;s height and in its register: <b>&lsaquo; Plan</b> steps out without recording, and the plan state then offers <b>Resume session</b> with the clock kept. Between them is the step strip, one hairline per row of the session, warm-up and cool-down included, with the current row marked by weight and no umber. <b>There is no pill</b>: below 1024 the session state hides it, and the bar takes the strip at the foot of the screen. Measured in the demo at 375&times;667, the bar went from 209px plus the pill&rsquo;s 86 to 163, and all three sets now end above it (503 against 504). Before, two of the three sat under it. This frame keeps its older proportions everywhere else: the mock&rsquo;s type scale is not the app&rsquo;s, and &sect; The two states of <code>/training</code> carries the app&rsquo;s numbers.</p>
         </div>
       </div>
 
@@ -2205,7 +2195,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
       <div class="dcell">
         <!-- ===== D4b · TRAINING, THE SESSION STATE (FUEL-90) ===== -->
         <div class="dstage">
-          <div class="ui dframe" data-mode="dark" role="img" aria-label="Training in the session state at 1272: the paginator across the frame, Inverted rows, its three set rows with last time's reps, and Previous and Next exercise in the measure, with the rest timer in the action bar, and the rest of the session grouped in the aside above the adherence grid and recent sessions">
+          <div class="ui dframe" data-mode="dark" role="img" aria-label="Training in the session state at 1272: the session header across the frame with Plan, a hairline step strip marking the fifth of nine rows, and Finish; Inverted rows with its three set rows and last time's reps in the measure; a pinned bar with the rest timer above Previous and the primary, Next exercise; and the rest of the session in the aside">
 <div class="dbody spanning">
             <nav class="rail" aria-label="Primary">
             <span class="railitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#n-now"/></svg>Now</span>
@@ -2215,16 +2205,16 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
             <div class="railfoot"><a href="#">Settings</a></div>
           </nav>
             <div style="display:flex;flex-direction:column;gap:30px;min-width:0;">
-              <!-- The header does not change with the state. One job per zone:
-                   this one says where you are, and the paginator is what moves
-                   it, in both states and at every width. -->
+              <!-- One job per zone: this one says where you are. In the session
+                   state that is the session, not the date (FUEL-132), so the
+                   session's header takes the band: Plan, the step strip across
+                   the frame, Finish. The week's standing is the plan state's. -->
               <div class="folio" style="padding-bottom:16px;border-bottom:1px solid var(--border);">
-                <div style="display:flex;align-items:center;gap:20px;">
-                  <span class="u-micro" style="color:var(--text-2);">&lsaquo; Prev</span>
-                  <span class="u-micro" style="color:var(--text-3);">Wed 12 Aug · Today</span>
-                  <span class="u-micro" style="color:var(--text-2);">Next &rsaquo;</span>
+                <div style="display:flex;align-items:center;gap:20px;width:100%;">
+                  <span class="u-micro" style="color:var(--text);text-decoration:underline;text-underline-offset:4px;">&lsaquo; Plan</span>
+                  <span aria-hidden="true" style="flex:1;display:flex;align-items:center;gap:4px;min-width:0;"><span style="flex:1;height:1px;background:var(--text-3);"></span><span style="flex:1;height:1px;background:var(--text-3);"></span><span style="flex:1;height:1px;background:var(--text-3);"></span><span style="flex:1;height:1px;background:var(--text-3);"></span><span style="flex:1;height:2px;background:var(--text);"></span><span style="flex:1;height:1px;background:var(--border);"></span><span style="flex:1;height:1px;background:var(--border);"></span><span style="flex:1;height:1px;background:var(--border);"></span><span style="flex:1;height:1px;background:var(--border);"></span></span>
+                  <span class="u-micro" style="color:var(--text);text-decoration:underline;text-underline-offset:4px;">Finish</span>
                 </div>
-                <span class="u-micro" style="color:var(--text-3);">3 of 5 sessions this week</span>
               </div>
 
               <div class="pair">
@@ -2249,10 +2239,6 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                       <div class="setrow"><span class="num-ix">02</span><span class="set-reps">8 reps<span class="set-last"> · 8 last time</span></span><span class="set-tick on"></span></div>
                       <div class="setrow"><span class="num-ix">03</span><span class="set-reps" style="color:var(--text-3);">Target 8 · 7 last time</span><span class="set-tick"></span></div>
                     </div>
-                    <div style="display:flex;justify-content:space-between;">
-                      <button class="btn btn-text" type="button" style="width:auto;min-height:44px;padding:0;">&lsaquo; Previous exercise</button>
-                      <button class="btn btn-text" type="button" style="width:auto;min-height:44px;padding:0;">Next exercise &rsaquo;</button>
-                    </div>
                   </div>
 
                   <!-- The bar keeps the timer at this width too, and stays
@@ -2266,10 +2252,11 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                       <span class="timerval">1:12</span>
                       <button class="btn btn-text" type="button" style="width:auto;min-height:0;padding:0;">Stop</button>
                     </div>
+                    <!-- FUEL-132: the way back, then the way on as the primary,
+                         each its content's width (FUEL-85). -->
                     <div class="act-row">
-                      <button class="btn btn-primary auto" type="button">Mark done</button>
-                      <button class="btn btn-secondary auto" type="button">Partial</button>
-                      <button class="btn btn-secondary auto" type="button">Skip session</button>
+                      <button class="btn btn-secondary auto" type="button">&lsaquo; Previous</button>
+                      <button class="btn btn-primary auto" type="button">Next exercise &rsaquo;</button>
                     </div>
                   </div>
                 </div>
@@ -2337,7 +2324,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
           <span class="tagline">P10 · /training · session · 1272</span>
           <h3>Training — the session state, at the frame</h3>
           <p><b>The two states are one composition here</b>, which is the whole reason the split is a phone&rsquo;s device rather than a rule about the screen. The measure holds the exercise you are on and its sets; the aside holds the rest of the session, grouped, with everything already done receding to <code>text-2</code>. <b>The current row is marked by weight, never colour</b> &mdash; &sect; The Four Rules allows one umber element per screen and the paginator&rsquo;s <i>today</i> already spends it, which is the same correction &sect; Desktop made to <code>/</code>&rsquo;s first redraw. <b>This is the rule&rsquo;s first drawing, not its second.</b> v4.7 wrote it as a device <code>recent-sessions.tsx</code> already used; that component marks its viewed row with a <code>&middot; Viewing</code> suffix and the absence of a link, every title still at <code>text-primary</code>, and nothing in the app recedes a list&rsquo;s other rows. The attribution is withdrawn in the <code>.md</code>; the rule stands.</p>
-          <p>Recent sessions stand down in this state and adherence does not: you are mid-session, so the pattern you are adding to is context and last Thursday is not. The measure&rsquo;s controls keep FUEL-85&rsquo;s content width, and the bar keeps the timer and its pinning. <b>The third reads Skip session since FUEL-121</b>, and at this width the row still fits. <b>The aside follows the round since FUEL-119</b>: in round 3, Glute bridge and Plank have had two rounds, so they read <b>2 of 3</b> rather than their prescriptions, and the current row is still the one the measure shows. <b>Previous and Next exercise are drawn under the sets at this width too</b> (FUEL-120). The aside&rsquo;s rows stay inert rather than becoming a second way to jump that only this width has. Nothing about the header, the rail, the 584 measure or the 356 aside moves between the two states &mdash; if anything here had needed a fourth zone or a wider column, that would have been the signal that the state was the wrong answer.</p>
+          <p>Recent sessions stand down in this state and adherence does not: you are mid-session, so the pattern you are adding to is context and last Thursday is not. The measure&rsquo;s controls keep FUEL-85&rsquo;s content width, and the bar keeps the timer and its pinning. <b>The row is the stepping since FUEL-132</b>: &lsaquo; Previous and the primary, Next exercise, each its content&rsquo;s width. The three answers (Mark done, Partial and Skip session, FUEL-121) are behind <b>Finish</b>, and Mark done takes the primary on the last step. <b>The aside follows the round since FUEL-119</b>: in round 3, Glute bridge and Plank have had two rounds, so they read <b>2 of 3</b> rather than their prescriptions, and the current row is still the one the measure shows. <b>Previous and Next exercise are in the bar at this width too</b> (FUEL-120, moved by FUEL-132). The aside&rsquo;s rows stay inert rather than becoming a second way to jump that only this width has. <b>The header band is the session&rsquo;s in this state</b> (FUEL-132): Plan, the step strip and Finish, in the paginator&rsquo;s place and register, because only today has a session and the paginator could only leave it. The week&rsquo;s standing returns with the plan state. The rail stays: focus mode hides only the phone&rsquo;s pill. Nothing about the rail, the 584 measure or the 356 aside moves between the two states &mdash; if anything here had needed a fourth zone or a wider column, that would have been the signal that the state was the wrong answer.</p>
         </div>
       </div>
 

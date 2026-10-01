@@ -1,7 +1,7 @@
 import { type Locator, type Page, expect, test } from "@playwright/test";
 
 import { FROZEN_NOW_MS } from "./constants";
-import { stepIntoWork } from "./session";
+import { SET_ROWS, stepIntoWork } from "./session";
 
 /**
  * `/training`'s session bar, which is pinned where every other bar is released
@@ -59,11 +59,17 @@ const BAR = "main .action-bar-fade:not([aria-hidden])";
  * than the slab over a pair, and this state's page lost the same 58: travel
  * fell from 150 to 92 at 375 and from 134 to 76 at 1100, both under the 100
  * that `gapsWhileScrolling` requires before a measurement means anything. The
- * height is this file's instrument, not its subject — the bar clears the shell
- * at 375×667 in the test below, which keeps the named size.
+ * height is this file's instrument, not its subject — the tests below keep the
+ * named sizes: 375×667 for the bar's place at the foot, 667 and 812 for the fold.
+ *
+ * FUEL-132 took the phone from 600 to 520, for the same reason in the other
+ * direction of the same goal: the session state stopped spending the pill's
+ * 86px and the stepping row under the sets, so the page at 375 is the window
+ * plus 66 at 600 and the guard below wants 100. The named sizes, 667 and 812,
+ * are what the fold test measures.
  */
 const WIDTHS = [
-  { width: 375, height: 600, band: "the phone" },
+  { width: 375, height: 520, band: "the phone" },
   { width: 1100, height: 540, band: "the fluid band above the shell" },
   { width: 1272, height: 900, band: "the frame's cap" },
   { width: 1920, height: 1080, band: "wide" },
@@ -213,20 +219,28 @@ test.describe("the session state", () => {
     }
   });
 
-  test("clears the shell below 1024 and the viewport's own foot above it", async ({ page }) => {
+  test("takes the shell's strip below 1024 and the viewport's own foot above it", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
 
-    const bar = await boxOf(page.locator(BAR));
     /*
-     * By name: `/training` has three `<nav>`s — the § Navigation shell, the date
-     * paginator and the week nav — and an unnamed lookup would measure the bar
-     * against whichever came first.
+     * Focus mode — FUEL-132. Below 1024 the session state hides the
+     * § Navigation pill and the bar sits where the pill sat, at the viewport's
+     * foot, with `--nav-shell-h` read as 0. This test used to assert that the
+     * bar cleared the pill; the pill is not drawn here now, so what it asserts
+     * is that it is really gone (a class in jsdom proves nothing) and that the
+     * bar did not keep the 86px offset over an empty strip.
+     *
+     * By name: `/training` has more than one `<nav>`, and an unnamed lookup
+     * would measure whichever came first.
      */
-    const shell = await boxOf(page.getByRole("navigation", { name: "Primary" }));
+    await expect(page.getByRole("navigation", { name: "Primary" })).toBeHidden();
 
-    expect(bar.y + bar.height, "at 375, the bar's bottom vs the shell's top").toBeLessThanOrEqual(
-      shell.y + 0.5,
-    );
+    const phone = await boxOf(page.locator(BAR));
+
+    expect(
+      Math.abs(667 - (phone.y + phone.height)),
+      "at 375, the gap between the bar's bottom and the viewport's foot",
+    ).toBeLessThan(1);
 
     /*
      * AC #2. Above 1024 the shell is a rail with no height to clear, and
@@ -244,6 +258,48 @@ test.describe("the session state", () => {
         Math.abs(height - (box.y + box.height)),
         `at ${width} (${band}), the gap between the bar's bottom and the viewport's foot`,
       ).toBeLessThan(1);
+    }
+  });
+
+  test("leaves the exercise, all its sets and the way on visible on arrival", async ({ page }) => {
+    /*
+     * FUEL-132's first criterion, and PRD § P3's working one: "the exercise
+     * being performed and its sets are what is visible without scrolling". At
+     * 375×667 only set 1 of 3 was visible — the bar and the pill took ~270px —
+     * and at 375×812 the only way forward sat under the bar.
+     *
+     * Measured on arrival, scrolled to the top, against the bar's TOP rather
+     * than the viewport's foot: a row under the opaque bar is not visible, and
+     * that was the fault. The bar's fade starts at its top, so a row that ends
+     * at or above it is drawn whole.
+     */
+    for (const height of [667, 812]) {
+      await page.setViewportSize({ width: 375, height });
+      await page.evaluate(() => window.scrollTo(0, 0));
+
+      const bar = await boxOf(page.locator(BAR));
+      const title = await boxOf(page.getByRole("heading", { level: 1 }));
+      const rows = page.locator(SET_ROWS);
+      const count = await rows.count();
+
+      expect(count, "the working step should draw its sets").toBeGreaterThan(1);
+      expect(title.y, `at 375×${height}, the exercise's name`).toBeGreaterThanOrEqual(0);
+
+      for (let i = 0; i < count; i += 1) {
+        const row = await boxOf(rows.nth(i));
+
+        expect(
+          row.y + row.height,
+          `at 375×${height}, set row ${i + 1}'s bottom against the bar's top`,
+        ).toBeLessThanOrEqual(bar.y + 0.5);
+      }
+
+      // The way on is the bar's primary, so it is in the viewport by
+      // construction — asserted, because "by construction" is what the old
+      // Next exercise link was believed to be too.
+      const next = await boxOf(page.locator(BAR).getByRole("button", { name: /^Next exercise/ }));
+
+      expect(next.y + next.height, `at 375×${height}, Next exercise`).toBeLessThanOrEqual(height);
     }
   });
 

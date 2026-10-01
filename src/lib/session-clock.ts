@@ -150,3 +150,58 @@ export function isEntered(raw: string | null): boolean {
 
   return Number.isInteger(value) && value > 0;
 }
+
+/**
+ * Stepping out of the session state without finishing it — FUEL-132.
+ *
+ * The session state hides the § Navigation pill below 1024, so `‹ Plan` is the
+ * way out that is not a record: the reader logs a meal on `/`, comes back, and
+ * the session is where they left it. What it must not do is throw the start
+ * away, because the next tap would then be `Start session` and the clock — and
+ * the duration it fills — would begin again from the second visit.
+ *
+ * So the start is kept, negated. A negative integer is not entered, by
+ * `isEntered`'s own test (`value > 0`), so every reader of the key that predates
+ * this ticket sees the plan state without being taught a new shape; and
+ * `parseEnteredAt` refuses it as fifty-six years old, so no clock is drawn from
+ * it either. Only the three functions below know what the sign means.
+ */
+
+/**
+ * The value to store on stepping out, or `null` to remove the key.
+ *
+ * `null` for a value that is not a believable start — `"1"` from before
+ * FUEL-124 among them — because a key that would resume a clock this app cannot
+ * read is no better than none, and none is a session started afresh.
+ */
+export function stepOutValue(raw: string | null, now: number): string | null {
+  const startedAt = parseEnteredAt(raw, now);
+
+  return startedAt === null ? null : String(-startedAt);
+}
+
+/**
+ * Whether the stored value is a session stepped out of rather than finished.
+ *
+ * A statement about the string alone, for `isEntered`'s reason: it is read in a
+ * render, and an answer that changed as the clock passed a bound with nothing
+ * having told React would be a label that flipped on its own.
+ */
+export function isSteppedOut(raw: string | null): raw is string {
+  return raw !== null && /^-[1-9]\d*$/.test(raw);
+}
+
+/**
+ * The start a resumed session keeps, or `null` to start afresh.
+ *
+ * Under `parseEnteredAt`'s refusals, so a stepped-out key older than a day — or
+ * ahead of the clock — starts a new session rather than drawing a clock that
+ * nobody could believe.
+ */
+export function resumeValue(raw: string | null, now: number): string | null {
+  if (!isSteppedOut(raw)) return null;
+
+  const startedAt = parseEnteredAt(raw.slice(1), now);
+
+  return startedAt === null ? null : String(startedAt);
+}
