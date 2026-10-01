@@ -59,8 +59,8 @@ const BAR = "main .action-bar-fade:not([aria-hidden])";
  * than the slab over a pair, and this state's page lost the same 58: travel
  * fell from 150 to 92 at 375 and from 134 to 76 at 1100, both under the 100
  * that `gapsWhileScrolling` requires before a measurement means anything. The
- * height is this file's instrument, not its subject — the bar clears the shell
- * at 375×667 in the test below, which keeps the named size.
+ * height is this file's instrument, not its subject — the tests below keep the
+ * named sizes: 375×667 for the bar's place at the foot, 667 and 812 for the fold.
  *
  * FUEL-132 took the phone from 600 to 520, for the same reason in the other
  * direction of the same goal: the session state stopped spending the pill's
