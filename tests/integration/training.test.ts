@@ -1547,7 +1547,7 @@ describe.skipIf(!configured)("logging sets, scoped", () => {
 
   const UNLOGGED = "2026-03-09"; // a Monday the fixture has no log for
 
-  it("creates the session's log at partial when the first set arrives", async () => {
+  it("creates the session's log with no status when the first set arrives", async () => {
     const { userId, workoutId, exerciseId } = fixture.alice;
 
     await logSet(userId, {
@@ -1561,11 +1561,27 @@ describe.skipIf(!configured)("logging sets, scoped", () => {
 
     const created = (await logsOf(userId)).find((log) => log.date === UNLOGGED);
 
-    // 'partial' because it is the only one of the three that is true of a
-    // session with one set in it, and because `status` is not null.
-    expect(created?.status).toBe("partial");
+    // FUEL-134: the sets' parent, and no outcome. It was born 'partial' until
+    // then, which every screen reported while the owner was still training.
+    expect(created).toBeDefined();
+    expect(created?.status).toBeNull();
     expect(created?.note).toBeNull();
     expect(created?.durationMin).toBeNull();
+  });
+
+  it("takes the status the reader chooses afterwards, on the same row", async () => {
+    // The row the sets hang off is the one the outcome lands on — one row per
+    // (user, date, workout), so a mark after a set is an update, not a second
+    // log, and the sets stay under it.
+    const { userId, workoutId, exerciseId } = fixture.alice;
+
+    await logSet(userId, { date: UNLOGGED, workoutId, exerciseId, setIndex: 1, kind: "reps", value: 12, loadKg: null });
+    await recordSession(userId, { date: UNLOGGED, workoutId, status: "partial", note: null, durationMin: null });
+
+    const logs = (await logsOf(userId)).filter((log) => log.date === UNLOGGED);
+
+    expect(logs.map((log) => log.status)).toEqual(["partial"]);
+    expect((await setsOf(userId)).filter((set) => set.workoutLogId === logs[0]?.id)).toHaveLength(1);
   });
 
   it("leaves a status the reader chose exactly where it was", async () => {

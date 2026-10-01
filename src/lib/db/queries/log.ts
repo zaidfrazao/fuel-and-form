@@ -1,9 +1,9 @@
 import "server-only";
 
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 import type { CalendarDate } from "@/lib/date";
-import type { DayLogs, LoggedRow, LogIntent } from "@/lib/log-intent";
+import { type DayLogs, isMarked, type LoggedRow, type LogIntent } from "@/lib/log-intent";
 import { getDb } from "../index";
 import * as schema from "../schema";
 import { scope } from "../scope";
@@ -52,7 +52,10 @@ export async function logsFor(userId: string, date: CalendarDate): Promise<DayLo
     s.select(schema.workoutLogs, eq(schema.workoutLogs.date, date)),
   ]);
 
-  return { meals, workouts };
+  // A session with sets and no outcome is not a log of the session — FUEL-134,
+  // and `MarkedWorkoutLog`. Left in, it read as logged on `/`, and it topped
+  // Undo's stack, where taking it back deleted the sets under it.
+  return { meals, workouts: workouts.filter(isMarked) };
 }
 
 /**
@@ -78,6 +81,27 @@ export async function recordLog(userId: string, intent: LogIntent): Promise<void
     return;
   }
 
+  // A session with sets logged already has its row, with no status (FUEL-134),
+  // and `workout_logs` is unique on (user, date, workout) — so the insert below
+  // would collide with it. Marking it is filling that status in, with
+  // `logged_at` moved to now because the outcome is recorded now.
+  //
+  // `status is null` and not an unconditional upsert: a row that already holds
+  // an outcome was marked somewhere else (`/training`, another tab), and a
+  // stale `/` must not overwrite it. That case falls through to the insert and
+  // fails on the index, as it always has.
+  const [marked] = await s.update(
+    schema.workoutLogs,
+    { status: intent.status, loggedAt: sql`now()` },
+    and(
+      eq(schema.workoutLogs.date, intent.date),
+      eq(schema.workoutLogs.workoutId, intent.workoutId),
+      isNull(schema.workoutLogs.status),
+    ),
+  );
+
+  if (marked) return;
+
   await s.insert(schema.workoutLogs, {
     date: intent.date,
     workoutId: intent.workoutId,
@@ -102,10 +126,29 @@ export async function recordLog(userId: string, intent: LogIntent): Promise<void
 export async function deleteLog(userId: string, row: LoggedRow): Promise<boolean> {
   const s = scope(userId, getDb());
 
-  const removed =
-    row.kind === "meal"
-      ? await s.delete(schema.mealLogs, eq(schema.mealLogs.id, row.log.id))
-      : await s.delete(schema.workoutLogs, eq(schema.workoutLogs.id, row.log.id));
+  if (row.kind === "meal") {
+    const removed = await s.delete(schema.mealLogs, eq(schema.mealLogs.id, row.log.id));
+
+    return removed.length > 0;
+  }
+
+  // A session with sets under it takes back the OUTCOME and keeps the sets —
+  // FUEL-134. The row is their parent and deleting it cascades: undoing a tap
+  // of Mark done would erase the training it was a verdict on. The tap is what
+  // happened on `/`, so the tap is what goes, leaving the row as the sets left
+  // it. Only a row with no sets is deleted, which is every row `/` creates.
+  const unmarked = await s.update(
+    schema.workoutLogs,
+    { status: null },
+    and(
+      eq(schema.workoutLogs.id, row.log.id),
+      sql`exists (select 1 from ${schema.exerciseSets} where ${schema.exerciseSets.workoutLogId} = ${schema.workoutLogs.id})`,
+    ),
+  );
+
+  if (unmarked.length > 0) return true;
+
+  const removed = await s.delete(schema.workoutLogs, eq(schema.workoutLogs.id, row.log.id));
 
   return removed.length > 0;
 }

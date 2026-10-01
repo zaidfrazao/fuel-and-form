@@ -2350,9 +2350,11 @@ export function Training({
   const exerciseList = (of: TrainingItem, at: keyof typeof LIST_AT) => (
     /*
      * Keyed by which copy it is, because the phone's copy has two places since
-     * FUEL-128 and a record can arrive while a sheet it opened is up: a first
-     * set logged from the sets sheet creates one as `partial`, and the
-     * refresh moves the list under the open sheet. Both places are children
+     * FUEL-128 and a record can arrive while a sheet it opened is up. Until
+     * FUEL-134 a first set logged from the sets sheet created one as
+     * `partial`; it no longer records anything, but a mark made in another
+     * tab still arrives on a refresh and moves the list under the open
+     * sheet. Both places are children
      * of one fragment, so the key lets React MOVE this node rather than
      * remount it. Remounted, the row that opened the sheet would be gone, and
      * `Sheet` hands focus back to `<body>` when its opener is disconnected.
@@ -3083,10 +3085,9 @@ export function Training({
          * which are the session state's and are about training rather than
          * about the record; and no status, note or duration, which a set
          * edit may not touch — the writes below are `logExerciseSet` and
-         * `removeExerciseSet` and nothing else. The one exception is the
-         * server's, not this sheet's: a first set on a session with no
-         * record creates one as `partial`, FUEL-91's rule in `logSet`, and
-         * the refresh after it shows that record here.
+         * `removeExerciseSet` and nothing else. A first set on a session
+         * with no record creates the row the sets hang off, with no status
+         * (FUEL-134), so the screen still reads "Not recorded" after it.
          *
          * `Show form` hands over to the reference sheet rather than stacking
          * one on the other, so there is only ever one sheet open. It is

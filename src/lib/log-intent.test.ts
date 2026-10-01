@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import type { Meal, MealLog, Workout, WorkoutLog } from "./db/schema";
+import type { Meal, MealLog, Workout } from "./db/schema";
 import {
   alreadyLogged,
   type DayLogs,
   logCount,
   latestLog,
   logIntent,
+  type MarkedWorkoutLog,
   rowBelongsTo,
 } from "./log-intent";
 import type { NowItem } from "./resolve-now";
@@ -78,7 +79,7 @@ function mealLog(fields: Partial<MealLog> = {}): MealLog {
   };
 }
 
-function workoutLog(fields: Partial<WorkoutLog> = {}): WorkoutLog {
+function workoutLog(fields: Partial<MarkedWorkoutLog> = {}): MarkedWorkoutLog {
   return {
     id: "wlog-1",
     userId: USER,

@@ -252,8 +252,13 @@ export function adherenceWeeks(
   anchor: CalendarDate,
   weeks: number = ADHERENCE_WEEKS,
 ): Week[] {
+  // A row with no status is a session with sets and no outcome — FUEL-134.
+  // It is left out, so its day is `none` exactly as if there were no row: a dot
+  // drawn from the sets would be the completion percentage § P10 forbids.
   const recorded = new Map<string, WorkoutLogStatus>(
-    logs.map((log) => [keyOf(log.date, log.workoutId), log.status]),
+    logs.flatMap((log) =>
+      log.status === null ? [] : [[keyOf(log.date, log.workoutId), log.status] as const],
+    ),
   );
 
   const { from } = adherenceWindow(anchor, weeks);

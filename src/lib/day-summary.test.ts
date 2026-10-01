@@ -11,8 +11,8 @@ import {
   undoRetreats,
   undoTarget,
 } from "@/lib/day-summary";
-import type { Meal, MealLog, Workout, WorkoutLog } from "@/lib/db/schema";
-import type { DayLogs } from "@/lib/log-intent";
+import type { Meal, MealLog, Workout } from "@/lib/db/schema";
+import type { DayLogs, MarkedWorkoutLog } from "@/lib/log-intent";
 import type { NowItem, ScheduledItem } from "@/lib/resolve-now";
 
 /**
@@ -92,7 +92,7 @@ function mealLog(fields: Partial<MealLog> & { id: string }): MealLog {
   };
 }
 
-function workoutLog(fields: Partial<WorkoutLog> & { id: string }): WorkoutLog {
+function workoutLog(fields: Partial<MarkedWorkoutLog> & { id: string }): MarkedWorkoutLog {
   return {
     userId: USER,
     date: DATE,
