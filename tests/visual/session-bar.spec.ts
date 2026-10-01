@@ -314,6 +314,27 @@ test.describe("the session state", () => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.evaluate(() => window.scrollTo(0, 0));
 
+    /*
+     * The tick must not reach the database. The demo is one fixture shared by
+     * every project in the run, and a first set creates a `partial` record for
+     * the day (FUEL-91), so a real write here moved `/training`'s list under
+     * the record and failed 29 baselines in other projects. The Server Action's
+     * request is held instead: the optimistic set is drawn, which is all this
+     * measures, and nothing is written. Released by aborting once measured.
+     */
+    const held: { abort: () => Promise<void> }[] = [];
+
+    await page.route("**/training*", async (route) => {
+      const request = route.request();
+
+      if (request.method() === "POST" && (await request.headerValue("next-action"))) {
+        held.push({ abort: () => route.abort() });
+        return;
+      }
+
+      await route.fallback();
+    });
+
     const title = page.getByRole("heading", { level: 1 });
     const before = (await title.textContent()) ?? "";
     const barBefore = await boxOf(page.locator(BAR));
@@ -341,6 +362,12 @@ test.describe("the session state", () => {
     const line = await boxOf(said);
 
     expect(line.y + line.height, "the echo is above the bar").toBeLessThanOrEqual(bar.y);
+
+    // The write was held, never sent: the fixture is as every other project
+    // expects it.
+    expect(held.length, "the tick's Server Action should have been held").toBeGreaterThan(0);
+    await Promise.all(held.map((one) => one.abort()));
+    await page.unroute("**/training*");
   });
 
   test("is its own height and not the height of the space it sits in", async ({ page }) => {
