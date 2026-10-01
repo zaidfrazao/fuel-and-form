@@ -1955,11 +1955,6 @@ export function Training({
    */
   const [lastLogged, setLastLogged] = useState<LastLogged | null>(null);
 
-  if (lastLogged && !inSession) setLastLogged(null);
-
-  /** The next action, whatever it is: the echo of the last one ends. */
-  const settle = () => setLastLogged(null);
-
   /**
    * Where focus goes after Undo — the restored row's tick.
    *
@@ -1969,6 +1964,21 @@ export function Training({
    * `Log set N` tick is where the reader is.
    */
   const focusAfterUndo = useRef<string | null>(null);
+
+  if (lastLogged && !inSession) setLastLogged(null);
+
+  /**
+   * The next action, whatever it is: the echo of the last one ends, and so does
+   * any focus hand-off Undo left waiting. In practice the hand-off is spent on
+   * the next render, because Undo's optimistic removal draws the restored tick
+   * at once. Cleared here anyway, so a request that ever found no tick could
+   * not wait and pull focus to whichever `Log set N` is drawn later.
+   */
+  const settle = () => {
+    setLastLogged(null);
+    focusAfterUndo.current = null;
+  };
+
 
   useLayoutEffect(() => {
     const label = focusAfterUndo.current;
