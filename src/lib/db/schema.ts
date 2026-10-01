@@ -866,6 +866,35 @@ export const workoutExercises = pgTable(
     targetSecondsHigh: integer("target_seconds_high"),
 
     /**
+     * A total across sets, in reps — FUEL-130.
+     *
+     * '75 swings — sets of 10–25, ~60 s rest, until 75' is a TOTAL, and 75 is
+     * not a set count: it is the same shape '8–12 rounds' had, where the first
+     * number in the string is not what `target_sets` means. So it gets a column
+     * of its own rather than a borrowed one, transcribed by hand like the rest
+     * and never read off `prescription`.
+     *
+     * With a total, a set is complete when the logged reps reach it rather than
+     * when the rows run out, and the rows keep coming until they do. It is a
+     * target the program prescribes, not a best — nothing compares it with a
+     * previous session, which is the line PRD § Non-Goals draws.
+     *
+     * Reps only: a total of seconds is a duration, and nothing asks for one.
+     */
+    targetTotalReps: integer("target_total_reps"),
+
+    /**
+     * Whether a set of this exercise records the load it was done with —
+     * FUEL-130, which is where `exercise_sets.load_kg` is first written.
+     *
+     * Per exercise and not per workout type, because a loaded session can hold
+     * an unloaded row (a warm-up drill) and the gym restart will mix the two
+     * freely. False is the default, so every bodyweight row already stored is
+     * unchanged without a backfill.
+     */
+    takesLoad: boolean("takes_load").notNull().default(false),
+
+    /**
      * Form reference media — § P10, FUEL-94. All four nullable, and null is the
      * ordinary case: media exists for the exercises the project could licence,
      * and one without it renders no affordance rather than a broken box.
@@ -979,6 +1008,13 @@ export const workoutExercises = pgTable(
       "workout_exercises_one_target_unit",
       sql`"target_reps_low" is null or "target_seconds_low" is null`,
     ),
+    // A total is reachable inside the set cap (20 sets of at most 999), and it
+    // is a total of REPS, so it never sits on a timed row.
+    check(
+      "workout_exercises_target_total_reps",
+      sql`"target_total_reps" is null
+          or ("target_total_reps" between 1 and 19980 and "target_seconds_low" is null)`,
+    ),
 
     // The media vocabulary — § P10, FUEL-94. Built from the one array, and
     // `sql.raw` for the reason the section CHECK above spells out in full.
@@ -1032,9 +1068,30 @@ export const trainingTemplateEntries = pgTable(
     workoutId: uuid("workout_id"),
     rotationGroup: text("rotation_group"),
     sortOrder: integer("sort_order").notNull().default(0),
+
+    /**
+     * The dates this row schedules on, inclusive at both ends — FUEL-130.
+     *
+     * Null is open: a row with neither has always applied and still does, which
+     * is every row stored before this ticket. They exist because a past date is
+     * resolved against the template, not read back from a log — the adherence
+     * grid, `/training`'s Recent and past dates, and the week export all ask
+     * "what was scheduled on 3 September?" of the rows here. Repointing Tuesday
+     * in place would answer that question with today's workout, so a change of
+     * schedule closes the old row the day before and opens a new one: the old
+     * Tuesdays keep their session, by the same resolution that finds the new.
+     *
+     * Rows are never deleted to change a schedule, for the same reason.
+     */
+    validFrom: calendarDate("valid_from"),
+    validUntil: calendarDate("valid_until"),
   },
   (t) => [
     dayOfWeekInRange("training_template_entries"),
+    check(
+      "training_template_entries_valid_range",
+      sql`"valid_from" is null or "valid_until" is null or "valid_from" <= "valid_until"`,
+    ),
     ownedReference({
       name: "training_template_entries_workout_fk",
       columns: [t.workoutId, t.userId],

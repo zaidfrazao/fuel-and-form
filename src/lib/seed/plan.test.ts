@@ -151,14 +151,14 @@ describe("training template", () => {
     expect(new Set(walkKeys).size).toBe(walkKeys.length);
   });
 
-  it("puts the circuits on Mon/Wed/Fri and the cardio on Tue/Thu", () => {
+  it("puts the circuits on Mon/Wed/Fri and the kettlebell session on Tue/Thu", () => {
     const circuitDays = seedTrainingTemplate
       .filter((entry) => entry.rotationGroup === BODYWEIGHT_CIRCUIT)
       .map((entry) => entry.dayOfWeek)
       .sort();
 
     const cardioDays = seedTrainingTemplate
-      .filter((entry) => entry.workoutKey === "skipping-intervals-core")
+      .filter((entry) => entry.workoutKey === "kettlebell-swings")
       .map((entry) => entry.dayOfWeek)
       .sort();
 

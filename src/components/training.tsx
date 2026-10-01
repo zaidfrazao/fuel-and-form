@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
+  type KeyboardEvent,
   type ReactNode,
   startTransition,
   useLayoutEffect,
@@ -72,8 +73,11 @@ import {
   setsDone,
   setsFor,
   lastTimeValue,
+  loadOffered,
+  MAX_LOAD_KG,
   MAX_REPS,
   MAX_SECONDS,
+  parseLoadKg,
   setKind,
   setUnitLine,
   storedSet,
@@ -285,6 +289,12 @@ export type TrainingExercise = ListedExercise &
      * headings spent the plan list's row budget.
      */
     media: ResolvedFormMedia | null;
+    /**
+     * Whether its set rows take a kg box beside the reps — FUEL-130. From
+     * `workout_exercises.takes_load`, and never inferred from the workout's
+     * type: a loaded session's warm-up is still bodyweight.
+     */
+    takesLoad: boolean;
   };
 
 /** One set, narrowed to what the sub-list draws. */
@@ -568,8 +578,9 @@ function SetList({
   /** This exercise's sets last time — FUEL-122. Empty draws no clause. */
   lastTime: readonly LoggedSet[];
   drafts: ReadonlyMap<string, string>;
-  onDraft: (setIndex: number, value: string) => void;
-  onLog: (setIndex: number, value: number) => void;
+  /** `field` is the kg box's for a load, and the number's otherwise — FUEL-130. */
+  onDraft: (setIndex: number, value: string, field?: "kg") => void;
+  onLog: (setIndex: number, value: number, loadKg: number | null) => void;
   onRemove: (setIndex: number) => void;
 }) {
   const kind = setKind(exercise);
@@ -593,6 +604,40 @@ function SetList({
         // offering. `null` is a control with nothing to write.
         const wouldLog = entered ? typed : offered;
 
+        /*
+         * The load, for an exercise that takes one — FUEL-130. The same
+         * draft-over-stored rule as the number, under its own key. An empty
+         * box offers the recalled load (`loadOffered`) and the tick records
+         * it, exactly as an empty number box offers and records the target —
+         * one function behind both, so the box never shows one bell while the
+         * tick writes another. A figure the column would refuse (`16.`, `0`)
+         * holds the tick until it is corrected, rather than being dropped.
+         */
+        const storedLoad = logged.find((set) => set.setIndex === row.index)?.loadKg ?? null;
+        const kgDraft = drafts.get(`${key}#kg`);
+        const kgValue = kgDraft ?? (storedLoad === null ? "" : String(storedLoad));
+        const kgTyped = parseLoadKg(kgValue);
+        const kgOffered = exercise.takesLoad ? loadOffered(row.index, logged, lastTime) : null;
+        const wouldLoad = !exercise.takesLoad
+          ? null
+          : kgValue === ""
+            ? row.value === null
+              ? kgOffered
+              : null
+            : (kgTyped ?? null);
+        const loadRefused = exercise.takesLoad && kgTyped === undefined;
+        const canLog = wouldLog !== null && !loadRefused;
+
+        const logOnEnter = (event: KeyboardEvent<HTMLInputElement>) => {
+          if (event.key !== "Enter" || !canLog) return;
+
+          // A number typed and confirmed is a set logged, so the reader
+          // never has to reach for the tick to commit what they just
+          // wrote. The tick stays the way back.
+          event.preventDefault();
+          onLog(row.index, wouldLog, wouldLoad);
+        };
+
         return (
           <li
             key={key}
@@ -602,7 +647,7 @@ function SetList({
               {String(row.index).padStart(2, "0")}
             </span>
 
-            <span className="flex flex-1 items-center gap-2">
+            <span className="flex flex-1 flex-wrap items-center gap-x-2 gap-y-1">
               <input
                 // The label is the ordinal beside it, which is decorative to a
                 // screen reader — a bare "01" says nothing about what the box
@@ -619,15 +664,7 @@ function SetList({
                 onChange={(event) =>
                   onDraft(row.index, event.target.value.replace(/\D/g, ""))
                 }
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" || wouldLog === null) return;
-
-                  // A number typed and confirmed is a set logged, so the reader
-                  // never has to reach for the tick to commit what they just
-                  // wrote. The tick stays the way back.
-                  event.preventDefault();
-                  onLog(row.index, wouldLog);
-                }}
+                onKeyDown={logOnEnter}
                 onBlur={() => {
                   // Only a CORRECTION commits here — a row already logged whose
                   // number changed. An unlogged row committing on blur would
@@ -635,16 +672,59 @@ function SetList({
                   // recorded a set nobody confirmed.
                   if (row.value === null || !entered || typed === row.value) return;
 
-                  onLog(row.index, typed);
+                  // A kg box mid-edit (`16.`) keeps the set's stored load rather
+                  // than holding the number hostage: the reps are corrected now,
+                  // and the kg box keeps its draft for the reader to finish.
+                  const load = kgTyped === undefined ? storedLoad : kgTyped;
+
+                  onLog(row.index, typed, exercise.takesLoad ? load : null);
                 }}
                 inputMode="numeric"
                 // As many digits as the unit's ceiling — three for `MAX_REPS`,
                 // four for `MAX_SECONDS` — so the box cannot hold a value
                 // longer than any the action would accept.
                 maxLength={String(kind === "seconds" ? MAX_SECONDS : MAX_REPS).length}
-                className="h-11 w-14 rounded-md border border-border bg-surface px-2 text-body tabular-nums text-text-primary outline-none placeholder:text-text-tertiary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className={SET_BOX}
                 placeholder={offered === null ? "" : String(offered)}
               />
+              {exercise.takesLoad ? (
+                // The bell — FUEL-130. Per set, because an adjustable bell
+                // can change between them; kg only, to two decimals, which is
+                // what `load_kg` holds.
+                <span className="flex items-center gap-1">
+                  <input
+                    aria-label={`Set ${row.index} kg`}
+                    value={kgValue}
+                    // Digits and one point, stripped as they arrive for the
+                    // number box's reason. `parseLoadKg` is still the judge.
+                    onChange={(event) =>
+                      onDraft(
+                        row.index,
+                        event.target.value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1"),
+                        "kg",
+                      )
+                    }
+                    onKeyDown={logOnEnter}
+                    onBlur={() => {
+                      // A correction to a logged set's load, on the number
+                      // box's terms — and an emptied box is a correction too:
+                      // the set's load goes, rather than the old figure staying.
+                      if (row.value === null || kgTyped === undefined || kgTyped === storedLoad) {
+                        return;
+                      }
+
+                      onLog(row.index, row.value, kgTyped);
+                    }}
+                    inputMode="decimal"
+                    maxLength={String(MAX_LOAD_KG).length}
+                    className={SET_BOX}
+                    placeholder={kgOffered === null ? "" : String(kgOffered)}
+                  />
+                  <span aria-hidden="true" className="text-slash text-text-tertiary">
+                    kg
+                  </span>
+                </span>
+              ) : null}
               {/* The mock's two states, in words: `8 reps` for a set performed
                   and `Target 8` for one still on offer — `sec` and `Target
                   30–60s` for a timed one (FUEL-123). An exercise with no
@@ -672,7 +752,7 @@ function SetList({
               // One control with two states rather than two controls — the
               // reason `Recorded`'s three status buttons carry it too.
               aria-pressed={row.value !== null}
-              disabled={row.value === null && wouldLog === null}
+              disabled={row.value === null && !canLog}
               onClick={() => {
                 if (row.value !== null) {
                   onRemove(row.index);
@@ -680,7 +760,7 @@ function SetList({
                   return;
                 }
 
-                if (wouldLog !== null) onLog(row.index, wouldLog);
+                if (canLog) onLog(row.index, wouldLog, wouldLoad);
               }}
             >
               <span
@@ -700,6 +780,10 @@ function SetList({
     </ol>
   );
 }
+
+/** A set row's box — the number's, and a loaded row's kg (FUEL-130). */
+const SET_BOX =
+  "h-11 w-14 rounded-md border border-border bg-surface px-2 text-body tabular-nums text-text-primary outline-none placeholder:text-text-tertiary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 /**
  * The rest of the session, beside the exercise being worked — § Desktop.
@@ -904,7 +988,14 @@ function ExerciseSteps({ previous, next }: { previous: Step | null; next: Step |
 type Attempt =
   | { kind: "record"; status: WorkoutLogStatus; note: string; duration: string }
   | { kind: "clear" }
-  | { kind: "log-set"; exerciseId: string; setIndex: number; value: number }
+  | {
+      kind: "log-set";
+      exerciseId: string;
+      setIndex: number;
+      value: number;
+      /** kg, or `null` for none — FUEL-130. Always `null` for a bodyweight row. */
+      loadKg: number | null;
+    }
   | { kind: "remove-set"; exerciseId: string; setIndex: number };
 
 /**
@@ -1333,6 +1424,7 @@ export function Training({
               exerciseId: attempt.exerciseId,
               setIndex: attempt.setIndex,
               value: attempt.value,
+              loadKg: attempt.loadKg,
             },
           ];
     },
@@ -1418,6 +1510,7 @@ export function Training({
                 exerciseId: attempt.exerciseId,
                 setIndex: attempt.setIndex,
                 value: attempt.value,
+                loadKg: attempt.loadKg,
               })
             : await removeExerciseSet({
                 date,
@@ -1848,14 +1941,18 @@ export function Training({
     if (frame) rowThumbnails.set(exercise.id, frame);
   }
 
-  const draft = (exerciseId: string, setIndex: number, value: string) =>
-    setDrafts((previous) => new Map(previous).set(`${exerciseId}#${setIndex}`, value));
+  const draft = (exerciseId: string, setIndex: number, value: string, field?: "kg") =>
+    setDrafts((previous) =>
+      new Map(previous).set(`${exerciseId}#${setIndex}${field ? `#${field}` : ""}`, value),
+    );
 
+  // Both of a row's boxes — its number and, on a loaded row, its kg (FUEL-130).
   const forget = (exerciseId: string, setIndex: number) =>
     setDrafts((previous) => {
       const next = new Map(previous);
 
       next.delete(`${exerciseId}#${setIndex}`);
+      next.delete(`${exerciseId}#${setIndex}#kg`);
 
       return next;
     });
@@ -1870,9 +1967,14 @@ export function Training({
    * The draft is forgotten first, so the stored value takes over the box on
    * the frame the optimistic row lands.
    */
-  const commitSet = (exerciseId: string, setIndex: number, value: number) => {
+  const commitSet = (
+    exerciseId: string,
+    setIndex: number,
+    value: number,
+    loadKg: number | null,
+  ) => {
     forget(exerciseId, setIndex);
-    act({ kind: "log-set", exerciseId, setIndex, value });
+    act({ kind: "log-set", exerciseId, setIndex, value, loadKg });
   };
 
   const withdrawSet = (exerciseId: string, setIndex: number) => {
@@ -2365,8 +2467,10 @@ export function Training({
                     logged={setsFor(currentEx.id, sets)}
                     lastTime={setsFor(currentEx.id, session?.lastTime ?? NO_SETS)}
                     drafts={drafts}
-                    onDraft={(setIndex, value) => draft(currentEx.id, setIndex, value)}
-                    onLog={(setIndex, value) => {
+                    onDraft={(setIndex, value, field) =>
+                      draft(currentEx.id, setIndex, value, field)
+                    }
+                    onLog={(setIndex, value, loadKg) => {
                       // A circuit's rest — FUEL-126. Read against the sets
                       // BEFORE this one, in the gesture that logged it,
                       // because the gesture is what lets the rest's tone sound
@@ -2383,7 +2487,7 @@ export function Training({
 
                       if (rest !== null) startRest(CIRCUIT_REST[rest]);
 
-                      commitSet(currentEx.id, setIndex, value);
+                      commitSet(currentEx.id, setIndex, value, loadKg);
                     }}
                     onRemove={(setIndex) => withdrawSet(currentEx.id, setIndex)}
                   />
@@ -2635,8 +2739,10 @@ export function Training({
                 logged={setsFor(setsExercise.id, sets)}
                 lastTime={setsFor(setsExercise.id, session?.lastTime ?? NO_SETS)}
                 drafts={drafts}
-                onDraft={(setIndex, value) => draft(setsExercise.id, setIndex, value)}
-                onLog={(setIndex, value) => commitSet(setsExercise.id, setIndex, value)}
+                onDraft={(setIndex, value, field) => draft(setsExercise.id, setIndex, value, field)}
+                onLog={(setIndex, value, loadKg) =>
+                  commitSet(setsExercise.id, setIndex, value, loadKg)
+                }
                 onRemove={(setIndex) => withdrawSet(setsExercise.id, setIndex)}
               />
             </section>

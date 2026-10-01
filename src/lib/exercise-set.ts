@@ -78,6 +78,11 @@ export type SetTarget = {
   targetRepsHigh: number | null;
   targetSecondsLow: number | null;
   targetSecondsHigh: number | null;
+  /**
+   * A total across sets, in reps — '75 swings … until 75' (FUEL-130). Not a
+   * set count, which is why it is not `targetSets`; see schema.ts.
+   */
+  targetTotalReps: number | null;
 };
 
 /**
@@ -115,6 +120,12 @@ export function targetLow(target: SetTarget): number | null {
 export type LoggedSet = {
   setIndex: number;
   value: number;
+  /**
+   * The load the set was done with, in kg — FUEL-130. Present only for an
+   * exercise that `takes_load`; absent and `null` both mean no load recorded,
+   * and every bodyweight set is one.
+   */
+  loadKg?: number | null;
 };
 
 /**
@@ -216,7 +227,11 @@ export function setsFor(
 ): LoggedSet[] {
   return sets
     .filter((set) => set.exerciseId === exerciseId)
-    .map(({ setIndex, value }) => ({ setIndex, value }))
+    // The load rides along where there is one (FUEL-130); a bodyweight set
+    // keeps the two fields it always had.
+    .map(({ setIndex, value, loadKg }) =>
+      loadKg === undefined ? { setIndex, value } : { setIndex, value, loadKg },
+    )
     .sort((a, b) => a.setIndex - b.setIndex);
 }
 
@@ -269,9 +284,23 @@ export function setRows(target: SetTarget, logged: readonly LoggedSet[]): SetRow
  * this decides which exercise the screen shows next, and nothing else reads it.
  */
 export function isComplete(target: SetTarget, logged: readonly LoggedSet[]): boolean {
+  // A total is met by the reps, however many sets they took (FUEL-130) —
+  // seventy-five swings in three sets or in seven is the prescription done.
+  if (target.targetTotalReps !== null) return loggedTotal(logged) >= target.targetTotalReps;
+
   return target.targetSets === null
     ? logged.length >= 1
     : logged.length >= target.targetSets;
+}
+
+/**
+ * Every logged set's number, added up — FUEL-130's running total toward a
+ * `target_total_reps`. Only ever read against that target: it is how far
+ * through a prescribed total the session is, never a figure compared with
+ * another session's, which is the progression engine § Non-Goals rules out.
+ */
+export function loggedTotal(logged: readonly LoggedSet[]): number {
+  return logged.reduce((sum, set) => sum + set.value, 0);
 }
 
 /**
@@ -722,6 +751,12 @@ export function setUnitLine(
 export function setProgress(target: SetTarget, logged: readonly LoggedSet[]): string | null {
   if (logged.length === 0) return null;
 
+  // A total is the prescription, so progress is counted in it (FUEL-130):
+  // `45 of 75 reps`, and not a set count the prescription never set.
+  if (target.targetTotalReps !== null) {
+    return `${loggedTotal(logged)} of ${target.targetTotalReps} reps`;
+  }
+
   return target.targetSets === null
     ? `${logged.length} ${logged.length === 1 ? "set" : "sets"}`
     : `${logged.length} of ${target.targetSets} sets`;
@@ -753,4 +788,75 @@ export function setsDone(target: SetTarget, logged: readonly LoggedSet[]): strin
     .join(" · ");
 
   return `${values} ${UNIT_WORD[setKind(target)]}`;
+}
+
+/**
+ * The heaviest load `exercise_sets.load_kg` holds — `numeric(5, 2)` — FUEL-130.
+ * Far past any bell, and there so the box and the action refuse what the
+ * column would.
+ */
+export const MAX_LOAD_KG = 999.99;
+
+/**
+ * A set's load as it will be stored: kg to two decimals, `null` for none, or
+ * `undefined` for a value that is refused — FUEL-130.
+ *
+ * THREE states where `parseSetValue` has two, and the difference is the one
+ * that function draws: a set must hold a number, but a load is optional — a
+ * set logged without one is a set whose load was not recorded, not a set of
+ * nothing. So an empty box and an absent field are `null`.
+ *
+ * Decimals, because an adjustable bell steps in odd amounts; two places,
+ * because the column holds two and a third would be rounded by Postgres into
+ * a number nobody entered. Zero is refused on the column's own terms
+ * (`exercise_sets_load_positive`): a set with no load is `null`, not 0 kg.
+ */
+export function parseLoadKg(value: unknown): number | null | undefined {
+  if (value === null || value === undefined || value === "") return null;
+
+  const text = typeof value === "number" ? String(value) : value;
+
+  if (typeof text !== "string" || !/^\d{1,3}(\.\d{1,2})?$/.test(text)) return undefined;
+
+  const kg = Number(text);
+
+  return kg > 0 && kg <= MAX_LOAD_KG ? kg : undefined;
+}
+
+/**
+ * The load an unlogged row offers — its placeholder, and what its tick
+ * records from an empty kg box (FUEL-130).
+ *
+ * The nearest earlier set's load in THIS session, since a bell is rarely
+ * changed between sets; for the first set, last time's load at the same set
+ * number, and failing that the last load last time recorded at all. Recall,
+ * on `lastTimeValue`'s terms: what was lifted, never a heavier bell to try —
+ * nothing here is compared, and nothing is incremented.
+ */
+export function loadOffered(
+  index: number,
+  logged: readonly LoggedSet[],
+  lastTime: readonly LoggedSet[],
+): number | null {
+  const earlier = loads(logged)
+    .filter((set) => set.setIndex < index)
+    .sort((a, b) => b.setIndex - a.setIndex)[0];
+
+  if (earlier) return earlier.kg;
+
+  const previous = loads(lastTime);
+  const same = previous.find((set) => set.setIndex === index);
+
+  if (same) return same.kg;
+
+  const last = previous.sort((a, b) => b.setIndex - a.setIndex)[0];
+
+  return last ? last.kg : null;
+}
+
+/** The sets that recorded a load, with it — the only ones a load is recalled from. */
+function loads(sets: readonly LoggedSet[]): { setIndex: number; kg: number }[] {
+  return sets.flatMap((set) =>
+    set.loadKg == null ? [] : [{ setIndex: set.setIndex, kg: set.loadKg }],
+  );
 }

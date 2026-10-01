@@ -50,11 +50,11 @@ import { BODYWEIGHT_CIRCUIT, type SeedExercise, type SeedWorkout } from "./types
  * `profiles.program_start_date` and takes the count modulo the group size, so
  * the pattern never drifts and a skipped session does not shift what comes next.
  *
- * The skipping session and the walk name no group. They are scheduled by a fixed
+ * The kettlebell session and the walk name no group. They are scheduled by a fixed
  * `workout_id` on their template rows, and the schema's `workouts_rotation_pair`
  * check keeps `rotation_group` and `rotation_index` null together.
  *
- * ## The structured targets are transcribed by hand, and three of them are null
+ * ## The structured targets are transcribed by hand, and some of them are null
  *
  * § P10's per-set logging (FUEL-91) compares a set against `target_sets` and
  * the rep range beside it. Those are columns, filled in here by a person
@@ -70,11 +70,15 @@ import { BODYWEIGHT_CIRCUIT, type SeedExercise, type SeedWorkout } from "./types
  *     into the columns that mean seconds, so the set rows log a hold as a hold.
  *     'each side' is per side, as the dead bug's '10 each side' is per side:
  *     the side plank's 20–30 is what one side is held for.
- *   - '8–12 rounds — 40 sec on / 40 sec off' has no target of either kind.
+ *   - '8–12 rounds — 40 sec on / 40 sec off' had no target of either kind.
  *     Rounds are not sets, the first number in the string is 8, and an
  *     interval session logged as eight sets of eight reps would be a record of
- *     something nobody did. It is null, and the screen still logs sets against
- *     it — they simply have nothing to be compared to.
+ *     something nobody did. It was null. (The skipping session left this file
+ *     in FUEL-130; an existing user's row still reads that way.)
+ *   - '75 swings — sets of 10–25, ~60 s rest, until 75' is the same shape as
+ *     the rounds, one level up: 75 is a TOTAL, not a set count. It goes in
+ *     `target_total_reps`, the 10–25 is the per-set rep target, and
+ *     `target_sets` stays null (FUEL-130).
  *
  * `seed/seed.test.ts` feeds every prescription here through the reader and
  * asserts that no number in a target came out of a string. (It is that file and
@@ -361,89 +365,97 @@ export const seedWorkouts: readonly SeedWorkout[] = [
   },
 
   /* ------------------------------------------------------------------------ */
-  /* Cardio — Tue / Thu                                                       */
+  /* Kettlebell swings — Tue / Thu (FUEL-130)                                 */
   /* ------------------------------------------------------------------------ */
 
+  /*
+   * Kettlebell swings replaced Skipping Intervals + Core on Tue / Thu, after
+   * Tim Ferriss's "The Perfect Posterior: Kettlebell Swings and Cheap
+   * Alternatives" (tim.blog, 2011-01-08; The 4-Hour Body): the two-handed
+   * Russian swing, 75 reps, 2–3 times a week.
+   *
+   * The skipping session is no longer in this file, and that is not the
+   * history being rewritten. An existing user's skipping workout is a database
+   * row their logs point at, and it stays; migration 0019 closes its template
+   * rows the day before the change and opens this session's on it, so a past
+   * Tuesday still resolves to skipping (schema.ts, `valid_from`). This file
+   * seeds a NEW user, who never did the skipping session at all.
+   *
+   * Its own bookends rather than `session()`'s: the shared warm-up's "light
+   * skipping" is movement prep for a rope, and a hinge session wants the
+   * hinge rehearsed before it is loaded; the shared cool-down stretches the
+   * calves "after skipping", where this one needs hamstrings and glutes.
+   */
   {
-    key: "skipping-intervals-core",
-    name: "Skipping Intervals + Core",
-    type: "intervals",
+    key: "kettlebell-swings",
+    name: "Kettlebell Swings",
+    type: "kettlebell",
     rotationGroup: null,
     rotationIndex: null,
     description: describe(
       [
         "### Format",
         "",
-        "After the warm-up: 8–12 rounds of 40 sec skipping at a pace you can just",
-        "about sustain, then 40 sec rest — walk on the spot, don't sit down.",
-        "",
-        "Start at 8 rounds. Add a round each week until you reach 12, then start",
-        "shortening the rest to 30 sec rather than adding further rounds.",
+        "After the warm-up: 75 two-handed swings in total. If 75 in a row isn't",
+        "there yet, do sets — anything from 10 to 25 — with about 60 sec rest",
+        "between them, until the total reaches 75.",
       ].join("\n"),
       [
-        "### Coming back to the rope",
+        "### The swing",
         "",
-        "Your calves and feet will complain before your lungs do. For the first two",
-        "sessions cut to 6 rounds of 30 sec even if it feels easy — the tissue needs",
-        "time to adapt, and calf or Achilles soreness from going too hard too early is",
-        "the single most likely thing to derail this.",
+        "A hip hinge, not a squat. Hinge back with a flat back until the bell is",
+        "between the thighs, then pop the hips forward and squeeze the glutes hard",
+        "at the top. The bell floats to about chest height on straight arms — not",
+        "overhead. Shoulders never go in front of the knees at the bottom.",
+      ].join("\n"),
+      [
+        "### No core finisher",
         "",
-        "Tripping is normal and doesn't matter. Keep the clock running, pick the rope",
-        "back up, carry on. Don't restart the interval.",
+        "The plank, dead bug and side plank that followed the skipping went with",
+        "it. The swing is itself a posterior-chain and anti-extension movement —",
+        "the plank at the top of every rep — so the session is the swings alone,",
+        "as the source prescribes it.",
       ].join("\n"),
     ),
-    exercises: session([
+    exercises: [
+      WARM_UP[0]!,
       {
-        name: "Skipping intervals",
-        prescription: "8–12 rounds — 40 sec on / 40 sec off",
+        name: "Hinge prep",
+        prescription: "~3 min",
+        section: "warmup",
         targetSets: null,
         targetRepsLow: null,
         targetRepsHigh: null,
         notes:
-          "Build to 12 rounds before shortening the rest. Trips don't cost you the interval.",
+          "10 slow hip hinges with hands on the hips, 10 glute bridges, 10 bodyweight squats, then 5 easy swings.",
       },
       {
-        name: "Plank",
-        prescription: "3 x 30–45 sec",
-        targetSets: 3,
-        targetRepsLow: null,
-        targetRepsHigh: null,
-        targetSecondsLow: 30,
-        targetSecondsHigh: 45,
-        notes: "Core finisher, straight after the intervals.",
-        mediaKey: "plank",
-        mediaKind: "image",
-        mediaAlt:
-          "Two frames of a front plank: setting up on the forearms with the elbows under the shoulders, then the hold, with the body in one straight line from heels to head and the hips neither sagging toward the floor nor piked up.",
-      },
-      {
-        name: "Dead bug",
-        prescription: "3 x 10 each side",
-        targetSets: 3,
+        name: "Kettlebell swings",
+        prescription: "75 swings — sets of 10–25, ~60 s rest, until 75",
+        // The total is its own column: 75 is not a set count, and the rows keep
+        // coming until the logged reps reach it (FUEL-130). No `target_sets`,
+        // because how many sets 75 takes is the reader's, not the program's.
+        targetSets: null,
         targetRepsLow: 10,
-        targetRepsHigh: 10,
+        targetRepsHigh: 25,
+        targetTotalReps: 75,
+        takesLoad: true,
         notes:
-          "On your back, opposite arm and leg extend slowly. The lower back stays pressed to the floor throughout.",
-        mediaKey: "dead-bug",
-        mediaKind: "image",
-        mediaAlt:
-          "Two frames of a dead bug: lying face up with the arms reaching at the ceiling and the knees stacked over the hips, then one arm and the opposite leg extended away slowly while the lower back stays pressed to the floor.",
+          "Two hands. Hinge, snap the hips, squeeze the glutes; the bell floats to chest height.",
+        // No form reference, and deliberately: see `form-media.ts` on FUEL-130.
       },
       {
-        name: "Side plank",
-        prescription: "2 x 20–30 sec each side",
-        targetSets: 2,
+        name: "Posterior-chain stretches",
+        prescription: "30 sec each",
+        section: "cooldown",
+        targetSets: null,
         targetRepsLow: null,
         targetRepsHigh: null,
-        targetSecondsLow: 20,
-        targetSecondsHigh: 30,
-        notes: null,
-        mediaKey: "side-plank",
-        mediaKind: "image",
-        mediaAlt:
-          "Two frames of a side plank: setting up on one forearm with the body turned onto its side and the feet stacked, then the hold, with the hips lifted so that head, hips and heels make one straight line.",
+        notes:
+          "Hamstring stretch and figure-four glute stretch, each leg, then a kneeling hip-flexor stretch.",
       },
-    ]),
+      COOL_DOWN[1]!,
+    ],
   },
 
   /* ------------------------------------------------------------------------ */

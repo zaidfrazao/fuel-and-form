@@ -175,6 +175,8 @@ function exercise(fields: Partial<WorkoutExercise> & { id: string }): WorkoutExe
     mediaKind: null,
     mediaAlt: null,
     mediaCredit: null,
+    targetTotalReps: null,
+    takesLoad: false,
     ...fields,
   };
 }

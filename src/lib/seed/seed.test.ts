@@ -51,6 +51,8 @@ const template: TrainingTemplateEntry[] = [1, 3, 5].map((dayOfWeek, index) => ({
   workoutId: null,
   rotationGroup: BODYWEIGHT_CIRCUIT,
   sortOrder: 0,
+  validFrom: null,
+  validUntil: null,
 }));
 
 const plan: TrainingPlan = {
@@ -106,11 +108,13 @@ describe("A/B alternation", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("workout library", () => {
-  it("holds both circuits, the interval session and both walks", () => {
+  it("holds both circuits, the kettlebell session and both walks", () => {
+    // The skipping session left the seed in FUEL-130. A new user never did it;
+    // an existing user's row is in the database, and migration 0019 keeps it.
     expect(seedWorkouts.map((w) => w.key)).toEqual([
       "bodyweight-circuit-a",
       "bodyweight-circuit-b",
-      "skipping-intervals-core",
+      "kettlebell-swings",
       "morning-walk",
       "afternoon-walk",
     ]);
@@ -171,21 +175,30 @@ describe("workout library", () => {
   const numbersIn = (prescription: string) =>
     (prescription.match(/\d+/g) ?? []).map(Number);
 
-  it("does not read the interval session's targets out of its prescription", () => {
-    // The case the whole rule exists for. '8–12 rounds — 40 sec on / 40 sec
-    // off' has four numbers in it and describes no sets and no reps at all:
-    // rounds are not sets, and a parser taking the first two would offer eight
-    // sets of eight to twelve reps against a skipping session.
-    const intervals = exerciseNamed("Skipping intervals");
+  it("does not read the swings' targets out of their prescription — FUEL-130", () => {
+    // The case the rule exists for, in the shape '8–12 rounds' had before it.
+    // '75 swings — sets of 10–25, ~60 s rest, until 75' has five numbers, and
+    // the first is a TOTAL: a parser taking it as a set count would offer
+    // seventy-five set rows. The transcription puts each where it means.
+    const swings = exerciseNamed("Kettlebell swings");
 
-    expect(numbersIn(intervals.prescription)).toEqual([8, 12, 40, 40]);
+    expect(numbersIn(swings.prescription)).toEqual([75, 10, 25, 60, 75]);
 
-    expect(intervals.targetSets ?? null).toBeNull();
-    expect(intervals.targetRepsLow ?? null).toBeNull();
-    expect(intervals.targetRepsHigh ?? null).toBeNull();
-    // Nor seconds (FUEL-123): 40 is how long a round lasts, not a set.
-    expect(intervals.targetSecondsLow ?? null).toBeNull();
-    expect(intervals.targetSecondsHigh ?? null).toBeNull();
+    expect(swings.targetSets ?? null).toBeNull();
+    expect(swings.targetRepsLow).toBe(10);
+    expect(swings.targetRepsHigh).toBe(25);
+    expect(swings.targetTotalReps).toBe(75);
+    // 60 is the rest between sets, not a hold.
+    expect(swings.targetSecondsLow ?? null).toBeNull();
+    expect(swings.targetSecondsHigh ?? null).toBeNull();
+  });
+
+  it("gives a load only to the swings — FUEL-130", () => {
+    // `load_kg` is written by a loaded exercise and no other; the warm-up
+    // before the swings is still bodyweight.
+    const loaded = allExercises.filter((exercise) => exercise.takesLoad === true);
+
+    expect(loaded.map((exercise) => exercise.name)).toEqual(["Kettlebell swings"]);
   });
 
   it("gives a held exercise its sets and a seconds target, never a rep target", () => {
@@ -198,8 +211,6 @@ describe("workout library", () => {
     const holds: [workout: string, name: string, low: number, high: number][] = [
       ["bodyweight-circuit-a", "Plank", 30, 60],
       ["bodyweight-circuit-b", "Superman hold", 20, 40],
-      ["skipping-intervals-core", "Plank", 30, 45],
-      ["skipping-intervals-core", "Side plank", 20, 30],
     ];
 
     for (const [workout, name, low, high] of holds) {

@@ -134,6 +134,13 @@
       "when": 1790666409897,
       "tag": "0018_profile_targets_changed_on",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790760786964,
+      "tag": "0019_kettlebell_swings",
+      "breakpoints": true
     }
   ]
 }

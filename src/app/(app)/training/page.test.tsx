@@ -88,6 +88,8 @@ const EXERCISE: WorkoutExercise = {
   mediaKind: null,
   mediaAlt: null,
   mediaCredit: null,
+  targetTotalReps: null,
+  takesLoad: false,
 };
 
 const LOG: WorkoutLog = {

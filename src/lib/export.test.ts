@@ -178,6 +178,8 @@ const exercise = (id: string, sortOrder: number): WorkoutExercise => ({
   mediaKind: null,
   mediaAlt: null,
   mediaCredit: null,
+  targetTotalReps: null,
+  takesLoad: false,
 });
 
 const EXERCISE_ID = "aaaaaaaa-0000-4000-8000-000000000002";
@@ -205,6 +207,8 @@ const trainingEntry = (
   workoutId: WORKOUT_ID,
   rotationGroup: "circuit",
   sortOrder: 0,
+  validFrom: null,
+  validUntil: null,
 });
 
 const workoutLog = (id: string, date: string): WorkoutLog => ({

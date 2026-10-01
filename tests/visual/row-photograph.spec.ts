@@ -176,32 +176,32 @@ test("a 16:9 reference keeps its own ratio rather than being cropped to 3:2", as
    * column's 72 by its own 40.5 — not 72×48 with `object-fit` cutting the
    * hand and the foot off the sides.
    *
-   * Found by walking the frozen week rather than by naming a date, because
-   * which day carries the core session is the seed's to decide.
+   * On `/dev/exercise-list`, not the demo's week. The week found it by walking
+   * seven days for the core session, and FUEL-130 took the core session out
+   * of the program when swings replaced skipping. The asset still ships and an
+   * owner's past sessions still draw it, so the rule is photographed on a
+   * specimen that carries its own row — with a 3:2 row beside it, so the two
+   * boxes are measured in the same list.
    */
   await page.setViewportSize({ width: 820, height: 1180 });
+  await page.goto("/dev/exercise-list");
 
-  const monday = new Date(FROZEN_NOW_MS);
-  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+  const box = (name: string) =>
+    page
+      .locator("li", { hasText: name })
+      .locator("img")
+      .evaluate((img) => {
+        const rect = img.getBoundingClientRect();
+        return { width: rect.width, height: rect.height };
+      });
 
-  for (let day = 0; day < 7; day += 1) {
-    const date = new Date(monday);
-    date.setUTCDate(monday.getUTCDate() + day);
-    await page.goto(`/training?date=${date.toISOString().slice(0, 10)}`);
-    await expect(page.getByRole("main")).toBeVisible();
+  const deadBug = await box("Dead bug");
 
-    const row = page.locator(`${LIST} li`, { hasText: "Dead bug" });
-    if ((await row.count()) === 0) continue;
+  expect(deadBug.width).toBe(72);
+  expect(deadBug.height).toBeCloseTo(40.5, 0);
+  // 850×567 at 72 wide is 48.0 and a fraction, which is the ratio kept.
+  const plank = await box("Plank");
 
-    const box = await row.locator("img").evaluate((img) => {
-      const rect = img.getBoundingClientRect();
-      return { width: rect.width, height: rect.height };
-    });
-
-    expect(box.width).toBe(72);
-    expect(box.height).toBeCloseTo(40.5, 0);
-    return;
-  }
-
-  throw new Error("no day in the frozen week draws the dead bug — the fixture has moved");
+  expect(plank.width).toBe(72);
+  expect(plank.height).toBeCloseTo(48, 0);
 });

@@ -224,6 +224,8 @@ const exercise = (
   mediaKind: null,
   mediaAlt: null,
   mediaCredit: null,
+  targetTotalReps: null,
+  takesLoad: false,
 });
 
 /** Two working rows and a cool-down — the split the estimate apportions by. */

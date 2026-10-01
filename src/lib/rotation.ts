@@ -86,18 +86,51 @@ export type TrainingPlan = {
 const compareStrings = (a: string, b: string) => Number(a > b) - Number(a < b);
 
 /**
+ * Whether a template row schedules on `date` — its `valid_from`/`valid_until`
+ * window, inclusive at both ends, with null meaning open (FUEL-130).
+ *
+ * The window is what lets a schedule change without rewriting the past: the old
+ * Tuesday row is closed the day before the change and a new one opened on it,
+ * so a date from before resolves to what it resolved to on the day. schema.ts
+ * argues it in full.
+ *
+ * Exported because one reader orders the day's walks from the rows directly
+ * rather than through `resolveTraining` (`queries/walk-reminder.ts`), and a
+ * second spelling of the window would be a second thing to get wrong.
+ */
+export function activeOn(
+  entry: Pick<TrainingTemplateEntry, "validFrom" | "validUntil">,
+  date: CalendarDate,
+): boolean {
+  return (
+    (entry.validFrom === null || daysBetween(entry.validFrom, date) >= 0) &&
+    (entry.validUntil === null || daysBetween(date, entry.validUntil) >= 0)
+  );
+}
+
+/**
  * The weekdays this group trains on, deduped.
  *
  * A set, not a count: two template rows on the same Wednesday are one training
  * day, and counting them twice would advance the rotation twice for a day that
  * happens once. The dedupe is also what keeps `size` usable as the per-week
  * stride below.
+ *
+ * The rows counted are the ones in force on `date` (FUEL-130). The closed-form
+ * count assumes one set of training days back to day zero, so a group whose
+ * days CHANGED would be counted as though it had always trained on the new
+ * ones. No change of schedule has touched a rotation group yet — FUEL-130's
+ * moves a fixed row — and counting per window is the work to do when one does.
  */
-function trainingDays(template: TrainingTemplateEntry[], group: string): Set<number> {
+function trainingDays(
+  template: TrainingTemplateEntry[],
+  group: string,
+  date: CalendarDate,
+): Set<number> {
   const days = new Set<number>();
 
   for (const entry of template) {
-    if (entry.rotationGroup === group) days.add(entry.dayOfWeek);
+    if (entry.rotationGroup === group && activeOn(entry, date)) days.add(entry.dayOfWeek);
   }
 
   return days;
@@ -167,7 +200,7 @@ export function rotationIndex(
 
   if (size === 0) return null;
 
-  const days = trainingDays(plan.template, group);
+  const days = trainingDays(plan.template, group, date);
   const startDay = dayOfWeek(plan.programStartDate);
 
   // Whole weeks contribute one full set of training days each; the remainder is
@@ -227,7 +260,7 @@ export function resolveTraining(plan: TrainingPlan, date: CalendarDate): Resolve
   const resolved: ResolvedWorkout[] = [];
 
   const entries = plan.template
-    .filter((entry) => entry.dayOfWeek === day)
+    .filter((entry) => entry.dayOfWeek === day && activeOn(entry, date))
     .sort((a, b) => a.sortOrder - b.sortOrder || compareStrings(a.id, b.id));
 
   for (const entry of entries) {

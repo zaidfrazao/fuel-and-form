@@ -208,6 +208,8 @@ function training(
     userId: USER,
     dayOfWeek: day,
     sortOrder,
+    validFrom: null,
+    validUntil: null,
     ...fields,
   };
 }

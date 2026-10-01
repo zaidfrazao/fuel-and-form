@@ -50,7 +50,8 @@ const PROGRAM_START = "2026-03-02"; // a Monday
 
 const CIRCUIT_A = "Bodyweight Circuit A";
 const CIRCUIT_B = "Bodyweight Circuit B";
-const INTERVALS = "Skipping Intervals + Core";
+// Tue / Thu's session in the seed since FUEL-130.
+const KETTLEBELL = "Kettlebell Swings";
 const MORNING_WALK = "Morning Walk";
 const AFTERNOON_WALK = "Afternoon Walk";
 
@@ -95,6 +96,8 @@ const EXERCISES = new Map<string, WorkoutExercise[]>(
       mediaKind: exercise.mediaKind ?? null,
       mediaAlt: exercise.mediaAlt ?? null,
       mediaCredit: exercise.mediaCredit ?? null,
+      targetTotalReps: exercise.targetTotalReps ?? null,
+      takesLoad: exercise.takesLoad ?? false,
     })),
   ]),
 );
@@ -106,6 +109,8 @@ const TEMPLATE: TrainingTemplateEntry[] = seedTrainingTemplate.map((entry, index
   workoutId: entry.workoutKey ? idFor(entry.workoutKey) : null,
   rotationGroup: entry.rotationGroup ?? null,
   sortOrder: entry.sortOrder ?? 0,
+  validFrom: null,
+  validUntil: null,
 }));
 
 const PLAN: TrainingPlan = {
@@ -157,9 +162,9 @@ describe("a template entry that names a rotation group", () => {
 describe("the five-day schedule", () => {
   it("resolves the program's first week day by day", () => {
     expect(namesOn("2026-03-02")).toEqual([CIRCUIT_A, ...WALKS]);
-    expect(namesOn("2026-03-03")).toEqual([INTERVALS, ...WALKS]);
+    expect(namesOn("2026-03-03")).toEqual([KETTLEBELL, ...WALKS]);
     expect(namesOn("2026-03-04")).toEqual([CIRCUIT_B, ...WALKS]);
-    expect(namesOn("2026-03-05")).toEqual([INTERVALS, ...WALKS]);
+    expect(namesOn("2026-03-05")).toEqual([KETTLEBELL, ...WALKS]);
     expect(namesOn("2026-03-06")).toEqual([CIRCUIT_A, ...WALKS]);
   });
 
@@ -232,6 +237,8 @@ describe("weekends", () => {
       workoutId: null,
       rotationGroup: "bodyweight-circuit",
       sortOrder: 0,
+      validFrom: null,
+      validUntil: null,
     };
 
     const plan = { ...PLAN, template: [saturdayCircuit, ...TEMPLATE] };
@@ -280,13 +287,12 @@ describe("the exercise list", () => {
     ).toEqual(["Squats", "Push-ups", "Reverse lunges", "Glute bridges", "Plank"]);
   });
 
-  it("opens and closes every session with the same bookends", () => {
-    // One constant spread into each session, so a change to the warm-up cannot
-    // land on two of them and miss the third. Asserted across all three rather
-    // than on one, because "the same" is the property that decays.
+  it("opens and closes both circuits with the same bookends", () => {
+    // One constant spread into each circuit, so a change to the warm-up cannot
+    // land on one of them and miss the other. Asserted across both rather than
+    // on one, because "the same" is the property that decays.
     const sessions = [
       trainingDay(PLAN, EXERCISES, "2026-03-02").sessions[0]!, // circuit A
-      trainingDay(PLAN, EXERCISES, "2026-03-03").sessions[0]!, // intervals
       trainingDay(PLAN, EXERCISES, "2026-03-04").sessions[0]!, // circuit B
     ];
 
@@ -301,17 +307,32 @@ describe("the exercise list", () => {
     }
   });
 
+  it("gives the swings a hinge session's bookends — FUEL-130", () => {
+    // The joint prep and the upper-body stretches are shared; the movement
+    // prep and the lower-body stretches were a rope session's, and are not.
+    const names = trainingDay(PLAN, EXERCISES, "2026-03-03")
+      .sessions[0]!.exercises.map((exercise) => exercise.name);
+
+    expect(names).toEqual([
+      "Joint prep",
+      "Hinge prep",
+      "Kettlebell swings",
+      "Posterior-chain stretches",
+      "Upper-body stretches",
+    ]);
+  });
+
   it("carries the prescription verbatim", () => {
-    // '3 x 12–20' and '8–12 rounds — 40 sec on / 40 sec off' are the same kind
+    // '3 x 12–20' and '75 swings — sets of 10–25, ~60 s rest, until 75' are the same kind
     // of thing to this app: schema.ts says the column is "displayed verbatim,
     // never parsed", so nothing on the way to the screen may reformat it.
-    const [intervals] = trainingDay(PLAN, EXERCISES, "2026-03-03").sessions;
+    const [swings] = trainingDay(PLAN, EXERCISES, "2026-03-03").sessions;
 
     // The working rows, not `exercises[0]` — that is the shared warm-up now
     // (FUEL-92), and an index into a list whose first row is the same on every
     // session would assert nothing about this one.
-    expect(working(intervals!.exercises)[0]?.prescription).toBe(
-      "8–12 rounds — 40 sec on / 40 sec off",
+    expect(working(swings!.exercises)[0]?.prescription).toBe(
+      "75 swings — sets of 10–25, ~60 s rest, until 75",
     );
   });
 
@@ -433,6 +454,8 @@ describe("`kind`", () => {
       workoutId: strength.id,
       rotationGroup: null,
       sortOrder: 0,
+      validFrom: null,
+      validUntil: null,
     };
 
     const plan: TrainingPlan = {

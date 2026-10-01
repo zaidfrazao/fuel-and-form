@@ -184,6 +184,25 @@ describe("the formula", () => {
     // open vocabulary can miss.
     expect(MET_BANDS.intervals?.low).toBeGreaterThanOrEqual(MET_BANDS.circuit!.high);
   });
+
+  test("costs kettlebell swings between two compendium figures — FUEL-130", () => {
+    // 02040 (circuit including kettlebells, vigorous) to 02058 (swings).
+    expect(MET_BANDS.kettlebell).toEqual({ low: 7.5, high: 9.8 });
+
+    const range = sessionEnergy({
+      type: "kettlebell",
+      exercises: rows(1, "work"),
+      sets: [],
+      durationMin: 20,
+      distanceM: null,
+      weightKg: WEIGHT,
+    });
+
+    // A range, never a point and never a zero, and inside the width ceiling.
+    expect(range).not.toBeNull();
+    expect(range!.lowKcal).toBeGreaterThan(0);
+    expect(range!.highKcal).toBeGreaterThan(range!.lowKcal);
+  });
 });
 
 describe("where the duration comes from", () => {

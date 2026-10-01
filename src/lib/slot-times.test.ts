@@ -66,12 +66,12 @@ describe("parseSlotTimes", () => {
       parseSlotTimes(
         form({
           [workoutField("circuit")]: "06:30",
-          [workoutField("intervals")]: "06:30",
+          [workoutField("kettlebell")]: "06:30",
         }),
       ),
     );
 
-    expect(update.workoutTimes).toEqual({ circuit: "06:30", intervals: "06:30" });
+    expect(update.workoutTimes).toEqual({ circuit: "06:30", kettlebell: "06:30" });
   });
 
   it("reads a blank field as cleared, not as missing", () => {
@@ -175,13 +175,13 @@ describe("parseSlotTimes", () => {
   it("validates workout fields as strictly as slot fields", () => {
     // Asserted separately because the two loops are separate code. A relaxed
     // workout branch would be just as fatal on `/` as a relaxed slot one.
-    expect(parseSlotTimes(form({ [workoutField("intervals")]: "6:3" })).ok).toBe(false);
+    expect(parseSlotTimes(form({ [workoutField("kettlebell")]: "6:3" })).ok).toBe(false);
   });
 
   it("stores a workout's typed time in the same 'HH:MM' as a slot's", () => {
-    const update = ok(parseSlotTimes(form({ [workoutField("intervals")]: "6:30" })));
+    const update = ok(parseSlotTimes(form({ [workoutField("kettlebell")]: "6:30" })));
 
-    expect(update.workoutTimes.intervals).toBe("06:30");
+    expect(update.workoutTimes.kettlebell).toBe("06:30");
   });
 
   it("ignores a workout type settings does not offer", () => {
@@ -326,7 +326,7 @@ describe("scheduleFields", () => {
     const fields = scheduleFields(stored({ workoutTimes: { circuit: null } }));
 
     expect(fields[workoutField("circuit")]).toBe("");
-    expect(fields[workoutField("intervals")]).toBe(DEFAULT_WORKOUT_TIMES.intervals);
+    expect(fields[workoutField("kettlebell")]).toBe(DEFAULT_WORKOUT_TIMES.kettlebell);
   });
 
   it("gives a field to every slot and every editable workout type", () => {

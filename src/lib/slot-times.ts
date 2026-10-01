@@ -78,8 +78,13 @@ export type ParseResult =
  * `resolve-now.ts` explains what giving it a window would do: it would become
  * the active item every evening, displacing dinner on the five days that also
  * have a real session.
+ *
+ * 'intervals' left in FUEL-130, when the Tue/Thu skipping session became
+ * kettlebell swings: nothing is scheduled as intervals from that date on, and a
+ * field for a session that no longer happens is a setting that does nothing.
+ * Its stored time stays in the column, on the rule above.
  */
-export const EDITABLE_WORKOUT_TYPES = ["circuit", "intervals"] as const;
+export const EDITABLE_WORKOUT_TYPES = ["circuit", "kettlebell"] as const;
 
 /** Form field name for a meal slot. Prefixed so the two namespaces cannot collide. */
 export const slotField = (slot: MealSlot) => `slot.${slot}`;

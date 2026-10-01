@@ -578,9 +578,12 @@ export async function clearSession(
  *
  * `value` is the only thing that is not an address, which is why it is the only
  * field `exercise-set.ts` has to refuse. `kind` says which column it is stored
- * in (FUEL-123), and the caller takes it from the exercise's own target. `loadKg` is deliberately absent: the
- * column ships dormant (§ Gym-restart readiness), and a parameter for a value
- * nothing sends is a parameter somebody eventually sends something wrong in.
+ * in (FUEL-123), and the caller takes it from the exercise's own target.
+ *
+ * `loadKg` is the set's load, and `null` for none — the column's first writer
+ * is FUEL-130's kettlebell session. It shipped dormant until something sent it
+ * (§ Gym-restart readiness), and the caller only sends it for an exercise that
+ * `takes_load`, so a bodyweight set is always written with `null`.
  */
 export type SetRecord = {
   date: CalendarDate;
@@ -589,6 +592,7 @@ export type SetRecord = {
   setIndex: number;
   kind: SetKind;
   value: number;
+  loadKg: number | null;
 };
 
 /**
@@ -662,6 +666,7 @@ export async function logSet(userId: string, record: SetRecord): Promise<void> {
       exerciseId: record.exerciseId,
       setIndex: record.setIndex,
       ...storedSet(record.kind, record.value),
+      loadKg: record.loadKg,
     },
     {
       // The unique index from schema.ts, minus the `user_id` the scope
@@ -672,8 +677,9 @@ export async function logSet(userId: string, record: SetRecord): Promise<void> {
         schema.exerciseSets.setIndex,
       ],
       // Both columns, so a correction can never leave the other one behind —
-      // `exercise_sets_one_unit` would refuse a row holding both.
-      set: storedSet(record.kind, record.value),
+      // `exercise_sets_one_unit` would refuse a row holding both. The load
+      // too: a set corrected to no load holds none, not the old figure.
+      set: { ...storedSet(record.kind, record.value), loadKg: record.loadKg },
     },
   );
 }

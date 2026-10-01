@@ -4,6 +4,10 @@ import {
   currentExercise,
   isComplete,
   lastTimeValue,
+  loadOffered,
+  loggedTotal,
+  MAX_LOAD_KG,
+  parseLoadKg,
   type LoggedSet,
   MAX_REPS,
   MAX_PASSED,
@@ -47,6 +51,7 @@ const target = (fields: Partial<SetTarget> = {}): SetTarget => ({
   targetRepsHigh: null,
   targetSecondsLow: null,
   targetSecondsHigh: null,
+  targetTotalReps: null,
   ...fields,
 });
 
@@ -997,5 +1002,101 @@ describe("setsDone — FUEL-128", () => {
 
   it("says nothing for an exercise with no sets", () => {
     expect(setsDone(FIXED, [])).toBeNull();
+  });
+});
+
+describe("a total across sets — FUEL-130", () => {
+  // '75 swings — sets of 10–25, ~60 s rest, until 75'.
+  const swings = target({ targetRepsLow: 10, targetRepsHigh: 25, targetTotalReps: 75 });
+
+  it("adds up the logged reps", () => {
+    expect(loggedTotal([])).toBe(0);
+    expect(loggedTotal([set(1, 20), set(2, 25), set(3, 15)])).toBe(60);
+  });
+
+  it("is complete when the reps reach the total, however many sets that took", () => {
+    expect(isComplete(swings, [set(1, 25), set(2, 25)])).toBe(false);
+    expect(isComplete(swings, [set(1, 25), set(2, 25), set(3, 24)])).toBe(false);
+    expect(isComplete(swings, [set(1, 25), set(2, 25), set(3, 25)])).toBe(true);
+    expect(isComplete(swings, [set(1, 40), set(2, 40)])).toBe(true);
+  });
+
+  it("is not treated as a set count", () => {
+    // 75 rows would be the regex reading of the prescription.
+    expect(setRows(swings, [])).toHaveLength(1);
+    expect(setRows(swings, [set(1, 20), set(2, 20)])).toHaveLength(3);
+  });
+
+  it("counts progress in reps toward the total", () => {
+    expect(setProgress(swings, [])).toBeNull();
+    expect(setProgress(swings, [set(1, 20), set(2, 25)])).toBe("45 of 75 reps");
+  });
+});
+
+describe("parseLoadKg — FUEL-130", () => {
+  it("reads kg to two decimals, from a string or a number", () => {
+    expect(parseLoadKg("16")).toBe(16);
+    expect(parseLoadKg("13.6")).toBe(13.6);
+    expect(parseLoadKg("7.25")).toBe(7.25);
+    expect(parseLoadKg(24)).toBe(24);
+    expect(parseLoadKg(String(MAX_LOAD_KG))).toBe(MAX_LOAD_KG);
+  });
+
+  it("is null for no load, which is not a refusal", () => {
+    expect(parseLoadKg("")).toBeNull();
+    expect(parseLoadKg(null)).toBeNull();
+    expect(parseLoadKg(undefined)).toBeNull();
+  });
+
+  it("refuses zero, a third decimal, a fourth digit and anything not a number", () => {
+    expect(parseLoadKg("0")).toBeUndefined();
+    expect(parseLoadKg("0.00")).toBeUndefined();
+    expect(parseLoadKg("16.125")).toBeUndefined();
+    expect(parseLoadKg("1000")).toBeUndefined();
+    expect(parseLoadKg("-4")).toBeUndefined();
+    expect(parseLoadKg("1e2")).toBeUndefined();
+    expect(parseLoadKg("16.")).toBeUndefined();
+    expect(parseLoadKg(Number.NaN)).toBeUndefined();
+    expect(parseLoadKg(true)).toBeUndefined();
+  });
+});
+
+describe("loadOffered — FUEL-130", () => {
+  const loaded = (setIndex: number, loadKg: number | null): LoggedSet => ({
+    setIndex,
+    value: 15,
+    loadKg,
+  });
+
+  it("offers the nearest earlier set's load in this session", () => {
+    expect(loadOffered(3, [loaded(1, 16), loaded(2, 20)], [loaded(3, 12)])).toBe(20);
+  });
+
+  it("skips an earlier set that recorded no load, and ignores later ones", () => {
+    expect(loadOffered(3, [loaded(1, 16), loaded(2, null), loaded(4, 24)], [])).toBe(16);
+  });
+
+  it("falls back to last time's same set, then to last time's last load", () => {
+    expect(loadOffered(1, [], [loaded(1, 16), loaded(2, 18)])).toBe(16);
+    expect(loadOffered(4, [], [loaded(1, 16), loaded(2, 18), loaded(3, null)])).toBe(18);
+  });
+
+  it("offers nothing when no load has ever been recorded", () => {
+    expect(loadOffered(1, [], [])).toBeNull();
+    expect(loadOffered(2, [set(1)], [set(1)])).toBeNull();
+  });
+});
+
+describe("setsFor carries a set's load — FUEL-130", () => {
+  it("keeps the load where there is one, and adds none where there is not", () => {
+    expect(
+      setsFor("e", [
+        { exerciseId: "e", setIndex: 2, value: 15, loadKg: 16 },
+        { exerciseId: "e", setIndex: 1, value: 20 },
+      ]),
+    ).toEqual([
+      { setIndex: 1, value: 20 },
+      { setIndex: 2, value: 15, loadKg: 16 },
+    ]);
   });
 });

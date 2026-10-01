@@ -210,6 +210,28 @@ export type FormMediaAsset = {
  * and the exercise cannot be swapped for one that is because it names the whole
  * session. A form reference showing a different movement is worse than none.
  *
+ * **Kettlebell swings deliberately have none either (FUEL-130), and the gap is
+ * recorded rather than papered over.** The session is the two-handed Russian
+ * swing. The dataset this manifest draws on has only `One-Arm_Kettlebell_Swings`
+ * — a different movement, refused on the rule above. Wikimedia Commons was
+ * searched on 2026-09-30 and every candidate was opened:
+ *
+ *   - `Kettlebell swing with elbows flexed.jpg` and `Maurice Kettle Bell
+ *     Swings.jpg` (both CC BY-SA 4.0) are overhead, American swings. Refused.
+ *   - `Kettlebell swing with arms extended upon back swing.jpg` and `Kettlebell
+ *     swing with arms fully extended.jpg` (Taco Fleur, CC BY-SA 4.0) ARE the
+ *     two-handed swing's backswing and lockout, and were the only usable pair.
+ *     Refused on three counts: both carry arrows drawn onto the photograph, they
+ *     are two different shoots in two ratios (16:9 and 4:3), and the lockout is
+ *     cropped at the chest, so the hips — the whole point of the movement — are
+ *     out of frame. The originals are also 461 KB and 961 KB against a 150 KB
+ *     budget, and byte-identical shipping (§ Materials) forbids resizing them.
+ *   - The Commons clips (`Russian Swings.webm` and others by the same author)
+ *     are 3–8 MB of WebM against a 400 KB MP4 budget, and a still cut from one
+ *     is a re-encode.
+ *
+ * The owner's ruling was to render nothing. The row is inert, as skipping's is.
+ *
  * ## Look at the picture. The filename is not the exercise.
  *
  * Every asset here was opened and viewed before it was committed, and that pass

@@ -12,6 +12,7 @@ import {
 } from "@/lib/db/queries/training";
 import { type CalendarDate, parseCalendarDate } from "@/lib/date";
 import {
+  parseLoadKg,
   parseSetIndex,
   parseSetValue,
   type SetKind,
@@ -112,7 +113,12 @@ async function resolveSession(
   date: CalendarDate,
   entryId: string,
 ): Promise<
-  | { userId: string; workoutId: string; exerciseKinds: ReadonlyMap<string, SetKind> }
+  | {
+      userId: string;
+      workoutId: string;
+      exerciseKinds: ReadonlyMap<string, SetKind>;
+      loadedExercises: ReadonlySet<string>;
+    }
   | undefined
 > {
   const session = await getSession();
@@ -152,6 +158,16 @@ async function resolveSession(
        */
       exerciseKinds: new Map(
         resolved.exercises.map((exercise) => [exercise.id, setKind(exercise)]),
+      ),
+      /*
+       * Which of them record a load — FUEL-130. The server's row decides, on
+       * the unit's reasoning above: a forged request cannot put a load on a
+       * press-up, because only an exercise that `takes_load` is allowed one.
+       */
+      loadedExercises: new Set(
+        resolved.exercises
+          .filter((exercise) => exercise.takesLoad)
+          .map((exercise) => exercise.id),
       ),
     }
   );
@@ -293,6 +309,11 @@ export async function logExerciseSet(input: {
   setIndex: unknown;
   /** Reps or seconds — which one is the exercise's, decided below. */
   value: unknown;
+  /**
+   * The set's load in kg, or nothing — FUEL-130. Absent, `null` and `""` all
+   * mean no load; a figure is refused for an exercise that takes none.
+   */
+  loadKg?: unknown;
 }): Promise<TrainingResult> {
   try {
     // Before anything is fetched, on `setSessionStatus`'s reasoning: a refusal
@@ -302,8 +323,11 @@ export async function logExerciseSet(input: {
     // the wider of the two bounds here and to its own below.
     const setIndex = parseSetIndex(input.setIndex);
     const loose = parseSetValue(input.value, "seconds");
+    const loadKg = parseLoadKg(input.loadKg);
 
-    if (setIndex === undefined || loose === undefined) return FAILED;
+    if (setIndex === undefined || loose === undefined || loadKg === undefined) {
+      return FAILED;
+    }
 
     const resolved = await resolveSession(input.date, input.entryId);
 
@@ -324,6 +348,11 @@ export async function logExerciseSet(input: {
 
     if (value === undefined) return FAILED;
 
+    // A load on an exercise that takes none is refused rather than dropped:
+    // storing it silently would put a kg figure on a bodyweight set in the
+    // export, and dropping it would report success for something not stored.
+    if (loadKg !== null && !resolved.loadedExercises.has(input.exerciseId)) return FAILED;
+
     await logSet(resolved.userId, {
       date: input.date,
       workoutId: resolved.workoutId,
@@ -331,6 +360,7 @@ export async function logExerciseSet(input: {
       setIndex,
       kind,
       value,
+      loadKg,
     });
 
     refresh();
