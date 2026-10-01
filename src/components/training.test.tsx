@@ -4599,15 +4599,15 @@ describe("the session state's hierarchy — FUEL-132", () => {
 
     // Warm-up, three working rows, cool-down — rows, not rounds.
     expect(segments()).toHaveLength(5);
-    expect(segments()[0].className).toContain("bg-text-primary");
-    expect(segments()[1].className).toContain("bg-border");
+    expect(segments()[0]!.className).toContain("bg-text-primary");
+    expect(segments()[1]!.className).toContain("bg-border");
 
     await user.click(step("Next"));
 
     expect(subject()).toBe("Press-ups");
-    expect(segments()[0].className).toContain("bg-text-tertiary");
-    expect(segments()[1].className).toContain("bg-text-primary");
-    expect(segments()[2].className).toContain("bg-border");
+    expect(segments()[0]!.className).toContain("bg-text-tertiary");
+    expect(segments()[1]!.className).toContain("bg-text-primary");
+    expect(segments()[2]!.className).toContain("bg-border");
     // Decorative: the slash line says the position in words.
     expect(document.querySelector("[data-steps]")?.getAttribute("aria-hidden")).toBe("true");
   });
