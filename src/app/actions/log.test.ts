@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { Meal, MealLog, Workout, WorkoutLog } from "@/lib/db/schema";
-import type { DayLogs } from "@/lib/log-intent";
+import type { Meal, MealLog, Workout } from "@/lib/db/schema";
+import type { DayLogs, MarkedWorkoutLog } from "@/lib/log-intent";
 import type { AnytimeItem, NowItem, NowView, ScheduledItem } from "@/lib/resolve-now";
 
 /**
@@ -137,7 +137,7 @@ const today = (index = 0, logs: DayLogs = NO_LOGS) => ({
 });
 
 /** A row against the day's walk — `workout-2`, the fixture's anytime walk. */
-const walkLog = (fields: Partial<WorkoutLog> = {}): WorkoutLog => ({
+const walkLog = (fields: Partial<MarkedWorkoutLog> = {}): MarkedWorkoutLog => ({
   id: "walk-log",
   userId: USER,
   date: MON,

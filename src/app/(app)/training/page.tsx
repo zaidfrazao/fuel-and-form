@@ -150,9 +150,13 @@ function narrow(
        */
       media: resolveFormMedia(exercise),
     })),
-    entry: log
-      ? { status: log.status, note: log.note, durationMin: log.durationMin }
-      : null,
+    // A log with no status is the sets' parent and records no outcome
+    // (FUEL-134), so the screen is given no entry for it: "Not recorded", the
+    // same as a session with nothing logged. Its sets still cross, below.
+    entry:
+      log && log.status !== null
+        ? { status: log.status, note: log.note, durationMin: log.durationMin }
+        : null,
     /*
      * The walk's own figures — FUEL-102, and only for a walk.
      *

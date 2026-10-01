@@ -118,7 +118,7 @@ const EMPTY_EXERCISES = new Map<string, readonly WorkoutExercise[]>();
  */
 function dayFor(
   plan: TrainingPlan,
-  logs: ReadonlyMap<string, WorkoutLogStatus>,
+  logs: ReadonlyMap<string, WorkoutLogStatus | null>,
   date: CalendarDate,
 ): Day {
   // An empty exercise map: this file draws dots, and a dot has no exercises in
@@ -139,6 +139,9 @@ function dayFor(
       // comment. It is also what a future date is, which is right: today's
       // session has not been done yet either, and the grid says so by drawing
       // the same small dot for both rather than pre-judging one of them.
+      //
+      // A row with a null status is `none` too: sets and no outcome (FUEL-134).
+      // A dot drawn from the sets would be the percentage § P10 forbids.
       status: status ? DOT[status] : "none",
     };
   }
@@ -252,7 +255,7 @@ export function adherenceWeeks(
   anchor: CalendarDate,
   weeks: number = ADHERENCE_WEEKS,
 ): Week[] {
-  const recorded = new Map<string, WorkoutLogStatus>(
+  const recorded = new Map<string, WorkoutLogStatus | null>(
     logs.map((log) => [keyOf(log.date, log.workoutId), log.status]),
   );
 

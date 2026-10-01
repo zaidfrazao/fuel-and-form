@@ -1142,7 +1142,25 @@ export const workoutLogs = pgTable(
 
     date: calendarDate("date").notNull(),
     workoutId: uuid("workout_id").notNull(),
-    status: workoutLogStatus().notNull(),
+
+    /**
+     * The outcome the reader chose, and null until they choose one — FUEL-134.
+     *
+     * Null is "sets are logged and no outcome is recorded", and it exists
+     * because sets come first: the first set of a session writes this row (see
+     * `logSet`) and has no outcome to give it. Until FUEL-134 it was born
+     * 'partial' because the column was `not null`, and a set-born partial was
+     * byte-identical to a chosen one, so every screen and both exports reported
+     * an outcome the moment one set was ticked. No display rule could separate
+     * the two without a signal in the row, and null is that signal.
+     *
+     * Nothing turns null into an outcome, at midnight or otherwise — that would
+     * be a status derived from set data, which PRD § P10 forbids. A past date
+     * left null reads "Not marked" and is markable like any other past session.
+     * Every reader treats null as no outcome: adherence draws `none`, the
+     * exports write an empty status, and `/` lists the session as unlogged.
+     */
+    status: workoutLogStatus(),
     note: text(),
     durationMin: integer("duration_min"),
 
@@ -1318,10 +1336,10 @@ export const workoutLogs = pgTable(
  *
  * ## Where the parent row comes from
  *
- * `workout_logs` exists once a session has a status, and sets are logged BEFORE
- * anyone marks one — so the first set writes the parent, with status 'partial',
- * `on conflict do nothing`. See `logSet` in `queries/training.ts`: that status
- * is a DEFAULT AT CREATION and nothing recomputes it afterwards. A session
+ * sets are logged BEFORE anyone marks a session — so the first set writes the
+ * parent `workout_logs` row, with NO status (FUEL-134), leaving an existing row
+ * untouched. See `logSet` in `queries/training.ts`: nothing computes a status
+ * from the sets, then or afterwards. A session
  * marked done and then given a fourth set is still done; a session whose last
  * set is removed is still whatever it was marked. PRD § P10 requires that the
  * status is never derived from set data, and "never derived" has to hold in
@@ -1329,10 +1347,12 @@ export const workoutLogs = pgTable(
  *
  * ## Both keys composite, and only one of them cascades
  *
- * `(workout_log_id, user_id)` cascades: a session's record taken back takes its
- * sets with it. There is no third option — a set whose log is gone has no date,
- * no workout and nothing to hang off — and `clearSession` is what performs it,
- * deliberately, from a control that lives only in the plan state.
+ * `(workout_log_id, user_id)` cascades: a log row deleted takes its sets with
+ * it, because a set whose log is gone has no date, no workout and nothing to
+ * hang off. Taking back a session's RECORD no longer deletes the row when it
+ * has sets (FUEL-134): `takeBackRecord` clears its status, note and duration
+ * and leaves it as the sets' parent, so Clear and `/`'s Undo keep the training.
+ * The cascade still runs for a row with no sets, and for a user's deletion.
  *
  * `(exercise_id, user_id)` is `no action`, which is `ownedReference`'s rule for
  * history and the reason it exists: under a cascade, removing one movement from

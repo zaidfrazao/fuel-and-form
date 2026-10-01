@@ -17,6 +17,7 @@ import { getPool } from "../pool";
 import * as schema from "../schema";
 import type { ExerciseSet, WorkoutLog, WorkoutLogStatus } from "../schema";
 import { scope } from "../scope";
+import { takeBackRecord } from "./session-record";
 import { byWorkout } from "./today";
 
 /**
@@ -553,6 +554,12 @@ export async function recordWalkRecording(
  * taken back did not happen, and a soft-deleted row is a filter every future
  * total has to remember.
  *
+ * Except the sets (FUEL-134). Clear takes back the RECORD — status, note and
+ * duration — and a session with sets keeps them, under a row with no status;
+ * only a session with none is deleted. Until then the delete cascaded, and
+ * Clear on a wrongly marked session erased every set logged in it. See
+ * `takeBackRecord`, which `/`'s Undo shares so the two cannot disagree.
+ *
  * Returns whether a row went, so the caller can tell a real revert from one that
  * raced another tab. The scoped delete matches nothing for a row that is already
  * gone AND for one that was never the caller's, which are the same answer on
@@ -565,12 +572,10 @@ export async function clearSession(
 ): Promise<boolean> {
   const s = scope(userId, getDb());
 
-  const removed = await s.delete(
-    schema.workoutLogs,
-    and(eq(schema.workoutLogs.date, date), eq(schema.workoutLogs.workoutId, workoutId)),
+  return takeBackRecord(
+    s,
+    and(eq(schema.workoutLogs.date, date), eq(schema.workoutLogs.workoutId, workoutId))!,
   );
-
-  return removed.length > 0;
 }
 
 /**
@@ -598,14 +603,14 @@ export type SetRecord = {
 /**
  * Records one set, creating the session's log row if this is the first.
  *
- * ## The parent row, and the status it is born with
+ * ## The parent row, and why it is born with no status
  *
  * `exercise_sets` hangs off `workout_logs`, and sets are logged BEFORE anyone
  * marks a session — so the first set of a session has no parent to hang off and
- * has to make one. It is written with status 'partial', `on conflict` leaving
- * whatever is already there untouched.
+ * has to make one. It is written with NO status (FUEL-134), `on conflict`
+ * leaving whatever is already there untouched.
  *
- * That status is a DEFAULT AT CREATION and nothing recomputes it, in either
+ * Nothing computes a status from the sets, then or afterwards, in either
  * direction. A session marked done and then given a fourth set is still done. A
  * session whose last set is removed is still whatever it was marked. PRD § P10
  * requires that the status is never derived from set data, and § P3 calls
@@ -613,12 +618,14 @@ export type SetRecord = {
  * with set completion would quietly turn the dot grid into a percentage, which
  * is the one thing the Brand Guide says that graphic exists to refuse.
  *
- * 'partial' rather than 'done' because it is the only one of the three that is
- * true of a session with one set in it, and rather than nothing at all because
- * `status` is `not null` and this task may not change an existing table's
- * constraints. The alternative — creating the row when the session state is
- * ENTERED — was considered and rejected: a tap on Start session that trains
- * nothing would then sit in the adherence grid as a partial session.
+ * Until FUEL-134 the row was born 'partial', because `status` was `not null`.
+ * That was a status derived from one set after all, and a set-born partial was
+ * indistinguishable from a chosen one, so every screen and both exports
+ * reported an outcome while the owner was still training. Null is "sets, and
+ * no outcome yet", and every reader treats it as no outcome: see the column's
+ * comment in schema.ts. The alternative — creating the row when the session
+ * state is ENTERED — was considered and rejected: a tap on Start session that
+ * trains nothing would then leave a row behind for no set at all.
  *
  * ## Two statements, not a transaction
  *
@@ -629,12 +636,12 @@ export type SetRecord = {
  * `logged_at` means "when the outcome was recorded" rather than "when something
  * last happened here".
  *
- * If the second statement fails, a 'partial' row with no sets under it is left
- * behind. Worth naming, not worth a transaction: `queries/template.ts` makes
- * the same call, the interactive transaction needs the WebSocket pool rather
- * than the HTTP driver, and this is the write that happens on every tap of a
- * tick. The residue is a session marked partial, which the screen shows and the
- * reader can clear.
+ * If the second statement fails, a row with no status and no sets under it is
+ * left behind. Worth naming, not worth a transaction: `queries/template.ts`
+ * makes the same call, the interactive transaction needs the WebSocket pool
+ * rather than the HTTP driver, and this is the write that happens on every tap
+ * of a tick. The residue records nothing, so every reader already draws it as
+ * an unrecorded session, and the next set or a mark adopts it.
  */
 export async function logSet(userId: string, record: SetRecord): Promise<void> {
   const s = scope(userId, getDb());
@@ -644,7 +651,7 @@ export async function logSet(userId: string, record: SetRecord): Promise<void> {
     {
       date: record.date,
       workoutId: record.workoutId,
-      status: "partial",
+      status: null,
     },
     {
       target: [schema.workoutLogs.date, schema.workoutLogs.workoutId],

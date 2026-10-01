@@ -551,16 +551,17 @@ describe.skipIf(!configured)("recording a session, scoped", () => {
       durationMin: null,
     });
 
-    expect(await clearSession(userId, ALICE_LOGGED, workoutId)).toBe(true);
+    // 2026-03-09 has no sets, so its record goes with its row.
+    expect(await clearSession(userId, "2026-03-09", workoutId)).toBe(true);
 
     const remaining = await logsOf(userId);
 
-    expect(remaining).toHaveLength(1);
-    expect(remaining[0]?.date).toBe("2026-03-09");
+    expect(remaining.map((log) => log.date)).toEqual([ALICE_LOGGED]);
+    expect(remaining[0]?.status).toBe("done");
 
     // Nothing left to remove is `false`, not an error — the caller uses it to
     // tell a real revert from one that raced another tab.
-    expect(await clearSession(userId, ALICE_LOGGED, workoutId)).toBe(false);
+    expect(await clearSession(userId, "2026-03-09", workoutId)).toBe(false);
   });
 
   it("never reaches another user's log, holding its workout id or not", async () => {
@@ -1547,7 +1548,7 @@ describe.skipIf(!configured)("logging sets, scoped", () => {
 
   const UNLOGGED = "2026-03-09"; // a Monday the fixture has no log for
 
-  it("creates the session's log at partial when the first set arrives", async () => {
+  it("creates the session's log with no status when the first set arrives", async () => {
     const { userId, workoutId, exerciseId } = fixture.alice;
 
     await logSet(userId, {
@@ -1561,11 +1562,27 @@ describe.skipIf(!configured)("logging sets, scoped", () => {
 
     const created = (await logsOf(userId)).find((log) => log.date === UNLOGGED);
 
-    // 'partial' because it is the only one of the three that is true of a
-    // session with one set in it, and because `status` is not null.
-    expect(created?.status).toBe("partial");
+    // FUEL-134: the sets' parent, and no outcome. It was born 'partial' until
+    // then, which every screen reported while the owner was still training.
+    expect(created).toBeDefined();
+    expect(created?.status).toBeNull();
     expect(created?.note).toBeNull();
     expect(created?.durationMin).toBeNull();
+  });
+
+  it("takes the status the reader chooses afterwards, on the same row", async () => {
+    // The row the sets hang off is the one the outcome lands on — one row per
+    // (user, date, workout), so a mark after a set is an update, not a second
+    // log, and the sets stay under it.
+    const { userId, workoutId, exerciseId } = fixture.alice;
+
+    await logSet(userId, { date: UNLOGGED, workoutId, exerciseId, setIndex: 1, kind: "reps", value: 12, loadKg: null });
+    await recordSession(userId, { date: UNLOGGED, workoutId, status: "partial", note: null, durationMin: null });
+
+    const logs = (await logsOf(userId)).filter((log) => log.date === UNLOGGED);
+
+    expect(logs.map((log) => log.status)).toEqual(["partial"]);
+    expect((await setsOf(userId)).filter((set) => set.workoutLogId === logs[0]?.id)).toHaveLength(1);
   });
 
   it("leaves a status the reader chose exactly where it was", async () => {
@@ -1680,13 +1697,28 @@ describe.skipIf(!configured)("logging sets, scoped", () => {
     ).toBe(false);
   });
 
-  it("takes a session's sets with it when the record is cleared", async () => {
-    // The cascade, and the only outcome the shape allows: a set whose log is
-    // gone has no date, no workout and nothing to hang off.
+  it("clears the record and keeps the sets — FUEL-134", async () => {
+    // Clear takes back what was RECORDED, the status, note and duration. It
+    // used to delete the row, and the cascade took every set logged under it.
+    // The row stays as the sets' parent, with no status, which every reader
+    // draws as unrecorded.
     const { userId, workoutId } = fixture.alice;
+    const sets = await setsOf(userId);
+
+    await recordSession(userId, { date: ALICE_LOGGED, workoutId, status: "done", note: "Felt good", durationMin: 30 });
 
     expect(await clearSession(userId, ALICE_LOGGED, workoutId)).toBe(true);
-    expect(await setsOf(userId)).toEqual([]);
+    expect(await setsOf(userId)).toEqual(sets);
+    expect((await logsOf(userId)).find((log) => log.date === ALICE_LOGGED)).toMatchObject({
+      status: null,
+      note: null,
+      durationMin: null,
+    });
+
+    // Cleared already: nothing recorded to take back, and the sets are not
+    // collateral for a second tap.
+    expect(await clearSession(userId, ALICE_LOGGED, workoutId)).toBe(false);
+    expect(await setsOf(userId)).toEqual(sets);
   });
 
   it("refuses a set against another user's exercise, in the database", async () => {

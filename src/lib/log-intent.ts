@@ -89,16 +89,32 @@ export function logIntent(item: NowItem, verb: LogVerb, date: CalendarDate): Log
   };
 }
 
+/**
+ * A session's log row that records an outcome — FUEL-134.
+ *
+ * `workout_logs.status` is null on a row the first logged set wrote and nobody
+ * has marked yet. That row is the sets' parent, not a log of the session: it is
+ * not something `/` logged, not something it may undo, and not a reason to
+ * call the session logged. So `DayLogs` holds only the marked rows, and the
+ * type says so rather than leaving every reader to check.
+ */
+export type MarkedWorkoutLog = WorkoutLog & { status: WorkoutLogStatus };
+
+/** Whether a session's row records an outcome. See `MarkedWorkoutLog`. */
+export function isMarked(log: WorkoutLog): log is MarkedWorkoutLog {
+  return log.status !== null;
+}
+
 /** Today's logs, both kinds, as the undo affordance and the guard below read them. */
 export type DayLogs = {
   meals: MealLog[];
-  workouts: WorkoutLog[];
+  workouts: MarkedWorkoutLog[];
 };
 
 /** A log row with its table, so a caller can delete it without guessing. */
 export type LoggedRow =
   | { kind: "meal"; log: MealLog }
-  | { kind: "workout"; log: WorkoutLog };
+  | { kind: "workout"; log: MarkedWorkoutLog };
 
 /**
  * Whether today already holds this exact log.

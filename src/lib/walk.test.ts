@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import type { Workout, WorkoutLog } from "@/lib/db/schema";
-import type { DayLogs } from "@/lib/log-intent";
+import type { Workout } from "@/lib/db/schema";
+import type { DayLogs, MarkedWorkoutLog } from "@/lib/log-intent";
 import type { NowItem } from "@/lib/resolve-now";
 import { isWalk, walkEntries, walkWorkoutIds, withoutWalks, WALK_PRESETS } from "@/lib/walk";
 
@@ -61,7 +61,7 @@ const mealItem = (): NowItem => ({
   },
 });
 
-function workoutLog(fields: Partial<WorkoutLog> & { id: string }): WorkoutLog {
+function workoutLog(fields: Partial<MarkedWorkoutLog> & { id: string }): MarkedWorkoutLog {
   return {
     userId: USER,
     date: DATE,

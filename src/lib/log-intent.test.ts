@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import type { Meal, MealLog, Workout, WorkoutLog } from "./db/schema";
+import type { Meal, MealLog, Workout } from "./db/schema";
 import {
   alreadyLogged,
   type DayLogs,
   logCount,
   latestLog,
+  isMarked,
   logIntent,
+  type MarkedWorkoutLog,
   rowBelongsTo,
 } from "./log-intent";
 import type { NowItem } from "./resolve-now";
@@ -78,7 +80,7 @@ function mealLog(fields: Partial<MealLog> = {}): MealLog {
   };
 }
 
-function workoutLog(fields: Partial<WorkoutLog> = {}): WorkoutLog {
+function workoutLog(fields: Partial<MarkedWorkoutLog> = {}): MarkedWorkoutLog {
   return {
     id: "wlog-1",
     userId: USER,
@@ -200,6 +202,19 @@ describe("alreadyLogged", () => {
     expect(alreadyLogged({ meals: [mealLog()], workouts: [] }, logIntent(WORKOUT_ITEM, "log", MON))).toBe(
       false,
     );
+  });
+});
+
+describe("isMarked — FUEL-134", () => {
+  it("is false for the row a first set writes, and true for every outcome", () => {
+    // The sets' parent has no status until somebody chooses one. `logsFor`
+    // keeps only marked rows, so that row is never "logged" on / and never on
+    // Undo's stack, where taking it back would delete the sets under it.
+    expect(isMarked({ ...workoutLog(), status: null })).toBe(false);
+
+    for (const status of ["done", "partial", "skipped"] as const) {
+      expect(isMarked(workoutLog({ status }))).toBe(true);
+    }
   });
 });
 

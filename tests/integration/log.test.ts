@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { getDb } from "@/lib/db";
 import { deleteLog, logsFor, recordLog } from "@/lib/db/queries/log";
+import { logSet, recordSession } from "@/lib/db/queries/training";
 import * as schema from "@/lib/db/schema";
 import { scope } from "@/lib/db/scope";
 import { latestLog } from "@/lib/log-intent";
@@ -194,6 +195,118 @@ describe.skipIf(!configured)("logging, scoped", () => {
       expect(await deleteLog(alice.userId, target)).toBe(true);
       expect(await deleteLog(alice.userId, target)).toBe(false);
     });
+  });
+});
+
+/**
+ * A session with sets and no outcome, as `/` meets it — FUEL-134.
+ *
+ * The first set writes the session's row with no status. `/` logs and undoes
+ * through these three functions, which were written when every row was an
+ * outcome: an INSERT that would now collide with the sets' row, and an undo
+ * whose delete cascades to the sets under it.
+ */
+describe.skipIf(!configured)("a session with sets and no outcome, on /", () => {
+  const as = (user: { userId: string }) => scope(user.userId, getDb());
+  const DATE = "2026-03-09";
+
+  let fixture: Fixture;
+
+  beforeEach(async () => {
+    await truncateAll(getDb());
+    fixture = await seedFixture();
+
+    const { userId, workoutId, exerciseId } = fixture.alice;
+
+    await logSet(userId, { date: DATE, workoutId, exerciseId, setIndex: 1, kind: "reps", value: 10, loadKg: null });
+  });
+
+  const sessionRows = async () =>
+    (await as(fixture.alice).select(schema.workoutLogs)).filter((row) => row.date === DATE);
+  const setCount = async () => (await as(fixture.alice).select(schema.exerciseSets)).length;
+  const mark = (status: "done" | "skipped") =>
+    recordLog(fixture.alice.userId, {
+      kind: "workout",
+      date: DATE,
+      workoutId: fixture.alice.workoutId,
+      status,
+    });
+
+  it("is not one of the day's logs", async () => {
+    const day = await logsFor(fixture.alice.userId, DATE);
+
+    expect(day.workouts).toEqual([]);
+    expect(latestLog(day)).toBeNull();
+  });
+
+  it("is marked in place rather than colliding with a second row", async () => {
+    const before = await setCount();
+
+    await mark("done");
+
+    expect((await sessionRows()).map((row) => row.status)).toEqual(["done"]);
+    expect(await setCount()).toBe(before);
+    expect((await logsFor(fixture.alice.userId, DATE)).workouts).toHaveLength(1);
+  });
+
+  it("does not overwrite an outcome that is already recorded", async () => {
+    // Marked elsewhere — /training, another tab — before a stale / taps.
+    await mark("skipped");
+
+    await expect(mark("done")).rejects.toThrow();
+    expect((await sessionRows()).map((row) => row.status)).toEqual(["skipped"]);
+  });
+
+  it("undoes the mark and keeps the sets", async () => {
+    const before = await setCount();
+
+    await mark("done");
+
+    const row = latestLog(await logsFor(fixture.alice.userId, DATE));
+
+    expect(row).not.toBeNull();
+    expect(await deleteLog(fixture.alice.userId, row!)).toBe(true);
+    expect((await sessionRows()).map((r) => r.status)).toEqual([null]);
+    expect(await setCount()).toBe(before);
+    // And the stack is empty again: nothing left on / to undo.
+    expect(latestLog(await logsFor(fixture.alice.userId, DATE))).toBeNull();
+  });
+
+  it("takes the record's note and duration back with the mark", async () => {
+    // Recorded on /training with a note, then undone from /. A row with no
+    // status draws no record, so a note left on it would be invisible and the
+    // next mark would overwrite it unseen. Only the sets are kept.
+    const { userId, workoutId } = fixture.alice;
+    const before = await setCount();
+
+    await recordSession(userId, { date: DATE, workoutId, status: "partial", note: "Grip went", durationMin: 20 });
+
+    const row = latestLog(await logsFor(userId, DATE));
+
+    expect(await deleteLog(userId, row!)).toBe(true);
+    expect(await sessionRows()).toMatchObject([{ status: null, note: null, durationMin: null }]);
+    expect(await setCount()).toBe(before);
+  });
+
+  it("still deletes a mark that has no sets under it", async () => {
+    const { alice } = fixture;
+    const other = "2026-03-16";
+
+    await recordLog(alice.userId, { kind: "workout", date: other, workoutId: alice.workoutId, status: "done" });
+
+    const row = latestLog(await logsFor(alice.userId, other));
+
+    expect(await deleteLog(alice.userId, row!)).toBe(true);
+    expect((await as(alice).select(schema.workoutLogs)).filter((r) => r.date === other)).toEqual([]);
+  });
+
+  it("does not unmark another user's session", async () => {
+    await mark("done");
+
+    const row = latestLog(await logsFor(fixture.alice.userId, DATE));
+
+    expect(await deleteLog(fixture.bob.userId, row!)).toBe(false);
+    expect((await sessionRows()).map((r) => r.status)).toEqual(["done"]);
   });
 });
 
