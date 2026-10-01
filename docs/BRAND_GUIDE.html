@@ -264,10 +264,17 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--pg-accent); out
 .setrow + .setrow { border-top: 1px solid var(--border); }
 @media (min-resolution: 2dppx) { .setrow + .setrow { border-top-width: .5px; } }
 .set-reps { flex: 1; font-size: 17px; letter-spacing: -.011em; }
-/* FUEL-122 — last time's reps, in the target's own tertiary. Recall, never marked. */
-.set-last { color: var(--text-3); }
-.set-tick { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--border);
+/* FUEL-122 — last time's reps, in the target's own tone. Recall, never marked.
+   FUEL-133: the set line is information, so never text-3 (2.19:1); the rows
+   read in text-2 and the active row — the first open one — in text, by weight
+   rather than colour. The empty tick's outline clears 3:1 for the same reason. */
+.set-last { color: var(--text-2); }
+.setrow .num-ix { color: var(--text-2); }
+.setrow.active .num-ix, .setrow.active .set-reps, .setrow.active .set-last { color: var(--text); }
+.set-tick { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--text-2);
   flex: none; }
+/* FUEL-133 — the last tick, said back on Show form's row until the next action. */
+.logged { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .set-tick.on { background: var(--ink); border-color: var(--ink); }
 
 /* The current row of a list is marked by weight, not colour — the rows behind
@@ -1413,7 +1420,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
       <!-- ===== 4b · TRAINING, THE SESSION STATE (FUEL-90) ===== -->
       <div class="cell">
         <div class="stage">
-          <div class="ui device" data-mode="dark" role="img" aria-label="Training, the session state: a session header with Plan on the left, a hairline step strip marking the fifth of nine rows, and Finish on the right; Inverted rows as the current exercise with three set rows beneath it, each carrying last time's reps; and an action bar at the foot of the screen holding a rest timer reading 1 minute 12 above Previous and the primary, Next exercise. No navigation pill: the session state hides it below 1024">
+          <div class="ui device" data-mode="dark" role="img" aria-label="Training, the session state: a session header with Plan on the left, a hairline step strip marking the fifth of nine rows, and Finish on the right; Inverted rows as the current exercise, the last tick said back beside Show form as Logged 8, Reverse lunges, with Undo, and three set rows beneath it, each carrying last time's reps, the open one in full tone; and an action bar at the foot of the screen holding a rest timer reading 1 minute 12 above Previous and the primary, Next exercise. No navigation pill: the session state hides it below 1024">
             <div class="statusbar"><span>17:48</span>
               <span class="glyphs" aria-hidden="true">
                 <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.7" y="5" width="3" height="6" rx="1"/><rect x="9.4" y="2.5" width="3" height="8.5" rx="1"/><rect x="14" y="0" width="3" height="11" rx="1"/></svg>
@@ -1451,7 +1458,12 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                      row, and sitting with the subject because that is what it
                      is about. A Text button — it is tertiary to the set you
                      are in the middle of. -->
-                <button class="btn btn-text" type="button" style="align-self:flex-start;width:auto;min-height:0;padding:0;">Show form</button>
+                <!-- FUEL-133: the last tick, said back until the next action, on
+                     Show form's row so it costs no height. -->
+                <div style="display:flex;align-items:center;gap:16px;">
+                  <button class="btn btn-text" type="button" style="width:auto;min-height:0;padding:0;">Show form</button>
+                  <span class="logged"><span style="font-size:12.5px;color:var(--text-2);">Logged 8 · Reverse lunges</span><button class="btn btn-text" type="button" style="width:auto;min-height:0;padding:0;">Undo</button></span>
+                </div>
               </div>
 
               <div class="blk">
@@ -1459,7 +1471,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                 <div class="setlist">
                   <div class="setrow"><span class="num-ix">01</span><span class="set-reps">8 reps<span class="set-last"> · 8 last time</span></span><span class="set-tick on"></span></div>
                   <div class="setrow"><span class="num-ix">02</span><span class="set-reps">8 reps<span class="set-last"> · 8 last time</span></span><span class="set-tick on"></span></div>
-                  <div class="setrow"><span class="num-ix">03</span><span class="set-reps" style="color:var(--text-3);">Target 8 · 7 last time</span><span class="set-tick"></span></div>
+                  <div class="setrow active"><span class="num-ix">03</span><span class="set-reps">Target 8 · 7 last time</span><span class="set-tick"></span></div>
                 </div>
               </div>
 
@@ -1493,7 +1505,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
           <h3>Training — the session state</h3>
           <p><b>The eighth screen, and the reason there is one.</b> &sect; P10 adds per-set entry, section headings, a form affordance and a rest timer to a list that already spent its window at five rows — a warm-up, six exercises and a cool-down is eight rows and three headings, which fits nowhere. So the screen splits by <i>what you are doing</i>: the whole list when you are planning, <b>the exercise you are on</b> when you are working. The alternative, sets expanding in place, is an accordion and &sect; Progressive Disclosure has banned those since long before this milestone.</p>
           <p>The subject is the exercise; the eyebrow carries the session and its group so nothing above repeats them. Sets are a <b>sub-list</b> &mdash; &sect; Lists&rsquo; 46px dense row, indented to the parent&rsquo;s content column, one level, never nested inside a row. <b>The timer is a row of the action bar</b>, in the slot &sect; Feedback gives the failure banner, so the bar is a column of at most three things rather than growing a fourth button. And this bar stays <b>sticky at every width</b>: FUEL-72 released the others on a claim about thumb targets, and a running readout that scrolls out of sight has failed at its only job. That exception is what re-opens &sect; The Scroll Edge, whose mask now follows the pinning rather than the breakpoint.</p>
-          <p><b>This frame is 764px tall</b> &mdash; one exercise, three sets, the form affordance and the timer &mdash; against the grouped plan state&rsquo;s 1290 and against <b>973px, which is what the plan state measured before &sect; P10 added anything to it at all</b>. A screen holding more of what you need in less height than the version that held less is the evidence the split was the right cut rather than a way of hiding the overflow. <b>A circuit is walked round by round since FUEL-119</b>, and the slash line says which: <b>Round 3 of 3</b>. Inverted rows with two sets done and the third open is round 3 exactly, so only the words changed. Squats&rsquo; set 1 is followed by push-ups&rsquo; set 1, not squats&rsquo; set 2, because both circuits are <i>three rounds, back to back</i>. The round is read off the logged set numbers like the exercise always was, so a reload still resumes where the data says. <b>Previous and Next exercise exist since FUEL-120</b>, so an exercise finished short of its target no longer holds the screen until a set that did not happen is logged. <b>Since FUEL-132 they are the bar, and Next exercise is the primary.</b> Moving on is what you do a dozen times a session. Mark done recorded the whole session from the largest button on every step, and the Text links under the sets were covered by the bar at 375&times;812. Mark done comes back as the primary on the <b>last</b> step only. Everywhere else, every ending (Mark done, Partial, and <b>Skip session</b>, which still asks once a set is logged, FUEL-121) is behind <b>Finish</b> in the header, which opens a sheet and names the step you are on. <b>The header replaces the paginator in this state</b>, at the paginator&rsquo;s height and in its register: <b>&lsaquo; Plan</b> steps out without recording, and the plan state then offers <b>Resume session</b> with the clock kept. Between them is the step strip, one hairline per row of the session, warm-up and cool-down included, with the current row marked by weight and no umber. <b>There is no pill</b>: below 1024 the session state hides it, and the bar takes the strip at the foot of the screen. Measured in the demo at 375&times;667, the bar went from 209px plus the pill&rsquo;s 86 to 163, and all three sets now end above it (503 against 504). Before, two of the three sat under it. This frame keeps its older proportions everywhere else: the mock&rsquo;s type scale is not the app&rsquo;s, and &sect; The two states of <code>/training</code> carries the app&rsquo;s numbers.</p>
+          <p><b>This frame is 764px tall</b> &mdash; one exercise, three sets, the form affordance and the timer &mdash; against the grouped plan state&rsquo;s 1290 and against <b>973px, which is what the plan state measured before &sect; P10 added anything to it at all</b>. A screen holding more of what you need in less height than the version that held less is the evidence the split was the right cut rather than a way of hiding the overflow. <b>A circuit is walked round by round since FUEL-119</b>, and the slash line says which: <b>Round 3 of 3</b>. Inverted rows with two sets done and the third open is round 3 exactly, so only the words changed. Squats&rsquo; set 1 is followed by push-ups&rsquo; set 1, not squats&rsquo; set 2, because both circuits are <i>three rounds, back to back</i>. The round is read off the logged set numbers like the exercise always was, so a reload still resumes where the data says. <b>Previous and Next exercise exist since FUEL-120</b>, so an exercise finished short of its target no longer holds the screen until a set that did not happen is logged. <b>Since FUEL-132 they are the bar, and Next exercise is the primary.</b> Moving on is what you do a dozen times a session. Mark done recorded the whole session from the largest button on every step, and the Text links under the sets were covered by the bar at 375&times;812. Mark done comes back as the primary on the <b>last</b> step only. Everywhere else, every ending (Mark done, Partial, and <b>Skip session</b>, which still asks once a set is logged, FUEL-121) is behind <b>Finish</b> in the header, which opens a sheet and names the step you are on. <b>The header replaces the paginator in this state</b>, at the paginator&rsquo;s height and in its register: <b>&lsaquo; Plan</b> steps out without recording, and the plan state then offers <b>Resume session</b> with the clock kept. Between them is the step strip, one hairline per row of the session, warm-up and cool-down included, with the current row marked by weight and no umber. <b>There is no pill</b>: below 1024 the session state hides it, and the bar takes the strip at the foot of the screen. Measured in the demo at 375&times;667, the bar went from 209px plus the pill&rsquo;s 86 to 163, and all three sets now end above it (503 against 504). Before, two of the three sat under it. This frame keeps its older proportions everywhere else: the mock&rsquo;s type scale is not the app&rsquo;s, and &sect; The two states of <code>/training</code> carries the app&rsquo;s numbers. <b>A tick is said back since FUEL-133:</b> <i>Logged 8 &middot; Reverse lunges</i> and <b>Undo</b> sit on Show form&rsquo;s row until the next action, because in a circuit the row that would have shown the set is gone on the frame it was logged. It shares the row so it costs no height. <b>The open row is drawn in full tone and the others recede</b>, by weight and not colour, and no set line is in <code>text-3</code> any more, because it carries what the reader must read.</p>
         </div>
       </div>
 
@@ -2195,7 +2207,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
       <div class="dcell">
         <!-- ===== D4b · TRAINING, THE SESSION STATE (FUEL-90) ===== -->
         <div class="dstage">
-          <div class="ui dframe" data-mode="dark" role="img" aria-label="Training in the session state at 1272: the session header across the frame with Plan, a hairline step strip marking the fifth of nine rows, and Finish; Inverted rows with its three set rows and last time's reps in the measure; a pinned bar with the rest timer above Previous and the primary, Next exercise; and the rest of the session in the aside">
+          <div class="ui dframe" data-mode="dark" role="img" aria-label="Training in the session state at 1272: the session header across the frame with Plan, a hairline step strip marking the fifth of nine rows, and Finish; Inverted rows with the last tick said back beside Show form, and its three set rows and last time's reps in the measure, the open one in full tone; a pinned bar with the rest timer above Previous and the primary, Next exercise; and the rest of the session in the aside">
 <div class="dbody spanning">
             <nav class="rail" aria-label="Primary">
             <span class="railitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#n-now"/></svg>Now</span>
@@ -2229,7 +2241,12 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                     </div>
                     <div class="u-title">Inverted rows</div>
                     <span class="u-slash">3 × 8 · Round 3 of 3 · Exercise 3 of 5</span>
-                    <button class="btn btn-text" type="button" style="align-self:flex-start;width:auto;min-height:0;padding:0;">Show form</button>
+                    <!-- FUEL-133: the last tick, said back until the next action, on
+                     Show form's row so it costs no height. -->
+                <div style="display:flex;align-items:center;gap:16px;">
+                  <button class="btn btn-text" type="button" style="width:auto;min-height:0;padding:0;">Show form</button>
+                  <span class="logged"><span style="font-size:12.5px;color:var(--text-2);">Logged 8 · Reverse lunges</span><button class="btn btn-text" type="button" style="width:auto;min-height:0;padding:0;">Undo</button></span>
+                </div>
                   </div>
 
                   <div class="blk">
@@ -2237,7 +2254,7 @@ table.voice td:first-child { color: var(--pg-text-2); font-size: 13px; white-spa
                     <div class="setlist">
                       <div class="setrow"><span class="num-ix">01</span><span class="set-reps">8 reps<span class="set-last"> · 8 last time</span></span><span class="set-tick on"></span></div>
                       <div class="setrow"><span class="num-ix">02</span><span class="set-reps">8 reps<span class="set-last"> · 8 last time</span></span><span class="set-tick on"></span></div>
-                      <div class="setrow"><span class="num-ix">03</span><span class="set-reps" style="color:var(--text-3);">Target 8 · 7 last time</span><span class="set-tick"></span></div>
+                      <div class="setrow active"><span class="num-ix">03</span><span class="set-reps">Target 8 · 7 last time</span><span class="set-tick"></span></div>
                     </div>
                   </div>
 
