@@ -303,6 +303,73 @@ test.describe("the session state", () => {
     }
   });
 
+  test("says back a tick without moving the bar or the sets — FUEL-133", async ({ page }) => {
+    /*
+     * The tick's echo, `Logged 12 · Squats` and Undo, shares Show form's row so
+     * it costs no height: FUEL-132 left one pixel between the last set and the
+     * bar at 375×667, and a new row would put the next exercise's last set
+     * under it on exactly the frame the reader arrives. Measured on the frame
+     * after an empty-box tick in a circuit, which is the case that advances.
+     */
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+
+    /*
+     * The tick must not reach the database. The demo is one fixture shared by
+     * every project in the run, and a first set creates a `partial` record for
+     * the day (FUEL-91), so a real write here moved `/training`'s list under
+     * the record and failed 29 baselines in other projects. The Server Action's
+     * request is held instead: the optimistic set is drawn, which is all this
+     * measures, and nothing is written. Released by aborting once measured.
+     */
+    const held: { abort: () => Promise<void> }[] = [];
+
+    await page.route("**/training*", async (route) => {
+      const request = route.request();
+
+      if (request.method() === "POST" && (await request.headerValue("next-action"))) {
+        held.push({ abort: () => route.abort() });
+        return;
+      }
+
+      await route.fallback();
+    });
+
+    const title = page.getByRole("heading", { level: 1 });
+    const before = (await title.textContent()) ?? "";
+    const barBefore = await boxOf(page.locator(BAR));
+
+    await page.getByRole("button", { name: "Log set 1" }).click();
+    await expect(title).not.toHaveText(before);
+
+    const said = page.locator("[data-logged]");
+
+    await expect(said).toBeVisible();
+    await expect(said).toContainText(`· ${before}`);
+
+    const bar = await boxOf(page.locator(BAR));
+
+    expect(Math.abs(bar.y - barBefore.y), "the bar's top moved").toBeLessThan(0.5);
+
+    const rows = page.locator(SET_ROWS);
+
+    for (let i = 0; i < (await rows.count()); i += 1) {
+      const row = await boxOf(rows.nth(i));
+
+      expect(row.y + row.height, `set row ${i + 1} against the bar`).toBeLessThanOrEqual(bar.y + 0.5);
+    }
+
+    const line = await boxOf(said);
+
+    expect(line.y + line.height, "the echo is above the bar").toBeLessThanOrEqual(bar.y);
+
+    // The write was held, never sent: the fixture is as every other project
+    // expects it.
+    expect(held.length, "the tick's Server Action should have been held").toBeGreaterThan(0);
+    await Promise.all(held.map((one) => one.abort()));
+    await page.unroute("**/training*");
+  });
+
   test("is its own height and not the height of the space it sits in", async ({ page }) => {
     /*
      * AC #3, and the reason `xl:self-start` was in `PAGE_MEASURE_FOOT` in the

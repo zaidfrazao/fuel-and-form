@@ -198,6 +198,17 @@ export function startRest(seconds: number): void {
 }
 
 /**
+ * Stops whatever rest is running — FUEL-133.
+ *
+ * Exported for one caller: `training.tsx`'s Undo of a set whose tick started a
+ * circuit's rest (FUEL-126). The rest was earned by a set that is no longer
+ * recorded, so it goes with it, through the same write a Stop tap makes.
+ */
+export function stopRest(): void {
+  write(null);
+}
+
+/**
  * `storage` is subscribed to for `training.tsx`'s reason: a timer started in
  * another tab is not a tab left showing presets. It does not fire in the tab
  * that made the change, which is what `emit` is for.
@@ -416,7 +427,16 @@ function signal(context: AudioContext | null): void {
 
 /* -------------------------------------------------------------------------- */
 
-export function RestTimer() {
+export function RestTimer({
+  onAction,
+}: {
+  /**
+   * Called on any tap in the row — a preset, Custom, its Start or Cancel, or
+   * Stop. `training.tsx` reads it as "the next action", which is what ends the
+   * confirmation of the last logged set (FUEL-133). Nothing here depends on it.
+   */
+  onAction?: () => void;
+} = {}) {
   /**
    * `useSyncExternalStore` rather than a `useState` seeded in an effect, for
    * `training.tsx`'s reason: a `setState` in an effect body is a second render
@@ -573,6 +593,7 @@ export function RestTimer() {
             if (seconds === null) return;
 
             // The box closes because a rest started — see `seen` above.
+            onAction?.();
             startRest(seconds);
           }}
         >
@@ -598,7 +619,10 @@ export function RestTimer() {
           >
             Start
           </Button>
-          <Button type="button" variant="link" size="xs" onClick={() => setCustom(null)}>
+          <Button type="button" variant="link" size="xs" onClick={() => {
+              onAction?.();
+              setCustom(null);
+            }}>
             Cancel
           </Button>
         </form>
@@ -627,12 +651,18 @@ export function RestTimer() {
               variant="secondary"
               size="xs"
               className="tabular-nums"
-              onClick={() => startRest(seconds)}
+              onClick={() => {
+                onAction?.();
+                startRest(seconds);
+              }}
             >
               {restLabel(seconds * 1000)}
             </Button>
           ))}
-          <Button variant="link" size="xs" onClick={() => setCustom("")}>
+          <Button variant="link" size="xs" onClick={() => {
+              onAction?.();
+              setCustom("");
+            }}>
             Custom
           </Button>
         </div>
@@ -668,7 +698,10 @@ export function RestTimer() {
            * to be tapped. So the toggle survives as the control it was for —
            * the way back from a tap that was made — and is spelled.
            */}
-          <Button variant="link" size="xs" onClick={() => write(null)}>
+          <Button variant="link" size="xs" onClick={() => {
+            onAction?.();
+            write(null);
+          }}>
             Stop
           </Button>
         </>

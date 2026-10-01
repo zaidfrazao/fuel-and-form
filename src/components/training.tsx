@@ -38,7 +38,7 @@ import {
 import { SlashMeta } from "@/components/kv-grid";
 import { PageMain } from "@/components/page-main";
 import { RecentSessions } from "@/components/recent-sessions";
-import { RestTimer, startRest } from "@/components/rest-timer";
+import { RestTimer, startRest, stopRest } from "@/components/rest-timer";
 import { SessionClock } from "@/components/session-clock";
 import { Button, CONFIRM_DESTRUCTIVE } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
@@ -79,6 +79,7 @@ import {
   MAX_SECONDS,
   parseLoadKg,
   setKind,
+  type SetKind,
   setUnitLine,
   storedSet,
   targetLow,
@@ -579,6 +580,7 @@ function SetList({
   onDraft,
   onLog,
   onRemove,
+  markActive = false,
 }: {
   exercise: TrainingExercise;
   logged: readonly LoggedSet[];
@@ -589,17 +591,42 @@ function SetList({
   onDraft: (setIndex: number, value: string, field?: "kg") => void;
   onLog: (setIndex: number, value: number, loadKg: number | null) => void;
   onRemove: (setIndex: number) => void;
+  /**
+   * Whether the first open row is drawn as the active one — FUEL-133. The
+   * session state's, where a set is being worked; the sets sheet edits a record
+   * and has no "next" to point at, so it leaves every row level.
+   */
+  markActive?: boolean;
 }) {
   const kind = setKind(exercise);
   const offered = targetLow(exercise);
+  const rows = setRows(exercise, logged);
+
+  /*
+   * The active row, by WEIGHT — FUEL-133, amending FUEL-119.
+   *
+   * FUEL-119 declined to mark the round's row because the empty box "already
+   * shows" it. On a phone it did not: every row was `text-tertiary`, the
+   * placeholder read as a value already entered, and the rows looked disabled.
+   * So the first open row keeps `text-primary` and the others recede to
+   * `text-secondary` — the current-row device the ≥1272 aside already uses —
+   * rather than taking a colour, which § The Four Rules keeps for the day's
+   * dot. In a circuit the first open row IS the round's row (the round is the
+   * lowest gap), and otherwise it is the next set.
+   */
+  const active = markActive ? rows.find((row) => row.value === null)?.index : undefined;
 
   return (
     // 30px — the parent row's content column. § Lists gives the figure and this
     // is where it is spent; `exercise-list.tsx` draws the 18px ordinal and the
     // 12px gap that add up to it.
     <ol className="ml-[30px] flex flex-col">
-      {setRows(exercise, logged).map((row) => {
+      {rows.map((row) => {
         const key = `${exercise.id}#${row.index}`;
+        // § Accessibility: the set line is information, so never `text-tertiary`,
+        // which the palette keeps for what nobody must read (2.19:1 on the light
+        // canvas, FUEL-63). `text-secondary` is 4.8:1 light and 7.9:1 dark.
+        const tone = row.index === active ? "text-text-primary" : "text-text-secondary";
         // The typed value if there is one, otherwise what is stored. An empty
         // string is a real draft — it is how a box is cleared — so the fallback
         // is on the key's absence rather than on the value being falsy.
@@ -649,8 +676,9 @@ function SetList({
           <li
             key={key}
             className="flex min-h-[46px] items-center gap-3 border-t border-border py-[11px] first:border-t-0"
+            data-active={row.index === active ? "" : undefined}
           >
-            <span className="w-[18px] shrink-0 font-mono text-slash text-text-tertiary">
+            <span className={cn("w-[18px] shrink-0 font-mono text-slash", tone)}>
               {String(row.index).padStart(2, "0")}
             </span>
 
@@ -727,7 +755,7 @@ function SetList({
                     className={SET_BOX}
                     placeholder={kgOffered === null ? "" : String(kgOffered)}
                   />
-                  <span aria-hidden="true" className="text-slash text-text-tertiary">
+                  <span aria-hidden="true" className={cn("text-slash", tone)}>
                     kg
                   </span>
                 </span>
@@ -736,8 +764,9 @@ function SetList({
                   and `Target 8` for one still on offer — `sec` and `Target
                   30–60s` for a timed one (FUEL-123). An exercise with no
                   target says neither and just names the unit. Last time's
-                  figure follows as a clause where there was one — FUEL-122. */}
-              <span className="text-slash text-text-tertiary">
+                  figure follows as a clause where there was one — FUEL-122.
+                  In the row's tone since FUEL-133, never `text-tertiary`. */}
+              <span className={cn("text-slash", tone)}>
                 {setUnitLine(
                   exercise,
                   row.value !== null,
@@ -773,7 +802,10 @@ function SetList({
               <span
                 aria-hidden="true"
                 className={cn(
-                  "size-[18px] rounded-[4px] border border-border",
+                  // The empty tick is a control that carries meaning, so its
+                  // outline clears § Accessibility's 3:1 — `border` is 1.3:1
+                  // (FUEL-133).
+                  "size-[18px] rounded-[4px] border border-text-secondary",
                   // Ink rather than umber. § The Four Rules allows one accent
                   // element per screen and the day's dot has it; a filled tick
                   // is a mark, which is what the dot grid's own filled dots are.
@@ -1361,6 +1393,29 @@ function rememberStage(date: CalendarDate, id: string | null): void {
   for (const listener of listeners) listener();
 }
 
+/** The set a tick just logged, for its confirmation — FUEL-133. */
+type LastLogged = {
+  exerciseId: string;
+  setIndex: number;
+  value: number;
+  kind: SetKind;
+  name: string;
+  /** Whether this tick started a circuit's rest, which Undo then stops. */
+  restStarted: boolean;
+};
+
+/**
+ * The confirmation's words — FUEL-133. `Logged 15 · Squats`, `Logged 45s · Plank`.
+ *
+ * Short because it shares a row with `Show form`. At 375 the text has 211px and
+ * the longest the seed can produce, `Logged 20 · Single-leg glute bridge`, is
+ * 195. A round is not named: the slash line names the one on screen, and the
+ * accessible name of Undo carries the set.
+ */
+function loggedLine(last: LastLogged): string {
+  return `Logged ${last.value}${last.kind === "seconds" ? "s" : ""} · ${last.name}`;
+}
+
 /** One identity for "no sets", so the optimistic base does not change per render. */
 const NO_SETS: readonly LoggedSetView[] = [];
 
@@ -1884,6 +1939,75 @@ export function Training({
    */
   const [finishing, setFinishing] = useState(false);
 
+  /**
+   * The set the last tick logged, said back until the next action — FUEL-133.
+   *
+   * § Feedback makes success silent because "the UI reflecting the new state
+   * is the confirmation". In a circuit it is not: the tick moves the measure to
+   * the next exercise and starts the rest, so the row that would have reflected
+   * the set is gone on the frame it was logged, and a set logged from an empty
+   * box — the target's low end, FUEL-122's rule — was never shown at all. So
+   * the tick's value and the exercise's name stay on screen, with § Feedback's
+   * Undo beside them, until the reader does anything else.
+   *
+   * Component state and never stored. A reload is a fresh look at the screen,
+   * and the sets are the record; this is only the echo of a tap.
+   */
+  const [lastLogged, setLastLogged] = useState<LastLogged | null>(null);
+
+  /**
+   * Where focus goes after Undo — the restored row's tick.
+   *
+   * Undo removes the control that was pressed, and a keyboard or screen-reader
+   * user would otherwise be dropped to the top of the document. The set comes
+   * back as an open row, and the data moves the measure back to it, so its
+   * `Log set N` tick is where the reader is.
+   */
+  const focusAfterUndo = useRef<string | null>(null);
+
+  if (lastLogged && !inSession) setLastLogged(null);
+
+  /**
+   * The next action, whatever it is: the echo of the last one ends, and so does
+   * any focus hand-off Undo left waiting. In practice the hand-off is spent on
+   * the next render, because Undo's optimistic removal draws the restored tick
+   * at once. Cleared here anyway, so a request that ever found no tick could
+   * not wait and pull focus to whichever `Log set N` is drawn later.
+   */
+  const settle = () => {
+    setLastLogged(null);
+    focusAfterUndo.current = null;
+  };
+
+
+  useLayoutEffect(() => {
+    const label = focusAfterUndo.current;
+
+    if (label === null) return;
+
+    const tick = document.querySelector<HTMLButtonElement>(`main button[aria-label="${label}"]`);
+
+    if (tick) {
+      focusAfterUndo.current = null;
+      tick.focus();
+    }
+  });
+
+  /**
+   * Takes the last tick back — FUEL-133.
+   *
+   * The set is removed through the same write untick makes, so the derived
+   * position returns to the gap and the reader lands on the row they ticked. A
+   * circuit's rest that the tick started is stopped too: it was earned by a
+   * set that is no longer recorded (FUEL-126).
+   */
+  const undoLast = (last: LastLogged) => {
+    settle();
+    if (last.restStarted) stopRest();
+    focusAfterUndo.current = `Log set ${last.setIndex}`;
+    withdrawSet(last.exerciseId, last.setIndex);
+  };
+
   if (finishing && !inSession) setFinishing(false);
 
   /**
@@ -2335,7 +2459,7 @@ export function Training({
        * needs no props — the session it belongs to is the one this bar is
        * already the bar for, and it stores nothing about which.
        */}
-      {inSession && <RestTimer />}
+      {inSession && <RestTimer onAction={settle} />}
 
       {/*
        * The mock's own arrangement: one primary, two secondaries beneath.
@@ -2356,8 +2480,8 @@ export function Training({
        */}
       {inSession ? (
         <SessionSteps
-          previous={stepPrevious}
-          next={stepNext}
+          previous={stepPrevious && { ...stepPrevious, go: () => (settle(), stepPrevious.go()) }}
+          next={stepNext && { ...stepNext, go: () => (settle(), stepNext.go()) }}
           done={entry?.status === "done"}
           onFinish={() => finish("done")}
         />
@@ -2509,7 +2633,10 @@ export function Training({
               steps={allExercises.length}
               current={allExercises.findIndex((one) => one.id === currentEx?.id)}
               onStepOut={stepOut}
-              onFinish={() => setFinishing(true)}
+              onFinish={() => {
+                settle();
+                setFinishing(true);
+              }}
             />
           ) : (
             <DateNav date={date} today={today} />
@@ -2635,20 +2762,58 @@ export function Training({
                * reason. The gap closes because the button is simply absent from
                * the flex column rather than being hidden inside it.
                */}
-              {currentEx.media ? (
+              {currentEx.media || lastLogged ? (
                 /* 44px of target in a 24px row since FUEL-132: the negative
                    margin hands the extra 20px to the gaps either side, which
                    hold no control, and the measure gives that height back to
-                   the sets. `SessionHead` does the same. */
-                <Button
-                  variant="link"
-                  size="xs"
-                  className="-my-2.5 self-start px-0"
-                  onClick={() => setFormFor({ id: currentEx.id, from: "session" })}
-                >
-                  Show form
-                </Button>
+                   the sets. `SessionHead` does the same.
+
+                   Since FUEL-133 the row also carries the last tick's
+                   confirmation, right-aligned, so it costs no height wherever
+                   there is a reference — every working step of both circuits.
+                   Where there is none the confirmation takes the row alone.
+                   At 320 a long name wraps it under `Show form`. */
+                <div className="-my-2.5 flex flex-wrap items-center gap-x-4" data-show-row>
+                  {currentEx.media ? (
+                    <Button
+                      variant="link"
+                      size="xs"
+                      className="px-0"
+                      onClick={() => {
+                        settle();
+                        setFormFor({ id: currentEx.id, from: "session" });
+                      }}
+                    >
+                      Show form
+                    </Button>
+                  ) : null}
+                  {lastLogged ? (
+                    <span className="ml-auto flex items-center gap-3" data-logged>
+                      {/* Read by the status below, so it is not read twice. */}
+                      <span aria-hidden="true" className="text-slash text-text-secondary">
+                        {loggedLine(lastLogged)}
+                      </span>
+                      {/* § Feedback's Undo, named for what it takes back
+                          (FUEL-142); the visible word leads the name. */}
+                      <Button
+                        variant="link"
+                        size="xs"
+                        className="px-0"
+                        aria-label={`Undo set ${lastLogged.setIndex} of ${lastLogged.name}, ${lastLogged.value} ${lastLogged.kind === "seconds" ? "sec" : "reps"}`}
+                        onClick={() => undoLast(lastLogged)}
+                      >
+                        Undo
+                      </Button>
+                    </span>
+                  ) : null}
+                </div>
               ) : null}
+              {/* Mounted for the whole session state, so a change is announced:
+                  a live region that appears with its text is often not. Out of
+                  flow (`sr-only`), so it is no flex item and adds no gap. */}
+              <p role="status" className="sr-only">
+                {lastLogged ? loggedLine(lastLogged) : ""}
+              </p>
             </div>
 
             {/*
@@ -2687,9 +2852,11 @@ export function Training({
                     logged={setsFor(currentEx.id, sets)}
                     lastTime={setsFor(currentEx.id, session?.lastTime ?? NO_SETS)}
                     drafts={drafts}
-                    onDraft={(setIndex, value, field) =>
-                      draft(currentEx.id, setIndex, value, field)
-                    }
+                    markActive
+                    onDraft={(setIndex, value, field) => {
+                      settle();
+                      draft(currentEx.id, setIndex, value, field);
+                    }}
                     onLog={(setIndex, value, loadKg) => {
                       // A circuit's rest — FUEL-126. Read against the sets
                       // BEFORE this one, in the gesture that logged it,
@@ -2707,9 +2874,23 @@ export function Training({
 
                       if (rest !== null) startRest(CIRCUIT_REST[rest]);
 
+                      // FUEL-133: said back until the next action, because in
+                      // a circuit the row it would show in is about to go.
+                      setLastLogged({
+                        exerciseId: currentEx.id,
+                        setIndex,
+                        value,
+                        kind: setKind(currentEx),
+                        name: currentEx.name,
+                        restStarted: rest !== null,
+                      });
+
                       commitSet(currentEx.id, setIndex, value, loadKg);
                     }}
-                    onRemove={(setIndex) => withdrawSet(currentEx.id, setIndex)}
+                    onRemove={(setIndex) => {
+                      settle();
+                      withdrawSet(currentEx.id, setIndex);
+                    }}
                   />
                 </>
               )}
