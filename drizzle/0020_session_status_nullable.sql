@@ -1,0 +1,12 @@
+-- FUEL-134 — a session with sets and no outcome holds no status.
+--
+-- The first set of a session writes its `workout_logs` row, and until now that
+-- row was born 'partial' because `status` was `not null`. A set-born partial
+-- was indistinguishable from a chosen one, so the app reported an outcome the
+-- moment one set was ticked. Null is "sets logged, outcome not recorded".
+--
+-- Additive: the code already deployed writes a status on every insert, so it
+-- runs unchanged against this column. Existing rows are NOT rewritten — a
+-- set-born partial cannot be told apart from a chosen one in the data either,
+-- and guessing would overwrite outcomes the owner actually recorded.
+ALTER TABLE "workout_logs" ALTER COLUMN "status" DROP NOT NULL;

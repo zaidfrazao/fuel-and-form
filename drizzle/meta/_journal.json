@@ -141,6 +141,13 @@
       "when": 1790760786964,
       "tag": "0019_kettlebell_swings",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790863245114,
+      "tag": "0020_session_status_nullable",
+      "breakpoints": true
     }
   ]
 }
