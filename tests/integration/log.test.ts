@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { getDb } from "@/lib/db";
 import { deleteLog, logsFor, recordLog } from "@/lib/db/queries/log";
-import { logSet } from "@/lib/db/queries/training";
+import { logSet, recordSession } from "@/lib/db/queries/training";
 import * as schema from "@/lib/db/schema";
 import { scope } from "@/lib/db/scope";
 import { latestLog } from "@/lib/log-intent";
@@ -270,6 +270,22 @@ describe.skipIf(!configured)("a session with sets and no outcome, on /", () => {
     expect(await setCount()).toBe(before);
     // And the stack is empty again: nothing left on / to undo.
     expect(latestLog(await logsFor(fixture.alice.userId, DATE))).toBeNull();
+  });
+
+  it("takes the record's note and duration back with the mark", async () => {
+    // Recorded on /training with a note, then undone from /. A row with no
+    // status draws no record, so a note left on it would be invisible and the
+    // next mark would overwrite it unseen. Only the sets are kept.
+    const { userId, workoutId } = fixture.alice;
+    const before = await setCount();
+
+    await recordSession(userId, { date: DATE, workoutId, status: "partial", note: "Grip went", durationMin: 20 });
+
+    const row = latestLog(await logsFor(userId, DATE));
+
+    expect(await deleteLog(userId, row!)).toBe(true);
+    expect(await sessionRows()).toMatchObject([{ status: null, note: null, durationMin: null }]);
+    expect(await setCount()).toBe(before);
   });
 
   it("still deletes a mark that has no sets under it", async () => {
