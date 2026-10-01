@@ -649,7 +649,9 @@ Dates are `YYYY-MM-DD` in the account's timezone. Instants — `createdAt`,
 `loggedAt`, `checkedAt`, `exportedAt` — are ISO 8601 in UTC. `profile` is an
 object rather than an array because `profiles` holds exactly one row per user.
 Its `targetsChangedOn` is the date the targets last moved on `/settings`
-(FUEL-136), or `null` if they never have.
+(FUEL-136), or `null` if they never have. A `workoutLogs` row's `status` is
+`null` when sets were logged against the session and no outcome was chosen
+(FUEL-134); its sets are in `exerciseSets` under its `id`.
 
 `shoppingChecks` is the odd one, and it is here deliberately. `itemKey` is not
 an id but a normalised ingredient NAME — the shop name since FUEL-137, so
@@ -932,8 +934,12 @@ session with no logged duration to apportion.
 **`scheduled`** in the training section is `yes` or `no`. A session can be
 logged on a date the template no longer covers, because the template is edited
 for future weeks while a past week resolves against it as it is today. Those
-rows are kept and marked rather than dropped. A blank `status` means the
-session was never logged, which is a different fact from `skipped`.
+rows are kept and marked rather than dropped. A blank `status` means no
+outcome was recorded, which is a different fact from `skipped`. That covers a
+session never logged AND, since FUEL-134, one trained without being marked: its
+sets are still in the sets section, and it can carry a burn estimate priced
+from them. Join on `(date, session)` to tell the two apart. Nothing fills the
+status in at the end of the day — the owner never chose one.
 
 **Empty sections are written**, headers and all. A header with no rows says
 "nothing was recorded that week"; a missing section is indistinguishable from a

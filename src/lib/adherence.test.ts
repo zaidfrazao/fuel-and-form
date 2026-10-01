@@ -160,6 +160,20 @@ describe("what a day says", () => {
     expect(monday.label).toBe(CIRCUIT_A);
   });
 
+  it("leaves a session with sets and no outcome unrecorded — FUEL-134", () => {
+    // The first set writes the session's row with no status. A dot drawn from
+    // that row would be an outcome derived from set data, which § P10 forbids,
+    // so the day reads exactly as if there were no row — and in the recent
+    // list as "Not recorded", not as the Partial it was born as until FUEL-134.
+    const logs: SessionLog[] = [{ date: "2026-03-02", workoutId: CIRCUIT_A_ID, status: null }];
+
+    expect(dayOn("2026-03-02", logs)).toEqual(dayOn("2026-03-02"));
+    expect(recentSessions(adherenceWeeks(PLAN, logs, ANCHOR), "2026-03-02")[0]).toMatchObject({
+      date: "2026-03-02",
+      status: "none",
+    });
+  });
+
   it("treats a future date exactly as it treats an unlogged past one", () => {
     // Two days after the anchor, inside the last row. Nothing has happened yet
     // and nothing is claimed — the same small dot, for the same reason.

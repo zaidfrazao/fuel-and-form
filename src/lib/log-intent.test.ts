@@ -6,6 +6,7 @@ import {
   type DayLogs,
   logCount,
   latestLog,
+  isMarked,
   logIntent,
   type MarkedWorkoutLog,
   rowBelongsTo,
@@ -201,6 +202,19 @@ describe("alreadyLogged", () => {
     expect(alreadyLogged({ meals: [mealLog()], workouts: [] }, logIntent(WORKOUT_ITEM, "log", MON))).toBe(
       false,
     );
+  });
+});
+
+describe("isMarked — FUEL-134", () => {
+  it("is false for the row a first set writes, and true for every outcome", () => {
+    // The sets' parent has no status until somebody chooses one. `logsFor`
+    // keeps only marked rows, so that row is never "logged" on / and never on
+    // Undo's stack, where taking it back would delete the sets under it.
+    expect(isMarked({ ...workoutLog(), status: null })).toBe(false);
+
+    for (const status of ["done", "partial", "skipped"] as const) {
+      expect(isMarked(workoutLog({ status }))).toBe(true);
+    }
   });
 });
 
