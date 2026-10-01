@@ -303,6 +303,46 @@ test.describe("the session state", () => {
     }
   });
 
+  test("says back a tick without moving the bar or the sets — FUEL-133", async ({ page }) => {
+    /*
+     * The tick's echo, `Logged 12 · Squats` and Undo, shares Show form's row so
+     * it costs no height: FUEL-132 left one pixel between the last set and the
+     * bar at 375×667, and a new row would put the next exercise's last set
+     * under it on exactly the frame the reader arrives. Measured on the frame
+     * after an empty-box tick in a circuit, which is the case that advances.
+     */
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+
+    const title = page.getByRole("heading", { level: 1 });
+    const before = (await title.textContent()) ?? "";
+    const barBefore = await boxOf(page.locator(BAR));
+
+    await page.getByRole("button", { name: "Log set 1" }).click();
+    await expect(title).not.toHaveText(before);
+
+    const said = page.locator("[data-logged]");
+
+    await expect(said).toBeVisible();
+    await expect(said).toContainText(`· ${before}`);
+
+    const bar = await boxOf(page.locator(BAR));
+
+    expect(Math.abs(bar.y - barBefore.y), "the bar's top moved").toBeLessThan(0.5);
+
+    const rows = page.locator(SET_ROWS);
+
+    for (let i = 0; i < (await rows.count()); i += 1) {
+      const row = await boxOf(rows.nth(i));
+
+      expect(row.y + row.height, `set row ${i + 1} against the bar`).toBeLessThanOrEqual(bar.y + 0.5);
+    }
+
+    const line = await boxOf(said);
+
+    expect(line.y + line.height, "the echo is above the bar").toBeLessThanOrEqual(bar.y);
+  });
+
   test("is its own height and not the height of the space it sits in", async ({ page }) => {
     /*
      * AC #3, and the reason `xl:self-start` was in `PAGE_MEASURE_FOOT` in the

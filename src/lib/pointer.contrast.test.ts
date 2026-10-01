@@ -75,6 +75,7 @@ type Token =
   | "text-primary"
   | "text-secondary"
   | "text-tertiary"
+  | "border"
   | "error";
 type Rgb = readonly [number, number, number];
 
