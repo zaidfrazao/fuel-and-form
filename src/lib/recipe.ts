@@ -66,7 +66,7 @@ export function parseInline(text: string): Inline[] {
     if (at > last) out.push({ text: text.slice(last, at) });
 
     if (match[1] !== undefined) out.push({ text: match[1], strong: true });
-    else out.push({ text: match[2], em: true });
+    else out.push({ text: match[2] ?? "", em: true });
 
     last = at + match[0].length;
   }
@@ -103,7 +103,11 @@ function chunks(lines: readonly string[]): string[][] {
 
 function blocksOf(lines: readonly string[]): Block[] {
   return chunks(lines).flatMap((chunk): Block[] => {
-    const [first, ...rest] = chunk;
+    const [first, second] = chunk;
+    const rest = chunk.slice(1);
+
+    // `chunks` never yields an empty chunk; this is for the compiler.
+    if (first === undefined) return [];
 
     if (HEADING.test(first)) {
       const heading: Block = { kind: "heading", text: first.replace(HEADING, "") };
@@ -112,7 +116,7 @@ function blocksOf(lines: readonly string[]): Block[] {
 
     // A table needs its rule line: without one, a line that happens to start
     // and end with a pipe is prose, and is printed as written.
-    if (chunk.length >= 2 && chunk.every((line) => TABLE_ROW.test(line)) && TABLE_RULE.test(chunk[1])) {
+    if (second !== undefined && chunk.every((line) => TABLE_ROW.test(line)) && TABLE_RULE.test(second)) {
       return [{ kind: "table", head: cells(first), rows: chunk.slice(2).map(cells) }];
     }
 
@@ -161,7 +165,7 @@ function numbered(lines: readonly string[], first: number): Method {
   // A step runs until a blank line; an unnumbered line straight after one is
   // its continuation, as markdown reads it, not a step of its own.
   for (; i < lines.length; i++) {
-    const line = lines[i].trim();
+    const line = (lines[i] ?? "").trim();
     if (NUMBERED.test(line)) steps.push(line.replace(NUMBERED, ""));
     else if (line === "") {
       const next = lines.slice(i + 1).find((candidate) => candidate.trim() !== "");

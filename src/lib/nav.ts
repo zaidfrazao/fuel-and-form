@@ -149,6 +149,16 @@ const ROUTES = new Map<string, Route>([
   ],
   ["/shopping", { destination: "plan", name: "Shopping list", parent: "/plan" }],
   ["/settings", { destination: null, name: "Settings", parent: "/" }],
+  /*
+   * The app's one dynamic route — FUEL-143. Keyed by its pattern, exactly as
+   * the file tree spells it, so `tests/unit/route-table.test.ts` compares like
+   * with like; `normalise` maps a real meal's address onto this row.
+   *
+   * A recipe is a meal in the plan, and the mock's Meal detail frame lights
+   * Plan — so the parent is `/plan`, as for `/shopping`. `/` links here
+   * sideways from its current meal, which is a cross-link, not a second parent.
+   */
+  ["/recipe/[mealId]", { destination: "plan", name: "Recipe", parent: "/plan" }],
 ]);
 
 /**
@@ -170,10 +180,13 @@ const ROUTES = new Map<string, Route>([
  * to stop a mistake, since a test can cast anything it likes.
  *
  * Order is `ROUTES`' insertion order, which is § Navigation's table order: the
- * four level-1 routes and then the three level-2 ones. Nothing depends on that
+ * four level-1 routes and then the four level-2 ones. Nothing depends on that
  * and no test should start to — `DESTINATIONS` is the array whose order is
  * load-bearing, and it is a different one for a different reason.
  */
+/** `/recipe/[mealId]`'s row in the table above — the pattern, not an address. */
+const RECIPE_ROUTE = "/recipe/[mealId]";
+
 export const ROUTE_PATHS: readonly string[] = Object.freeze([...ROUTES.keys()]);
 
 /**
@@ -185,6 +198,10 @@ export const ROUTE_PATHS: readonly string[] = Object.freeze([...ROUTES.keys()]);
  * slash, and trimming it would produce an empty string that matches nothing.
  */
 function normalise(pathname: string): string {
+  // Before the slash strip, so `/recipe/<id>/` resolves too. One segment and
+  // no more: `/recipe/<id>/extra` is not a recipe, and matches nothing.
+  if (/^\/recipe\/[^/]+\/?$/.test(pathname)) return RECIPE_ROUTE;
+
   if (pathname.length > 1 && pathname.endsWith("/")) {
     return pathname.slice(0, -1);
   }

@@ -18,8 +18,8 @@ import Link from "next/link";
 
 import { DayRuler, RULER_AT, STATUS_LABEL as SLOT_STATUS_LABEL } from "@/components/day-ruler";
 import { ExerciseList } from "@/components/exercise-list";
-import { KeyValueGrid, SlashMeta } from "@/components/kv-grid";
-import { MacroGrid, MealDayGrid } from "@/components/macro-grid";
+import { SlashMeta } from "@/components/kv-grid";
+import { MacroGrid, MealDayGrid, MealMacroGrid } from "@/components/macro-grid";
 import { PageMain } from "@/components/page-main";
 import { SwapSheet, type PlannedMeal, type SwappableMeal } from "@/components/swap-sheet";
 import { WalkList, WalkRow } from "@/components/walk-row";
@@ -312,15 +312,7 @@ function MealMacros({
        * 83px a column against the guide's own 110px test, so a `4` that meant
        * four at every width would be a count no screen could use.
        */}
-      <KeyValueGrid
-        columns={4}
-        items={[
-          { label: "Calories", value: `${meal.kcal}` },
-          { label: "Protein", value: `${meal.proteinG} g`, emphasis: true },
-          { label: "Fat", value: `${meal.fatG} g` },
-          { label: "Carbs", value: `${meal.carbG} g` },
-        ]}
-      />
+      <MealMacroGrid meal={meal} />
     </section>
   );
 }

@@ -64,6 +64,7 @@ describe("resolveActive", () => {
     ["/plan/template", "plan", 2],
     ["/shopping", "plan", 2],
     ["/settings", null, 2],
+    ["/recipe/[mealId]", "plan", 2],
   ];
 
   test.each(table)("%s lights %s (level %i)", (route, active) => {
@@ -78,6 +79,24 @@ describe("resolveActive", () => {
    * list is addressed by week through `?week=` rather than nested inside one.
    * Its first segment is `shopping`, which is not a destination.
    */
+  /*
+   * The one dynamic route (FUEL-143). The table holds its pattern; a real
+   * address has a meal id in that segment and must resolve to the same row —
+   * and only an address with exactly one segment there does.
+   */
+  test.each([
+    "/recipe/3f2b8a1e-9c4d-4e5f-8a6b-7c8d9e0f1a2b",
+    "/recipe/3f2b8a1e-9c4d-4e5f-8a6b-7c8d9e0f1a2b/",
+  ])("resolves the recipe at %s to its row", (address) => {
+    expect(resolveActive(address)).toBe("plan");
+    expect(resolveParent(address)).toEqual({ href: "/plan", label: "Plan" });
+  });
+
+  test.each(["/recipe", "/recipe/", "/recipe/a/b"])("%s is not a recipe", (address) => {
+    expect(resolveActive(address)).toBeNull();
+    expect(resolveParent(address)).toBeNull();
+  });
+
   test("resolves a level-2 route whose URL does not contain its parent", () => {
     expect(resolveActive("/shopping")).toBe("plan");
   });
@@ -166,6 +185,7 @@ describe("resolveParent", () => {
     ["/plan/template", "/plan", "Plan"],
     ["/shopping", "/plan", "Plan"],
     ["/settings", "/", "Now"],
+    ["/recipe/[mealId]", "/plan", "Plan"],
   ];
 
   test.each(table)("%s goes up to %s, named %s", (route, href, label) => {
@@ -259,6 +279,7 @@ describe("resolveParent", () => {
       ["/plan/template", "Plan", "Plan"],
       ["/shopping", "Plan", "Plan"],
       ["/settings", "Now", "Now"],
+      ["/recipe/[mealId]", "Plan", "Plan"],
     ]);
   });
 

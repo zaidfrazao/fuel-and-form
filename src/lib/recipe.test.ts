@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { seedMeals } from "@/lib/seed/meals";
 
-import { isMealId, parseInline, parseMethod, parseProse, plain } from "./recipe";
+import { type Inline, isMealId, parseInline, parseMethod, parseProse, plain } from "./recipe";
 
 const byKey = (key: string) => {
   const meal = seedMeals.find((candidate) => candidate.key === key);
@@ -30,7 +30,7 @@ describe("every seeded method", () => {
         expect(text).not.toMatch(/^\d+\.\s/);
         // A variant's lead is a bold run ending in a colon. The steak's
         // "**Chips.**" is a step's own lead and ends in a full stop.
-        expect(step[0].strong && step[0].text.endsWith(":"), text).toBeFalsy();
+        expect(step[0]?.strong && step[0].text.endsWith(":"), text).toBeFalsy();
       }
     },
   );
@@ -49,8 +49,8 @@ describe("the seed's own shape", () => {
     const parsed = parseMethod(byKey("beef-mince-chilli").method)!;
 
     expect(parsed.steps).toHaveLength(10);
-    expect(plain(parsed.steps[0])).toMatch(/^Start the rice first\./);
-    expect(plain(parsed.steps[9])).toMatch(/^Season with salt and pepper\./);
+    expect(plain(parsed.steps[0]!)).toMatch(/^Start the rice first\./);
+    expect(plain(parsed.steps[9]!)).toMatch(/^Season with salt and pepper\./);
 
     expect(parsed.after).toHaveLength(1);
     expect(parsed.after[0]).toMatchObject({ kind: "paragraph" });
@@ -65,7 +65,7 @@ describe("the seed's own shape", () => {
 
     expect(parsed.steps).toHaveLength(5);
     expect(parsed.after.map((block) => block.kind)).toEqual(["paragraph"]);
-    expect(plain((parsed.after[0] as { inline: never[] }).inline)).toMatch(/^Jars keep 4 days\./);
+    expect(plain((parsed.after[0] as { inline: Inline[] }).inline)).toMatch(/^Jars keep 4 days\./);
   });
 
   test("a method with no blank line is all steps", () => {
@@ -89,8 +89,8 @@ describe("a method that numbers its own steps", () => {
 
   test("its numbered lines are the steps, numbers stripped", () => {
     expect(parsed.steps).toHaveLength(9);
-    expect(parsed.steps[0][0]).toEqual({ text: "Chips.", strong: true });
-    expect(plain(parsed.steps[8])).toBe("Plate the steak with the chips, sauce over or alongside.");
+    expect(parsed.steps[0]?.[0]).toEqual({ text: "Chips.", strong: true });
+    expect(plain(parsed.steps[8]!)).toBe("Plate the steak with the chips, sauce over or alongside.");
   });
 
   test("the heat guide is read before them, and '### Steps' is dropped", () => {
@@ -100,8 +100,8 @@ describe("a method that numbers its own steps", () => {
     const table = parsed.before[2] as Extract<(typeof parsed.before)[number], { kind: "table" }>;
     expect(table.head.map(plain)).toEqual(["Stage", "Heat"]);
     expect(table.rows).toHaveLength(4);
-    expect(table.rows[0][1][0]).toEqual({ text: "HIGH", strong: true });
-    expect(plain(table.rows[3][0])).toBe("Sauce, once the cream is in");
+    expect(table.rows[0]?.[1]?.[0]).toEqual({ text: "HIGH", strong: true });
+    expect(plain(table.rows[3]![0]!)).toBe("Sauce, once the cream is in");
   });
 
   test("italic inside a step survives", () => {
@@ -113,7 +113,7 @@ describe("a method that numbers its own steps", () => {
   });
 
   test("an unnumbered line straight after a step continues it", () => {
-    expect(parseMethod("1. One\nstill one.\n2. Two").steps.map(plain)).toEqual([
+    expect(parseMethod("1. One\nstill one.\n2. Two")!.steps.map(plain)).toEqual([
       "One still one.",
       "Two",
     ]);
@@ -160,7 +160,7 @@ describe("parseProse", () => {
 
     expect(blocks.map((block) => block.kind)).toEqual(Array(5).fill("paragraph"));
     const leads = blocks.filter(
-      (block) => block.kind === "paragraph" && block.inline[0].strong,
+      (block) => block.kind === "paragraph" && block.inline[0]?.strong,
     );
     // ESTIMATED's own bold lead, plus the butter and the salt.
     expect(leads).toHaveLength(3);
