@@ -690,6 +690,36 @@ html body[data-scroll-locked] {
   mask-image: var(--action-bar-mask);
 }
 
+/* Focus mode — `/training`'s session state, FUEL-132.
+ *
+ * Below 1024 the session state hides the § Navigation pill, and the session bar
+ * takes the strip the pill held. At 375×667 the pill's 86px was the difference
+ * between the current exercise's three sets fitting on arrival and two of them
+ * sitting under the bar, which is PRD § P3's working criterion failing. The
+ * session's own header carries `‹ Plan`, which leaves the state without
+ * recording anything, so the rest of the app is one tap away rather than gone.
+ *
+ * `:has()` on the bar rather than a class set from an effect, so the shell
+ * follows the state on the same frame and with no code of its own: the bar
+ * carries `data-session-bar` exactly while the session state is drawn.
+ *
+ * The bar sticks to 0 rather than to the shell, and takes the bottom inset the
+ * shell used to own (FUEL-58), with 12px of air where there is no home
+ * indicator so the primary does not sit on the screen's edge. */
+@media (width < 64rem) {
+  :root:has([data-session-bar]) {
+    --nav-shell-h: 0px;
+  }
+
+  :root:has([data-session-bar]) [data-nav-shell] {
+    display: none;
+  }
+
+  [data-session-bar] {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+}
+
 /* The sheet footer's scroll edge — FUEL-135.
  *
  * § The Scroll Edge again, in the one other place an opaque edge meets moving

@@ -6,8 +6,11 @@ import {
   MAX_START_SKEW_MS,
   elapsedLabel,
   isEntered,
+  isSteppedOut,
   parseEnteredAt,
   prefillMinutes,
+  resumeValue,
+  stepOutValue,
 } from "./session-clock";
 
 /**
@@ -144,5 +147,46 @@ describe("isEntered", () => {
     ["Infinity", "Infinity"],
   ])("is false for %s", (_name, raw) => {
     expect(isEntered(raw)).toBe(false);
+  });
+});
+
+describe("stepping out and resuming — FUEL-132", () => {
+  it("keeps the start, negated, and that value is not entered", () => {
+    const start = NOW - 20 * MINUTE;
+    const out = stepOutValue(String(start), NOW);
+
+    expect(out).toBe(String(-start));
+    expect(isEntered(out)).toBe(false);
+    expect(isSteppedOut(out)).toBe(true);
+    expect(parseEnteredAt(out, NOW)).toBeNull();
+  });
+
+  it("resumes the same start, so the clock does not begin again", () => {
+    const start = NOW - 20 * MINUTE;
+
+    expect(resumeValue(stepOutValue(String(start), NOW), NOW + 5 * MINUTE)).toBe(String(start));
+  });
+
+  it('forgets a start it cannot believe — the legacy "1", a stale one, nothing', () => {
+    expect(stepOutValue("1", NOW)).toBeNull();
+    expect(stepOutValue(String(NOW - MAX_START_AGE_MS - 1), NOW)).toBeNull();
+    expect(stepOutValue(null, NOW)).toBeNull();
+  });
+
+  it("starts afresh from a stepped-out key that has gone stale or runs ahead", () => {
+    expect(resumeValue(`-${NOW - MAX_START_AGE_MS - 1}`, NOW)).toBeNull();
+    expect(resumeValue(`-${NOW + MAX_START_SKEW_MS + 1}`, NOW)).toBeNull();
+  });
+
+  it.each([
+    ["absent", null],
+    ["an entered start", String(NOW)],
+    ["the legacy entered value", "1"],
+    ["a negative zero", "-0"],
+    ["a negative float", "-1.5"],
+    ["prose", "-yes"],
+  ])("is not stepped out, and resumes nothing, for %s", (_name, raw) => {
+    expect(isSteppedOut(raw)).toBe(false);
+    expect(resumeValue(raw, NOW)).toBeNull();
   });
 });

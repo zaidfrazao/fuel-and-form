@@ -126,6 +126,9 @@ export function NavShell({
      */
     <nav
       aria-label="Primary"
+      // Hidden by globals.css while `/training`'s session state is drawn below
+      // 1024 — focus mode, FUEL-132.
+      data-nav-shell
       className={cn(
         // 12px above, 24px below, per the mock — with the bottom inset folded
         // into the padding rather than added to it, so the 24px still applies on

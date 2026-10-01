@@ -115,7 +115,14 @@ import {
   type StageStep,
   stepStage,
 } from "@/lib/session-stage";
-import { isEntered, parseEnteredAt, prefillMinutes } from "@/lib/session-clock";
+import {
+  isEntered,
+  isSteppedOut,
+  parseEnteredAt,
+  prefillMinutes,
+  resumeValue,
+  stepOutValue,
+} from "@/lib/session-clock";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
 import { MAX_NOTE_LENGTH } from "@/lib/session-entry";
 import { titleText } from "@/lib/title";
@@ -878,48 +885,60 @@ function SessionList({
 }
 
 /**
- * The way past an exercise, and back — FUEL-120.
+ * The way past an exercise, and back — FUEL-120, moved into the bar by FUEL-132.
  *
  * Without it, an exercise short of its target held the state on itself: the
  * only way on was to log a set that was not done, which put a false row in the
  * history and the export. § P10 exists to record the session "as it was
  * actually performed", so the way on cannot be a set.
  *
- * Text buttons, the weight "Show form" has: they are tertiary to the set being
- * worked, and Mark done keeps the screen's one primary. `xs` is 44px tall, and
- * both labels are wider than that, so each is a full § Touch Targets area.
+ * FUEL-120 drew these as Text buttons under the sets and left the primary to
+ * Mark done. FUEL-132 found that the wrong way round: moving on is what the
+ * reader does a dozen times a session and finishing is what they do once, yet
+ * finishing was the largest control on screen and moving on sat under the
+ * sticky bar at 375×812, covered on arrival. So **Next exercise is the session
+ * state's primary** and Previous is its secondary, both in the bar, where
+ * nothing can cover them. Finishing moves to the header's `Finish`, which asks
+ * first, and comes back to the primary on the LAST step, where it is the way
+ * forward — `next` is `null` there, and that is the whole of the switch.
  *
- * Not "Skip", which on this screen finishes the whole session (FUEL-121), and
- * not a bare "Next" either, which beside Mark done could read as the step after
- * finishing. The visible words name the unit, and the accessible name adds
- * where it goes, as the date paginator's "Previous day, Tue 16 Sep" does: the
- * visible label leads it, so a voice user saying what they see still hits it.
+ * Not "Skip", which on this screen is the whole session's (FUEL-121). The
+ * visible words name the unit and the accessible name adds where it goes, as
+ * the date paginator's "Previous day, Tue 16 Sep" does: the visible label leads
+ * it, so a voice user saying what they see still hits it. Previous is
+ * `‹ Previous` on screen, because the row also holds the primary and the long
+ * form leaves `Next exercise ›` 139px at 375.
  *
- * Drawn only where there is somewhere to go, for the reason "Show form" gives:
- * a disabled control promises an action that does not exist. Next keeps the
- * right edge with or without Previous beside it, so it does not jump across
- * the row under a thumb as the reader leaves the first step.
+ * Previous is drawn only where there is somewhere to go, for the reason "Show
+ * form" gives: a disabled control promises an action that does not exist. The
+ * primary is always drawn, so it is what a press that removes Previous hands
+ * focus to — otherwise a keyboard or screen-reader user stepping back onto the
+ * first step is dropped to the top of the document mid-session.
  *
- * Nothing here calls an action. A move is stored in the browser beside the
- * entered boolean, and the session's sets and status are exactly as they were.
+ * Nothing here but `onFinish` calls an action. A move is stored in the browser
+ * beside the entered instant, and the session's sets and status are exactly as
+ * they were.
  *
  * Since FUEL-125 a step either side can be a WARM-UP or COOL-DOWN row as well
  * as a working one, so this takes each step already resolved — a label and what
  * to do — rather than an index into the working list and the list to read it
- * against. The caller owns which stage a step belongs to; this owns the row of
- * controls, the focus hand-off and the words. That also removes the class of
- * fault `SessionList` records above: there is no index here to read against the
- * wrong list, because there is no index.
- *
- * Drawing only what exists has one cost, and this pays it: Next pressed onto
- * the last step unmounts the button that had focus, and a keyboard or
- * screen-reader user is dropped to the top of the document mid-session. So a
- * press that removes its own button hands focus to the one that remains.
+ * against. The caller owns which stage a step belongs to; this owns the
+ * controls, the focus hand-off and the words.
  */
 type Step = { label: string; go: () => void };
 
-function ExerciseSteps({ previous, next }: { previous: Step | null; next: Step | null }) {
-  const nav = useRef<HTMLElement>(null);
+function SessionSteps({
+  previous,
+  next,
+  done,
+  onFinish,
+}: {
+  previous: Step | null;
+  next: Step | null;
+  done: boolean;
+  onFinish: () => void;
+}) {
+  const row = useRef<HTMLDivElement>(null);
   const pressed = useRef(false);
 
   // After the render a press caused, and before paint, so focus never shows
@@ -928,14 +947,12 @@ function ExerciseSteps({ previous, next }: { previous: Step | null; next: Step |
     if (!pressed.current) return;
     pressed.current = false;
 
-    const here = nav.current;
+    const here = row.current;
 
     if (here && !here.contains(document.activeElement)) {
-      here.querySelector("button")?.focus();
+      here.querySelector<HTMLButtonElement>("[data-primary]")?.focus();
     }
   });
-
-  if (!previous && !next) return null;
 
   const press = (move: () => void) => () => {
     pressed.current = true;
@@ -943,30 +960,122 @@ function ExerciseSteps({ previous, next }: { previous: Step | null; next: Step |
   };
 
   return (
-    <nav ref={nav} aria-label="Exercises" className="flex items-center justify-between gap-3">
+    <div ref={row} className={ACTION_BAR_CONTROLS}>
       {previous ? (
         <Button
-          variant="link"
-          size="xs"
-          className="px-0"
+          variant="secondary"
+          className={ACTION_BAR_SECONDARY}
           aria-label={`Previous exercise, ${previous.label}`}
           onClick={press(previous.go)}
         >
-          <span aria-hidden="true">&lsaquo; Previous exercise</span>
+          <span aria-hidden="true">&lsaquo; Previous</span>
         </Button>
       ) : null}
       {next ? (
         <Button
-          variant="link"
-          size="xs"
-          className="ml-auto px-0"
+          data-primary
+          className={ACTION_BAR_LEAD}
           aria-label={`Next exercise, ${next.label}`}
           onClick={press(next.go)}
         >
           <span aria-hidden="true">Next exercise &rsaquo;</span>
         </Button>
-      ) : null}
-    </nav>
+      ) : (
+        <Button data-primary className={ACTION_BAR_LEAD} aria-pressed={done} onClick={onFinish}>
+          Mark done
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Where the reader is in the whole session — FUEL-132.
+ *
+ * One segment per ROW, bookends included, in the list's own order: the slash
+ * line already says `Exercise 2 of 5` and `Round 2 of 3` in words, and what it
+ * cannot say is how much of the session is behind and ahead of that, warm-up
+ * and cool-down included. A segment per exercise-and-round would be fifteen
+ * hairs for a circuit's work alone, and would make the strip a count of sets,
+ * which is § P10's refused arithmetic rather than a position.
+ *
+ * Hairlines and the text tokens, no umber: § The Four Rules allows one umber
+ * element per screen and the current row is marked by WEIGHT — the device the
+ * ≥1272 aside already uses — so the current segment is `text-primary` at 2px
+ * and the rest are 1px, behind in `text-tertiary` and ahead in `border`.
+ *
+ * Decorative. The slash line is the position in words and the strip restates
+ * it, so it is hidden from the accessibility tree rather than announced twice.
+ */
+function StepStrip({ count, current }: { count: number; current: number }) {
+  return (
+    <div aria-hidden="true" className="flex h-0.5 min-w-0 flex-1 items-center gap-1" data-steps>
+      {Array.from({ length: count }, (_, index) => (
+        <span
+          key={index}
+          className={cn(
+            "flex-1",
+            index === current
+              ? "h-0.5 bg-text-primary"
+              : index < current
+                ? "h-px bg-text-tertiary"
+                : "h-px bg-border",
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The session state's header — FUEL-132.
+ *
+ * In the slot the date paginator holds in the plan state, because the
+ * paginator has nothing to do here: only today has a session state, so both of
+ * its links would leave it. The header band's question is still *where am I in
+ * this?*, and in a session the answer is the session rather than the date.
+ *
+ * `‹ Plan` steps out without recording anything — the § Navigation pill is
+ * hidden in this state below 1024 (focus mode), and this is the way to `/` that
+ * is not a verdict on the session. `Finish` is every ending, behind a sheet.
+ *
+ * Both are 44px Text buttons drawn in a 24px row: the negative margin gives the
+ * extra 20px of hit area to the gaps above and below, which hold no control,
+ * so the header costs the paginator's height and not a button's.
+ */
+function SessionHead({
+  steps,
+  current,
+  onStepOut,
+  onFinish,
+}: {
+  steps: number;
+  current: number;
+  onStepOut: () => void;
+  onFinish: () => void;
+}) {
+  return (
+    <div className="flex w-full items-center gap-4" data-session-head>
+      <Button
+        variant="link"
+        size="xs"
+        className="-my-2.5 px-0 text-micro uppercase"
+        aria-label="Plan, leaving the session open"
+        onClick={onStepOut}
+      >
+        <span aria-hidden="true">&lsaquo; Plan</span>
+      </Button>
+      <StepStrip count={steps} current={current} />
+      <Button
+        variant="link"
+        size="xs"
+        className="-my-2.5 px-0 text-micro uppercase"
+        aria-label="Finish session"
+        onClick={onFinish}
+      >
+        <span aria-hidden="true">Finish</span>
+      </Button>
+    </div>
   );
 }
 
@@ -1121,9 +1230,12 @@ function readSession(date: CalendarDate): string | null {
  * clock. It is the whole of what the session clock and the duration pre-fill
  * need, and it is still one key, client-only, with nothing in the database.
  */
-function rememberEntered(date: CalendarDate, entered: boolean): void {
+function rememberEntered(date: CalendarDate, entered: boolean | string | null): void {
   try {
-    if (entered) window.localStorage.setItem(SESSION_KEY(date), String(Date.now()));
+    // A string is a value already decided — a resumed start, or a stepped-out
+    // one (FUEL-132) — and `null` is a step out with nothing worth keeping.
+    if (typeof entered === "string") window.localStorage.setItem(SESSION_KEY(date), entered);
+    else if (entered) window.localStorage.setItem(SESSION_KEY(date), String(Date.now()));
     else window.localStorage.removeItem(SESSION_KEY(date));
   } catch {
     // Nothing to do and nothing to say: the state still works for as long as
@@ -1131,6 +1243,25 @@ function rememberEntered(date: CalendarDate, entered: boolean): void {
   }
 
   for (const listener of listeners) listener();
+}
+
+/**
+ * Resumes a session stepped out of, and says whether there was one — FUEL-132.
+ *
+ * Out here rather than in `enter` for `durationOnFinish`'s reason below: it
+ * reads the clock, and the clock belongs to the tap rather than to a render.
+ */
+function resumeSession(date: CalendarDate, stored: string | null): boolean {
+  const resumed = resumeValue(stored, Date.now());
+
+  if (resumed !== null) rememberEntered(date, resumed);
+
+  return resumed !== null;
+}
+
+/** Steps out keeping the start, negated — `stepOutValue`. Out here for the clock. */
+function stepOutOfSession(date: CalendarDate, stored: string | null): void {
+  rememberEntered(date, stepOutValue(stored, Date.now()));
 }
 
 /**
@@ -1638,8 +1769,52 @@ export function Training({
    * rule this screen keeps everywhere else, and the warm-up is one Previous away.
    */
   const enter = () => {
+    /*
+     * A session stepped out of resumes — FUEL-132. Its start comes back, so the
+     * clock and the duration it fills carry on from the first tap rather than
+     * the second, and the stage and the moves were never cleared, so the reader
+     * lands on the step they left. A start too stale to believe begins afresh.
+     */
+    if (resumeSession(date, stored)) return;
+
     rememberEntered(date, true);
     rememberStage(date, loggedSets > 0 ? null : (beforeWork[0]?.id ?? null));
+  };
+
+  /**
+   * Leaves the state WITHOUT recording anything — `‹ Plan`, FUEL-132.
+   *
+   * The session state hides the § Navigation pill below 1024, so this is the
+   * way to `/` mid-session that is not a verdict on the session. It keeps the
+   * start (negated, see `stepOutValue`), the stage and the moves, so `Resume
+   * session` puts the reader back where they were with the clock still
+   * running. Nothing is written to the database: the sets are already there.
+   */
+  const stepOut = () => {
+    setFinishing(false);
+    stepOutOfSession(date, stored);
+  };
+
+  /** Whether this date's session was stepped out of rather than finished. */
+  const steppedOut = isSteppedOut(stored);
+
+  /**
+   * A status tapped in the plan state's bar.
+   *
+   * `record` itself, plus one thing: a session stepped out of and then recorded
+   * from here has ended, so its kept start, stage and moves are forgotten as
+   * `finish` forgets them — otherwise the primary would offer to RESUME a
+   * session the reader has just said is over. `Save note` calls `record`
+   * directly, because saving a note is not an answer.
+   */
+  const answer = (status: WorkoutLogStatus) => {
+    record(status);
+
+    if (steppedOut) {
+      rememberEntered(date, false);
+      rememberMoved(date, null);
+      rememberStage(date, null);
+    }
   };
 
   /**
@@ -1690,9 +1865,26 @@ export function Training({
   if (confirmingSkip && !inSession) setConfirmingSkip(false);
 
   const skipSession = () => {
+    setFinishing(false);
     if (loggedSets > 0) setConfirmingSkip(true);
     else finish("skipped");
   };
+
+  /**
+   * Whether the Finish sheet is open — FUEL-132.
+   *
+   * Every way of ending the session, behind one tap that asks first. Mark done
+   * was the bar's primary on every step until this ticket, the warm-up
+   * included, and one stray tap recorded the whole session as done. The bar's
+   * primary is now the way ON, and it becomes Mark done only on the last step,
+   * where finishing is the way on; anywhere else, ending is this sheet.
+   *
+   * Reset during render when the state ends without it, for `confirmingSkip`'s
+   * reason above.
+   */
+  const [finishing, setFinishing] = useState(false);
+
+  if (finishing && !inSession) setFinishing(false);
 
   /**
    * Which exercise the session state is showing, and in a circuit which round.
@@ -2110,6 +2302,10 @@ export function Training({
         at ? TRAINING_BAR_AT[at] : cn(SESSION_ACTION_BAR, PAGE_SESSION_FOOT)
       }
       data-bar={at}
+      // Focus mode — FUEL-132: globals.css hides the § Navigation pill below
+      // 1024 while this attribute is on the page, and only the session state's
+      // bar carries it.
+      data-session-bar={at ? undefined : ""}
     >
       {failure && (
         <div
@@ -2153,39 +2349,51 @@ export function Training({
        * is the reason these are three buttons rather than a primary and two
        * alternatives: they are one choice with three answers.
        */}
-      {/* One row at every width — § Buttons: FUEL-85 at the frame's cap,
+      {/*
+       * The session state's controls — FUEL-132. The way on as the primary,
+       * the way back beside it, and Mark done only on the last step. Every
+       * other ending is the header's `Finish`. `SessionSteps` carries why.
+       */}
+      {inSession ? (
+        <SessionSteps
+          previous={stepPrevious}
+          next={stepNext}
+          done={entry?.status === "done"}
+          onFinish={() => finish("done")}
+        />
+      ) : (
+      /* One row at every width — § Buttons: FUEL-85 at the frame's cap,
           FUEL-109 below it, which took this bar with `/`'s rather than
           leaving a slab over a pair here. Three answers to one question
           read as one choice side by side. `action-bar.ts` carries the
           argument and the strings; the banner and the timer above stay
-          outside the row because each is a block that spans the column.
-          The session state's `Skip session` (FUEL-121) is the one label
-          that does not fit: below ~401px the pair wraps under Mark done. */}
+          outside the row because each is a block that spans the column. */
       <div className={ACTION_BAR_CONTROLS}>
         {/*
          * The primary changes because the screen's question does — § Desktop.
          *
          * § Buttons allows one primary and calls it "the one action the
-         * screen exists for". Before you train that is starting; while you
-         * are training it is finishing. Neither state has two, and Mark done
-         * never appears as a secondary — a demotion of the action the whole
-         * adherence record depends on.
+         * screen exists for". Before you train that is starting. While you
+         * are training it is moving on, since FUEL-132, and that is
+         * `SessionSteps`' — this copy is the plan state's alone.
          *
          * A date that is not today keeps Mark done, because Start session is
          * not offered where it would mean nothing: § Desktop gives the
          * session state to today alone, and PRD § P3 has always had past
          * sessions "viewable and editable by date". So the plan state's
-         * primary is Start session exactly where the state is reachable.
+         * primary is Start session exactly where the state is reachable —
+         * and Resume session where it was stepped out of (FUEL-132), which
+         * says the clock and the place are kept.
          */}
-        {canEnter && !inSession ? (
+        {canEnter ? (
           <Button className={ACTION_BAR_LEAD} onClick={enter}>
-            Start session
+            {steppedOut ? "Resume session" : "Start session"}
           </Button>
         ) : (
           <Button
             className={ACTION_BAR_LEAD}
             aria-pressed={entry?.status === "done"}
-            onClick={() => (inSession ? finish("done") : record("done"))}
+            onClick={() => answer("done")}
           >
             Mark done
           </Button>
@@ -2195,23 +2403,17 @@ export function Training({
             variant="secondary"
             className={ACTION_BAR_SECONDARY}
             aria-pressed={entry?.status === "partial"}
-            onClick={() => (inSession ? finish("partial") : record("partial"))}
+            onClick={() => answer("partial")}
           >
             Partial
           </Button>
-          {/*
-           * `Skip session` in the session state, where a bare Skip sits under
-           * a list of sets and reads as *skip this exercise* (FUEL-121). The
-           * plan state keeps `Skip`, where it answers the question it was
-           * written for: did you do today's session?
-           */}
           <Button
             variant="secondary"
             className={ACTION_BAR_SECONDARY}
             aria-pressed={entry?.status === "skipped"}
-            onClick={() => (inSession ? skipSession() : record("skipped"))}
+            onClick={() => answer("skipped")}
           >
-            {inSession ? "Skip session" : "Skip"}
+            Skip
           </Button>
         </div>
 
@@ -2219,13 +2421,13 @@ export function Training({
           these are the same kind of thing: the way back from a tap that was
           made, for the uncommon case where it was the wrong one.
 
-          Not offered in the session state, which the mock draws with three
-          controls and no fourth. Clear takes the whole record away and its
+          Not offered in the session state, whose row is the stepping
+          (FUEL-132). Clear takes the whole record away and its
           cascade takes the sets with it — a control the reader has no use
           for mid-session and every reason not to reach by accident while
           looking at a phone between sets. It is a tap away in the plan
           state, where taking a record back is what the screen is for. */}
-      {entry && !inSession && (
+      {entry && (
         <div className={cn("flex items-center gap-4", ACTION_BAR_PRIMARY)}>
           {/* Offered only when the boxes hold something the server has
               not been told. Before a status exists the note has a control
@@ -2244,6 +2446,7 @@ export function Training({
         </div>
       )}
       </div>
+      )}
     </div>
   );
 
@@ -2297,9 +2500,22 @@ export function Training({
           )}
           data-column="header"
         >
-          <DateNav date={date} today={today} />
+          {/* The session's own header in the session state — FUEL-132. Only
+              today has one, so the paginator could only leave it; `SessionHead`
+              carries the rest. `currentEx` exists whenever `inSession` does —
+              `canEnter`'s invariant above. */}
+          {inSession ? (
+            <SessionHead
+              steps={allExercises.length}
+              current={allExercises.findIndex((one) => one.id === currentEx?.id)}
+              onStepOut={stepOut}
+              onFinish={() => setFinishing(true)}
+            />
+          ) : (
+            <DateNav date={date} today={today} />
+          )}
 
-          {standing && (
+          {!inSession && standing && (
             /* Micro and a caption, like `/`'s folio — § Desktop: "the folio is
                a caption, not a heading". Hidden below the cap, where the band
                does not exist and this would land under the paginator as a
@@ -2420,10 +2636,14 @@ export function Training({
                * the flex column rather than being hidden inside it.
                */}
               {currentEx.media ? (
+                /* 44px of target in a 24px row since FUEL-132: the negative
+                   margin hands the extra 20px to the gaps either side, which
+                   hold no control, and the measure gives that height back to
+                   the sets. `SessionHead` does the same. */
                 <Button
                   variant="link"
                   size="xs"
-                  className="self-start px-0"
+                  className="-my-2.5 self-start px-0"
                   onClick={() => setFormFor({ id: currentEx.id, from: "session" })}
                 >
                   Show form
@@ -2493,7 +2713,6 @@ export function Training({
                   />
                 </>
               )}
-              <ExerciseSteps previous={stepPrevious} next={stepNext} />
             </section>
           </>
         ) : (
@@ -2748,6 +2967,77 @@ export function Training({
             </section>
           </Sheet>
         ) : null}
+
+        {/*
+         * Every ending of the session, behind the header's `Finish` — FUEL-132.
+         *
+         * The bar's three answers moved here when Next exercise became the
+         * primary. They are still one choice with three answers, so they keep
+         * their `aria-pressed` and their order, and Mark done keeps the fill:
+         * inside the sheet it IS the action the sheet exists for. Skip session
+         * hands over to its own confirmation once a set is logged (FUEL-121),
+         * one sheet at a time, rather than stacking.
+         *
+         * What it says depends on whether the session has more after the step
+         * on screen. That is the case the sheet exists for — a stray Mark done
+         * on exercise 2 of 6 — and naming the step the reader is on is what
+         * makes the question answerable. On the last step it is not asked: the
+         * bar's own Mark done is already one tap there, so this is only the way
+         * to Partial or Skip.
+         *
+         * `inSession` is in `open` for the Skip sheet's reason below.
+         */}
+        <Sheet
+          open={finishing && inSession}
+          onOpenChange={(open) => !open && setFinishing(false)}
+          title="Finish session"
+        >
+          <p className="text-body text-text-primary">
+            {stepNext && currentEx
+              ? `You’re on ${currentEx.name}${
+                  !bookend && position?.round ? `, round ${position.round}` : ""
+                }, and the session has more after it. `
+              : ""}
+            Mark done if you did all of it, or Partial if you stopped partway.
+          </p>
+
+          <div className="flex flex-col gap-2">
+            <Button
+              className="w-full"
+              aria-pressed={entry?.status === "done"}
+              onClick={() => {
+                setFinishing(false);
+                finish("done");
+              }}
+            >
+              Mark done
+            </Button>
+            <Button
+              variant="secondary"
+              className="w-full"
+              aria-pressed={entry?.status === "partial"}
+              onClick={() => {
+                setFinishing(false);
+                finish("partial");
+              }}
+            >
+              Partial
+            </Button>
+            <Button
+              variant="secondary"
+              className="w-full"
+              aria-pressed={entry?.status === "skipped"}
+              onClick={skipSession}
+            >
+              Skip session
+            </Button>
+
+            {/* § Voice: the way out says what it does, not "Cancel". */}
+            <Button variant="link" className="w-full" onClick={() => setFinishing(false)}>
+              Keep going
+            </Button>
+          </div>
+        </Sheet>
 
         {/*
          * Skip session's confirmation — FUEL-121. § Buttons gives Destructive
