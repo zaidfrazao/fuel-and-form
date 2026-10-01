@@ -1347,10 +1347,12 @@ export const workoutLogs = pgTable(
  *
  * ## Both keys composite, and only one of them cascades
  *
- * `(workout_log_id, user_id)` cascades: a session's record taken back takes its
- * sets with it. There is no third option — a set whose log is gone has no date,
- * no workout and nothing to hang off — and `clearSession` is what performs it,
- * deliberately, from a control that lives only in the plan state.
+ * `(workout_log_id, user_id)` cascades: a log row deleted takes its sets with
+ * it, because a set whose log is gone has no date, no workout and nothing to
+ * hang off. Taking back a session's RECORD no longer deletes the row when it
+ * has sets (FUEL-134): `takeBackRecord` clears its status, note and duration
+ * and leaves it as the sets' parent, so Clear and `/`'s Undo keep the training.
+ * The cascade still runs for a row with no sets, and for a user's deletion.
  *
  * `(exercise_id, user_id)` is `no action`, which is `ownedReference`'s rule for
  * history and the reason it exists: under a cascade, removing one movement from

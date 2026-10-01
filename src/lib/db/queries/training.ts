@@ -17,6 +17,7 @@ import { getPool } from "../pool";
 import * as schema from "../schema";
 import type { ExerciseSet, WorkoutLog, WorkoutLogStatus } from "../schema";
 import { scope } from "../scope";
+import { takeBackRecord } from "./session-record";
 import { byWorkout } from "./today";
 
 /**
@@ -553,6 +554,12 @@ export async function recordWalkRecording(
  * taken back did not happen, and a soft-deleted row is a filter every future
  * total has to remember.
  *
+ * Except the sets (FUEL-134). Clear takes back the RECORD — status, note and
+ * duration — and a session with sets keeps them, under a row with no status;
+ * only a session with none is deleted. Until then the delete cascaded, and
+ * Clear on a wrongly marked session erased every set logged in it. See
+ * `takeBackRecord`, which `/`'s Undo shares so the two cannot disagree.
+ *
  * Returns whether a row went, so the caller can tell a real revert from one that
  * raced another tab. The scoped delete matches nothing for a row that is already
  * gone AND for one that was never the caller's, which are the same answer on
@@ -565,12 +572,10 @@ export async function clearSession(
 ): Promise<boolean> {
   const s = scope(userId, getDb());
 
-  const removed = await s.delete(
-    schema.workoutLogs,
-    and(eq(schema.workoutLogs.date, date), eq(schema.workoutLogs.workoutId, workoutId)),
+  return takeBackRecord(
+    s,
+    and(eq(schema.workoutLogs.date, date), eq(schema.workoutLogs.workoutId, workoutId))!,
   );
-
-  return removed.length > 0;
 }
 
 /**

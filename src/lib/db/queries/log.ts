@@ -7,6 +7,7 @@ import { type DayLogs, isMarked, type LoggedRow, type LogIntent } from "@/lib/lo
 import { getDb } from "../index";
 import * as schema from "../schema";
 import { scope } from "../scope";
+import { takeBackRecord } from "./session-record";
 
 /**
  * Writing down what happened — P1's "log eaten", "mark done" and "skip".
@@ -132,28 +133,8 @@ export async function deleteLog(userId: string, row: LoggedRow): Promise<boolean
     return removed.length > 0;
   }
 
-  // A session with sets under it takes back the OUTCOME and keeps the sets —
-  // FUEL-134. The row is their parent and deleting it cascades: undoing a tap
-  // of Mark done would erase the training it was a verdict on. The tap is what
-  // happened on `/`, so the tap is what goes, leaving the row as the sets left
-  // it. Only a row with no sets is deleted, which is every row `/` creates.
-  //
-  // The note and the duration go with the status, as they went with the row
-  // before. They are the record's, and a row with no status draws no record —
-  // `/training` gives it no entry — so keeping them would hide them, and the
-  // next mark would overwrite them without anyone having seen them again.
-  const unmarked = await s.update(
-    schema.workoutLogs,
-    { status: null, note: null, durationMin: null },
-    and(
-      eq(schema.workoutLogs.id, row.log.id),
-      sql`exists (select 1 from ${schema.exerciseSets} where ${schema.exerciseSets.workoutLogId} = ${schema.workoutLogs.id})`,
-    ),
-  );
-
-  if (unmarked.length > 0) return true;
-
-  const removed = await s.delete(schema.workoutLogs, eq(schema.workoutLogs.id, row.log.id));
-
-  return removed.length > 0;
+  // A session with sets under it loses the mark and keeps the sets — FUEL-134,
+  // and `takeBackRecord`. Deleting the row would cascade: undoing a tap of
+  // Mark done would erase the training it was a verdict on.
+  return takeBackRecord(s, eq(schema.workoutLogs.id, row.log.id));
 }
