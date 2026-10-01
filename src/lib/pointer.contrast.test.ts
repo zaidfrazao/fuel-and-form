@@ -244,3 +244,27 @@ describe("the ring is a hairline, and it is the guide's value", () => {
     expect(measured).toBeCloseTo(theme === "light" ? 1.95 : 2.52, 2);
   });
 });
+
+describe("the set rows clear AA on the canvas — FUEL-133", () => {
+  /*
+   * The session state's set rows drew their line, their index and their empty
+   * tick in `text-tertiary` and `border`, which § Color Palette keeps for what
+   * nobody must read. FUEL-133 moved them to `text-secondary` (the line, the
+   * index, the tick's outline) and `text-primary` (the active row). These are
+   * the ratios that move was for, computed from `globals.css` rather than
+   * copied from the guide's table, against the canvas the rows sit on.
+   */
+  test.each(THEMES)("%s — the line is body text, ≥4.5:1", (theme) => {
+    expect(ratio(colour(theme, "text-secondary"), colour(theme, "canvas"))).toBeGreaterThanOrEqual(
+      4.5,
+    );
+    expect(ratio(colour(theme, "text-primary"), colour(theme, "canvas"))).toBeGreaterThanOrEqual(
+      4.5,
+    );
+  });
+
+  test.each(THEMES)("%s — the empty tick is a control, ≥3:1, where `border` was not", (theme) => {
+    expect(ratio(colour(theme, "text-secondary"), colour(theme, "canvas"))).toBeGreaterThanOrEqual(3);
+    expect(ratio(colour(theme, "border"), colour(theme, "canvas"))).toBeLessThan(3);
+  });
+});

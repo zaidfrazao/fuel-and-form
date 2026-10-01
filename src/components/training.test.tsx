@@ -4685,3 +4685,199 @@ describe("the session state's hierarchy — FUEL-132", () => {
     });
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* FUEL-133 — a tick is said back, with Undo, and the active row has weight    */
+/* -------------------------------------------------------------------------- */
+
+describe("what a tick logged, said back — FUEL-133", () => {
+  const subject = () => screen.getByRole("heading", { level: 1 }).textContent;
+  const said = () => document.querySelector("[data-logged]")?.textContent ?? null;
+  const status = () => document.querySelector('main [role="status"]')?.textContent;
+  const timer = () => screen.queryByRole("timer")?.textContent ?? null;
+
+  /*
+   * Held, so the optimistic set survives: a mock that resolves at once hands
+   * the screen back to its props, which never held the set, and the measure
+   * would snap back to the exercise ticked — which would make "returns to its
+   * row" true for the wrong reason.
+   */
+  const holdLogs = () => {
+    const pending = deferred<{ ok: boolean }>();
+
+    logExerciseSet.mockReturnValue(pending.promise);
+
+    return pending;
+  };
+
+  test("names the value and the exercise after an empty-box tick, across the advance", async () => {
+    // The criterion's case: in a circuit the tick moves the measure on, and an
+    // empty box logs the target's low end (FUEL-122) without ever showing it.
+    const user = userEvent.setup();
+
+    holdLogs();
+    resumed();
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Reverse lunges" })).toBeTruthy();
+    expect(said()).toBe("Logged 12 · Press-upsUndo");
+    expect(status()).toBe("Logged 12 · Press-ups");
+    expect(logExerciseSet).toHaveBeenCalledWith(expect.objectContaining({ value: 12 }));
+  });
+
+  test("says a typed value, and a timed hold in seconds", async () => {
+    const user = userEvent.setup();
+
+    resumed();
+    render(view({ sessions: timed() }));
+    await user.type(screen.getByLabelText("Set 1 seconds"), "45");
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    expect(status()).toMatch(/^Logged 45s · /);
+  });
+
+  test("ends on the next action — a step, a rest preset, a draft, Finish", async () => {
+    const user = userEvent.setup();
+
+    holdLogs();
+    resumed();
+    render(view());
+
+    // A value typed first, because Plank's fixture has no target and an
+    // empty tick there has nothing to log. The draft is itself an action, so
+    // it ends any line before the tick starts the next one.
+    const tickThen = async (then: () => Promise<void>) => {
+      const [box] = screen.getAllByLabelText(/^Set \d (reps|seconds)$/).filter(
+        (input) => (input as HTMLInputElement).value === "",
+      );
+      await user.type(box!, "10");
+      await user.click(screen.getAllByRole("button", { name: /^Log set \d$/ })[0]!);
+      expect(said()).not.toBeNull();
+      await then();
+      expect(said()).toBeNull();
+      expect(status()).toBe("");
+    };
+
+    await tickThen(() => user.click(screen.getByRole("button", { name: /^Next exercise/ })));
+    await tickThen(() => user.click(screen.getByRole("button", { name: "Stop" })));
+    await tickThen(() => user.type(screen.getAllByLabelText(/^Set \d reps$/)[0]!, "9"));
+    await tickThen(() => user.click(screen.getByRole("button", { name: "Finish session" })));
+  });
+
+  test("is replaced, not stacked, by the next tick", async () => {
+    const user = userEvent.setup();
+
+    holdLogs();
+    resumed();
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+    await screen.findByRole("heading", { level: 1, name: "Reverse lunges" });
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    expect(subject()).toBe("Plank");
+    expect(status()).toBe("Logged 8 · Reverse lunges");
+    expect(document.querySelectorAll("[data-logged]")).toHaveLength(1);
+  });
+
+  test("Undo takes the set back, returns to its row, stops the rest it started", async () => {
+    const user = userEvent.setup();
+
+    holdLogs();
+    resumed();
+    render(view());
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Reverse lunges" })).toBeTruthy();
+    expect(timer()).toBe("0:20");
+
+    await user.click(screen.getByRole("button", { name: "Undo set 1 of Press-ups, 12 reps" }));
+
+    expect(removeExerciseSet).toHaveBeenCalledWith(
+      expect.objectContaining({ exerciseId: "e1", setIndex: 1 }),
+    );
+    expect(await screen.findByRole("heading", { level: 1, name: "Press-ups" })).toBeTruthy();
+    expect(timer()).toBeNull();
+    expect(said()).toBeNull();
+    // Undo was the control pressed, and it is gone; focus goes to the tick of
+    // the row it restored rather than to the top of the document.
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Log set 1" }));
+  });
+
+  test("Undo leaves a rest alone that the tick did not start", async () => {
+    // Outside a circuit a tick starts no rest, so a rest the reader started
+    // themselves is theirs — Undo is about the set.
+    const user = userEvent.setup();
+
+    holdLogs();
+    resumed();
+    render(view({ sessions: straight() }));
+    await user.click(screen.getByRole("button", { name: "1:30" }));
+    await user.click(screen.getByRole("button", { name: "Log set 1" }));
+    await user.click(screen.getByRole("button", { name: /^Undo set 1 of Press-ups/ }));
+
+    expect(removeExerciseSet).toHaveBeenCalled();
+    expect(timer()).toBe("1:30");
+  });
+
+  test("is not offered by the sets sheet, whose row stays where it was", async () => {
+    const user = userEvent.setup();
+
+    render(view({ date: YESTERDAY }));
+    await user.click(list().getByRole("button", { name: /Press-ups/ }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Log set 1" }),
+    );
+
+    expect(logExerciseSet).toHaveBeenCalled();
+    expect(said()).toBeNull();
+  });
+});
+
+describe("the set rows' weight and contrast — FUEL-133", () => {
+  const rows = () => [...document.querySelectorAll("main ol > li:has(input)")] as HTMLElement[];
+  // The innermost span holding the words — the unit line itself, not the
+  // wrapper around the boxes that also contains them.
+  const lineOf = (row: HTMLElement) =>
+    [...row.querySelectorAll("span")]
+      .filter((span) => !span.querySelector("span"))
+      .find((span) => /Target|reps|sec/.test(span.textContent ?? ""))!;
+
+  test("draws the first open row in text-primary and the others receding", () => {
+    resumed();
+    render(view({ sessions: straight([set("e1", 1)]) }));
+
+    const [logged, active, pending] = rows();
+
+    expect(active!.hasAttribute("data-active")).toBe(true);
+    expect(lineOf(active!).className).toContain("text-text-primary");
+    expect(logged!.hasAttribute("data-active")).toBe(false);
+    expect(lineOf(logged!).className).toContain("text-text-secondary");
+    expect(lineOf(pending!).className).toContain("text-text-secondary");
+  });
+
+  test("never draws a set line, an index or an empty tick in text-tertiary", () => {
+    // § Color Palette: `text-tertiary` is "never for information the user must
+    // read" — 2.19:1 on the light canvas (FUEL-63). The set rows were all of it.
+    resumed();
+    render(view());
+
+    for (const row of rows()) {
+      for (const node of row.querySelectorAll("span")) {
+        expect(node.className).not.toContain("text-text-tertiary");
+      }
+      const tick = row.querySelector("button span")!;
+      expect(tick.className).toContain("border-text-secondary");
+      expect(tick.className).not.toMatch(/\bborder-border\b/);
+    }
+  });
+
+  test("leaves every row level in the sets sheet, which has no next set", async () => {
+    const user = userEvent.setup();
+
+    render(view({ date: YESTERDAY }));
+    await user.click(list().getByRole("button", { name: /Press-ups/ }));
+
+    expect(document.querySelector("[role=dialog] [data-active]")).toBeNull();
+  });
+});
