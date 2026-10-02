@@ -180,7 +180,7 @@ describe("under StrictMode's double mount", () => {
 
     const locks = [sentinel(), sentinel()];
     await act(async () => {
-      grants.forEach((resolve, i) => resolve(locks[i]));
+      grants.forEach((resolve, i) => resolve(locks[i] ?? sentinel()));
     });
 
     // One kept, one let go on arrival.

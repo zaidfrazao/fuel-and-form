@@ -23,13 +23,18 @@ const fake = (): Fake => {
 /** A platform that answers only when told to, in the order it was asked. */
 const deferred = () => {
   const pending: ((sentinel: Fake) => void)[] = [];
+  const answer = (i: number, sentinel: Fake) => {
+    const resolve = pending[i];
+    if (!resolve) throw new Error(`request ${i} was never made`);
+    resolve(sentinel);
+  };
   vi.stubGlobal(
     "navigator",
     Object.assign(Object.create(navigator), {
       wakeLock: { request: () => new Promise<Fake>((resolve) => pending.push(resolve)) },
     }),
   );
-  return pending;
+  return answer;
 };
 
 const refs = () => ({
@@ -45,13 +50,13 @@ describe("two requests in flight at once", () => {
   test("keep the first grant and let the second go", async () => {
     // A return that fires `visibilitychange` and `pageshow` together, or React's
     // development double-mount: both calls ask before either is answered.
-    const pending = deferred();
+    const answer = deferred();
     const { ref, wanted } = refs();
 
     const asked = [hold(ref, wanted), hold(ref, wanted)];
     const [first, second] = [fake(), fake()];
-    pending[0](first);
-    pending[1](second);
+    answer(0, first);
+    answer(1, second);
     await Promise.all(asked);
 
     expect(ref.current).toBe(first);
@@ -60,12 +65,12 @@ describe("two requests in flight at once", () => {
   });
 
   test("leave nothing held once the caller lets go", async () => {
-    const pending = deferred();
+    const answer = deferred();
     const { ref, wanted } = refs();
 
     const asked = [hold(ref, wanted), hold(ref, wanted)];
     const grants = [fake(), fake()];
-    grants.forEach((sentinel, i) => pending[i](sentinel));
+    grants.forEach((sentinel, i) => answer(i, sentinel));
     await Promise.all(asked);
 
     wanted.current = false;
@@ -79,7 +84,7 @@ describe("two requests in flight at once", () => {
   test("still replace a lock the platform dropped", async () => {
     // The guard must not refuse the case re-requesting exists for: a stored
     // sentinel the platform has released is not a lock, and is replaced.
-    const pending = deferred();
+    const answer = deferred();
     const { ref, wanted } = refs();
 
     const dropped = fake();
@@ -88,7 +93,7 @@ describe("two requests in flight at once", () => {
 
     const asked = hold(ref, wanted);
     const fresh = fake();
-    pending[0](fresh);
+    answer(0, fresh);
     await asked;
 
     expect(ref.current).toBe(fresh);
