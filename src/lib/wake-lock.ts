@@ -59,6 +59,18 @@ import type { RefObject } from "react";
  * wanted is released immediately rather than stored. Callers must set
  * `wanted.current = false` BEFORE calling `release`, or the two guards do not
  * meet.
+ *
+ * ## Nor is a second grant — two requests can be in flight at once
+ *
+ * The first guard only sees a lock that has already been *stored*, so two
+ * calls made before either is answered both ask, and both answers arrive
+ * wanted. Storing the second overwrote the first, which was then held by
+ * nothing anyone would release: the same invisible leak as above, outliving
+ * the screen that took it until the tab was hidden. It is reachable three
+ * ways — a return that fires `visibilitychange` and `pageshow` together,
+ * React's development double-mount, and a Stop then Start inside the
+ * platform's answer (FUEL-145). So a grant that finds a live lock already
+ * filed is released, and the one that got there first is kept.
  */
 export async function hold(
   ref: RefObject<WakeLockSentinel | null>,
@@ -69,7 +81,9 @@ export async function hold(
   try {
     const sentinel = await navigator.wakeLock.request("screen");
 
-    if (!wanted.current) {
+    const held = ref.current !== null && !ref.current.released;
+
+    if (!wanted.current || held) {
       void sentinel.release().catch(() => {});
       return;
     }

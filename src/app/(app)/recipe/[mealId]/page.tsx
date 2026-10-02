@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
+import { KeepAwake } from "@/components/keep-awake";
 import { PageMain } from "@/components/page-main";
 import { RecipeView } from "@/components/recipe-view";
 import { getSession } from "@/lib/auth/session";
@@ -29,6 +30,12 @@ import { requestedWeek } from "@/lib/week-param";
  * without one, the ticks are held in memory and a reload starts clean.
  * Validated as a calendar date and otherwise dropped: a bad date is the
  * library's view of the meal, not an error.
+ *
+ * ## The screen stays on
+ *
+ * `KeepAwake` holds a wake lock while the recipe is open (FUEL-145): it is
+ * cooked from, with hands that cannot tap a dimming screen. Here rather than in
+ * `RecipeView`, so `/dev/recipe` does not take one.
  */
 export const metadata: Metadata = {
   title: "Recipe · Fuel & Form",
@@ -54,6 +61,7 @@ export default async function RecipePage({
 
   return (
     <PageMain className="gap-7 py-8">
+      <KeepAwake />
       <RecipeView recipe={recipe} userId={session.userId} date={requestedWeek(date)} />
     </PageMain>
   );
