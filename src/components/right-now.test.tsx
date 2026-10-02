@@ -493,6 +493,27 @@ describe("the active meal", () => {
     expect(within(subject!).getByText("07:00")).toBeDefined();
   });
 
+  test("links its name to the meal's recipe, for today — FUEL-143", () => {
+    renderNow(active(0));
+
+    const heading = screen.getByRole("heading", { level: 1 });
+    const link = within(heading).getByRole("link");
+    const id = BREAKFAST.kind === "meal" ? BREAKFAST.meal.meal.id : "";
+
+    // The name IS the link — no second control, and so no height on a screen
+    // whose fold is measured to the pixel.
+    expect(link.textContent).toBe(heading.textContent);
+    expect(link.getAttribute("href")).toBe(`/recipe/${id}?date=2026-03-09`);
+  });
+
+  test("a swapped dinner links the swapped meal's recipe", () => {
+    renderNow(swappedView());
+
+    const link = within(screen.getByRole("heading", { level: 1 })).getByRole("link");
+
+    expect(link.getAttribute("href")).toBe("/recipe/meal-4?date=2026-03-09");
+  });
+
   test("keeps a dash in the name with the words before it — FUEL-117", () => {
     // Headings balance, and balancing would otherwise open line 2 with the
     // dash: "Overnight Oats / — PB Cocoa" at 375. Where the break lands is the
@@ -711,6 +732,8 @@ describe("the active session", () => {
     const heading = screen.getByRole("heading", { level: 1 });
 
     expect(heading.textContent).toBe("Circuit A");
+    // A session has no recipe, so its name links nowhere — FUEL-143.
+    expect(within(heading).queryByRole("link")).toBeNull();
     // Scoped: the walk in "Anytime" is a session too, and carries the same
     // eyebrow.
     expect(within(heading.closest("header")!).getByText("Training")).toBeDefined();
@@ -2715,6 +2738,11 @@ describe("repeating a meal", () => {
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Chickpea curry");
     expect(screen.getByText("Swapped")).toBeTruthy();
+    // The recipe link follows the meal the card now names, not the one it
+    // replaced — FUEL-143's "a swapped meal opens the swapped recipe".
+    expect(
+      within(screen.getByRole("heading", { level: 1 })).getByRole("link").getAttribute("href"),
+    ).toMatch(/^\/recipe\/meal-4\?/);
 
     held.settle({ ok: true });
   });
@@ -2971,11 +2999,20 @@ describe("the link at the foot", () => {
     // the one that stays: it is not one of the four, does not go in the pill,
     // and § Navigation puts it exactly here — "To the foot of `/`... Two taps
     // from anywhere: the Now pill, then the link."
+    //
+    // The page's one other link is the meal's own name, to its recipe
+    // (FUEL-143) — a cross-link sideways to `/recipe/[mealId]`, in the title
+    // rather than at the foot, and listed here so the set is still whole.
     renderNow(active(0));
+
+    const id = BREAKFAST.kind === "meal" ? BREAKFAST.meal.meal.id : "";
 
     expect(
       screen.getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")]),
-    ).toEqual([["Settings", "/settings"]]);
+    ).toEqual([
+      ["Overnight oats", `/recipe/${id}?date=2026-03-09`],
+      ["Settings", "/settings"],
+    ]);
   });
 
   test("is named for the screen it opens, not for one section of it", () => {

@@ -111,6 +111,12 @@ export type MealPickerProps = {
    */
   children?: ReactNode;
   /**
+   * Above the tiles, under the title — the swap sheet's `Recipe` link for the
+   * meal the slot holds now (FUEL-143). About the slot, not about a choice, so
+   * it reads before the choices do.
+   */
+  lead?: ReactNode;
+  /**
    * Pinned beneath the scrolling grid — FUEL-135. The swap's confirm and the
    * two figures it changes, so a tap on a tile always has its next step on
    * screen. See `Sheet`'s `footer`.
@@ -129,6 +135,7 @@ export function MealPicker({
   selectedMealId,
   onSelect,
   children,
+  lead,
   footer,
 }: MealPickerProps) {
   return (
@@ -144,6 +151,8 @@ export function MealPicker({
           the slot filter — which is what "by default" in the acceptance
           criterion means. State hoisted into MealPicker would survive the close
           and quietly stop defaulting after the first time the toggle was used. */}
+      {lead}
+
       <Candidates
         slot={slot}
         meals={meals}

@@ -635,6 +635,20 @@ describe("editing a cell", () => {
     expect(within(sheet).getByText(/Dinner/i)).toBeTruthy();
   });
 
+  test("the sheet links the cell's meal to its recipe, on the cell's date — FUEL-143", async () => {
+    grid();
+    const user = userEvent.setup();
+
+    await user.click(cell("Thu 12 Mar dinner: Chilli con Carne"));
+
+    const link = within(screen.getByRole("dialog")).getByRole("link", { name: "Recipe" });
+
+    // The tapped day's date, not today's: the recipe's up-link goes back to
+    // the week the cell is in, and FUEL-144's ticks belong to that dinner.
+    expect(link.getAttribute("href")).toMatch(/^\/recipe\/[^/?]+\?date=2026-03-12$/);
+    expect(link.parentElement?.textContent).toBe("Recipe · Chilli con Carne");
+  });
+
   test("nothing is written by opening a cell", async () => {
     grid();
     const user = userEvent.setup();

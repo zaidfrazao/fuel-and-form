@@ -196,3 +196,11 @@ export const plain = (inline: readonly Inline[]): string => inline.map((run) => 
  */
 export const isMealId = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+/**
+ * A meal's recipe, as every entry point links it — `/`'s title and `/plan`'s
+ * swap sheet. The date is the plan's: it sends the recipe's up-link back to
+ * that week, and FUEL-144 keys its ticks by it.
+ */
+export const recipeHref = (mealId: string, date?: string | null): string =>
+  date ? `/recipe/${mealId}?date=${date}` : `/recipe/${mealId}`;

@@ -144,6 +144,33 @@ function column(sheet: HTMLElement, label: string) {
   return pair.textContent ?? "";
 }
 
+describe("the recipe link — FUEL-143", () => {
+  test("names the meal the slot holds now, and links its recipe for the sheet's date", async () => {
+    const { sheet } = await open();
+
+    const link = within(sheet).getByRole("link", { name: "Recipe" });
+
+    expect(link.getAttribute("href")).toBe("/recipe/m1?date=2026-03-09");
+    expect(link.parentElement?.textContent).toBe("Recipe · Chilli");
+  });
+
+  test("does not follow a tile that has been picked but not swapped", async () => {
+    const { user, sheet } = await open();
+
+    await user.click(within(sheet).getByRole("button", { name: /Chickpea curry/ }));
+
+    expect(within(sheet).getByRole("link", { name: "Recipe" }).getAttribute("href")).toBe(
+      "/recipe/m1?date=2026-03-09",
+    );
+  });
+
+  test("is absent for an empty slot — there is no meal to cook", async () => {
+    const { sheet } = await open({ slot: "lunch" });
+
+    expect(within(sheet).queryByRole("link", { name: "Recipe" })).toBeNull();
+  });
+});
+
 describe("the resulting day totals", () => {
   test("start as the day stands, before anything is chosen", () => {
     // Not blank and not zero. The reader is deciding whether to swap, and the

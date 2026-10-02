@@ -52,6 +52,7 @@ import type { LogVerb } from "@/lib/log-intent";
 import { type MacroBearing, type MacroTarget, summariseDay } from "@/lib/macros";
 import { folioLabel, itemLabel, itemName, rulerSlots } from "@/lib/now-display";
 import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
+import { recipeHref } from "@/lib/recipe";
 import { swapNote } from "@/lib/swap-note";
 import { titleText } from "@/lib/title";
 import { cn } from "@/lib/utils";
@@ -211,6 +212,7 @@ function Subject({
   at,
   swapped,
   name,
+  recipeHref: href,
 }: {
   item: NowItem;
   at?: string;
@@ -224,7 +226,18 @@ function Subject({
    * the frame while the 40px title still named the meal that was replaced.
    */
   name?: string;
+  /**
+   * The meal's recipe, when the subject is a meal — PRD § P12, FUEL-143.
+   *
+   * The name IS the link rather than a link beside it: the 40px title gains an
+   * underline and no height, and this screen's fold is measured to the pixel.
+   * Built from the meal shown, so an un-confirmed swap links the meal it has
+   * just become.
+   */
+  recipeHref?: string;
 }) {
+  const title = titleText(name ?? itemName(item));
+
   return (
     <header className="flex flex-col gap-1">
       {/* The tag sits beside the slot label rather than beside the name: it
@@ -253,7 +266,18 @@ function Subject({
       </div>
       {/* The one h1 on the page. A screen whose whole job is answering "what
           now?" should have the answer as its heading, not the product name. */}
-      <h1 className="text-title text-text-primary">{titleText(name ?? itemName(item))}</h1>
+      <h1 className="text-title text-text-primary">
+        {href ? (
+          <Link
+            href={href}
+            className={`underline decoration-text-tertiary decoration-1 underline-offset-[6px] ${HOVER_LINK} ${FOCUS_RING}`}
+          >
+            {title}
+          </Link>
+        ) : (
+          title
+        )}
+      </h1>
       {at !== undefined && <SlashMeta className="hidden md:block">{at}</SlashMeta>}
     </header>
   );
@@ -2005,6 +2029,7 @@ export function RightNow({
           at={now.active.at}
           swapped={activeMeal?.isOverride}
           name={activeMeal?.meal.name}
+          recipeHref={activeMeal && recipeHref(activeMeal.meal.id, view.date)}
         />
 
         {rulerAbove}
