@@ -204,13 +204,18 @@ describe("where there is no lock to be had", () => {
 
   test("a release that rejects is swallowed too", async () => {
     const stop = watchRejections();
+    let releases = 0;
+    // A plain function, not `vi.fn`: a mock subscribes to every promise it
+    // returns to record how it settled, which marks the rejection handled — and
+    // this test then passes with the `.catch` deleted from `release`.
     const lock = {
       released: false,
-      release: vi.fn(async () => {
-        throw new DOMException("gone", "InvalidStateError");
-      }),
+      release: () => {
+        releases += 1;
+        return Promise.reject(new DOMException("gone", "InvalidStateError"));
+      },
     };
-    granting(lock);
+    stubWakeLock(async () => lock);
 
     const { unmount } = render(<KeepAwake />);
     await act(async () => {});
@@ -218,7 +223,7 @@ describe("where there is no lock to be had", () => {
     await settle();
     stop();
 
-    expect(lock.release).toHaveBeenCalledTimes(1);
+    expect(releases).toBe(1);
     expect(unhandled).not.toHaveBeenCalled();
   });
 });
