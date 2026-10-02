@@ -80,6 +80,7 @@ const {
   loadWeighIns,
   loadShoppingWeek,
   loadSettings,
+  loadRecipe,
 } = vi.hoisted(() => ({
   nav: { pathname: "/" },
   redirect: vi.fn((path: string) => {
@@ -97,6 +98,7 @@ const {
   loadWeighIns: vi.fn(),
   loadShoppingWeek: vi.fn(),
   loadSettings: vi.fn(),
+  loadRecipe: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ redirect, usePathname: () => nav.pathname }));
@@ -109,6 +111,7 @@ vi.mock("@/lib/db/queries/training", () => ({ loadTraining }));
 vi.mock("@/lib/db/queries/weight", () => ({ loadWeighIns }));
 vi.mock("@/lib/db/queries/shopping", () => ({ loadShoppingWeek }));
 vi.mock("@/lib/db/queries/profile", () => ({ loadSettings }));
+vi.mock("@/lib/db/queries/recipe", () => ({ loadRecipe }));
 
 // The client components each screen renders import "use server" modules, which
 // cannot be imported under jsdom. Every per-screen test file mocks its own; this
@@ -157,6 +160,7 @@ const { default: TrainingPage } = await import("@/app/(app)/training/page");
 const { default: WeightPage } = await import("@/app/(app)/weight/page");
 const { default: ShoppingPage } = await import("@/app/(app)/shopping/page");
 const { default: SettingsPage } = await import("@/app/(app)/settings/page");
+const { default: RecipePage } = await import("@/app/(app)/recipe/[mealId]/page");
 
 /* -------------------------------------------------------------------------- */
 /* Fixtures                                                                   */
@@ -351,6 +355,22 @@ const SETTINGS = {
 
 type Search = Record<string, string | string[]>;
 
+/** A recipe with nothing in it but its macros — enough to render the frame. */
+const RECIPE = {
+  meal: {
+    id: "3f2b8a1e-9c4d-4e5f-8a6b-7c8d9e0f1a2b",
+    name: "Lean Beef Mince Chilli",
+    slotType: "dinner" as const,
+    kcal: 355,
+    proteinG: 41,
+    fatG: 4,
+    carbG: 36,
+    method: null,
+    notes: null,
+  },
+  ingredients: [],
+};
+
 const params = (search: Search = {}) => ({ searchParams: Promise.resolve(search) }) as never;
 
 /**
@@ -369,6 +389,13 @@ const SCREENS: Record<string, (search: Search) => Promise<ReactNode>> = {
   "/plan/template": () => TemplatePage(),
   "/shopping": (search) => ShoppingPage(params(search)),
   "/settings": () => SettingsPage(),
+  // The table's row is the pattern; the page is given a real id for it, and
+  // `nav.pathname` stays the pattern, which `lib/nav.ts` resolves the same way.
+  "/recipe/[mealId]": (search) =>
+    RecipePage({
+      params: Promise.resolve({ mealId: RECIPE.meal.id }),
+      searchParams: Promise.resolve(search),
+    }),
 };
 
 /**
@@ -444,6 +471,7 @@ beforeEach(() => {
   loadTraining.mockResolvedValue(TRAINING);
   loadWeighIns.mockResolvedValue(WEIGHT);
   loadShoppingWeek.mockResolvedValue(SHOPPING);
+  loadRecipe.mockResolvedValue(RECIPE);
   loadSettings.mockResolvedValue(SETTINGS);
 });
 
@@ -625,6 +653,7 @@ describe("the way up", () => {
     ["/plan/template", "Back to Plan", "/plan"],
     ["/shopping", "Back to Plan", "/plan"],
     ["/settings", "Back to Now", "/"],
+    ["/recipe/[mealId]", "Back to Plan", "/plan"],
   ];
 
   test.each(PARENTS)("%s goes up to %s", async (route, name, href) => {

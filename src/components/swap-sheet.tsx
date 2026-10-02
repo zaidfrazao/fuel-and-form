@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { TINTED_TEXT } from "@/components/kv-grid";
@@ -10,6 +11,8 @@ import { REPEAT_MAX, REPEAT_MIN } from "@/lib/repeat";
 import type { MealSlot } from "@/lib/db/schema";
 import { type MacroBearing, type MacroTarget, summariseDay } from "@/lib/macros";
 import { dayLabel } from "@/lib/now-display";
+import { FOCUS_RING, HOVER_LINK } from "@/lib/pointer";
+import { recipeHref } from "@/lib/recipe";
 import { cn } from "@/lib/utils";
 import type { CalendarDate } from "@/lib/date";
 
@@ -389,6 +392,26 @@ export function SwapSheet({
       currentMealId={current?.id}
       selectedMealId={selectedId}
       onSelect={setSelectedId}
+      /*
+       * The recipe for the meal the slot holds now — PRD § P12, FUEL-143. On
+       * `/plan` a cell is one control and it opens this sheet, so the sheet is
+       * where that meal can be followed to its recipe. `current` is the
+       * resolved slot, so a swapped cell links the swapped meal; a pick inside
+       * the sheet does not move it, because nothing is swapped until Swap.
+       */
+      lead={
+        current && (
+          <p className="text-slash text-text-secondary">
+            <Link
+              href={recipeHref(current.id, date)}
+              className={`text-text-primary underline decoration-text-tertiary underline-offset-4 ${HOVER_LINK} ${FOCUS_RING}`}
+            >
+              Recipe
+            </Link>{" "}
+            &middot; {current.name}
+          </p>
+        )
+      }
       footer={
         <>
           {/*

@@ -115,6 +115,29 @@ export function isMaterialOverage(delta: number, target: number): boolean {
 export type CaloriesFigure = "actual" | "target";
 
 /**
+ * One meal's four figures, per serving, with no target and no delta — `/`'s
+ * *This meal* and the recipe's (FUEL-143). A meal is not a day, so there is
+ * nothing to measure it against here.
+ *
+ * Four across from 768px and 2×2 below it: `kv-grid.tsx` owns that breakpoint,
+ * and `MealMacros` in `right-now.tsx` carries the reasoning for the count.
+ */
+export function MealMacroGrid({ meal, className }: { meal: MacroBearing; className?: string }) {
+  return (
+    <KeyValueGrid
+      columns={4}
+      className={className}
+      items={[
+        { label: "Calories", value: `${meal.kcal}` },
+        { label: "Protein", value: `${meal.proteinG} g`, emphasis: true },
+        { label: "Fat", value: `${meal.fatG} g` },
+        { label: "Carbs", value: `${meal.carbG} g` },
+      ]}
+    />
+  );
+}
+
+/**
  * The meal and the day in one grid — FUEL-82, Brand Guide § The Day's Numbers
  * on a Phone.
  *

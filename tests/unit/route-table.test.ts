@@ -98,7 +98,7 @@ const inGroup = files.filter((file) => file.startsWith("(app)/"));
 const outsideGroup = files.filter((file) => !file.startsWith("(app)/"));
 
 describe("the route table and the route tree", () => {
-  test("hold the same seven routes", () => {
+  test("hold the same eight routes", () => {
     // Sorted rather than compared in order: `ROUTE_PATHS` is § Navigation's
     // table order and `readdirSync` is the filesystem's, and neither is a claim
     // the other should have to satisfy. What matters is the SET.

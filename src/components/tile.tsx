@@ -40,6 +40,13 @@ type TileOwnProps = {
    * announced as ordinary buttons.
    */
   selected?: boolean;
+  /**
+   * The Meal detail tile — `/recipe/[mealId]`, FUEL-143. The name becomes the
+   * screen's `<h1>` at the frame's 17px, and the tile takes the frame's size:
+   * 172px tall with a 66px mark at 375, 200 and 78 at 1272. A `div` tile only;
+   * a heading inside a button would be announced as part of its name.
+   */
+  detail?: boolean;
   className?: string;
 };
 
@@ -64,7 +71,9 @@ type TileProps =
         HTMLAttributes<HTMLDivElement>,
         keyof TileOwnProps
       >)
-  | (TileOwnProps & { as: "button" } & Omit<
+  // `detail` is refused here rather than ignored: its name is an `<h1>`, and a
+  // heading inside a button is invalid and is read out as the button's name.
+  | (Omit<TileOwnProps, "detail"> & { as: "button"; detail?: never } & Omit<
         ButtonHTMLAttributes<HTMLButtonElement>,
         // `type` is deliberately not passable. It is set to "button" below, but
         // the spread comes after it, so a caller could otherwise override it to
@@ -85,19 +94,30 @@ export function Tile({
   meta,
   material = "surface",
   selected,
+  detail = false,
   className,
   as = "div",
   ...rest
 }: TileProps) {
+  const Name = detail ? "h1" : "span";
+
   const content = (
     <>
-      <span className="text-[0.9375rem] leading-[1.2] font-semibold tracking-[-0.018em]">
+      <Name
+        className={cn(
+          "text-[0.9375rem] leading-[1.2] font-semibold tracking-[-0.018em]",
+          detail && "text-[1.0625rem]",
+        )}
+      >
         {name}
-      </span>
+      </Name>
       {/* `flex-1` with the motif centred inside it, so tiles of differing name
           lengths still line their marks up across a row. */}
       <span className="grid flex-1 place-items-center">
-        <Motif name={motif} className="h-[46px] w-[46px]" />
+        <Motif
+          name={motif}
+          className={detail ? "size-[66px] xl:size-[78px]" : "h-[46px] w-[46px]"}
+        />
       </span>
       {meta !== undefined && <SlashMeta tone="subdued">{meta}</SlashMeta>}
     </>
@@ -105,6 +125,7 @@ export function Tile({
 
   const classes = cn(
     "flex min-h-[132px] flex-col gap-2 rounded-lg px-[13px] py-3 text-left",
+    detail && "min-h-[172px] xl:min-h-[200px]",
     MATERIAL[material],
     // Brand Guide § Accessibility — 2px accent ring at 2px offset on every
     // interactive element, in both modes, never removed. Only `focus-visible`,
