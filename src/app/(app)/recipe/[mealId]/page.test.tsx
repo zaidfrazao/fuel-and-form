@@ -1,5 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { act, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { Recipe } from "@/lib/db/queries/recipe";
 import { seedMeals } from "@/lib/seed/meals";
@@ -82,6 +82,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   getSession.mockResolvedValue(SESSION);
   loadRecipe.mockResolvedValue(CHILLI);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("the boundaries", () => {
@@ -261,5 +265,26 @@ describe("the up-link", () => {
     await page({ date: "tuesday" });
 
     expect(upLink().getAttribute("href")).toBe("/plan");
+  });
+});
+
+describe("the screen stays on", () => {
+  /*
+   * FUEL-145. The lock's lifecycle is `keep-awake.test.tsx`'s; what this proves
+   * is that the route takes it at all — a `KeepAwake` dropped from the page
+   * would leave every one of those tests green.
+   */
+  test("a wake lock is requested when the recipe opens", async () => {
+    const request = vi.fn(async () => ({ released: false, release: vi.fn(async () => {}) }));
+
+    vi.stubGlobal(
+      "navigator",
+      Object.assign(Object.create(navigator), { wakeLock: { request } }),
+    );
+
+    await page();
+    await act(async () => {});
+
+    expect(request).toHaveBeenCalledWith("screen");
   });
 });
