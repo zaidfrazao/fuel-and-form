@@ -1,4 +1,5 @@
 import { act, render } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { KeepAwake } from "./keep-awake";
@@ -153,6 +154,41 @@ describe("a grant that arrives after the recipe is left", () => {
     });
 
     expect(lock.release).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("under StrictMode's double mount", () => {
+  test("one lock is held, and leaving releases every grant", async () => {
+    /*
+     * Development mounts, unmounts and mounts again before the first request
+     * is answered, so two grants arrive wanted. Without `hold`'s held-lock
+     * guard the second overwrote the first in the ref, and the first was never
+     * released — a screen kept on after the recipe was left.
+     */
+    const grants: ((value: ReturnType<typeof sentinel>) => void)[] = [];
+    const request = vi.fn(
+      () => new Promise<ReturnType<typeof sentinel>>((resolve) => grants.push(resolve)),
+    );
+    stubWakeLock(request);
+
+    const { unmount } = render(
+      <StrictMode>
+        <KeepAwake />
+      </StrictMode>,
+    );
+    expect(request).toHaveBeenCalledTimes(2);
+
+    const locks = [sentinel(), sentinel()];
+    await act(async () => {
+      grants.forEach((resolve, i) => resolve(locks[i]));
+    });
+
+    // One kept, one let go on arrival.
+    expect(locks.filter((lock) => lock.release.mock.calls.length === 0)).toHaveLength(1);
+
+    unmount();
+
+    for (const lock of locks) expect(lock.release).toHaveBeenCalledTimes(1);
   });
 });
 
