@@ -25,7 +25,8 @@ import { requestedWeek } from "@/lib/week-param";
  * ## `?date=`
  *
  * The plan's date, when the recipe was opened from `/` or `/plan`. It sends the
- * up-link back to that week, and it is what FUEL-144's tick lists will key by.
+ * up-link back to that week, and it is what FUEL-144's tick lists key by —
+ * without one, the ticks are held in memory and a reload starts clean.
  * Validated as a calendar date and otherwise dropped: a bad date is the
  * library's view of the meal, not an error.
  */
@@ -53,7 +54,7 @@ export default async function RecipePage({
 
   return (
     <PageMain className="gap-7 py-8">
-      <RecipeView recipe={recipe} date={requestedWeek(date)} />
+      <RecipeView recipe={recipe} userId={session.userId} date={requestedWeek(date)} />
     </PageMain>
   );
 }

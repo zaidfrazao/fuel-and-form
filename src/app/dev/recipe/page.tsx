@@ -95,7 +95,7 @@ export default async function RecipeSpecimen({
           does and leaves the aside standing empty. */}
       <div className={FRAME}>
         <PageMain className="gap-7 py-8">
-          <RecipeView recipe={current.recipe} date="2026-03-11" />
+          <RecipeView recipe={current.recipe} userId="specimen" date="2026-03-11" />
         </PageMain>
       </div>
 
