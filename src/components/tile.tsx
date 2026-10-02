@@ -71,7 +71,9 @@ type TileProps =
         HTMLAttributes<HTMLDivElement>,
         keyof TileOwnProps
       >)
-  | (TileOwnProps & { as: "button" } & Omit<
+  // `detail` is refused here rather than ignored: its name is an `<h1>`, and a
+  // heading inside a button is invalid and is read out as the button's name.
+  | (Omit<TileOwnProps, "detail"> & { as: "button"; detail?: never } & Omit<
         ButtonHTMLAttributes<HTMLButtonElement>,
         // `type` is deliberately not passable. It is set to "button" below, but
         // the spread comes after it, so a caller could otherwise override it to
