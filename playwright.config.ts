@@ -58,7 +58,7 @@ const screens = WIDTHS.flatMap(({ width, height }) =>
      * called `sheet-screens.spec.ts` by accident, which is not a wiring anyone
      * should have to notice to keep working.
      */
-    testMatch: /(screens|sheet-open)\.spec\.ts/,
+    testMatch: /(screens|sheet-open|recipe)\.spec\.ts/,
     dependencies: ["setup"],
     use: {
       ...devices["Desktop Chrome"],

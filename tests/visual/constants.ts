@@ -107,9 +107,10 @@ export const THEMES = ["light", "dark"] as const;
  * FUEL-73 redrew the sheet — it stands in the measure's column above 1024px
  * rather than centring on the window — so the state this list deferred as "about
  * to be redrawn" has been, and it is baselined by the same eight projects
- * against this same list of widths. The day-complete summary is still FUEL-48's,
- * and so is the meal detail, which is a screen the mock draws and the app has no
- * route for.
+ * against this same list of widths. The day-complete summary is still FUEL-48's.
+ * The meal detail has a route since FUEL-143, `/recipe/[mealId]`, and is
+ * photographed by `recipe.spec.ts` and the two specimen rows at the foot of
+ * this list.
  *
  * `slug` is the baseline's filename and must stay stable — renaming one orphans
  * eight committed PNGs.
@@ -161,6 +162,18 @@ export const SCREENS = [
     path: "/dev/right-now?case=empty",
     capture: "main",
   },
+  /**
+   * The recipe's two shapes the demo cannot reach — FUEL-143.
+   *
+   * The live route is `recipe.spec.ts`'s, reached by following `/`'s title,
+   * because its address carries a meal id that each demo provisioning mints
+   * afresh. These two are specimens: the steak, the one method that numbers its
+   * own steps under a table (the demo's dinner at the frozen instant is not
+   * it), and a meal with macros and nothing else, whose quiet empty sections
+   * neither the fixture nor jsdom can photograph.
+   */
+  { slug: "recipe-steak", path: "/dev/recipe?case=steak", capture: "main" },
+  { slug: "recipe-empty", path: "/dev/recipe?case=empty", capture: "main" },
 ] as const satisfies readonly {
   slug: string;
   path: string;
