@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { MealMacroGrid } from "@/components/macro-grid";
 import { Blocks, Section } from "@/components/recipe-parts";
 import { RecipePrep } from "@/components/recipe-prep";
@@ -28,21 +30,32 @@ import { parseMethod, parseProse } from "@/lib/recipe";
  * Takes the `Recipe` shape the query returns, so the kitchen's reading of an
  * ingredient is the only one that can reach it: the shop's columns are not in
  * the type.
+ *
+ * `edit` is the owner's Edit control (FUEL-147), passed in rather than built
+ * here: it calls a Server Action, and importing one would drag `server-only`
+ * into every test and specimen that renders this view.
  */
 export function RecipeView({
   recipe,
   userId,
   date,
+  edit,
 }: {
   recipe: Recipe;
   /** Whose ticks — FUEL-144 keys the prep lists by the reader. */
   userId: string;
   /** The plan's date, when opened from it. Carries the up-link to that week. */
   date?: CalendarDate | null;
+  /** The owner's Edit control, at the up-link row's right. Absent for a demo. */
+  edit?: ReactNode;
 }) {
   const { meal, ingredients } = recipe;
   const method = parseMethod(meal.method);
   const notes = parseProse(meal.notes);
+
+  const upLink = (
+    <UpLink pathname="/recipe/[mealId]" week={date ? startOfWeek(date) : undefined} />
+  );
 
   const counts = [
     ingredients.length > 0 && plural(ingredients.length, "ingredient"),
@@ -52,7 +65,16 @@ export function RecipeView({
   return (
     <>
       <header className="flex flex-col gap-4">
-        <UpLink pathname="/recipe/[mealId]" week={date ? startOfWeek(date) : undefined} />
+        {/* Wrapped only when there is a control to set beside the link, so a
+            demo's header is the markup it always was. */}
+        {edit ? (
+          <div className="flex items-baseline justify-between gap-3">
+            {upLink}
+            {edit}
+          </div>
+        ) : (
+          upLink
+        )}
 
         {/* The mock's top bar: what the meal is, and what its figures are per. */}
         <div className="flex items-baseline justify-between gap-3">
