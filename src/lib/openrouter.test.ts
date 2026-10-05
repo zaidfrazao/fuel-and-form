@@ -104,6 +104,16 @@ describe("requestEstimate", () => {
     expect((await requestEstimate(INPUT, KEY)).kind).toBe("estimated");
   });
 
+  test("is malformed for any finish but stop, even when the text happens to parse", async () => {
+    // A cut-off answer can end on a closing brace: the finish reason is what says
+    // it was cut, so a parse that succeeds is not evidence it was complete.
+    fetchMock.mockResolvedValue(
+      reply(completion({ finish_reason: "length", message: { content: JSON.stringify(ANSWER) } })),
+    );
+
+    expect(await requestEstimate(INPUT, KEY)).toEqual({ kind: "malformed" });
+  });
+
   test.each([
     ["a cut-off answer", completion({ finish_reason: "length", message: { content: '{"kcal":6' } })],
     ["an answer that fails the second reading", completion({ message: { content: JSON.stringify({ ...ANSWER, kcal: -5 }) } })],
