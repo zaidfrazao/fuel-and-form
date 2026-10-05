@@ -224,3 +224,22 @@ describe("saving", () => {
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
 });
+
+describe("focus", () => {
+  test("opens on the sheet, not on a selected name, and Tab reaches the name", async () => {
+    const { user, sheet } = await open();
+
+    expect(document.activeElement).toBe(screen.getByRole("dialog"));
+
+    await user.tab();
+    expect(document.activeElement).toBe(sheet.getAllByRole("textbox", { name: "Name" })[0]);
+  });
+
+  test("closing gives focus back to Edit", async () => {
+    const { user } = await open();
+
+    await user.keyboard("{Escape}");
+
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit" }));
+  });
+});

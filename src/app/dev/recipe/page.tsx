@@ -2,10 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { PageMain } from "@/components/page-main";
+import { RecipeEditor } from "@/components/recipe-edit-sheet";
 import { RecipeView } from "@/components/recipe-view";
 import type { Recipe } from "@/lib/db/queries/recipe";
 import { FRAME } from "@/lib/frame";
+import { slotLabel } from "@/lib/now-display";
 import { FOCUS_RING, HOVER_GROUND } from "@/lib/pointer";
+import { draftOf, type RecipeDraft } from "@/lib/recipe-edit";
 import { seedMeals } from "@/lib/seed/meals";
 
 /**
@@ -53,7 +56,34 @@ function fromSeed(key: string): Recipe {
 
 const CHILLI = fromSeed("beef-mince-chilli");
 
-const CASES: Record<string, { label: string; note: string; recipe: Recipe }> = {
+/**
+ * The owner's draft of a seed meal — FUEL-147. Both readings of each row, as
+ * the seed writes them, so the sheet is photographed holding real shop lines.
+ */
+function draftFromSeed(key: string): RecipeDraft {
+  const seed = seedMeals.find((meal) => meal.key === key)!;
+  const { meal } = fromSeed(key);
+
+  return draftOf(
+    meal,
+    (seed.ingredients ?? []).map((row, i) => ({
+      id: `${key}-${i}`,
+      name: row.name,
+      nonScaleMeasure: row.nonScaleMeasure ?? null,
+      grams: row.grams ?? null,
+      shopName: row.shopName ?? null,
+      shopQty: row.shopQty ?? null,
+      shopUnit: row.shopUnit ?? null,
+      category: row.category ?? null,
+      pantry: row.pantry ?? false,
+    })),
+  );
+}
+
+const CASES: Record<
+  string,
+  { label: string; note: string; recipe: Recipe; draft?: RecipeDraft }
+> = {
   chilli: {
     label: "Steps and a variant",
     note: "The seed's own shape: a line is a step, and the baked-potato variant after the blank line is prose under the steps.",
@@ -73,6 +103,12 @@ const CASES: Record<string, { label: string; note: string; recipe: Recipe }> = {
     label: "Macros only",
     note: "PRD § Risks has always allowed a meal with macros and nothing else. Both sections say so, Notes is absent, and the tile has no slash line.",
     recipe: { ...CHILLI, meal: { ...CHILLI.meal, method: null, notes: null }, ingredients: [] },
+  },
+  edit: {
+    label: "Owner, editable",
+    note: "The owner's view (FUEL-147): Edit at the right of the up-link's row opens the edit sheet. A demo session sees the chilli case. Saving here is refused — the specimen's meal is no row.",
+    recipe: CHILLI,
+    draft: draftFromSeed("beef-mince-chilli"),
   },
 };
 
@@ -95,7 +131,20 @@ export default async function RecipeSpecimen({
           does and leaves the aside standing empty. */}
       <div className={FRAME}>
         <PageMain className="gap-7 py-8">
-          <RecipeView recipe={current.recipe} userId="specimen" date="2026-03-11" />
+          <RecipeView
+            recipe={current.recipe}
+            userId="specimen"
+            date="2026-03-11"
+            edit={
+              current.draft && (
+                <RecipeEditor
+                  mealId={current.recipe.meal.id}
+                  slot={slotLabel(current.recipe.meal.slotType)}
+                  draft={current.draft}
+                />
+              )
+            }
+          />
         </PageMain>
       </div>
 

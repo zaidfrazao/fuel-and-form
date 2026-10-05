@@ -109,6 +109,16 @@ export type SheetProps = {
    * action to hold, are untouched along with their baselines.
    */
   footer?: ReactNode;
+  /**
+   * Focus the sheet itself on open, not its first control — FUEL-147.
+   *
+   * Radix focuses the first focusable element and, when that is a text input,
+   * SELECTS its contents: the recipe edit sheet opened with the meal's whole
+   * name highlighted, one keystroke from replaced. A form opened to be read
+   * before it is changed lands on the panel instead, and Tab reaches the first
+   * field. Absent, the sheets that open on a choice keep Radix's default.
+   */
+  focusSheet?: boolean;
   className?: string;
 };
 
@@ -119,6 +129,7 @@ export function Sheet({
   meta,
   children,
   footer,
+  focusSheet,
   className,
 }: SheetProps) {
   /**
@@ -208,7 +219,7 @@ export function Sheet({
               // by its own contents — a grid of named tiles — and inventing a
               // sentence for a screen reader to read before them would be noise.
               aria-describedby={undefined}
-              onOpenAutoFocus={() => {
+              onOpenAutoFocus={(event) => {
                 const active = document.activeElement;
 
                 // `instanceof` rather than a cast: `activeElement` is typed `Element`
@@ -217,6 +228,13 @@ export function Sheet({
                 // dead end this handler exists to avoid.
                 opener.current =
                   active instanceof HTMLElement && active !== document.body ? active : null;
+
+                if (focusSheet) {
+                  event.preventDefault();
+                  // Radix gives the content `tabIndex={-1}`, so it takes focus
+                  // without joining the Tab order.
+                  (event.currentTarget as HTMLElement).focus();
+                }
               }}
               onCloseAutoFocus={(event) => {
                 const trigger = opener.current;

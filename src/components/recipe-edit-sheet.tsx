@@ -229,6 +229,8 @@ function EditSheet({
       onOpenChange={onOpenChange}
       title="Edit recipe"
       meta={slot}
+      // Not the name field: Radix would select the whole name on open.
+      focusSheet
       footer={
         <>
           <Button type="submit" form={FORM_ID} className="w-full" disabled={pending}>

@@ -96,3 +96,38 @@ test("recipe-ticked", async ({ page }) => {
 
   await expect(main).toHaveScreenshot("recipe-ticked.png", { timeout: 15_000 });
 });
+
+/**
+ * The owner's edit sheet — FUEL-147.
+ *
+ * On the specimen: the demo fixture is a demo session, and a demo session is
+ * shown no Edit control, so the live route can never open this sheet here.
+ * Opening it writes nothing; Save is never pressed (memory: visual specs must
+ * not mutate the demo).
+ *
+ * Viewport captures, for `sheet-open.spec.ts`'s reason — a sheet is anchored
+ * to the window. Two of them: the sheet as it opens, on the name, the figures
+ * and the first ingredient's two readings; and scrolled to the method, where
+ * the preview numbers the steps the screen will.
+ */
+test("recipe-edit-sheet", async ({ page }) => {
+  await page.goto("/dev/recipe?case=edit");
+  await expect(page.getByRole("main")).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Edit recipe" });
+  await expect(dialog).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  await page.mouse.move(0, 0);
+
+  await expect(page).toHaveScreenshot("recipe-edit-sheet.png", { timeout: 15_000 });
+
+  // The heading, not the region: at 375 the region is taller than the sheet,
+  // and centring it scrolls step 1 out of view above.
+  const preview = dialog.getByRole("region", { name: "Method preview" });
+  await preview.getByRole("heading", { name: "Preview" }).scrollIntoViewIfNeeded();
+  await expect(preview.getByRole("listitem").first()).toBeInViewport();
+
+  await expect(page).toHaveScreenshot("recipe-edit-preview.png", { timeout: 15_000 });
+});
