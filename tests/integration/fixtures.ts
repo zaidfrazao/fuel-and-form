@@ -156,6 +156,10 @@ async function seedUser(
     slot: "breakfast",
     mealId: meal.id,
     status: "eaten",
+    kcal: meal.kcal,
+    proteinG: meal.proteinG,
+    fatG: meal.fatG,
+    carbG: meal.carbG,
   });
 
   const workout = inserted(

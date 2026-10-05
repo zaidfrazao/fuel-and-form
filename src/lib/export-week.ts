@@ -80,8 +80,9 @@ import type { TrainingDay } from "./resolve-training";
  * `swapped_with` column: it is history rather than configuration, so it
  * outlives the meal it names.
  *
- * The four macro columns describe the meal in `actual` when there is one, and
- * otherwise the meal that stood. So a summed column is intake as recorded, and
+ * The four macro columns are the log's own figures when the slot was logged —
+ * the meal as it stood at log time, not as the recipe reads now (FUEL-146) —
+ * and otherwise the meal that stood. So a summed column is intake as recorded, and
  * a row with a blank `status` is intake that was planned and never confirmed —
  * the assistant filters on `status = eaten` to separate them. Stated in the
  * README too, because a column whose meaning depends on another column is
@@ -668,9 +669,9 @@ function mealRows(
       logs: logsByDate.get(date) ?? [],
       meals: library,
     }).map((comparison) => {
-      // What the macros describe: what was eaten if anything was, else what
-      // stood for the slot. See the module comment.
-      const counted = comparison.actual ?? stood(comparison);
+      // What the macros describe: what the log recorded if there is one, else
+      // what stood for the slot. See the module comment.
+      const counted = comparison.figures ?? stood(comparison);
 
       return [
         date,

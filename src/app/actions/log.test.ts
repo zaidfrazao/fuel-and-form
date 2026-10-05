@@ -161,6 +161,10 @@ const log = (fields: Partial<MealLog> = {}): MealLog => ({
   status: "eaten",
   note: null,
   loggedAt: new Date("2026-03-09T07:05:00Z"),
+  kcal: 486,
+  proteinG: 32.5,
+  fatG: 11.8,
+  carbG: 58.2,
   ...fields,
 });
 
@@ -266,6 +270,11 @@ describe("logging the active item", () => {
       slot: "breakfast",
       mealId: "meal-1",
       status: "eaten",
+      // The resolved meal's figures, copied server-side — FUEL-146.
+      kcal: 420,
+      proteinG: 32.5,
+      fatG: 12,
+      carbG: 48,
     });
   });
 
@@ -322,6 +331,11 @@ describe("logging the active item", () => {
       slot: "snack",
       mealId: "meal-2",
       status: "eaten",
+      // The resolved meal's figures, copied server-side — FUEL-146.
+      kcal: 420,
+      proteinG: 32.5,
+      fatG: 12,
+      carbG: 48,
     });
     expect(writeCursor).not.toHaveBeenCalled();
   });

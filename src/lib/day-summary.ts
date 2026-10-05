@@ -150,12 +150,19 @@ const macrosOf = ({ kcal, proteinG, fatG, carbG }: MacroBearing): MacroBearing =
  * It still gets a line, named by its slot — "Breakfast" rather than the meal.
  * Dropping it would be worse in two ways: the count would disagree with
  * `logCount`, which is what offers the undo control, and a log the user
- * genuinely made would vanish from the day's record with nothing to say why. It
- * contributes no macros, because the figures went with the row that is missing.
+ * genuinely made would vanish from the day's record with nothing to say why.
+ * It still counts its macros: since FUEL-146 the figures are on the log row
+ * itself, so only the name went with the missing plan item.
  *
  * Unreachable today — nothing removes a meal from a day it was logged on until
  * P2's swap exists — which is precisely why it is written down now rather than
  * discovered later as a summary that quietly disagrees with itself.
+ *
+ * ## The macros are the log's, not the meal's
+ *
+ * An eaten line's figures come from the `meal_logs` row — the meal's four
+ * figures as they stood when it was logged — rather than from the meal it
+ * names. A recipe edited after lunch must not rewrite lunch.
  */
 export function dayLog(
   items: readonly NowItem[],
@@ -195,9 +202,10 @@ export function dayLog(
           name: meal?.name ?? slotLabel(log.slot),
           kind: "meal",
           status: log.status,
-          // The macros of what was eaten, from the meal the log names — never
-          // from the slot, which a swap could have refilled since.
-          ...(meal && log.status === "eaten" ? { macros: macrosOf(meal) } : {}),
+          // The macros of what was eaten, from the log row itself — never from
+          // the slot, which a swap could have refilled since, nor from the
+          // meal, whose recipe could have been edited since (FUEL-146).
+          ...(log.status === "eaten" ? { macros: macrosOf(log) } : {}),
         } satisfies LoggedEntry,
       };
     }),

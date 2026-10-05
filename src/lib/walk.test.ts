@@ -155,6 +155,10 @@ describe("withoutWalks", () => {
           status: "eaten",
           note: null,
           loggedAt: new Date(Date.UTC(2026, 2, 9, 7, 0)),
+          kcal: 486,
+          proteinG: 32.5,
+          fatG: 11.8,
+          carbG: 58.2,
         },
       ],
     });

@@ -80,7 +80,17 @@ const scheduled = (item: NowItem, key: string): ScheduledItem => ({
 const at = (minutes: number) => new Date(Date.UTC(2026, 2, 9, 0, minutes));
 
 function mealLog(fields: Partial<MealLog> & { id: string }): MealLog {
+  // The figures the meal had when it was logged — its current ones, unless a
+  // case overrides them to stand for a recipe edited since (FUEL-146).
+  const { kcal, proteinG, fatG, carbG } = [OATS, SALAD].find(
+    (meal) => meal.id === (fields.mealId ?? "meal-1"),
+  ) ?? { kcal: 0, proteinG: 0, fatG: 0, carbG: 0 };
+
   return {
+    kcal,
+    proteinG,
+    fatG,
+    carbG,
     userId: USER,
     date: DATE,
     slot: "breakfast",
@@ -271,18 +281,43 @@ describe("dayLog", () => {
     const entries = dayLog(
       ITEMS,
       logs({
-        meals: [mealLog({ id: "l1", mealId: "meal-gone", slot: "dinner" })],
+        meals: [
+          mealLog({
+            id: "l1",
+            mealId: "meal-gone",
+            slot: "dinner",
+            kcal: 540,
+            proteinG: 41,
+            fatG: 17,
+            carbG: 52,
+          }),
+        ],
         workouts: [workoutLog({ id: "l2", workoutId: "workout-gone", loggedAt: at(1) })],
       }),
     );
 
     expect(entries.map((entry) => entry.name)).toEqual(["Dinner", "Training"]);
-    // The figures went with the row that is missing, so it counts for nothing.
-    expect(entries[0]!.macros).toBeUndefined();
+    // Only the NAME went with the missing plan item. Since FUEL-146 the
+    // figures are on the log row, so the meal still counts for what it was.
+    expect(entries[0]!.macros).toEqual({ kcal: 540, proteinG: 41, fatG: 17, carbG: 52 });
   });
 
   test("is empty on a day nothing was logged on", () => {
     expect(dayLog(ITEMS, logs())).toEqual([]);
+  });
+
+  test("counts what the log recorded, not the recipe as edited since — FUEL-146", () => {
+    // ITEMS' oats read 486 kcal now. The log was written when they were 400,
+    // and an edit to the recipe after breakfast must not rewrite breakfast.
+    const asLogged = { kcal: 400, proteinG: 30, fatG: 10, carbG: 50 };
+    const entries = dayLog(
+      ITEMS,
+      logs({ meals: [mealLog({ id: "l1", mealId: "meal-1", ...asLogged })] }),
+    );
+
+    expect(entries[0]!.name).toBe("Overnight oats");
+    expect(entries[0]!.macros).toEqual(asLogged);
+    expect(entryTotals(entries)).toMatchObject(asLogged);
   });
 });
 

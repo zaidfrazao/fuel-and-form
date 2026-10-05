@@ -77,6 +77,10 @@ export async function recordLog(userId: string, intent: LogIntent): Promise<void
       slot: intent.slot,
       mealId: intent.mealId,
       status: intent.status,
+      kcal: intent.kcal,
+      proteinG: intent.proteinG,
+      fatG: intent.fatG,
+      carbG: intent.carbG,
     });
 
     return;

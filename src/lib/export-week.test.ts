@@ -247,7 +247,17 @@ function session(workout: Workout): TrainingSession {
 function mealLog(
   over: Partial<MealLog> & Pick<MealLog, "date" | "slot" | "mealId">,
 ): MealLog {
+  // The figures the meal had when it was logged — its current ones, unless a
+  // case overrides them to stand for a recipe edited since (FUEL-146).
+  const { kcal, proteinG, fatG, carbG } = [OATS, CHICKEN, BEEF].find(
+    (meal) => meal.id === (over.mealId),
+  ) ?? { kcal: 0, proteinG: 0, fatG: 0, carbG: 0 };
+
   return {
+    kcal,
+    proteinG,
+    fatG,
+    carbG,
     id: "cccccccc-0000-4000-8000-000000000001",
     userId: USER_ID,
     status: "eaten",
@@ -517,6 +527,34 @@ describe("planned, swapped_with and actual", () => {
         templateDays: [day(MONDAY, [planned("breakfast", OATS)])],
         mealLogs: [
           mealLog({ date: MONDAY, slot: "breakfast", mealId: OATS.id }),
+        ],
+      }),
+    );
+
+    expect(section(csv, "meals")).toEqual([
+      "2026-08-17,breakfast,Oats and whey,,Oats and whey,eaten,430,32,9,58,",
+    ]);
+  });
+
+  test("a logged slot prints the log's figures, not the recipe as edited since — FUEL-146", () => {
+    // OATS has been edited to 610 kcal since Monday's breakfast was logged at
+    // 430. The row is history: it names the meal and counts what it was.
+    const edited: Meal = { ...OATS, kcal: 610, proteinG: 41, fatG: 14, carbG: 77 };
+    const csv = buildWeekCsv(
+      input({
+        meals: [edited, CHICKEN, BEEF],
+        days: [day(MONDAY, [planned("breakfast", edited)])],
+        templateDays: [day(MONDAY, [planned("breakfast", edited)])],
+        mealLogs: [
+          mealLog({
+            date: MONDAY,
+            slot: "breakfast",
+            mealId: OATS.id,
+            kcal: 430,
+            proteinG: 32,
+            fatG: 9,
+            carbG: 58,
+          }),
         ],
       }),
     );

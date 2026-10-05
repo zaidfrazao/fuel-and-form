@@ -76,6 +76,10 @@ function mealLog(fields: Partial<MealLog> = {}): MealLog {
     status: "eaten",
     note: null,
     loggedAt: new Date("2026-03-09T12:00:00Z"),
+    kcal: 420,
+    proteinG: 32.5,
+    fatG: 12,
+    carbG: 48,
     ...fields,
   };
 }
@@ -109,7 +113,36 @@ describe("logIntent", () => {
       slot: "lunch",
       mealId: "meal-2",
       status: "eaten",
+      kcal: 420,
+      proteinG: 32.5,
+      fatG: 12,
+      carbG: 48,
     });
+  });
+
+  it("copies the resolved meal's four figures onto the row — FUEL-146", () => {
+    // The log is history, so it carries what the meal counted for at the time
+    // rather than a pointer a later recipe edit could move. Distinct values,
+    // so a figure read from the wrong field cannot pass by coincidence.
+    const item: NowItem = {
+      kind: "meal",
+      meal: {
+        slot: "dinner",
+        meal: meal({ id: "meal-3", kcal: 701, proteinG: 48.5, fatG: 22.1, carbG: 73.4 }),
+        source: "override",
+        entryId: "o1",
+      },
+    };
+
+    expect(logIntent(item, "log", MON)).toMatchObject({
+      kcal: 701,
+      proteinG: 48.5,
+      fatG: 22.1,
+      carbG: 73.4,
+    });
+    // A skip carries them too: every row has its figures, so no reader needs
+    // a rule for which rows do.
+    expect(logIntent(item, "skip", MON)).toMatchObject({ kcal: 701, carbG: 73.4 });
   });
 
   it("records a skipped meal as skipped, not as absent", () => {
@@ -153,6 +186,15 @@ describe("alreadyLogged", () => {
     // The double-tap. `meal_logs` has no unique constraint to stop it, so this
     // is what stands between a second tap and a doubled day total.
     expect(alreadyLogged({ ...NOTHING, meals: [mealLog()] }, intent)).toBe(true);
+  });
+
+  it("ignores the figures — a recipe edited since is still the same log", () => {
+    // Today's row holds the figures at its log time; the intent holds the
+    // meal's figures now. If the recipe changed in between, a second tap is
+    // still a double-tap, and must not write a second row.
+    const stale = mealLog({ kcal: 300, proteinG: 10, fatG: 5, carbG: 40 });
+
+    expect(alreadyLogged({ ...NOTHING, meals: [stale] }, intent)).toBe(true);
   });
 
   it("is false for the same meal in a different slot", () => {
