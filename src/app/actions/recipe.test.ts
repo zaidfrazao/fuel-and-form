@@ -107,6 +107,11 @@ describe("editRecipe", () => {
     expect(saveRecipe).not.toHaveBeenCalled();
   });
 
+  test("refuses a meal id that is not a uuid before parsing or writing", async () => {
+    expect(await editRecipe(undefined, form("{", "not-a-meal"))).toEqual({ status: "refused" });
+    expect(saveRecipe).not.toHaveBeenCalled();
+  });
+
   test("refuses a meal the write did not find — another account's, or none", async () => {
     saveRecipe.mockResolvedValue(false);
 

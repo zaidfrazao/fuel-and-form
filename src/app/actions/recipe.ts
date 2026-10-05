@@ -4,6 +4,7 @@ import { refresh } from "next/cache";
 
 import { getSession } from "@/lib/auth/session";
 import { saveRecipe } from "@/lib/db/queries/recipe";
+import { isMealId } from "@/lib/recipe";
 import {
   MEAL_FIELD,
   parseRecipeEdit,
@@ -63,7 +64,9 @@ export async function editRecipe(
 
     const mealId = form.get(MEAL_FIELD);
 
-    if (typeof mealId !== "string") return REFUSED;
+    // Checked here as well as by `saveRecipe`, so a malformed id is refused
+    // before the submission is parsed rather than after.
+    if (typeof mealId !== "string" || !isMealId(mealId)) return REFUSED;
 
     const parsed = parseRecipeEdit(form.get(RECIPE_FIELD));
 
