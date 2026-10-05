@@ -172,6 +172,8 @@ vi.mock("@/app/actions/training", () => ({
 }));
 vi.mock("@/app/actions/weight", () => ({ logWeighIn: vi.fn(), deleteWeighIn: vi.fn() }));
 vi.mock("@/app/actions/shopping", () => ({ setChecked: vi.fn() }));
+// FUEL-148: the edit sheet's Reassess macros imports it, and its modules are server-only.
+vi.mock("@/app/actions/recipe-estimate", () => ({ estimateMacros: vi.fn() }));
 vi.mock("@/app/actions/settings", () => ({
   saveSlotTimes: vi.fn(),
   saveProfileTargets: vi.fn(),
