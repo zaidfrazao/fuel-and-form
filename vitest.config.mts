@@ -97,6 +97,7 @@ export default defineConfig({
         "src/lib/week-param.ts",
         "src/lib/week-totals.ts",
         "src/lib/seed/history.ts",
+        "src/lib/macro-estimate.ts",
       ],
       thresholds: {
         "src/lib/db/scope.ts": FULLY_COVERED,
@@ -124,6 +125,11 @@ export default defineConfig({
         // auth/cookies.ts is — a property only a real browser exercises is one
         // no test can hold still.
         "src/lib/cursor.ts": FULLY_COVERED,
+        // FUEL-148. The second reading of a model's answer, and the only thing
+        // between it and four fields the owner may accept and save. Every
+        // branch in `readEstimate` is a way an answer is refused; an unmeasured
+        // one is a malformed figure that reaches the form.
+        "src/lib/macro-estimate.ts": FULLY_COVERED,
         // FUEL-42. `vercel.json` publishes the reaper's path in a public
         // repository, so this comparison is the whole of the difference between
         // Vercel's scheduler and anyone who read it — in front of the one route

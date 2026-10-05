@@ -149,3 +149,17 @@ export function vapidKeys(): VapidKeys | null {
 
   return { publicKey, privateKey, subject };
 }
+
+/**
+ * The OpenRouter key for § P12's macro reassessment, or `null` when this
+ * deployment has none — FUEL-148, PRD § Integrations.
+ *
+ * Optional for `vapidKeys`' reason rather than `cronSecret`'s: the feature is
+ * one button on one owner-only sheet, and without the key the sheet says the
+ * estimate is unavailable. Nothing else depends on it, so a deployment without
+ * it is not broken. It is a server secret that spends money: never
+ * `NEXT_PUBLIC_`, never in a log line, and read only by `lib/openrouter.ts`.
+ */
+export function openRouterApiKey(): string | null {
+  return process.env.OPENROUTER_API_KEY || null;
+}

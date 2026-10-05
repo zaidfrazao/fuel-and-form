@@ -29,6 +29,8 @@ const { redirect, notFound, getSession, loadRecipe } = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ redirect, notFound }));
 vi.mock("@/lib/auth/session", () => ({ getSession }));
+// FUEL-148: the edit sheet's Reassess macros imports it, and its modules are server-only.
+vi.mock("@/app/actions/recipe-estimate", () => ({ estimateMacros: vi.fn() }));
 /** A draft for a mocked recipe: its rows, with no shop reading. */
 function draftFromRecipe(recipe: Recipe) {
   return draftOf(

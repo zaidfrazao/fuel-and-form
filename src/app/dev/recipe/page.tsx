@@ -8,8 +8,11 @@ import type { Recipe } from "@/lib/db/queries/recipe";
 import { FRAME } from "@/lib/frame";
 import { slotLabel } from "@/lib/now-display";
 import { FOCUS_RING, HOVER_GROUND } from "@/lib/pointer";
+import type { MacroEstimate } from "@/lib/macro-estimate";
 import { draftOf, type RecipeDraft } from "@/lib/recipe-edit";
 import { seedMeals } from "@/lib/seed/meals";
+
+import { EstimateSpecimen } from "./estimate-specimen";
 
 /**
  * The recipe specimen — FUEL-143.
@@ -80,9 +83,30 @@ function draftFromSeed(key: string): RecipeDraft {
   );
 }
 
+/**
+ * An invented proposal for the chilli — FUEL-148. Its calories sit 58 kcal
+ * above 4P + 4C + 9F on purpose, so the specimen draws the mismatch line as
+ * well as the table, the rationale and the assumptions.
+ */
+const CHILLI_ESTIMATE: MacroEstimate = {
+  kcal: 430,
+  proteinG: 39.6,
+  fatG: 6.8,
+  carbG: 38.2,
+  rationale:
+    "USDA FoodData Central per row. The mince is taken as 5% fat raw, the olive oil is counted in full, and the rice by its dry weight.",
+  assumptions: ["Onion: half a small onion at 60 g", "Fresh chilli: one at 10 g, counted though optional"],
+};
+
 const CASES: Record<
   string,
-  { label: string; note: string; recipe: Recipe; draft?: RecipeDraft }
+  {
+    label: string;
+    note: string;
+    recipe: Recipe;
+    draft?: RecipeDraft;
+    estimate?: { estimate: MacroEstimate; gap: number };
+  }
 > = {
   chilli: {
     label: "Steps and a variant",
@@ -110,6 +134,12 @@ const CASES: Record<
     recipe: CHILLI,
     draft: draftFromSeed("beef-mince-chilli"),
   },
+  estimate: {
+    label: "Reassessed macros",
+    note: "The proposal the edit sheet draws under Reassess macros (FUEL-148), from a fixture rather than a request: Now, Proposed and Change, a calorie figure 58 kcal off its macros, the rationale and the assumed weights. Accept and Discard do nothing here.",
+    recipe: CHILLI,
+    estimate: { estimate: CHILLI_ESTIMATE, gap: 58 },
+  },
 };
 
 const DEFAULT_CASE = "chilli";
@@ -131,20 +161,32 @@ export default async function RecipeSpecimen({
           does and leaves the aside standing empty. */}
       <div className={FRAME}>
         <PageMain className="gap-7 py-8">
-          <RecipeView
-            recipe={current.recipe}
-            userId="specimen"
-            date="2026-03-11"
-            edit={
-              current.draft && (
-                <RecipeEditor
-                  mealId={current.recipe.meal.id}
-                  slot={slotLabel(current.recipe.meal.slotType)}
-                  draft={current.draft}
-                />
-              )
-            }
-          />
+          {current.estimate ? (
+            <EstimateSpecimen
+              {...current.estimate}
+              current={{
+                kcal: String(current.recipe.meal.kcal),
+                proteinG: String(current.recipe.meal.proteinG),
+                fatG: String(current.recipe.meal.fatG),
+                carbG: String(current.recipe.meal.carbG),
+              }}
+            />
+          ) : (
+            <RecipeView
+              recipe={current.recipe}
+              userId="specimen"
+              date="2026-03-11"
+              edit={
+                current.draft && (
+                  <RecipeEditor
+                    mealId={current.recipe.meal.id}
+                    slot={slotLabel(current.recipe.meal.slotType)}
+                    draft={current.draft}
+                  />
+                )
+              }
+            />
+          )}
         </PageMain>
       </div>
 

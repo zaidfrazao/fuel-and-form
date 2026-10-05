@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { RecipeEditState } from "@/app/actions/recipe";
+import type { EstimateState } from "@/app/actions/recipe-estimate";
 import { parseMethod } from "@/lib/recipe";
 import { blankIngredient, RECIPE_FIELD, type RecipeDraft } from "@/lib/recipe-edit";
 import { seedMeals } from "@/lib/seed/meals";
@@ -19,9 +20,13 @@ import { RecipePrep } from "./recipe-prep";
  * screen's own reading of the method.
  */
 
-const { editRecipe } = vi.hoisted(() => ({ editRecipe: vi.fn() }));
+const { editRecipe, estimateMacros } = vi.hoisted(() => ({
+  editRecipe: vi.fn(),
+  estimateMacros: vi.fn(),
+}));
 
 vi.mock("@/app/actions/recipe", () => ({ editRecipe }));
+vi.mock("@/app/actions/recipe-estimate", () => ({ estimateMacros }));
 
 const MEAL = "3f2b8a1e-9c4d-4e5f-8a6b-7c8d9e0f1a2b";
 const GARLIC = "aaaaaaaa-bbbb-4ccc-8ddd-000000000001";
@@ -241,5 +246,161 @@ describe("focus", () => {
     await user.keyboard("{Escape}");
 
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit" }));
+  });
+});
+
+describe("reassessing the macros (FUEL-148)", () => {
+  const ESTIMATE = {
+    kcal: 640,
+    proteinG: 45.2,
+    fatG: 14,
+    carbG: 70,
+    rationale: "USDA figures; the beans drained.",
+    assumptions: ["Beans: 1 tin at 240 g drained"],
+  };
+
+  /** A held estimate, released by the test. */
+  function holdEstimate() {
+    let release: (state: EstimateState) => void = () => {};
+    estimateMacros.mockReturnValue(new Promise<EstimateState>((resolve) => (release = resolve)));
+    return (state: EstimateState) => act(async () => release(state));
+  }
+
+  const figure = (sheet: Pick<typeof screen, "getByRole">, name: RegExp) =>
+    (sheet.getByRole("textbox", { name }) as HTMLInputElement).value;
+
+  const figures = (sheet: Pick<typeof screen, "getByRole">) =>
+    [/^Calories/, /^Protein/, /^Fat/, /^Carbs/].map((name) => figure(sheet, name));
+
+  async function estimated(state: EstimateState = { status: "estimated", estimate: ESTIMATE, gap: null }) {
+    const opened = await open();
+    const release = holdEstimate();
+
+    await opened.user.click(opened.sheet.getByRole("button", { name: "Reassess macros" }));
+    expect(await opened.sheet.findByRole("button", { name: "Estimating…" })).toBeTruthy();
+    await release(state);
+
+    return opened;
+  }
+
+  test("sends the draft as it stands, unsaved edits included", async () => {
+    const { user, sheet } = await open();
+    estimateMacros.mockResolvedValue({ status: "estimated", estimate: ESTIMATE, gap: null });
+
+    await user.type(sheet.getAllByRole("textbox", { name: /^Weight/ })[1]!, "240");
+    await user.click(sheet.getByRole("button", { name: "Reassess macros" }));
+
+    const sent = JSON.parse(String(estimateMacros.mock.lastCall?.[0])) as RecipeDraft;
+    expect(sent.ingredients[1]).toMatchObject({ name: "Beans", grams: "240" });
+    expect(editRecipe).not.toHaveBeenCalled();
+  });
+
+  test("shows current against proposed, with the difference, the rationale and the assumptions", async () => {
+    const { sheet } = await estimated();
+    const report = within(await sheet.findByRole("region", { name: "Proposed macros" }));
+
+    const rows = report.getAllByRole("row").slice(1).map((row) =>
+      within(row).getAllByRole("cell").map((cell) => cell.textContent),
+    );
+
+    expect(rows).toEqual([
+      ["612", "640", "+28"],
+      ["48.5", "45.2", "−3.3"],
+      ["14", "14", "0"],
+      ["62", "70", "+8"],
+    ]);
+    expect(report.getByText("USDA figures; the beans drained.")).toBeTruthy();
+    expect(report.getByText("Beans: 1 tin at 240 g drained")).toBeTruthy();
+    expect(report.queryByText(/4 × protein/)).toBeNull();
+  });
+
+  test("flags a calorie figure that disagrees with its macros, without correcting it", async () => {
+    const { sheet } = await estimated({ status: "estimated", estimate: ESTIMATE, gap: -90 });
+
+    expect(await sheet.findByText(/proposed calories are −90 kcal from 4 × protein/)).toBeTruthy();
+    expect(within(sheet.getByRole("region", { name: "Proposed macros" })).getAllByRole("row")[1]!.textContent).toContain("640");
+  });
+
+  test("Accept fills the four fields, still editable, and saves nothing", async () => {
+    const { user, sheet } = await estimated();
+
+    await user.click(await sheet.findByRole("button", { name: "Accept" }));
+
+    expect(figures(sheet)).toEqual(["640", "45.2", "14", "70"]);
+    expect(sheet.queryByRole("region", { name: "Proposed macros" })).toBeNull();
+    expect(editRecipe).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(sheet.getByRole("button", { name: "Reassess macros" }));
+
+    await user.clear(sheet.getByRole("textbox", { name: /^Calories/ }));
+    await user.type(sheet.getByRole("textbox", { name: /^Calories/ }), "650");
+    await user.click(sheet.getByRole("button", { name: "Save recipe" }));
+
+    expect(submitted().draft).toMatchObject({ kcal: "650", proteinG: "45.2", fatG: "14", carbG: "70" });
+  });
+
+  test("Discard changes nothing", async () => {
+    const { user, sheet } = await estimated();
+
+    await user.click(await sheet.findByRole("button", { name: "Discard" }));
+
+    expect(figures(sheet)).toEqual(["612", "48.5", "14", "62"]);
+    expect(sheet.queryByRole("region", { name: "Proposed macros" })).toBeNull();
+    expect(editRecipe).not.toHaveBeenCalled();
+  });
+
+  test("an edit to the ingredients withdraws the estimate, and says why", async () => {
+    const { user, sheet } = await estimated();
+    await sheet.findByRole("region", { name: "Proposed macros" });
+
+    await user.type(sheet.getAllByRole("textbox", { name: /^Weight/ })[1]!, "1");
+
+    expect(sheet.queryByRole("region", { name: "Proposed macros" })).toBeNull();
+    expect(sheet.getByText("The recipe changed since that estimate. Reassess again.")).toBeTruthy();
+  });
+
+  test("typing over a figure keeps the estimate: that is what it is compared against", async () => {
+    const { user, sheet } = await estimated();
+    await sheet.findByRole("region", { name: "Proposed macros" });
+
+    await user.clear(sheet.getByRole("textbox", { name: /^Calories/ }));
+    await user.type(sheet.getByRole("textbox", { name: /^Calories/ }), "600");
+
+    const row = within(sheet.getByRole("region", { name: "Proposed macros" })).getAllByRole("row")[1]!;
+    expect(within(row).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["600", "640", "+40"]);
+  });
+
+  test.each([
+    ["declined", "Couldn't estimate — the model declined this recipe. Nothing was changed."],
+    ["malformed", "Couldn't estimate — the answer couldn't be read. Nothing was changed. Try again."],
+    ["failed", "Couldn't estimate — the request failed. Nothing was changed. Try again."],
+    ["unavailable", "Couldn't estimate — reassessment isn't set up here. Nothing was changed."],
+    ["refused", "Only the owner can reassess a recipe."],
+    ["empty", "Add a name and at least one ingredient to estimate."],
+  ] as const)("a %s estimate says so and leaves the form untouched", async (status, message) => {
+    const { sheet } = await estimated({ status });
+
+    expect(await sheet.findByText(message)).toBeTruthy();
+    expect(figures(sheet)).toEqual(["612", "48.5", "14", "62"]);
+    expect(sheet.queryByRole("region", { name: "Proposed macros" })).toBeNull();
+  });
+
+  test("a request that never reaches the action is a failure, not a crash", async () => {
+    const { user, sheet } = await open();
+    estimateMacros.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await user.click(sheet.getByRole("button", { name: "Reassess macros" }));
+
+    expect(await sheet.findByText(/the request failed/)).toBeTruthy();
+    expect(figures(sheet)).toEqual(["612", "48.5", "14", "62"]);
+  });
+
+  test("a blank figure on the form has no difference to show", async () => {
+    const { user, sheet } = await open({ ...DRAFT, kcal: "" });
+    estimateMacros.mockResolvedValue({ status: "estimated", estimate: ESTIMATE, gap: null });
+
+    await user.click(sheet.getByRole("button", { name: "Reassess macros" }));
+
+    const row = within(await sheet.findByRole("region", { name: "Proposed macros" })).getAllByRole("row")[1]!;
+    expect(within(row).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["—", "640", "—"]);
   });
 });

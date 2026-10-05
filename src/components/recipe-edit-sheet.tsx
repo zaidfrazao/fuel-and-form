@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { editRecipe, type RecipeEditState } from "@/app/actions/recipe";
+import { MacroReassess } from "@/components/macro-reassess";
 import { MethodSteps } from "@/components/recipe-parts";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
@@ -290,6 +291,13 @@ function EditSheet({
               </Field>
             ))}
           </div>
+
+          {/* A proposal only: Accept fills the four fields above, and Save
+              recipe is still what writes them — FUEL-148. */}
+          <MacroReassess
+            draft={draft}
+            onAccept={(figures) => setFields((current) => ({ ...current, ...figures }))}
+          />
         </Group>
 
         <Group heading="Ingredients">
