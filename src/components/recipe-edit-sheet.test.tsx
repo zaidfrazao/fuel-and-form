@@ -66,7 +66,7 @@ function hold() {
   return (state: RecipeEditState) => act(async () => release(state));
 }
 
-const names = (sheet: ReturnType<typeof within>) =>
+const names = (sheet: Pick<typeof screen, "getAllByRole">) =>
   sheet.getAllByRole("textbox", { name: "Name" }).map((input) => (input as HTMLInputElement).value);
 
 beforeEach(() => {
