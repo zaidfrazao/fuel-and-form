@@ -2,6 +2,7 @@ import { act, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { Recipe } from "@/lib/db/queries/recipe";
+import { draftOf } from "@/lib/recipe-edit";
 import { seedMeals } from "@/lib/seed/meals";
 
 /**
@@ -28,7 +29,34 @@ const { redirect, notFound, getSession, loadRecipe } = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ redirect, notFound }));
 vi.mock("@/lib/auth/session", () => ({ getSession }));
-vi.mock("@/lib/db/queries/recipe", () => ({ loadRecipe }));
+/** A draft for a mocked recipe: its rows, with no shop reading. */
+function draftFromRecipe(recipe: Recipe) {
+  return draftOf(
+    recipe.meal,
+    recipe.ingredients.map((row) => ({
+      ...row,
+      shopName: null,
+      shopQty: null,
+      shopUnit: null,
+      category: null,
+      pantry: false,
+    })),
+  );
+}
+
+/*
+ * The owner's read is `loadEditableRecipe` since FUEL-147, which is
+ * `loadRecipe`'s rows plus a draft. Mocked through `loadRecipe`, so every
+ * test that stubs or asserts on that mock still describes the page's one read.
+ */
+vi.mock("@/lib/db/queries/recipe", () => ({
+  loadRecipe,
+  loadEditableRecipe: async (userId: string, mealId: string) => {
+    const recipe = await loadRecipe(userId, mealId);
+
+    return recipe && { recipe, draft: draftFromRecipe(recipe) };
+  },
+}));
 
 const { default: RecipePage } = await import("./page");
 
@@ -286,5 +314,36 @@ describe("the screen stays on", () => {
     await act(async () => {});
 
     expect(request).toHaveBeenCalledWith("screen");
+  });
+});
+
+describe("editing, for the owner only", () => {
+  /*
+   * FUEL-147. The action refuses a demo session on its own terms
+   * (`actions/recipe.test.ts`); this is the other half of the criterion — no
+   * control is rendered for one at all, not a disabled one.
+   */
+  test("the owner is offered Edit on the up-link's row", async () => {
+    await page();
+
+    const edit = screen.getByRole("button", { name: "Edit" });
+    expect(edit.parentElement?.contains(screen.getByRole("link", { name: "Back to Plan" }))).toBe(true);
+  });
+
+  test("a demo session is offered no Edit control", async () => {
+    getSession.mockResolvedValue({ ...SESSION, kind: "demo" });
+
+    await page();
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Lean Beef Mince Chilli");
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+  });
+
+  test("a demo session's meal is still read as its own user", async () => {
+    getSession.mockResolvedValue({ ...SESSION, kind: "demo" });
+
+    await page();
+
+    expect(loadRecipe).toHaveBeenCalledWith(SESSION.userId, MEAL_ID);
   });
 });

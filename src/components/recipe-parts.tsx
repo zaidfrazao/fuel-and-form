@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 
-import type { Block, Inline } from "@/lib/recipe";
+import type { Block, Inline, Method } from "@/lib/recipe";
 import { cn } from "@/lib/utils";
 
 /**
@@ -122,6 +122,40 @@ export function Blocks({
             );
         }
       })}
+    </div>
+  );
+}
+
+/**
+ * A method as the recipe screen numbers it, without the ticks — FUEL-147's
+ * edit preview.
+ *
+ * Takes `parseMethod`'s output rather than text, so the sheet and the screen
+ * cannot read one method two ways: both call the same parser, and this draws
+ * its steps in `RecipePrep`'s numbered column — `w-[2ch]`, tabular,
+ * `text-secondary` — with the box gone, because a preview is not cooked from.
+ */
+export function MethodSteps({ method }: { method: Method | null }) {
+  if (!method) return <Quiet>No method recorded.</Quiet>;
+
+  return (
+    <div className="flex flex-col gap-5">
+      {method.before.length > 0 && <Blocks blocks={method.before} />}
+
+      <ol className="flex flex-col gap-3">
+        {method.steps.map((step, i) => (
+          <li key={i} className="flex gap-3 text-body">
+            <span aria-hidden className="w-[2ch] shrink-0 text-right tabular-nums text-text-secondary">
+              {i + 1}
+            </span>
+            <span className="min-w-0 flex-1 text-text-primary">
+              <Runs inline={step} />
+            </span>
+          </li>
+        ))}
+      </ol>
+
+      {method.after.length > 0 && <Blocks blocks={method.after} tone="secondary" />}
     </div>
   );
 }

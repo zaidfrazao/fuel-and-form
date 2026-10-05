@@ -3,7 +3,9 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { DESTINATIONS, isRailFootCurrent, ROUTE_PATHS, resolveActive } from "@/lib/nav";
+import type { Recipe } from "@/lib/db/queries/recipe";
 import type { ShoppingWeek } from "@/lib/db/queries/shopping";
+import { draftOf } from "@/lib/recipe-edit";
 import { demoProfile } from "@/lib/seed/persona";
 
 /**
@@ -111,7 +113,34 @@ vi.mock("@/lib/db/queries/training", () => ({ loadTraining }));
 vi.mock("@/lib/db/queries/weight", () => ({ loadWeighIns }));
 vi.mock("@/lib/db/queries/shopping", () => ({ loadShoppingWeek }));
 vi.mock("@/lib/db/queries/profile", () => ({ loadSettings }));
-vi.mock("@/lib/db/queries/recipe", () => ({ loadRecipe }));
+/** A draft for a mocked recipe: its rows, with no shop reading. */
+function draftFromRecipe(recipe: Recipe) {
+  return draftOf(
+    recipe.meal,
+    recipe.ingredients.map((row) => ({
+      ...row,
+      shopName: null,
+      shopQty: null,
+      shopUnit: null,
+      category: null,
+      pantry: false,
+    })),
+  );
+}
+
+/*
+ * The owner's read is `loadEditableRecipe` since FUEL-147, which is
+ * `loadRecipe`'s rows plus a draft. Mocked through `loadRecipe`, so every
+ * test that stubs or asserts on that mock still describes the page's one read.
+ */
+vi.mock("@/lib/db/queries/recipe", () => ({
+  loadRecipe,
+  loadEditableRecipe: async (userId: string, mealId: string) => {
+    const recipe = await loadRecipe(userId, mealId);
+
+    return recipe && { recipe, draft: draftFromRecipe(recipe) };
+  },
+}));
 
 // The client components each screen renders import "use server" modules, which
 // cannot be imported under jsdom. Every per-screen test file mocks its own; this

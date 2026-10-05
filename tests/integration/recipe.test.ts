@@ -40,6 +40,8 @@ describe.skipIf(!configured)("loadRecipe, scoped", () => {
   it("does not read another account's meal, in either direction", async () => {
     expect(await loadRecipe(fixture.bob.userId, fixture.alice.mealId)).toBeUndefined();
     expect(await loadRecipe(fixture.alice.userId, fixture.bob.mealId)).toBeUndefined();
+    // The owner's read, which also carries the draft, is scoped the same way.
+    expect(await loadEditableRecipe(fixture.alice.userId, fixture.bob.mealId)).toBeUndefined();
   });
 
   it("answers a malformed id without asking Postgres to cast it", async () => {

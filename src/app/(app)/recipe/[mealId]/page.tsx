@@ -3,9 +3,11 @@ import { notFound, redirect } from "next/navigation";
 
 import { KeepAwake } from "@/components/keep-awake";
 import { PageMain } from "@/components/page-main";
+import { RecipeEditor } from "@/components/recipe-edit-sheet";
 import { RecipeView } from "@/components/recipe-view";
 import { getSession } from "@/lib/auth/session";
-import { loadRecipe } from "@/lib/db/queries/recipe";
+import { loadEditableRecipe, loadRecipe } from "@/lib/db/queries/recipe";
+import { slotLabel } from "@/lib/now-display";
 import { requestedWeek } from "@/lib/week-param";
 
 /**
@@ -36,6 +38,13 @@ import { requestedWeek } from "@/lib/week-param";
  * `KeepAwake` holds a wake lock while the recipe is open (FUEL-145): it is
  * cooked from, with hands that cannot tap a dimming screen. Here rather than in
  * `RecipeView`, so `/dev/recipe` does not take one.
+ *
+ * ## Edit, for the owner (FUEL-147)
+ *
+ * The owner's read also returns the draft the edit sheet opens on, in the
+ * same round trip; a demo session reads the plain recipe and is handed no
+ * control. Not rendering it is the courtesy — `actions/recipe.ts` refusing a
+ * demo session is the rule.
  */
 export const metadata: Metadata = {
   title: "Recipe · Fuel & Form",
@@ -55,14 +64,33 @@ export default async function RecipePage({
 
   const [{ mealId }, { date }] = await Promise.all([params, searchParams]);
 
-  const recipe = await loadRecipe(session.userId, mealId);
+  const owner = session.kind === "owner";
 
-  if (!recipe) notFound();
+  const loaded = owner
+    ? await loadEditableRecipe(session.userId, mealId)
+    : await loadRecipe(session.userId, mealId).then((recipe) => recipe && { recipe, draft: null });
+
+  if (!loaded) notFound();
+
+  const { recipe, draft } = loaded;
 
   return (
     <PageMain className="gap-7 py-8">
       <KeepAwake />
-      <RecipeView recipe={recipe} userId={session.userId} date={requestedWeek(date)} />
+      <RecipeView
+        recipe={recipe}
+        userId={session.userId}
+        date={requestedWeek(date)}
+        edit={
+          draft && (
+            <RecipeEditor
+              mealId={recipe.meal.id}
+              slot={slotLabel(recipe.meal.slotType)}
+              draft={draft}
+            />
+          )
+        }
+      />
     </PageMain>
   );
 }
