@@ -69,6 +69,9 @@ const ownerOf = (row: unknown) => (row as { userId: string }).userId;
 /** Postgres' class 23 code for a foreign key violation. */
 const FOREIGN_KEY_VIOLATION = "23503";
 
+/** The fixture porridge's figures, for a log written by hand — FUEL-146. */
+const PORRIDGE = { kcal: 420, proteinG: 24, fatG: 12, carbG: 55 };
+
 /**
  * Why Postgres refused a statement — its SQLSTATE and the constraint by name.
  *
@@ -183,6 +186,7 @@ describe.skipIf(!configured)("demo isolation — Testing Strategy § 1.4", () =>
         slot: "dinner",
         mealId: fixture.alice.mealId,
         status: "eaten",
+        ...PORRIDGE,
       });
 
       const mine = await alice.select(schema.mealLogs);
@@ -271,6 +275,7 @@ describe.skipIf(!configured)("demo isolation — Testing Strategy § 1.4", () =>
             slot: "lunch",
             mealId: fixture.bob.mealId,
             status: "eaten",
+            ...PORRIDGE,
           }),
         ),
       ).toEqual({ code: FOREIGN_KEY_VIOLATION, constraint: "meal_logs_meal_fk" });

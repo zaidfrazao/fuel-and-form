@@ -1,4 +1,5 @@
 import type { Meal, MealLog, MealSlot } from "./db/schema";
+import type { LoggedFigures } from "./log-intent";
 import { type ResolvedMeal, SLOT_ORDER } from "./resolve-plan";
 
 /**
@@ -38,6 +39,15 @@ import { type ResolvedMeal, SLOT_ORDER } from "./resolve-plan";
  *     every day look edited.
  *   - `actual` — the meal the `meal_log` names, `null` when the slot was never
  *     logged.
+ *
+ * ## What was eaten is counted from the log, not from the meal
+ *
+ * `actual` names the meal; `figures` is what it counted for. Since FUEL-146 a
+ * log carries its own copy of the meal's four figures, taken when it was
+ * written, and a recipe edited afterwards changes `actual`'s macros but not
+ * this. So anything summing intake reads `figures`, and `actual` is for the
+ * name and the id. The plan side — `planned`, `swappedWith`, `stood` — still
+ * reads the library, because a plan is what you would eat now.
  *
  * The three usually agree, because `actions/log.ts` re-resolves the plan on the
  * server and takes the meal id from its own answer. They come apart in exactly
@@ -96,6 +106,13 @@ export type SlotComparison = {
   swappedWith: Meal | null;
   /** `meal_logs` — what was eaten, or `null` if the slot was not logged. */
   actual: Meal | null;
+  /**
+   * The log's own figures — what `actual` counted for when it was logged, which
+   * an edit to the recipe since does not change. `null` exactly when no log
+   * speaks for the slot. Present even when `actual` is not: the figures are on
+   * the row, so a missing meal costs the name and nothing else.
+   */
+  figures: LoggedFigures | null;
   /** The log's status, present whenever the slot was logged at all. */
   status: MealLog["status"] | null;
   /** The log's note. */
@@ -130,6 +147,14 @@ function later<T extends { loggedAt: Date; id: string }>(a: T, b: T): T {
 
   return at > bt ? a : b;
 }
+
+/** A log's four figures, and none of the rest of the row. */
+const figuresOf = ({ kcal, proteinG, fatG, carbG }: MealLog): LoggedFigures => ({
+  kcal,
+  proteinG,
+  fatG,
+  carbG,
+});
 
 /** The one log that speaks for a slot — see the module comment. */
 function slotLog(logs: readonly MealLog[], slot: MealSlot): MealLog | undefined {
@@ -175,6 +200,7 @@ export function compareDay({
         // a swap to the same meal no swap at all.
         swappedWith: onTheDay?.source === "override" ? onTheDay.meal : null,
         actual: log ? (meals.get(log.mealId) ?? null) : null,
+        figures: log ? figuresOf(log) : null,
         status: log?.status ?? null,
         note: log?.note ?? null,
       },

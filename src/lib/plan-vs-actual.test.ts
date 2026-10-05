@@ -70,7 +70,17 @@ function slot(
 function mealLog(
   over: Partial<MealLog> & Pick<MealLog, "slot" | "mealId">,
 ): MealLog {
+  // The figures the meal had when it was logged — its current ones, unless a
+  // case overrides them to stand for a recipe edited since (FUEL-146).
+  const { kcal, proteinG, fatG, carbG } = [OATS, CHICKEN, BEEF].find(
+    (meal) => meal.id === (over.mealId),
+  ) ?? { kcal: 0, proteinG: 0, fatG: 0, carbG: 0 };
+
   return {
+    kcal,
+    proteinG,
+    fatG,
+    carbG,
     id: "cccccccc-0000-4000-8000-000000000001",
     userId: USER_ID,
     date: MONDAY,
@@ -409,6 +419,47 @@ describe("a log naming a meal the library does not hold", () => {
       actual: null,
       status: "eaten",
     });
+  });
+
+  test("still reports the figures, which are on the log rather than the meal", () => {
+    const day = compare({
+      logs: [mealLog({ slot: "lunch", mealId: BEEF.id, kcal: 655, proteinG: 44 })],
+      meals: new Map([[OATS.id, OATS]]),
+    });
+
+    expect(slotOf(day, "lunch").figures).toMatchObject({ kcal: 655, proteinG: 44 });
+  });
+});
+
+describe("a recipe edited after it was logged — FUEL-146", () => {
+  // OATS as it reads today, after an edit. The log below was written before
+  // it, so it holds the figures the meal had then.
+  const EDITED: Meal = { ...OATS, kcal: 610, proteinG: 41, fatG: 14, carbG: 77 };
+  const AS_LOGGED = { kcal: 430, proteinG: 32, fatG: 9, carbG: 58 };
+
+  test("counts the log's figures, and names the meal as it is now", () => {
+    const day = compare({
+      templateMeals: [slot("breakfast", EDITED)],
+      resolvedMeals: [slot("breakfast", EDITED)],
+      logs: [mealLog({ slot: "breakfast", mealId: OATS.id, ...AS_LOGGED })],
+      meals: new Map([[OATS.id, EDITED]]),
+    });
+    const breakfast = slotOf(day, "breakfast");
+
+    expect(breakfast.figures).toEqual(AS_LOGGED);
+    // `actual` is the library's row — the name and the id. Its figures are the
+    // edited ones, which is exactly why nothing summing intake may read them.
+    expect(breakfast.actual?.kcal).toBe(610);
+  });
+
+  test("has no figures for a slot nothing logged — the plan side reads the library", () => {
+    const day = compare({
+      templateMeals: [slot("breakfast", EDITED)],
+      resolvedMeals: [slot("breakfast", EDITED)],
+    });
+
+    expect(slotOf(day, "breakfast").figures).toBeNull();
+    expect(stood(slotOf(day, "breakfast"))?.kcal).toBe(610);
   });
 });
 

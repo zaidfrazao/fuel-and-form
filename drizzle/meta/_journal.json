@@ -148,6 +148,20 @@
       "when": 1790863245114,
       "tag": "0020_session_status_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791196953699,
+      "tag": "0021_meal_log_macro_snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791196955280,
+      "tag": "0022_meal_log_macro_not_null",
+      "breakpoints": true
     }
   ]
 }

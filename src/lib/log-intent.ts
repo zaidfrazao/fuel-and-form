@@ -37,6 +37,16 @@ import type { NowItem } from "./resolve-now";
  * a status no user ever chose.
  */
 
+/**
+ * A meal's four figures as a log row carries them — FUEL-146.
+ *
+ * Copied from the resolved meal at the moment of logging, so the row keeps
+ * what was eaten if the recipe is edited later. They come from the same
+ * server-side resolution as `mealId`, never from the request: a figure the
+ * client could send is a day's protein the client could choose.
+ */
+export type LoggedFigures = Pick<MealLog, "kcal" | "proteinG" | "fatG" | "carbG">;
+
 /** The two things a tap can mean. */
 export type LogVerb = "log" | "skip";
 
@@ -48,13 +58,13 @@ export type LogVerb = "log" | "skip";
  * type a caller could put the wrong one into.
  */
 export type LogIntent =
-  | {
+  | ({
       kind: "meal";
       date: CalendarDate;
       slot: MealSlot;
       mealId: string;
       status: MealLogStatus;
-    }
+    } & LoggedFigures)
   | {
       kind: "workout";
       date: CalendarDate;
@@ -72,12 +82,18 @@ export type LogIntent =
  */
 export function logIntent(item: NowItem, verb: LogVerb, date: CalendarDate): LogIntent {
   if (item.kind === "meal") {
+    const { id, kcal, proteinG, fatG, carbG } = item.meal.meal;
+
     return {
       kind: "meal",
       date,
       slot: item.meal.slot,
-      mealId: item.meal.meal.id,
+      mealId: id,
       status: verb === "log" ? "eaten" : "skipped",
+      kcal,
+      proteinG,
+      fatG,
+      carbG,
     };
   }
 

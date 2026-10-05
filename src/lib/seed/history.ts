@@ -1265,6 +1265,12 @@ export function demoHistory(input: DemoHistoryInput): DemoHistory {
         slot: resolved.slot,
         mealId: resolved.meal.id,
         status: roll < MEAL_SKIP_RATE[resolved.slot] ? "skipped" : "eaten",
+        // The meal's figures as logged — FUEL-146. Provisioning writes the
+        // meals in the same transaction, so "as it stood" is simply as seeded.
+        kcal: resolved.meal.kcal,
+        proteinG: resolved.meal.proteinG,
+        fatG: resolved.meal.fatG,
+        carbG: resolved.meal.carbG,
         loggedAt: loggedAt(
           date,
           parseTimeOfDay(profile.slotTimes[resolved.slot] ?? MEAL_FALLBACK_TIME) + 10,

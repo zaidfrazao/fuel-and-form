@@ -623,7 +623,8 @@ restores a uuid pointing at nothing.
   "mealIngredients":         [ { "id", "mealId", "name", "grams", "nonScaleMeasure", "category", "sortOrder", "shopName", "shopQty", "shopUnit", "pantry" } ],
   "planTemplateEntries":     [ { "id", "dayOfWeek", "slot", "mealId", "sortOrder" } ],
   "dayPlanOverrides":        [ { "id", "date", "slot", "mealId", "createdAt" } ],
-  "mealLogs":                [ { "id", "date", "slot", "mealId", "status", "note", "loggedAt" } ],
+  "mealLogs":                [ { "id", "date", "slot", "mealId", "status", "note", "loggedAt",
+                                 "kcal", "proteinG", "fatG", "carbG" } ],
 
   "workouts":                [ { "id", "name", "type", "description", "rotationGroup", "rotationIndex" } ],
   "workoutExercises":        [ { "id", "workoutId", "name", "prescription", "sortOrder", "notes",
@@ -878,8 +879,9 @@ The three come from `src/lib/plan-vs-actual.ts`, which is also where the JSON's
 `planVsActual` gets them. One rule rendered twice, rather than two derivations
 that would disagree on exactly the swapped days.
 
-**The four macro columns** describe the meal in `actual` when there is one, and
-otherwise the meal that stood. So a summed column is intake *as recorded*, and
+**The four macro columns** are the log's own figures when the slot was logged —
+the meal as it stood at log time, so a recipe edited since does not rewrite the
+week — and otherwise the meal that stood. So a summed column is intake *as recorded*, and
 a row with a blank `status` is intake that was planned and never confirmed —
 **filter on `status = eaten`** to separate them.
 

@@ -300,24 +300,27 @@ const WEIGHT_LOG: WeightLog = {
   createdAt: new Date("2026-08-17T07:00:00.000Z"),
 };
 
-const mealLog = (
-  id: string,
-  slot: MealLog["slot"],
-  mealId: string,
-): MealLog => ({
+// The log's figures are the meal's own (FUEL-146), so the JSON's `mealLogs`
+// gains no number the fixture did not already hold and the collision check
+// below stays as it was argued.
+const mealLog = (id: string, slot: MealLog["slot"], meal: Meal): MealLog => ({
   id,
   userId: USER_ID,
   date: MONDAY,
   slot,
-  mealId,
+  mealId: meal.id,
   status: "eaten",
   note: null,
   loggedAt: new Date("2026-08-17T08:00:00.000Z"),
+  kcal: meal.kcal,
+  proteinG: meal.proteinG,
+  fatG: meal.fatG,
+  carbG: meal.carbG,
 });
 
 const MEAL_LOGS = [
-  mealLog("aaaaaaaa-0000-4000-8000-00000000000a", "breakfast", OATS.id),
-  mealLog("aaaaaaaa-0000-4000-8000-00000000000b", "lunch", BEEF.id),
+  mealLog("aaaaaaaa-0000-4000-8000-00000000000a", "breakfast", OATS),
+  mealLog("aaaaaaaa-0000-4000-8000-00000000000b", "lunch", BEEF),
 ];
 
 const resolved = (slot: ResolvedMeal["slot"], meal: Meal): ResolvedMeal => ({
@@ -466,7 +469,8 @@ function jsonNumbers(value: unknown, found = new Set<number>()): Set<number> {
  * Every intake figure in play — the measured side, which the estimate may never
  * be combined with.
  *
- * The four targets, both meals' four macros each, and the sums a reader would
+ * The four targets, both meals' four macros each (and both logs', which hold
+ * the same figures as logged), and the sums a reader would
  * form from them. The sums are the important half: no total is written into
  * either artefact today, so "the burn is not inside a total" is only a real
  * assertion if the totals a spreadsheet would compute are in the forbidden set
@@ -483,6 +487,11 @@ const INTAKE = [
     meal.fatG,
     meal.carbG,
   ]),
+  // The logs' own figures — FUEL-146 put them on the row, and the JSON
+  // carries them. Equal to the meals' here, so they add no number today; listed
+  // so that a fixture whose recipe drifts from its logs (FUEL-147's edit) is
+  // still guarded on the figures that are actually intake.
+  ...MEAL_LOGS.flatMap((log) => [log.kcal, log.proteinG, log.fatG, log.carbG]),
   OATS.kcal + BEEF.kcal,
   OATS.proteinG + BEEF.proteinG,
   OATS.fatG + BEEF.fatG,

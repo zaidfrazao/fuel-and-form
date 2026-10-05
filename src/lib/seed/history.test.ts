@@ -603,6 +603,24 @@ describe("meal history", () => {
     }
   });
 
+  it.each(eachWeekday)("carries each logged meal's figures — FUEL-146, %s", (date) => {
+    const input = provisionedOn(date);
+    const { mealLogs } = demoHistory(input);
+    const library = new Map(input.meals.map((meal) => [meal.id, meal]));
+
+    expect(mealLogs.length).toBeGreaterThan(0);
+
+    for (const log of mealLogs) {
+      const meal = library.get(log.mealId)!;
+
+      // As the meal stood when it was logged, which for a provision is as
+      // seeded — so the demo's history is the snapshot, not a pointer to it.
+      expect({ kcal: log.kcal, proteinG: log.proteinG, fatG: log.fatG, carbG: log.carbG }).toEqual(
+        { kcal: meal.kcal, proteinG: meal.proteinG, fatG: meal.fatG, carbG: meal.carbG },
+      );
+    }
+  });
+
   it.each(eachWeekday)("is mostly eaten, but not entirely, %s", (date) => {
     const { mealLogs } = demoHistory(provisionedOn(date));
 

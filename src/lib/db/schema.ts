@@ -688,6 +688,27 @@ export const mealLogs = pgTable(
     status: mealLogStatus().notNull(),
     note: text(),
     loggedAt: instant("logged_at").notNull().defaultNow(),
+
+    /**
+     * The meal's four figures as they stood when the log was written — FUEL-146.
+     *
+     * A copy, not a read through `meal_id`, because a recipe's macros can be
+     * edited and a log is history: last month's dinner was eaten at last
+     * month's numbers. Every reader of LOGGED intake (the day's summary,
+     * plan-versus-actual's actual side, both exports) reads these; the plan
+     * side still reads `meals`, because a plan is what you would eat now.
+     *
+     * On skipped rows too. They contribute nothing to a total, but a row that
+     * always carries its figures needs no "which rows have them" rule, and the
+     * CSV prints a skipped slot's macros beside it.
+     *
+     * Rows written before this column existed were back-filled from `meals` by
+     * migrations 0021–0022 — the values at that moment were the only truth left.
+     */
+    kcal: integer().notNull(),
+    proteinG: macroGrams("protein_g").notNull(),
+    fatG: macroGrams("fat_g").notNull(),
+    carbG: macroGrams("carb_g").notNull(),
   },
   (t) => [
     ownedReference({

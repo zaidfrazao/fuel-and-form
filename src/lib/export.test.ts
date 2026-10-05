@@ -148,6 +148,10 @@ const mealLog = (id: string, date: string): MealLog => ({
   status: "eaten",
   note: null,
   loggedAt: new Date("2026-08-10T18:40:00.000Z"),
+  kcal: 420,
+  proteinG: 30,
+  fatG: 12,
+  carbG: 44,
 });
 
 const workout = (id: string, name: string): Workout => ({
@@ -372,6 +376,23 @@ describe("what leaves the account", () => {
     expect(document.mealIngredients[0]?.mealId).toBe(MEAL_ID);
     expect(document.workoutLogs[0]?.workoutId).toBe(WORKOUT_ID);
     expect(document.workoutExercises[0]?.workoutId).toBe(WORKOUT_ID);
+  });
+
+  test("keeps a meal log's figures as logged when the recipe is edited — FUEL-146", () => {
+    // The fixture's oats were 420 kcal when the log was written. Editing the
+    // recipe changes the library row the backup carries, and nothing else: the
+    // log is history, and the file is the record of it.
+    const before = build();
+    const edited = build({
+      ...TABLES,
+      meals: [{ ...TABLES.meals[0]!, kcal: 610, proteinG: 41, fatG: 14, carbG: 77 }],
+    });
+
+    expect(edited.meals[0]?.kcal).toBe(610);
+    expect(edited.mealLogs).toEqual(before.mealLogs);
+    expect(edited.mealLogs[0]).toMatchObject({ kcal: 420, proteinG: 30, fatG: 12, carbG: 44 });
+    // The derived comparison carries ids only, so it cannot have moved either.
+    expect(edited.derived.planVsActual).toEqual(before.derived.planVsActual);
   });
 
   test("carries a walk's step figure and the origin of it — FUEL-103", () => {

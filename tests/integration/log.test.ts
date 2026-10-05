@@ -29,6 +29,9 @@ import { truncateAll } from "./tables";
 
 const configured = testDatabaseUrl() !== undefined;
 
+/** The fixture porridge's figures, as a server-resolved intent carries them — FUEL-146. */
+const PORRIDGE = { kcal: 420, proteinG: 24, fatG: 12, carbG: 55 };
+
 describe.skipIf(!configured)("logging, scoped", () => {
   const as = (user: { userId: string }) => scope(user.userId, getDb());
 
@@ -49,12 +52,18 @@ describe.skipIf(!configured)("logging, scoped", () => {
         slot: "lunch",
         mealId: alice.mealId,
         status: "eaten",
+        ...PORRIDGE,
       });
 
       const rows = await as(alice).select(schema.mealLogs);
       const written = rows.find((row) => row.date === "2026-03-09");
 
-      expect(written).toMatchObject({ slot: "lunch", status: "eaten", userId: alice.userId });
+      expect(written).toMatchObject({
+        slot: "lunch",
+        status: "eaten",
+        userId: alice.userId,
+        ...PORRIDGE,
+      });
       // Left to the column's own default, so the database's clock is what
       // orders the day for undo.
       expect(written?.loggedAt).toBeInstanceOf(Date);
@@ -92,6 +101,7 @@ describe.skipIf(!configured)("logging, scoped", () => {
           slot: "lunch",
           mealId: alice.mealId,
           status: "eaten",
+          ...PORRIDGE,
         }),
       ).rejects.toThrow();
     });
@@ -107,6 +117,7 @@ describe.skipIf(!configured)("logging, scoped", () => {
         slot: "lunch",
         mealId: alice.mealId,
         status: "eaten",
+        ...PORRIDGE,
       });
       await recordLog(bob.userId, {
         kind: "meal",
@@ -114,6 +125,7 @@ describe.skipIf(!configured)("logging, scoped", () => {
         slot: "lunch",
         mealId: bob.mealId,
         status: "eaten",
+        ...PORRIDGE,
       });
 
       const mine = await logsFor(alice.userId, "2026-03-09");
@@ -132,6 +144,7 @@ describe.skipIf(!configured)("logging, scoped", () => {
         slot: "lunch",
         mealId: alice.mealId,
         status: "eaten",
+        ...PORRIDGE,
       });
 
       expect((await logsFor(alice.userId, "2026-03-10")).meals).toHaveLength(0);
@@ -148,6 +161,7 @@ describe.skipIf(!configured)("logging, scoped", () => {
         slot: "lunch",
         mealId: alice.mealId,
         status: "eaten",
+        ...PORRIDGE,
       });
 
       const target = latestLog(await logsFor(alice.userId, "2026-03-09"));
@@ -170,6 +184,7 @@ describe.skipIf(!configured)("logging, scoped", () => {
         slot: "lunch",
         mealId: alice.mealId,
         status: "eaten",
+        ...PORRIDGE,
       });
 
       const target = latestLog(await logsFor(alice.userId, "2026-03-09"))!;

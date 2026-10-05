@@ -236,6 +236,11 @@ describe("with a session", () => {
               status: "eaten",
               note: null,
               loggedAt: new Date(0),
+              // The figures as logged — FUEL-146. The chilli's, unedited.
+              kcal: 612,
+              proteinG: 54.2,
+              fatG: 14.6,
+              carbG: 63.8,
             },
           ],
           workouts: [],
