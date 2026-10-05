@@ -102,6 +102,12 @@ export type RecipeParseResult =
 export const RECIPE_FIELD = "recipe";
 
 /**
+ * The field naming the meal. Here rather than beside the action, because a
+ * `"use server"` module may export nothing but async functions.
+ */
+export const MEAL_FIELD = "mealId";
+
+/**
  * Bounds. Each buys the typo, as `profile-targets.ts`'s do, and none is a
  * judgement about a meal: a dropped or doubled digit lands outside.
  */
