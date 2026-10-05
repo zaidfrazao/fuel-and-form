@@ -131,3 +131,23 @@ test("recipe-edit-sheet", async ({ page }) => {
 
   await expect(page).toHaveScreenshot("recipe-edit-preview.png", { timeout: 15_000 });
 });
+
+/**
+ * The reassessed macros — FUEL-148.
+ *
+ * On the specimen, from a fixture: the live sheet's proposal comes from a
+ * paid request whose wording no baseline could hold still, and the demo is
+ * refused it anyway. The table, the mismatch line, the rationale, the assumed
+ * weights and Accept / Discard, in the measure the sheet uses. The main
+ * element only, so the specimen's footer is not part of what is compared.
+ */
+test("recipe-estimate", async ({ page }) => {
+  await page.goto("/dev/recipe?case=estimate");
+
+  const report = page.getByRole("region", { name: "Proposed macros" });
+  await expect(report).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  await page.mouse.move(0, 0);
+
+  await expect(page.getByRole("main")).toHaveScreenshot("recipe-estimate.png", { timeout: 15_000 });
+});
